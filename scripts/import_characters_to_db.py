@@ -71,7 +71,10 @@ def main():
                 }
             )
 
-    db._set_characters_raw(chars)
+    def _replace(current: list) -> None:
+        current[:] = chars
+
+    db.mutate_characters(_replace)
     print(f"Imported {len(chars)} characters into DB")
     return 0
 

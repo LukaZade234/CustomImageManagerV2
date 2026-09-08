@@ -105,20 +105,49 @@ fail where `python -m pytest` succeeded (the entry point does not add the CWD to
 
 ---
 
-## Phase 2 — Data layer
+## Phase 2 — Data layer — **COMPLETE**
 
-Fixes the silent data loss. `db.py` holds one module-global psycopg2 connection with
-`autocommit = True` and no transactions anywhere, so concurrent read-modify-writes of the JSONB
-blob lose data today.
+Fixed the silent data loss. `db.py` previously held one module-global psycopg2 connection with
+`autocommit = True` and no transaction anywhere, so concurrent read-modify-writes of the JSONB
+document lost data.
 
-- [ ] **Move to `psycopg` 3 with `psycopg_pool`.** A direct replacement for `psycopg2-binary` with
-      pooling built in — this *is* the connection-pooling task, without dragging in an ORM.
-- [ ] **Wrap every read-modify-write in a real transaction.**
-- [ ] **Green the Phase 1 concurrency test.** That is the signal the bug is dead.
+- [x] **Moved to `psycopg` 3 with `psycopg_pool`.** The pool replaces the single global connection,
+      its lock, and its keepalive thread — it hands out only verified-alive connections, so a
+      database restart surfaces as a retry rather than an error.
+- [x] **Every read-modify-write is now one transaction**, holding a Postgres advisory lock across
+      the read and the write.
+- [x] **There is no public setter any more.** `set_custom_images`, `set_saved_characters`,
+      `set_last_updated` and `_set_characters_raw` are gone. The only way to write is `mutate_*`,
+      which takes a function that edits the document in place. The unsafe pattern is not merely
+      discouraged, it is **unavailable** — which is what stops it being reintroduced later.
+- [x] **All 11 call sites migrated** across `upload_imgchest.py` and `scripts/`, including the
+      rename cascade in `edit_character`.
+- [x] **The Phase 1 concurrency test is green** and the `xfail` marker is gone. Two stronger tests
+      were added: 20 concurrent adds to one key lose nothing, and concurrent writes to *different*
+      keys neither serialise nor deadlock.
+- [x] **13 endpoint tests** pin the status codes, since the rewrite changed the control flow — the
+      mutator now reports *why* it failed so the route can still return 404 vs 400 vs 200.
+- [x] **Pool shutdown is clean.** Registered an `atexit` handler after finding that gunicorn worker
+      restarts otherwise stalled ~5s per pool thread, logging `couldn't stop thread ... within 5.0
+      seconds`. Verified zero warnings on SIGTERM.
 
-**Skip SQLAlchemy.** Five small tables and a handful of queries do not justify an ORM; raw SQL
-through psycopg3 plus Alembic for migrations stays clearer, and is easier for a future session to
-reason about.
+### Behaviour change worth knowing about
+
+**Reorder no longer discards concurrent uploads.** It used to assign the client's `new_order`
+wholesale, so any image added between page load and submit was silently deleted. It now applies the
+requested order to images that still exist and appends any it did not know about. Covered by
+`test_keeps_images_added_after_the_client_loaded_the_page`.
+
+### Note on the advisory lock
+
+It serialises writes per *key*, not per character — every custom-image write contends with every
+other. At this scale that is the right trade: simple and obviously correct. Phase 3 replaces the
+blob with one row per image, after which writes stop contending at all and the lock can go.
+
+### Verified
+
+`uv run pytest` → 18 passed. `npm test` → 21 passed. Gunicorn with 2 workers serves reads and
+writes against the pool, and shuts down cleanly on SIGTERM.
 
 ---
 

@@ -77,6 +77,32 @@ TypeScript is adopted **incrementally**: `allowJs: true`, `checkJs: false`. Exis
 `.js`/`.jsx` are not type-checked; convert a file to `.ts`/`.tsx` and it is. Shared API
 shapes live in `frontend/src/types.ts`.
 
+## Writing to the database
+
+`db.py` deliberately exposes **no setter**. Reads are `get_*`; every write goes through
+`mutate_*`, which opens a transaction, takes an advisory lock on the key, reads the
+document, hands it to your function to edit **in place**, and writes it back:
+
+```python
+# Correct: atomic.
+db.mutate_custom_images(lambda data: data.setdefault(name, []).extend(urls))
+
+# Correct: the mutator's return value comes back to you, so a route can still
+# choose its status code.
+def _delete(data: dict) -> str:
+    urls = data.get(name)
+    if urls is None:
+        return "no_character"
+    urls.remove(image_url)
+    return "deleted"
+
+outcome = db.mutate_custom_images(_delete)
+```
+
+The two-call pattern — `data = get_x()`, mutate, `set_x(data)` — is what caused the
+original data loss: two overlapping requests both read the same document and the second
+write discarded the first. Do not add a setter back to make that possible again.
+
 ## Conventions
 
 - **Lint findings that need judgement are left unfixed on purpose.** Ruff and Biome

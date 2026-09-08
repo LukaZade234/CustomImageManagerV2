@@ -131,9 +131,23 @@ def clean_db(database_url):
     # Belt and braces: verify what the application actually resolved to.
     _assert_not_production(os.environ["DATABASE_URL"])
 
-    db_module._reset_db()
-    _, conn = db_module._get_db()  # also creates the schema
-    with conn.cursor() as cur:
+    db_module._reset_pool()
+    # Opening the pool also creates the schema.
+    with db_module.transaction() as conn, conn.cursor() as cur:
         cur.execute("TRUNCATE kv_store")
     yield db_module
-    db_module._reset_db()
+    db_module._reset_pool()
+
+
+@pytest.fixture
+def client(clean_db):
+    """Flask test client against the clean test database.
+
+    Imported here rather than at module scope so the DATABASE_URL guard in
+    `pytest_configure` has already run before the app calls `load_dotenv()`.
+    """
+    from upload_imgchest import app
+
+    app.config.update(TESTING=True)
+    with app.test_client() as test_client:
+        yield test_client

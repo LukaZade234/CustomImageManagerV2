@@ -172,14 +172,14 @@ moderation design in §1 depends on this.
 
 ### Requirements
 
-Real CPython with native extensions (`Pillow`, `psycopg2`, `discord.py-self`); outbound WebSocket
+Real CPython with native extensions (`Pillow`, `psycopg`, `discord.py-self`); outbound WebSocket
 to Discord; requests lasting 30s or more, plus SSE streaming; PostgreSQL; globally distributed
 users; free or near-free; a custom domain.
 
 ### Rejected: Cloudflare Workers for the API
 
 Workers run JS/WASM. Python Workers cannot load native CPython extensions, so `discord.py-self`,
-`Pillow`, and `psycopg2` are all impossible, and a 30-second Discord login does not fit the
+`Pillow`, and `psycopg` are all impossible, and a 30-second Discord login does not fit the
 execution model regardless. **Cloudflare D1 is rejected with it** — it is SQLite reachable only
 through a Worker binding, so a Flask process on a VM cannot use it.
 
@@ -349,7 +349,12 @@ upper bound — `flask>=2.0` would accept Flask 4.0 and break the build with no 
 ### psycopg 3, and no ORM
 
 `psycopg` 3 with `psycopg_pool` replaces `psycopg2-binary` and brings pooling with it, so
-connection pooling stops being a separate task.
+connection pooling stops being a separate task. **Done in Phase 2.**
+
+The decision that mattered more than the driver: `db.py` exposes **no setter**. Writes go through
+`mutate_*`, which holds an advisory lock across the read and the write. Keeping `set_x()` around
+"for convenience" would have left the racy two-call pattern available, and it would have crept back
+in. Removing it makes the correct path the only path.
 
 **SQLAlchemy was considered and rejected.** Five small tables and a handful of queries do not
 justify an ORM; raw SQL through psycopg3 with Alembic for migrations stays more legible, and a

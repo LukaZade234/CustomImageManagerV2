@@ -14,8 +14,9 @@ dependencies = [
     "gunicorn>=23,<27",
     "requests>=2.32,<3",
     "Pillow>=11,<12",
-    # Phase 2 replaces this with psycopg[binary,pool] (psycopg 3).
-    "psycopg2-binary>=2.9,<3",
+    # psycopg 3 with its connection pool. Replaced psycopg2-binary in Phase 2:
+    # pooling is built in, so it is not a separate concern.
+    "psycopg[binary,pool]>=3.2,<4",
     "python-dotenv>=1.0,<2",
     # Pinned exactly: unmaintained, and the most fragile dependency here.
     # protobuf is NOT declared - it arrives transitively via discord.py-self.

@@ -1,288 +1,251 @@
-"""
-Database layer for user data. Requires PostgreSQL (DATABASE_URL).
+"""Database layer for user data. Requires PostgreSQL (DATABASE_URL).
+
+Concurrency
+-----------
+Every stored document is a whole JSON blob, so any change is a read-modify-write.
+Doing that as two separate calls -- `get_x()`, mutate, `set_x()` -- loses data
+whenever two requests overlap: both read the same document and the second write
+discards the first. That was a live bug; `tests/test_db_concurrency.py` proves it.
+
+The fix is that **there is no public setter**. The only way to change a document
+is `mutate_*`, which takes a transaction, takes a Postgres advisory lock on the
+key, then reads, applies the caller's function and writes -- all atomically. The
+unsafe pattern is therefore not merely discouraged, it is unavailable.
+
+The advisory lock serialises writes per key rather than per character. At this
+scale that is the right trade: it is simple and obviously correct, and Phase 3
+replaces the blob with one row per image, after which writes stop contending at
+all.
 """
 
-import json
+import atexit
 import os
-import threading
-import time
+import zlib
 from collections.abc import Callable
-from typing import TypeVar
+from contextlib import contextmanager
+from typing import Any
 
-_T = TypeVar("_T")
+from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 
 
 class DatabaseConfigurationError(RuntimeError):
     """Raised when DATABASE_URL is not set or PostgreSQL is unavailable."""
 
 
-_db = None
-_db_lock = threading.Lock()
-_keepalive_thread = None
+_pool: ConnectionPool | None = None
+
+# Per worker process. Gunicorn runs several, so keep this modest.
+_POOL_MIN = int(os.environ.get("DB_POOL_MIN", "1"))
+_POOL_MAX = int(os.environ.get("DB_POOL_MAX", "5"))
 
 
-def _reset_db():
-    """Clear cached DB connection (e.g., after stale connection)."""
-    global _db
-    with _db_lock:
-        if _db is not None:
-            try:
-                _db[1].close()
-            except Exception:
-                pass
-        _db = None
+def _normalise_url(url: str) -> str:
+    return "postgresql://" + url[11:] if url.startswith("postgres://") else url
 
 
-def _is_connection_error(exc):
-    """Check if exception indicates a stale/failed DB connection."""
-    ename = type(exc).__name__
-    return ename in ("OperationalError", "InterfaceError", "DatabaseError")
+def _get_pool() -> ConnectionPool:
+    """Lazily create the pool. The pool handles reconnection, so the old
+    single global connection, its lock and its keepalive thread are all gone."""
+    global _pool
+    if _pool is not None:
+        return _pool
 
-
-# Keepalive interval (seconds) - ping DB before server closes idle connections (~5 min typical)
-_KEEPALIVE_INTERVAL = 4 * 60
-
-
-def _keepalive_loop():
-    """Background thread: ping DB periodically so connection never goes idle."""
-    global _db
-    while True:
-        time.sleep(_KEEPALIVE_INTERVAL)
-        with _db_lock:
-            if _db is None:
-                return
-            conn = _db[1]
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-        except Exception:
-            _reset_db()  # Next request will reconnect
-
-
-def _start_keepalive():
-    """Start background keepalive thread for PostgreSQL."""
-    global _keepalive_thread
-    if _keepalive_thread is not None and _keepalive_thread.is_alive():
-        return
-    _keepalive_thread = threading.Thread(target=_keepalive_loop, daemon=True)
-    _keepalive_thread.start()
-
-
-def _get_db():
-    """Get PostgreSQL connection. Requires DATABASE_URL."""
-    global _db
-    with _db_lock:
-        if _db is not None:
-            return _db
-        url = os.environ.get("DATABASE_URL")
-        if not url:
-            raise DatabaseConfigurationError(
-                "DATABASE_URL is not set. Configure PostgreSQL (e.g. on DigitalOcean) and set DATABASE_URL."
-            )
-        import psycopg2
-
-        if url.startswith("postgres://"):
-            url = "postgresql://" + url[11:]
-        conn = psycopg2.connect(
-            url,
-            keepalives=1,
-            keepalives_idle=60,
-            keepalives_interval=30,
-            keepalives_count=5,
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise DatabaseConfigurationError(
+            "DATABASE_URL is not set. Configure PostgreSQL and set DATABASE_URL."
         )
-        conn.autocommit = True
-        _init_postgres(conn)
-        _db = ("postgres", conn)
-        _start_keepalive()
-        return _db
+
+    pool = ConnectionPool(
+        _normalise_url(url),
+        min_size=_POOL_MIN,
+        max_size=_POOL_MAX,
+        # Hand out only connections that are actually alive, so a database
+        # restart or an idle timeout surfaces as a retry rather than an error.
+        check=ConnectionPool.check_connection,
+        open=False,
+        name="imgmanager",
+    )
+    pool.open(wait=True, timeout=30)
+    _pool = pool
+    # Without this, the pool's worker and scheduler threads outlive the process
+    # and every gunicorn worker restart stalls for ~5s per thread while logging
+    # "couldn't stop thread ... within 5.0 seconds". Gunicorn's SIGTERM handler
+    # exits via SystemExit, so atexit callbacks do run on a graceful restart.
+    atexit.register(_reset_pool)
+    _init_schema()
+    return _pool
 
 
-def _init_postgres(conn):
-    """Create kv_store table if it doesn't exist."""
-    with conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS kv_store (
-                key TEXT PRIMARY KEY,
-                value JSONB NOT NULL
-            )
-        """)
+def _reset_pool() -> None:
+    """Close the pool. Used by tests between cases."""
+    global _pool
+    if _pool is not None:
+        try:
+            _pool.close()
+        except Exception:
+            pass
+        _pool = None
 
 
-def _get_pg(conn, key, default):
-    """Read from PostgreSQL."""
-    with conn.cursor() as cur:
+# Kept under the old name because tests and callers already use it.
+_reset_db = _reset_pool
+
+
+def _init_schema() -> None:
+    with _pool.connection() as conn, conn.cursor() as cur:  # type: ignore[union-attr]
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value JSONB NOT NULL)"
+        )
+
+
+@contextmanager
+def transaction():
+    """A connection inside a transaction: commits on success, rolls back on error."""
+    with _get_pool().connection() as conn:
+        yield conn
+
+
+def _lock_id(key: str) -> int:
+    """Stable across processes and restarts, unlike the built-in hash()."""
+    return zlib.crc32(key.encode("utf-8"))
+
+
+def read[T](key: str, default: T) -> T:
+    with transaction() as conn, conn.cursor() as cur:
         cur.execute("SELECT value FROM kv_store WHERE key = %s", (key,))
         row = cur.fetchone()
         return row[0] if row else default
 
 
-def _set_pg(conn, key, value):
-    """Write to PostgreSQL."""
-    with conn.cursor() as cur:
+def mutate[T](key: str, default: T, fn: Callable[[T], Any]) -> Any:
+    """Atomically read-modify-write one document.
+
+    `fn` receives the current value and **mutates it in place**; whatever it
+    returns is passed back to the caller. The document written is always the
+    object handed to `fn`.
+
+    The advisory lock is taken before the read so that two concurrent callers
+    cannot both observe the pre-change state. It is released automatically when
+    the transaction ends, including on rollback.
+    """
+    with transaction() as conn, conn.cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_lock_id(key),))
+        cur.execute("SELECT value FROM kv_store WHERE key = %s", (key,))
+        row = cur.fetchone()
+        data = row[0] if row else default
+        result = fn(data)
         cur.execute(
-            "INSERT INTO kv_store (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-            (key, json.dumps(value)),
+            "INSERT INTO kv_store (key, value) VALUES (%s, %s) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            (key, Jsonb(data)),
         )
+        return result
 
 
-def _with_retry(fn: Callable[[], _T]) -> _T:
-    """Execute fn() and retry once on connection error (stale PostgreSQL)."""
-    for attempt in range(2):
-        try:
-            return fn()
-        except Exception as e:
-            if attempt == 0 and _is_connection_error(e):
-                _reset_db()
-                continue
-            raise
-    raise AssertionError("_with_retry: exhausted retries without return")
+# --- Custom images: {char_name: [url, ...]} ---
 
 
-def get_custom_images():
-    """Get {char_name: [url1, url2, ...]}."""
-
-    def _do():
-        _, conn = _get_db()
-        return _get_pg(conn, "custom_images", {})
-
-    return _with_retry(_do)
+def get_custom_images() -> dict:
+    return read("custom_images", {})
 
 
-def set_custom_images(data):
-    """Save custom_images."""
-
-    def _do():
-        _, conn = _get_db()
-        _set_pg(conn, "custom_images", data)
-
-    _with_retry(_do)
+def mutate_custom_images(fn: Callable[[dict], Any]) -> Any:
+    return mutate("custom_images", {}, fn)
 
 
-def get_saved_characters():
-    """Get list of saved character objects."""
-
-    def _do():
-        _, conn = _get_db()
-        return _get_pg(conn, "saved_characters", [])
-
-    return _with_retry(_do)
+# --- Saved characters (bookmarks) ---
 
 
-def set_saved_characters(data):
-    """Save saved_characters."""
-
-    def _do():
-        _, conn = _get_db()
-        _set_pg(conn, "saved_characters", data)
-
-    _with_retry(_do)
+def get_saved_characters() -> list:
+    return read("saved_characters", [])
 
 
-def get_last_updated():
-    """Get {char_name: timestamp, ...}."""
-
-    def _do():
-        _, conn = _get_db()
-        raw = _get_pg(conn, "last_updated", {})
-        return raw if isinstance(raw, dict) else {}
-
-    return _with_retry(_do)
+def mutate_saved_characters(fn: Callable[[list], Any]) -> Any:
+    return mutate("saved_characters", [], fn)
 
 
-def set_last_updated(data):
-    """Save last_updated."""
-
-    def _do():
-        _, conn = _get_db()
-        _set_pg(conn, "last_updated", data)
-
-    _with_retry(_do)
+# --- Last updated: {char_name: unix_timestamp} ---
 
 
-def update_last_modified(char_name):
-    """Update timestamp for a character."""
+def get_last_updated() -> dict:
+    raw = read("last_updated", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def mutate_last_updated(fn: Callable[[dict], Any]) -> Any:
+    return mutate("last_updated", {}, fn)
+
+
+def update_last_modified(char_name: str) -> None:
     import time
 
-    data = get_last_updated()
-    data[char_name] = time.time()
-    set_last_updated(data)
+    stamp = time.time()
+    mutate_last_updated(lambda data: data.__setitem__(char_name, stamp))
 
 
-# --- Characters (name, series, rank, main_image_url) ---
+# --- Characters: [{name, series, rank, main_image_url}] ---
 
 
-def get_characters():
-    """Get list of characters as [{name, series, rank, image}, ...] for API."""
-
-    def _do():
-        _, conn = _get_db()
-        raw = _get_pg(conn, "characters", None)
-        if raw is None:
-            return None  # Not yet migrated
-        chars = raw if isinstance(raw, list) else []
-        return [
-            {
-                "name": c["name"],
-                "series": c.get("series", ""),
-                "rank": c.get("rank", ""),
-                "image": c.get("main_image_url", ""),
-            }
-            for c in chars
-        ]
-
-    return _with_retry(_do)
+def get_characters() -> list | None:
+    """API shape. Returns None when the table has not been seeded yet."""
+    raw = read("characters", None)
+    if raw is None:
+        return None
+    chars = raw if isinstance(raw, list) else []
+    return [
+        {
+            "name": c["name"],
+            "series": c.get("series", ""),
+            "rank": c.get("rank", ""),
+            "image": c.get("main_image_url", ""),
+        }
+        for c in chars
+    ]
 
 
-def _get_characters_raw():
-    """Get raw character list (internal)."""
-
-    def _do():
-        _, conn = _get_db()
-        raw = _get_pg(conn, "characters", [])
-        return raw if isinstance(raw, list) else []
-
-    return _with_retry(_do)
+def mutate_characters(fn: Callable[[list], Any]) -> Any:
+    return mutate("characters", [], fn)
 
 
-def _set_characters_raw(chars):
-    """Save raw character list (internal)."""
+def add_character(name: str, series: str, rank: str, main_image_url: str = "") -> bool:
+    """Add a character. Returns False if the name already exists."""
 
-    def _do():
-        _, conn = _get_db()
-        _set_pg(conn, "characters", chars)
+    def _add(chars: list) -> bool:
+        if any(c.get("name") == name for c in chars):
+            return False
+        chars.append(
+            {"name": name, "series": series, "rank": rank, "main_image_url": main_image_url}
+        )
+        return True
 
-    _with_retry(_do)
+    return mutate_characters(_add)
 
 
-def add_character(name, series, rank, main_image_url=""):
-    """Add a character. Returns False if name already exists."""
-    chars = _get_characters_raw()
-    if any(c.get("name") == name for c in chars):
+def update_character(orig_name: str, new_name: str, series: str, rank: str) -> bool:
+    """Update a character. Returns False if orig_name was not found."""
+
+    def _update(chars: list) -> bool:
+        for c in chars:
+            if c.get("name") == orig_name:
+                c["name"] = new_name
+                c["series"] = series
+                c["rank"] = rank
+                return True
         return False
-    chars.append({"name": name, "series": series, "rank": rank, "main_image_url": main_image_url})
-    _set_characters_raw(chars)
-    return True
+
+    return mutate_characters(_update)
 
 
-def update_character(orig_name, new_name, series, rank):
-    """Update character. Returns False if orig_name not found."""
-    chars = _get_characters_raw()
-    for c in chars:
-        if c.get("name") == orig_name:
-            c["name"] = new_name
-            c["series"] = series
-            c["rank"] = rank
-            _set_characters_raw(chars)
-            return True
-    return False
+def set_main_image(char_name: str, image_url: str) -> bool:
+    """Set a character's main image. Returns False if not found."""
 
+    def _set(chars: list) -> bool:
+        for c in chars:
+            if c.get("name") == char_name:
+                c["main_image_url"] = image_url
+                return True
+        return False
 
-def set_main_image(char_name, image_url):
-    """Set main image for character. Returns False if not found."""
-    chars = _get_characters_raw()
-    for c in chars:
-        if c.get("name") == char_name:
-            c["main_image_url"] = image_url
-            _set_characters_raw(chars)
-            return True
-    return False
+    return mutate_characters(_set)
