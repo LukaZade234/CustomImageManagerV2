@@ -253,44 +253,52 @@ timeout question disappears entirely rather than being worked around.
 
 ---
 
-## Phase 5 — Hosting migration — **CODE COMPLETE, provisioning outstanding**
+## Phase 5 — Hosting migration — **DEPLOYED**
 
-Everything the repository can do is done. What remains needs your Cloudflare account, a domain and
-an origin box, and is written out step by step in `docs/DEPLOYMENT.md`.
+Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running and is
+**still the one users are on** until cut-over.
 
 ### Done in the repository
 
 - [x] **The frontend can live on a different origin.** `frontend/src/config.js` centralises
-      `VITE_API_BASE_URL` and `VITE_IMAGE_BASE_URL`; `api.js` and `downloadCustomImages.js` no
-      longer assume same-origin. Both were hardcoding `/api/...` and `window.location.origin`.
-- [x] **`credentials: 'include'` everywhere**, replacing `'same-origin'`. This is the subtle one:
-      once the SPA is on Pages, `'same-origin'` silently stops sending cookies, so the Phase 6
-      identity cookie would fail as "everyone is a new person on every request" rather than as an
-      error.
-- [x] **CORS hardened for credentialed cross-origin.** `CORS_ORIGINS=*` is now **refused at
-      startup** — browsers reject credentialed requests against a wildcard, so failing loudly at
-      boot beats failing silently in someone's browser. Unset means same-origin only.
-      *(This also completes the CORS item listed under Phase 7.)*
-- [x] **Deployment artifacts** in `deploy/`: `litestream.yml`, `imgmanager.service` (Litestream
-      supervising gunicorn, so replication cannot be running-but-not), `cloudflared-config.yml`,
-      and `upload-character-images-to-r2.sh`.
-- [x] **`docs/DEPLOYMENT.md`** replaces the DigitalOcean `DEPLOY.md`, which is deleted.
-- [x] **13 new tests** pinning the contract: 7 on the frontend config (credentials mode, base-URL
-      joining, image URL resolution) and 6 on CORS, including that the app refuses to start on a
-      wildcard.
+      `VITE_API_BASE_URL` and `VITE_IMAGE_BASE_URL`; `api.js` and `downloadCustomImages.js` were
+      both hardcoding `/api/...` and `window.location.origin`.
+- [x] **`credentials: 'include'` everywhere**, replacing `'same-origin'`. Without this the Phase 6
+      identity cookie would silently stop being sent once the SPA moved to Pages.
+- [x] **CORS hardened.** `CORS_ORIGINS=*` is refused at startup; unset means same-origin only.
+      *(Also completes the CORS item under Phase 7.)*
+- [x] **Deployment artifacts** in `deploy/`, and `docs/DEPLOYMENT.md` replacing `DEPLOY.md`.
+- [x] **13 tests** pinning the contract — 7 on frontend config, 6 on CORS.
 
-### Outstanding — needs your accounts
+### Deployed
 
-- [ ] Create the R2 buckets (assets + backups) and a custom domain for the assets one.
-- [ ] Upload `character_images/` to R2 with `deploy/upload-character-images-to-r2.sh`.
-- [ ] Choose and provision the origin box: **Oracle Cloud Always Free** or the **home server**.
-      Cloudflare Tunnel makes them interchangeable, so this stays a late, reversible decision.
-- [ ] Set up the Tunnel, install the systemd unit, and generate a **permanent** `SECRET_KEY`.
-- [ ] Create the Pages project and set the two `VITE_*` build variables.
-- [ ] Run the migration on the origin, cut DNS over, **verify a Litestream restore actually
-      works**, and only then decommission DigitalOcean and Neon.
-- [ ] **Remove `flask-compress`** once Cloudflare is in front — the edge does Brotli, which beats
-      gzip, and origin-side compression then only burns CPU. Not before.
+- [x] **Origin:** Oracle Cloud Always Free, `aarch64`, **4 OCPU / 23 GB / 43 GB free** — the full
+      ARM allowance, despite London's capacity shortage. Twenty-three times the RAM v1's image
+      pipeline was tuned to survive on.
+- [x] **App** as a systemd service under a dedicated `imgmanager` user, gunicorn with gthread.
+- [x] **Cloudflare Tunnel** → `api.lukazade.dev`. **No inbound ports are open on the VM at all**;
+      `cloudflared` only dials out.
+- [x] **R2:** `imgmanager-assets` (1000 character images, custom domain `images.lukazade.dev`,
+      `cache-control: immutable`, served from the edge) and `imgmanager-backups` (private).
+- [x] **Litestream** replicating the database to R2, supervised by systemd as gunicorn's parent.
+- [x] **Cloudflare Pages** → `lukazade.dev`, building from git with the `VITE_*` variables.
+- [x] **Data migrated:** 1,705 characters, 8,547 images.
+- [x] **`docs/DEPLOYMENT.md` updated** with the dozen things that actually went wrong — the hidden
+      Ampere tab, ARM capacity, the missing public IP, VCN-vs-VNIC, rclone's version requirement,
+      the expected `ListBuckets` 403, Workers-vs-Pages, `NODE_VERSION`, and the apex CNAME
+      conflict. Section ordering corrected: the Tunnel cannot be verified before the app runs.
+
+### Outstanding
+
+- [ ] **Verify a Litestream restore before cut-over.** `litestream restore` to a scratch file and
+      confirm `SELECT COUNT(*) FROM custom_images` returns 8547. An untested backup is not a
+      backup, and after cut-over this box holds the only copy.
+- [ ] **Decide the cut-over.** Both sites are live now and **their data has forked** — anything
+      added on v1 from this point does not appear on v2. Re-run the migration immediately before
+      switching users across.
+- [ ] **Decommission** the DigitalOcean app and the Neon database, only after the above.
+- [ ] **Remove `flask-compress`.** Now actionable: Cloudflare is in front and does Brotli, so
+      origin-side gzip only burns CPU.
 
 ---
 

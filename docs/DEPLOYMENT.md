@@ -41,6 +41,20 @@ machine you already own.
 
 ---
 
+## Order
+
+Do it in this order. An earlier draft put the Tunnel before the origin box, which
+cannot work: the Tunnel step tells you to check `/api/health` responds, and
+nothing responds until the app is running.
+
+1. R2 buckets and images
+2. The origin box, with the app serving on `localhost:8080`
+3. The Tunnel in front of it
+4. Load the data
+5. Pages, and the CORS flip
+
+---
+
 ## 1. Cloudflare: R2
 
 1. **R2 → Create bucket**, e.g. `imgmanager-assets`.
@@ -159,6 +173,60 @@ so re-running to pick up late changes before cut-over is safe.
 2. Re-run the migration to catch anything added to v1 in the meantime.
 3. **Verify a restore works before trusting it** (see below).
 4. Only then delete the DigitalOcean app and the Neon database.
+
+---
+
+## Things that actually went wrong the first time
+
+Collected from doing this for real. None are in Oracle's or Cloudflare's docs.
+
+**Oracle: the ARM shape is hidden two clicks deep.** *Image and shape → Edit →
+Change shape → **Ampere** tab*. The default tab is AMD, and the free AMD shape
+(`E2.1.Micro`, 1 GB) is not worth having.
+
+**Oracle: "out of host capacity" is normal**, not a mistake you made. Free ARM is
+heavily oversubscribed, London especially. Retry, try other availability domains,
+and ask for less — 1 OCPU / 6 GB fills far more easily than 4 / 24 and is still
+more than this app needs. Upgrading to Pay As You Go improves the odds
+substantially; you keep the Always Free allowance.
+
+**Oracle: the instance may get no public IP.** If the details page shows only a
+private address, the VNIC was created without one. Fix it on the *instance's*
+VNIC — Compute → Instances → your instance → Attached VNICs → the VNIC → IPv4
+Addresses → ⋮ → Edit → Public IP Type: Ephemeral.
+
+**Oracle: VCN and VNIC are different things** and the console does nothing to help.
+A **VCN** is the network; a **VNIC** is the adapter on your instance. If you name
+your VCN something like "…VNIC" you will lose a lot of time. The public IP setting
+is only reachable via the instance, never via the network.
+
+**Oracle: the Cloud Shell is the escape hatch.** The `>_` icon in the top bar gives
+a browser terminal with the OCI CLI already authenticated, which is often faster
+than hunting through menus.
+
+**rclone must be recent.** Ubuntu's packaged version is too old for `key=value`
+config syntax and rejects `--s3-no-check-bucket`. Install the current one:
+`curl https://rclone.org/install.sh | sudo bash`.
+
+**`rclone lsd r2:` returning 403 is correct.** Listing all buckets is an
+account-level operation, and the token is deliberately scoped to two buckets. Test
+with `rclone ls r2:imgmanager-assets` instead. This is also why the upload script
+passes `--s3-no-check-bucket`.
+
+**Cloudflare now steers you to Workers, not Pages.** If the create flow asks for a
+"Deploy command" (`npx wrangler deploy`) you are in the Workers flow, which needs a
+`wrangler.jsonc` in the repo. For Pages, look for the **Pages tab** on the create
+screen. Both are free and equivalent for a static SPA.
+
+**Pages needs `NODE_VERSION=22`.** Vite 8 requires Node 20.19+/22.12+, and the
+default build image is often older. The failure does not obviously point at Node.
+
+**The apex custom domain will hang on "Verifying"** if the imported parking
+`A`/`AAAA` records still exist — DNS forbids a CNAME alongside A records on the
+same name, and Cloudflare will not delete your records for you. Remove the `@`
+parking records, then add `CNAME @ → <project>.pages.dev`, **proxied** (the orange
+cloud is what makes an apex CNAME legal, via flattening). Leave the `api` and
+`images` records alone.
 
 ---
 
