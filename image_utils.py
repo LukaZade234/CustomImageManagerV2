@@ -1,5 +1,6 @@
-from PIL import Image, ImageOps
 import os
+
+from PIL import Image, ImageOps
 
 # Pillow 9.1+ exposes LANCZOS on Image.Resampling (preferred for type checkers).
 # Older Pillow used Image.LANCZOS.
@@ -21,6 +22,7 @@ MAX_FILE_SIZE_SKIP_DIM_CHECK = 30 * 1024 * 1024  # 30MB
 # Output must fit ImgChest upload limit (same as upload_imgchest.MAX_FILE_SIZE).
 MAX_OUTPUT_BYTES = 30 * 1024 * 1024
 
+
 def _log(msg):
     print(f"[IMG] {msg}", flush=True)
 
@@ -33,6 +35,7 @@ def validate_image_file(file_path):
         return True, None
     except Exception as e:
         return False, f"Invalid image file: {str(e)}"
+
 
 def convert_to_png(input_path):
     """
@@ -72,7 +75,7 @@ def convert_to_png(input_path):
 
             # Convert to RGBA to handle transparency and ensure compatibility
             _log("converting to RGBA")
-            img = img.convert('RGBA')
+            img = img.convert("RGBA")
 
             # Create new filename
             base, _ = os.path.splitext(input_path)
@@ -80,7 +83,7 @@ def convert_to_png(input_path):
 
             # Save as PNG; if still over host limit, scale down until it fits (rare: complex art)
             _log(f"saving to {output_path}")
-            img.save(output_path, 'PNG')
+            img.save(output_path, "PNG")
             out_size = os.path.getsize(output_path)
             guard = 0
             while out_size > MAX_OUTPUT_BYTES and guard < 14:
@@ -96,7 +99,7 @@ def convert_to_png(input_path):
                     f"scaling {w0}x{h0} -> {new_w}x{new_h}"
                 )
                 img = img.resize((new_w, new_h), _RESAMPLE)
-                img.save(output_path, 'PNG')
+                img.save(output_path, "PNG")
                 out_size = os.path.getsize(output_path)
 
             out_size_mb = out_size / (1024 * 1024)

@@ -9,6 +9,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 
 class ImgChestError(Exception):
     """Raised when ImgChest API fails (rate limit, service down, etc)."""
+
     pass
 
 
@@ -30,7 +31,7 @@ def _log(msg):
 
 
 def _backoff_seconds(attempt_index):
-    return (2 ** attempt_index) + random.uniform(0, 0.35)
+    return (2**attempt_index) + random.uniform(0, 0.35)
 
 
 def _error_detail_from_response(response):
@@ -54,13 +55,17 @@ def _error_detail_from_response(response):
 
 
 def _size_clause_mb(file_size_mb, limit_mb=30.0):
-    return f" Uploaded file size is {file_size_mb:.2f} MB; ImgChest allows at most {limit_mb:.0f} MB."
+    return (
+        f" Uploaded file size is {file_size_mb:.2f} MB; ImgChest allows at most {limit_mb:.0f} MB."
+    )
 
 
 def upload_to_imgchest(file_path):
     if API_KEY == "YOUR_API_KEY_HERE" or not API_KEY:
         _log("ERROR: API_KEY not set")
-        raise ImgChestError("Image hosting API key not configured. Set IMGCHEST_API_KEY environment variable.")
+        raise ImgChestError(
+            "Image hosting API key not configured. Set IMGCHEST_API_KEY environment variable."
+        )
 
     if not os.path.exists(file_path):
         _log(f"ERROR: File not found: {file_path}")
@@ -82,7 +87,9 @@ def upload_to_imgchest(file_path):
         try:
             with open(file_path, "rb") as image_file:
                 files = {"images[]": image_file}
-                _log(f"sending POST to api.imgchest.com (attempt {attempt + 1}/{_IMGCHEST_MAX_ATTEMPTS})...")
+                _log(
+                    f"sending POST to api.imgchest.com (attempt {attempt + 1}/{_IMGCHEST_MAX_ATTEMPTS})..."
+                )
                 response = requests.post(
                     url, headers=headers, data=payload, files=files, timeout=_IMGCHEST_POST_TIMEOUT
                 )
@@ -110,7 +117,9 @@ def upload_to_imgchest(file_path):
             raise
         except requests.RequestException as e:
             _log(f"upload REQUEST EXCEPTION: {type(e).__name__}: {e}")
-            raise ImgChestError("Could not reach image hosting. Please check your connection and try again.")
+            raise ImgChestError(
+                "Could not reach image hosting. Please check your connection and try again."
+            )
 
         if response is None:
             continue
@@ -151,7 +160,9 @@ def upload_to_imgchest(file_path):
                 _log(f"rate limited (429), sleeping {delay:.2f}s before retry")
                 time.sleep(delay)
                 continue
-            raise ImgChestError("Image hosting rate limit reached. Please try again in a few minutes.")
+            raise ImgChestError(
+                "Image hosting rate limit reached. Please try again in a few minutes."
+            )
 
         if status in _RETRYABLE_HTTP and attempt < _IMGCHEST_MAX_ATTEMPTS - 1:
             delay = _backoff_seconds(attempt)

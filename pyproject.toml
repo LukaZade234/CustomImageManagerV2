@@ -1,0 +1,49 @@
+[project]
+name = "imgmanager"
+version = "2.0.0"
+description = "Custom character image manager for Mudae"
+requires-python = ">=3.13,<3.14"
+
+# Upper bounds are deliberate: v1 pinned only floors (flask>=2.0), which would
+# have accepted Flask 4.0 and broken the build with no code change.
+dependencies = [
+    "flask>=3.1,<4",
+    "flask-cors>=6.0,<7",
+    # flask-compress is removed once Cloudflare fronts the origin (it does Brotli).
+    "flask-compress>=1.24,<2",
+    "gunicorn>=23,<27",
+    "requests>=2.32,<3",
+    "Pillow>=11,<12",
+    # Phase 2 replaces this with psycopg[binary,pool] (psycopg 3).
+    "psycopg2-binary>=2.9,<3",
+    "python-dotenv>=1.0,<2",
+    # Pinned exactly: unmaintained, and the most fragile dependency here.
+    # protobuf is NOT declared - it arrives transitively via discord.py-self.
+    "discord.py-self==2.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14",
+    "pytest>=8.0",
+    "pyright>=1.1.400",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+exclude = [".venv", "frontend", "character_images"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "B008",   # function call in default arg - common and fine in Flask
+    "SIM105", # contextlib.suppress is not always clearer than try/except/pass
+]
+
+[tool.pyright]
+include = ["."]
+exclude = ["frontend", "**/node_modules", "**/__pycache__", ".venv", "character_images"]
+pythonVersion = "3.13"
+reportMissingModuleSource = "none"

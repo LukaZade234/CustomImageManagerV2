@@ -3,7 +3,9 @@
 A factual description of the version being retired. No recommendations here; those live in
 `ROADMAP.md`, and the reasoning behind them in `DECISIONS.md`.
 
-Written against commit `93d7c97` on `main`.
+Line references point at the code as it stands in this repository (v1 behaviour, reformatted
+by `ruff` during the Phase 0 toolchain work). The original unformatted history lives on the
+v1 repository at commit `93d7c97`.
 
 > **Note:** this describes v1 *as it was*. Some files documented here no longer exist in the
 > V2 repository — `character_mapping.js`, `github_utils.py`, `.do/app.yaml`,
@@ -79,7 +81,7 @@ Both exist in the repo and disagree with each other:
 |---|---|---|
 | `IMGCHEST_API_KEY` | Yes | ImgChest uploads |
 | `DATABASE_URL` | Yes | Neon PostgreSQL |
-| `SECRET_KEY` | No | Set on `app.config` at `upload_imgchest.py:336` and **never read anywhere** |
+| `SECRET_KEY` | No | Set on `app.config` at `upload_imgchest.py:377` and **never read anywhere** |
 | `CORS_ORIGINS` | No | Comma-separated. **Defaults to `*`** |
 | `DISCORD_USER_TOKEN` | For Mudae | A real user account token (self-bot) |
 | `DISCORD_CHANNEL_ID` | For Mudae | Channel where `$im` / `$ima` are sent |
@@ -146,7 +148,7 @@ installed although the project contains no TypeScript.
 
 ### Schema — the entire thing
 
-`db.py:100` creates one table and there are no others:
+`db.py:104` creates one table and there are no others:
 
 ```sql
 CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value JSONB NOT NULL)
@@ -156,10 +158,10 @@ Four rows, each holding one whole JSON document read and written atomically:
 
 | Key | Shape | Accessors |
 |---|---|---|
-| `custom_images` | `{"Char Name": ["https://cdn.imgchest.com/...", ...]}` | `db.py:137` / `db.py:145` |
-| `characters` | `[{name, series, rank, main_image_url}]` | `db.py:209` / `db.py:218` |
-| `saved_characters` | `[{...character objects...}]` (bookmarks) | `db.py:153` / `db.py:161` |
-| `last_updated` | `{"Char Name": 1712345678.9}` | `db.py:169` / `db.py:179` |
+| `custom_images` | `{"Char Name": ["https://cdn.imgchest.com/...", ...]}` | `db.py:141` / `db.py:151` |
+| `characters` | `[{name, series, rank, main_image_url}]` | `db.py:236` / `db.py:247` |
+| `saved_characters` | `[{...character objects...}]` (bookmarks) | `db.py:161` / `db.py:171` |
+| `last_updated` | `{"Char Name": 1712345678.9}` | `db.py:181` / `db.py:192` |
 
 **A custom image is a bare URL string in a list.** No id, no timestamp, no uploader, no metadata.
 Ordering is array position. There is nowhere to attach anything to an image without changing the
@@ -168,8 +170,8 @@ value type.
 ### Connection handling
 
 `db.py` keeps **one module-global psycopg2 connection** (`_db`) per process, created lazily in
-`_get_db()` (`db.py:68`) with `conn.autocommit = True` (`db.py:89`). A daemon thread pings
-`SELECT 1` every 4 minutes to stop idle timeouts (`db.py:43`). `_with_retry` (`db.py:124`) retries
+`_get_db()` (`db.py:71`) with `conn.autocommit = True` (`db.py:93`). A daemon thread pings
+`SELECT 1` every 4 minutes to stop idle timeouts (`db.py:46`). `_with_retry` (`db.py:128`) retries
 once on `OperationalError` / `InterfaceError` / `DatabaseError`.
 
 There are **no transactions anywhere in the codebase.**
@@ -177,12 +179,12 @@ There are **no transactions anywhere in the codebase.**
 ### The concurrent-write data loss bug
 
 Every mutation is a read-modify-write of an entire JSONB document with no locking and no
-isolation. For example, adding an image (`upload_imgchest.py:689`):
+isolation. For example, adding an image (`upload_imgchest.py:761`):
 
 ```python
-data = db.get_custom_images()      # read the whole map
-data[char_name].extend(links)      # modify in Python
-db.set_custom_images(data)         # write the whole map back
+data = db.get_custom_images()  # read the whole map
+data[char_name].extend(links)  # modify in Python
+db.set_custom_images(data)  # write the whole map back
 ```
 
 With `--workers 2`, two simultaneous requests both read the old document and the second write
@@ -212,12 +214,12 @@ Everything lives here: Flask app construction, CORS, compression, a `before_requ
 error handler, ~30 route handlers, SSRF-protection helpers, the upload pipeline, and the Mudae
 endpoints. No blueprints, no separation.
 
-App setup (`upload_imgchest.py:336`):
+App setup (`upload_imgchest.py:377`):
 ```python
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
-_origins = os.environ.get('CORS_ORIGINS', '*')
-cors_origins = [o.strip() for o in _origins.split(',')] if _origins != '*' else '*'
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-key-change-in-production")
+_origins = os.environ.get("CORS_ORIGINS", "*")
+cors_origins = [o.strip() for o in _origins.split(",")] if _origins != "*" else "*"
 CORS(app, origins=cors_origins)
 Compress(app)
 ```
@@ -238,50 +240,50 @@ Notable helpers:
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/api/health` | 367 | Static liveness dict; does **not** check the DB |
-| GET | `/api/last-updated` | 373 | `{char: timestamp}` |
-| GET | `/`, `/saved`, `/add`, `/customs`, `/character/<name>` | 389–393 | SPA shell, `Cache-Control: no-cache` |
-| GET | `/images/<filename>` | 407 | Serves `character_images/` off local disk |
-| GET | `/character_images/<path>` | 411 | Same |
-| GET | `/custom_images.json` | 416 | **Dumps every image URL for every character** |
-| POST | `/api/download-image-proxy` | 427 | Server-side fetch for browser downloads |
-| GET | `/assets/<path>` | 459 | Hashed SPA assets, `max_age=31536000` |
-| GET | `/characters`, `/api/characters` | 467 | Character list |
-| POST | `/upload` | 479 | Bare ImgChest upload; does not persist |
-| GET | `/api/saved` | 533 | Bookmarks |
-| POST | `/api/saved` | 541 | Add bookmark |
-| POST | `/api/add-character` | 566 | Create a character |
-| DELETE | `/api/saved/<name>` | 623 | Remove bookmark |
-| POST | `/api/custom-image` | 636 | **Add images** (multipart) |
-| POST | `/api/import-custom-images-from-urls` | 711 | Add by URL, max 20, SSRF-guarded |
-| GET | `/api/custom-image/<char_name>` | 773 | One character's URL list |
-| POST | `/api/reorder-custom-images` | 782 | Replaces the whole array |
-| POST | `/api/delete-custom-image` | 804 | **Delete one** — `list.remove(url)` |
-| POST | `/api/delete-custom-images` | 826 | **Delete many** — list-comprehension filter |
-| POST | `/api/edit-character` | 853 | Rename; cascades across three KV keys |
-| POST | `/api/set-main-image` | 913 | Upload and set `main_image_url` |
-| GET | `/api/mudae/status` | 1025 | `{configured: bool}` |
-| GET | `/api/mudae/proxy-image` | 1030 | Proxy a Mudae CDN image |
-| POST | `/api/mudae/lookup-character` | 1070 | `$im` lookup; `add:true` persists |
-| POST | `/api/mudae/lookup-series` | 1117 | `$ima` series resolution |
-| POST | `/api/mudae/add-series` | 1141 | Bulk import; SSE when `?stream=1` |
-| POST | `/api/mudae/cancel-series` | 1215 | Cancels an in-flight bulk import |
-| POST | `/api/mudae/refresh-main-image` | 1312 | Re-pull main image from Mudae |
+| GET | `/api/health` | 409 | Static liveness dict; does **not** check the DB |
+| GET | `/api/last-updated` | 415 | `{char: timestamp}` |
+| GET | `/`, `/saved`, `/add`, `/customs`, `/character/<name>` | 432–436 | SPA shell, `Cache-Control: no-cache` |
+| GET | `/images/<filename>` | 451 | Serves `character_images/` off local disk |
+| GET | `/character_images/<path>` | 456 | Same |
+| GET | `/custom_images.json` | 462 | **Dumps every image URL for every character** |
+| POST | `/api/download-image-proxy` | 473 | Server-side fetch for browser downloads |
+| GET | `/assets/<path>` | 506 | Hashed SPA assets, `max_age=31536000` |
+| GET | `/characters`, `/api/characters` | 515 | Character list |
+| POST | `/upload` | 532 | Bare ImgChest upload; does not persist |
+| GET | `/api/saved` | 592 | Bookmarks |
+| POST | `/api/saved` | 592 | Add bookmark |
+| POST | `/api/add-character` | 627 | Create a character |
+| DELETE | `/api/saved/<name>` | 689 | Remove bookmark |
+| POST | `/api/custom-image` | 703 | **Add images** (multipart) |
+| POST | `/api/import-custom-images-from-urls` | 785 | Add by URL, max 20, SSRF-guarded |
+| GET | `/api/custom-image/<char_name>` | 852 | One character's URL list |
+| POST | `/api/reorder-custom-images` | 862 | Replaces the whole array |
+| POST | `/api/delete-custom-image` | 885 | **Delete one** — `list.remove(url)` |
+| POST | `/api/delete-custom-images` | 908 | **Delete many** — list-comprehension filter |
+| POST | `/api/edit-character` | 936 | Rename; cascades across three KV keys |
+| POST | `/api/set-main-image` | 1000 | Upload and set `main_image_url` |
+| GET | `/api/mudae/status` | 1124 | `{configured: bool}` |
+| GET | `/api/mudae/proxy-image` | 1129 | Proxy a Mudae CDN image |
+| POST | `/api/mudae/lookup-character` | 1169 | `$im` lookup; `add:true` persists |
+| POST | `/api/mudae/lookup-series` | 1218 | `$ima` series resolution |
+| POST | `/api/mudae/add-series` | 1244 | Bulk import; SSE when `?stream=1` |
+| POST | `/api/mudae/cancel-series` | 1326 | Cancels an in-flight bulk import |
+| POST | `/api/mudae/refresh-main-image` | 1424 | Re-pull main image from Mudae |
 
 ### 5.3 Image upload pipeline
 
-`_run_single_custom_upload_from_temp` (`upload_imgchest.py:236`):
+`_run_single_custom_upload_from_temp` (`upload_imgchest.py:255`):
 
 1. File saved to `./temp_custom_<secure_filename>` in the working directory
 2. Size check against `MAX_FILE_SIZE` (30 MB)
-3. `validate_image_file` (`image_utils.py:28`) — Pillow `img.verify()`
-4. `convert_to_png` (`image_utils.py:37`) unless already `.png` / `.gif`:
+3. `validate_image_file` (`image_utils.py:30`) — Pillow `img.verify()`
+4. `convert_to_png` (`image_utils.py:40`) unless already `.png` / `.gif`:
    - Reject over 4096px unless the file is under 30 MB
    - `ImageOps.exif_transpose` for orientation
    - Resize longest edge to ≤ 2048px (`MAX_DIMENSION`)
    - Convert to RGBA, save PNG
    - Loop shrinking by ~8–12% until under 30 MB, max 14 iterations
-5. `upload_to_imgchest` (`imgchest_utils.py:60`) — `POST /v1/post` with `privacy: hidden`,
+5. `upload_to_imgchest` (`imgchest_utils.py:63`) — `POST /v1/post` with `privacy: hidden`,
    `nsfw: "false"` hardcoded; 4 attempts with exponential backoff on timeouts, connection errors,
    429, and 502/503/504
 6. Returns `(post_link, direct_link)`; only `direct_link` is stored
@@ -293,14 +295,14 @@ A **Discord self-bot**: it logs into the operator's own personal Discord account
 `DISCORD_USER_TOKEN`, posts `$im` / `$ima` in a fixed channel, and parses Mudae's embed replies.
 It does not introduce any end-user identity — every request is attributed to the operator's
 account. Identity checks are only "is this message from the Mudae bot"
-(`mudae_discord.py:889`, `:1142`).
+(`mudae_discord.py:897`, `:1142`).
 
-**Architecture: connect per request, not persistent.** `mudae_discord.py:1334` is
+**Architecture: connect per request, not persistent.** `mudae_discord.py:1348` is
 `asyncio.run(coro)` — each request creates a fresh event loop, calls `client.start()`
 (`:1097`), waits up to 30s for ready (`:1099`), does its work, then tears the client down
 (`:1127`). Two consequences:
 
-- The guarding `threading.Lock` (`mudae_discord.py:127`) is **process-global, and gunicorn runs
+- The guarding `threading.Lock` (`mudae_discord.py:131`) is **process-global, and gunicorn runs
   2 workers** — two concurrent Mudae requests landing on different workers will both connect
   simultaneously, defeating the lock entirely.
 - Every lookup consumes one Discord *identify*, which is rate-limited to roughly 1000/day per
@@ -350,7 +352,7 @@ hand-parses the SSE byte stream. All calls send `credentials: 'same-origin'`, bu
 because nothing is stored.
 
 **Serving:** Flask serves the SPA shell for the five client routes with `Cache-Control: no-cache`
-(`upload_imgchest.py:389`) and hashed assets from `/assets/` with a one-year max-age (`:459`).
+(`upload_imgchest.py:432`) and hashed assets from `/assets/` with a one-year max-age (`:459`).
 
 ### The obvious performance problem
 
@@ -417,7 +419,7 @@ backslash paths from a pre-React era and has **zero references** anywhere in the
   are still on ImgChest, only within that tab's lifetime, and it **silently clobbers concurrent
   edits by other visitors**
 - **Moderation** — none. `nsfw: "false"` is hardcoded in the ImgChest payload
-  (`imgchest_utils.py:77`) and that is the entire extent of it
+  (`imgchest_utils.py:82`) and that is the entire extent of it
 - **Tests** — zero. No pytest, vitest, or jest anywhere
 - **Migrations** — `CREATE TABLE IF NOT EXISTS` at startup; no versioning
 - **Structured logging** — `print(..., flush=True)` throughout
@@ -429,20 +431,20 @@ backslash paths from a pre-React era and has **zero references** anywhere in the
 | Issue | Location | Impact |
 |---|---|---|
 | Concurrent writes lose data | `db.py` — no transactions, whole-blob RMW | Images silently vanish; looks like griefing |
-| Anyone can delete anything | `upload_imgchest.py:804`, `:826` | The griefing problem that motivated this rework |
+| Anyone can delete anything | `upload_imgchest.py:885`, `:826` | The griefing problem that motivated this rework |
 | No delete confirmation | `CharacterPage.jsx:635` | Accidental bulk deletion |
-| `CORS: *` by default | `upload_imgchest.py:339` | Any webpage can drive a visitor's browser into mutating endpoints |
+| `CORS: *` by default | `upload_imgchest.py:380` | Any webpage can drive a visitor's browser into mutating endpoints |
 | No rate limiting | Everywhere | A trivial script can empty the library |
-| Mudae lock is per-process | `mudae_discord.py:127` + 2 workers | Concurrent Discord connections |
+| Mudae lock is per-process | `mudae_discord.py:131` + 2 workers | Concurrent Discord connections |
 | Only 2 concurrent requests site-wide | `--workers 2`, sync class | Two slow requests make the site appear down |
 | SSE imports over 120s are SIGKILLed | `--timeout 120` + sync worker | Large series imports stop dead mid-stream |
 | Four-way Python version mismatch | `.python-version` / venv / Dockerfile / pyright | Dev on 3.14, deploy on 3.11 |
 | No lockfile, 8/10 deps unbounded | `requirements.txt` | Builds are not reproducible |
 | 5 npm vulnerabilities (2 high) | `esbuild`, `nanoid`, `react-router` | Fixed by the pending major upgrades |
-| Discord identify quota burn | `mudae_discord.py:1334` | Connect/disconnect per request, ~1000/day cap |
+| Discord identify quota burn | `mudae_discord.py:1348` | Connect/disconnect per request, ~1000/day cap |
 | Discord self-bot ToS | `mudae_discord.py` | Account ban would remove all Mudae features |
-| `SECRET_KEY` unused | `upload_imgchest.py:336` | Falls back to a hardcoded dev key |
-| Health check checks nothing | `upload_imgchest.py:367` | Reports healthy with a dead database |
+| `SECRET_KEY` unused | `upload_imgchest.py:377` | Falls back to a hardcoded dev key |
+| Health check checks nothing | `upload_imgchest.py:409` | Reports healthy with a dead database |
 | Full-map fetch on Home | `HomePage.jsx:16` | Unbounded payload growth |
 | Undo clobbers concurrent edits | `CharacterPage.jsx:635` | Restores a stale array wholesale |
 | Dead code | `character_mapping.js`, `github_utils.py` | 260 KB and confusion |
