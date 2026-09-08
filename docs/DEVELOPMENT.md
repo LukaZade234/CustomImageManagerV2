@@ -135,6 +135,7 @@ different hat.
 - **A `strict` xfail marks a known bug**, not a flaky test. When the bug is fixed the test
   XPASSes and fails the suite, forcing the marker to be removed. Do not convert one to a
   skip.
-- **The gunicorn worker configuration is deliberately unchanged** until the Phase 2 data
-  layer is transactional. Raising concurrency first would lose more data, not less. See
-  `DECISIONS.md` section 7.
+- **Gunicorn settings live in `gunicorn.conf.py`,** not in the command line, and each is
+  commented with why. Override at runtime with `WEB_WORKERS`, `WEB_THREADS`, `WEB_TIMEOUT`.
+  The worker class is `gthread` on purpose: gevent monkey-patches sockets and conflicts with
+  the `asyncio` Discord client. See `DECISIONS.md` section 7.

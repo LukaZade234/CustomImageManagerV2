@@ -214,28 +214,42 @@ gallery, unicode and apostrophe names — and shuts down cleanly.
 
 ---
 
-## Phase 4 — Concurrency and worker model
+## Phase 4 — Concurrency and worker model — **COMPLETE**
 
-**Deliberately placed after Phase 2, not before.** Raising concurrency while the read-modify-write
-bug is still live would produce *more* collisions and lose *more* data. This is the one place where
-doing the cheap fix early makes things actively worse.
+Deliberately sequenced after Phase 2/3: raising concurrency while writes could still lose data
+would have produced *more* collisions, not fewer.
 
-Today: `--workers 2` with no `--worker-class`, so gunicorn uses sync workers — one request at a
-time each, blocked for the request's full duration including network waits. That is **two
-concurrent requests site-wide**, against requests that take up to 55s (Mudae lookup) or minutes
-(series import, image upload).
+- [x] **Switched to `gthread`.** Settings moved into `gunicorn.conf.py`, which explains each
+      choice, with `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` overrides so the same image suits
+      a home server or a cloud VM. Default: 2 workers × 8 threads = 16 concurrent requests, up
+      from 2.
+- [x] **Not gevent.** It monkey-patches sockets, which conflicts with the `asyncio.run()` Discord
+      client. `gthread` patches nothing.
+- [x] **The 120-second SSE kill is fixed**, as a side effect rather than by raising the timeout. A
+      *sync* worker only reports to the master between requests, so any response longer than
+      `timeout` was killed mid-flight; a *gthread* worker reports from its accept loop,
+      independently of what its threads are serving. The timeout still does its real job of
+      catching a wedged process.
+- [x] **`max_requests` with jitter**, so a slow leak in the image pipeline cannot grow unbounded.
 
-- [ ] **Switch to `--workers 1 --worker-class gthread --threads 8`.** Gives 8 concurrent requests
-      instead of 2, one copy of the app in RAM instead of two, and — because there is only one
-      process — **makes the Discord `threading.Lock` correct for free.**
-- [ ] **Do not use gevent.** It monkey-patches sockets, which conflicts with the `asyncio.run()`
-      Discord code in `mudae_discord.py`. `gthread` patches nothing.
-- [ ] **Fix the SSE timeout kill.** `--timeout 120` kills any worker silent for 120s, and a sync
-      worker only reports to the master *between* requests. Any series import over two minutes is
-      SIGKILLed mid-stream. Raise the timeout for the streaming route, or remove the long work from
-      the request cycle entirely (see Phase 8) — the second is the real fix.
-- [ ] **Reconsider worker count** only once Discord work is out of the request path. At that point
-      every request is fast and the number stops mattering much.
+### Measured, not assumed
+
+| | result |
+|---|---|
+| 12s response, `--timeout 5`, **sync** | killed at 5s, `WORKER TIMEOUT`, worker rebooted, output truncated |
+| 12s response, `--timeout 5`, **gthread** | completed in full, no timeout |
+| 8 concurrent 3s requests, **sync, 2 workers** | **23.3s** (serialised; theoretical worst case 24s) |
+| 8 concurrent 3s requests, **gthread, 2×8** | **3.0s** (the theoretical floor) |
+| Real app, 16 concurrent reads | all 200 |
+| Real app, 12 concurrent writes to one table | all 200, all rows persisted, no "database is locked" |
+
+### This is a mitigation, not the cure
+
+A series import still does minutes of work inside a single web request. Sixteen threads means
+sixteen slow imports before the site stalls instead of two — better, but the same shape of problem.
+The cure is Phase 8: the request starts a job and returns immediately, a background process does
+the work, and the page polls for progress. Nothing then holds a request open for minutes, and the
+timeout question disappears entirely rather than being worked around.
 
 ---
 

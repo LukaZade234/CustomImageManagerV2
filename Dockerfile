@@ -31,8 +31,6 @@ RUN test -f frontend/dist/index.html
 ENV PORT=8080
 EXPOSE 8080
 
-# NOTE: worker model is unchanged on purpose. Moving to
-# `--workers 1 --worker-class gthread --threads 8` is Phase 4, and must not
-# land before the Phase 2 data layer is transactional - raising concurrency
-# against the current read-modify-write code would lose more data, not less.
-CMD ["sh", "-c", "gunicorn --worker-tmp-dir /dev/shm --workers 2 --timeout 120 --bind 0.0.0.0:${PORT:-8080} app:app"]
+# Settings live in gunicorn.conf.py, which explains why each is what it is.
+# Tunable at runtime via WEB_WORKERS / WEB_THREADS / WEB_TIMEOUT.
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
