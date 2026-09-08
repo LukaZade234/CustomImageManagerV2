@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="ImgManager — personal tool to browse characters, manage custom images for Mudae, and copy $ai commands. No login; not affiliated with Discord or Mudae."
+    />
+    <meta name="google-site-verification" content="7U-EcXYg_g_s3VD9qSfqlEPrIKelnXNfJf9gYwUfyqM" />
+    <title>ImgManager — Mudae custom image helper</title>
+  </head>
+  <body>
+    <script>
+      try {
+        if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark-mode');
+      } catch (_) { /* private mode / blocked storage */ }
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

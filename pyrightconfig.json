@@ -1,0 +1,6 @@
+{
+  "include": ["."],
+  "exclude": ["frontend", "**/node_modules", "**/__pycache__"],
+  "pythonVersion": "3.11",
+  "reportMissingModuleSource": "none"
+}

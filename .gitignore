@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv
+.tox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+nosetests.xml
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Secrets
+.env
+
+# Logs
+*.log
+
+# Build artifacts
+frontend/node_modules
+frontend/dist
+
+# User-specific data (not project code)
+add_to_csv.txt
+pending_characters.json
+
+# Runtime temp files from the upload pipeline
+temp_custom_*
+temp_add_*
+temp_main_*
