@@ -85,6 +85,61 @@ Both exist in the repo and disagree with each other:
 | `DISCORD_CHANNEL_ID` | For Mudae | Channel where `$im` / `$ima` are sent |
 | `MUDAE_BOT_USER_ID` | No | Defaults to `432610292342587392` |
 
+### 3.1 Worker model
+
+`gunicorn --worker-tmp-dir /dev/shm --workers 2 --timeout 120 app:app`. No `--worker-class` is
+set, so gunicorn uses **sync** workers.
+
+A sync worker handles exactly one request at a time, start to finish, and stays blocked for the
+whole duration including time spent waiting on the network. **Two workers therefore means two
+concurrent requests site-wide**; further requests queue in the socket backlog.
+
+This collides badly with how long requests take here:
+
+| Request | Duration | Cause |
+|---|---|---|
+| Mudae lookup | up to ~55s | 30s Discord login timeout + 25s `REPLY_TIMEOUT_S` |
+| Series import (SSE) | minutes | ~1-2.5s per character across dozens of characters |
+| Image upload | up to minutes | Pillow conversion + ImgChest, 4 retries at `(30, 120)` timeouts |
+
+The frontend also uploads one file per request in a serial loop, so a 10-file drop is 10
+sequential requests. One series import plus one upload session occupies both workers, and every
+other visitor gets nothing — the site appears down rather than slow.
+
+The worker model is also the direct cause of two bugs below: the Discord `threading.Lock` is
+process-global, so two workers hold two independent locks; and `db.py`'s single global connection
+is one per worker.
+
+### 3.2 Python version disagreement
+
+Four sources disagree about which Python this is:
+
+| Source | Version |
+|---|---|
+| `.python-version` | 3.13 |
+| the committed `.venv` | 3.14.6 |
+| `Dockerfile` | `python:3.11-slim` |
+| `pyrightconfig.json` | 3.11 |
+
+Development happens on 3.14 and deployment on 3.11. `discord.py-self==2.1.0` does import on 3.14,
+so this has been luck rather than design.
+
+### 3.3 Dependency pinning
+
+`requirements.txt` declares 10 packages, **8 of which have no upper bound** (`flask>=2.0` will
+accept Flask 4.0), and there is **no lockfile** — builds are not reproducible. Installed versions
+have drifted far past the declared floors: Flask 3.1.3, gunicorn 26.0.0, flask-cors 6.0.5.
+
+`protobuf` is declared directly but **never imported by application code** — it is transitive via
+`discord.py-self` / `discord-protos`.
+
+The frontend is in better shape: `package-lock.json` is tracked. But every major dependency is one
+major version behind (React 18.3.1, react-router-dom 6.30.4, zustand 4.5.7, Vite 5.4.21), and
+`npm audit` reports **5 vulnerabilities (2 high)** in `esbuild`, `nanoid`, and `react-router`.
+There is no linter, formatter, type checker, or test runner on either side; `pyrightconfig.json`
+exists but pyright is not in `requirements.txt`. `@types/react` and `@types/react-dom` are
+installed although the project contains no TypeScript.
+
 ---
 
 ## 4. Database
@@ -379,6 +434,11 @@ backslash paths from a pre-React era and has **zero references** anywhere in the
 | `CORS: *` by default | `upload_imgchest.py:339` | Any webpage can drive a visitor's browser into mutating endpoints |
 | No rate limiting | Everywhere | A trivial script can empty the library |
 | Mudae lock is per-process | `mudae_discord.py:127` + 2 workers | Concurrent Discord connections |
+| Only 2 concurrent requests site-wide | `--workers 2`, sync class | Two slow requests make the site appear down |
+| SSE imports over 120s are SIGKILLed | `--timeout 120` + sync worker | Large series imports stop dead mid-stream |
+| Four-way Python version mismatch | `.python-version` / venv / Dockerfile / pyright | Dev on 3.14, deploy on 3.11 |
+| No lockfile, 8/10 deps unbounded | `requirements.txt` | Builds are not reproducible |
+| 5 npm vulnerabilities (2 high) | `esbuild`, `nanoid`, `react-router` | Fixed by the pending major upgrades |
 | Discord identify quota burn | `mudae_discord.py:1334` | Connect/disconnect per request, ~1000/day cap |
 | Discord self-bot ToS | `mudae_discord.py` | Account ban would remove all Mudae features |
 | `SECRET_KEY` unused | `upload_imgchest.py:336` | Falls back to a hardcoded dev key |

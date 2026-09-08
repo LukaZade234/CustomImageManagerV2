@@ -300,7 +300,94 @@ are not the problem.
 
 ---
 
-## 7. Smaller decisions
+## 7. Libraries and toolchain
+
+### Concurrency comes *after* the data layer, not before
+
+The obvious quick win is to raise gunicorn's concurrency — today it runs `--workers 2` with the
+default sync worker class, meaning **two concurrent requests site-wide** against requests that take
+up to 55 seconds (Mudae lookup) or minutes (series import, image upload). One import plus one
+upload session makes the site appear down for everyone else.
+
+It was tempting to fix that first because it is nearly a one-line change. **That would have been a
+mistake.** The read-modify-write data-loss bug gets worse with concurrency: more simultaneous
+requests means more collisions on the JSONB blob and more silently lost writes. Raising concurrency
+before Phase 2 would trade a visible problem for an invisible one.
+
+So the worker change is deliberately sequenced after the data layer is transactional.
+
+### `gthread`, not `gevent`
+
+The usual advice for a blocking WSGI app is gevent, and that advice is wrong here: gevent
+monkey-patches sockets, which conflicts with the `asyncio.run()` Discord client in
+`mudae_discord.py`. asyncio and monkey-patched sockets do not coexist reliably.
+
+`gthread` patches nothing — it just gives each worker a thread pool, and Python releases the GIL
+during I/O, which is what nearly all of this app's blocking actually is (waiting on Discord,
+ImgChest, and Postgres).
+
+There is also a free win: `--workers 1 --worker-class gthread --threads 8` gives 8 concurrent
+requests instead of 2, one copy of the app in memory instead of two, and — because there is only
+one process — **makes the Discord `threading.Lock` correct**, since the reason it fails today is
+that two worker processes hold two independent locks.
+
+### Tests before the data-layer rewrite
+
+Originally testing was the last phase. That was an ordering error. The test that matters most —
+"concurrent adds to one character both persist" — *is* the acceptance criterion for the data-layer
+rewrite. Written afterwards it proves nothing; written first it fails against the current code and
+then flips green, which is the only real evidence the data-loss bug is dead.
+
+### `uv` for the Python toolchain
+
+Four sources currently disagree about which Python this is (`.python-version` 3.13, the venv
+3.14.6, the Dockerfile 3.11, pyright 3.11), there is no lockfile, and 8 of 10 dependencies have no
+upper bound — `flask>=2.0` would accept Flask 4.0 and break the build with no code change.
+
+`uv` fixes the interpreter pin, the lockfile, and the environment in one tool rather than three.
+
+### psycopg 3, and no ORM
+
+`psycopg` 3 with `psycopg_pool` replaces `psycopg2-binary` and brings pooling with it, so
+connection pooling stops being a separate task.
+
+**SQLAlchemy was considered and rejected.** Five small tables and a handful of queries do not
+justify an ORM; raw SQL through psycopg3 with Alembic for migrations stays more legible, and a
+future session reading plain SQL does not have to reverse-engineer a mapping layer to understand
+what the database actually does.
+
+### react-query *and* zustand, not one or the other
+
+These look redundant and are not. `@tanstack/react-query` owns **server** state — fetching,
+caching, retry, invalidation — replacing retry and backoff logic currently hand-rolled and
+duplicated across `useStore.js` and `api.js`. zustand keeps owning **UI** state: dark mode, toasts,
+selection. Its per-character caching is also what makes killing the full-map fetch practical.
+
+### Dependencies dropped, and one deliberately kept
+
+- **`protobuf`** — declared directly but never imported by our code; it is transitive via
+  `discord.py-self`. Pinning another package's transitive dependency only creates future conflicts.
+- **`flask-compress`** — removed *once Cloudflare is in front*, not before. The edge does Brotli,
+  which beats gzip, so origin-side compression would just burn CPU on a box we are paying for in
+  uptime.
+- **`flask-cors` is kept.** It looks droppable, but once the SPA is on Pages the API is genuinely
+  cross-origin, and cookie identity makes CORS subtle — `*` is invalid with credentials.
+  Hand-rolling that is how it gets done wrong.
+
+### TypeScript: open
+
+`@types/react` and `@types/react-dom` are installed although the project contains no TypeScript.
+The decision is deliberately left open, but the timing is not: adopting TS is cheapest immediately
+before the 1178-line `CharacterPage.jsx` and 617-line `AddPage.jsx` get split, and considerably
+more expensive after. Either commit then, or remove the unused type packages.
+
+The same timing argument applies to the frontend major upgrades (React 18→19, react-router 6→7,
+zustand 4→5, Vite 5→8, which also clear 5 npm vulnerabilities): do them while the components are
+still whole and a test harness exists to catch regressions.
+
+---
+
+## 8. Smaller decisions
 
 - **The 1000 committed PNGs stay for now.** They are default main images for the top 1000
   characters by rank, not custom images users take away, so their value is low. They move to R2
