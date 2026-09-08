@@ -14,6 +14,16 @@ uv sync                       # create .venv and install from uv.lock, exactly
 cd frontend && npm ci         # install from package-lock.json, exactly
 ```
 
+The database is a single SQLite file at `data/imgmanager.db` (override with
+`DATABASE_PATH`). It is created and migrated automatically on first connection;
+`migrations/*.sql` are applied in filename order and recorded in
+`schema_migrations`. To load the v1 data:
+
+```bash
+uv run python scripts/export_neon_snapshot.py            # read-only, from the live v1 DB
+uv run python scripts/migrate_v1_to_sqlite.py --dump kv_store.sql
+```
+
 Use `uv sync --locked` in CI: it fails if `uv.lock` has drifted from `pyproject.toml`
 rather than silently resolving something new.
 
@@ -36,19 +46,19 @@ uv run pytest                 # everything
 uv run pytest -v              # per-test names
 ```
 
-The suite needs PostgreSQL. If `TEST_DATABASE_URL` is unset, `tests/conftest.py`
-starts a throwaway `postgres:16-alpine` container via podman on port 55432 and
-reuses it across runs. To use your own instead:
+No setup: `tests/conftest.py` creates a temporary SQLite file per run and deletes
+it afterwards. To point the suite at your own database instead:
 
 ```bash
-TEST_DATABASE_URL=postgresql://user:pw@localhost:5432/imgmgr_test uv run pytest
+TEST_DATABASE_PATH=/tmp/mine.db uv run pytest
 ```
 
-> **Safety.** `upload_imgchest.py` calls `load_dotenv()` at import time, and `.env`
-> holds the **production** `DATABASE_URL`. `conftest.py` therefore overwrites
-> `DATABASE_URL` before any application module is imported, and refuses to run at
-> all against a non-local host or a known managed-database hostname. Do not weaken
-> those guards — without them, running the suite would write to live user data.
+> **Safety.** `DATABASE_PATH` is overwritten at collection time, before any
+> application module is imported, so a value inherited from the environment or
+> `.env` cannot reach the app. The harness also refuses to run against the working
+> database at `data/imgmanager.db`, or against any path outside a temp directory.
+> Do not weaken those guards — the hazard is quieter than it was when the database
+> was remote, not smaller.
 
 ### Frontend
 
@@ -79,29 +89,41 @@ shapes live in `frontend/src/types.ts`.
 
 ## Writing to the database
 
-`db.py` deliberately exposes **no setter**. Reads are `get_*`; every write goes through
-`mutate_*`, which opens a transaction, takes an advisory lock on the key, reads the
-document, hands it to your function to edit **in place**, and writes it back:
+`db.py` wraps SQLite (`sqlite3`, standard library). There is no ORM and no query
+builder — read the SQL.
 
 ```python
-# Correct: atomic.
-db.mutate_custom_images(lambda data: data.setdefault(name, []).extend(urls))
-
-# Correct: the mutator's return value comes back to you, so a route can still
-# choose its status code.
-def _delete(data: dict) -> str:
-    urls = data.get(name)
-    if urls is None:
-        return "no_character"
-    urls.remove(image_url)
-    return "deleted"
-
-outcome = db.mutate_custom_images(_delete)
+db.get_custom_images_for(name)  # one character's active images
+db.add_custom_images(name, urls)  # returns how many landed
+db.delete_custom_images(name, urls)  # 'no_character' | 'no_match' | 'deleted'
+db.reorder_custom_images(name, new_order)  # False if the character is unknown
 ```
 
-The two-call pattern — `data = get_x()`, mutate, `set_x(data)` — is what caused the
-original data loss: two overlapping requests both read the same document and the second
-write discarded the first. Do not add a setter back to make that possible again.
+Two rules that are easy to break and expensive to debug:
+
+**Never check-then-insert.** This is a race — two callers both see the row missing,
+both insert, one dies on the UNIQUE constraint:
+
+```python
+if not exists(name):  # WRONG
+    conn.execute("INSERT ...")
+```
+
+Let the constraint decide instead, and read the outcome:
+
+```python
+cur = conn.execute("INSERT ... ON CONFLICT (name) DO NOTHING", ...)
+if cur.rowcount:
+    ...
+```
+
+This bug was written and caught by `test_many_concurrent_adds_all_persist` during
+Phase 3. It is the same read-modify-write hazard Phase 2 removed, wearing a
+different hat.
+
+**Foreign keys need turning on.** SQLite ignores `REFERENCES` unless
+`PRAGMA foreign_keys = ON` is set on **every** connection. `db.py` does this in
+`_configure`; any new connection path must too, or the constraints are decoration.
 
 ## Conventions
 

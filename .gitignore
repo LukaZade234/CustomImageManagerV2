@@ -29,6 +29,14 @@ frontend/dist
 frontend/coverage
 .pytest_cache/
 
+# Local snapshots of the live database (data, not code)
+snapshot/
+kv_store.sql
+data/
+*.db
+*.db-wal
+*.db-shm
+
 # User-specific data (not project code)
 add_to_csv.txt
 pending_characters.json

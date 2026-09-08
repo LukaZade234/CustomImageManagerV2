@@ -14,9 +14,6 @@ dependencies = [
     "gunicorn>=23,<27",
     "requests>=2.32,<3",
     "Pillow>=11,<12",
-    # psycopg 3 with its connection pool. Replaced psycopg2-binary in Phase 2:
-    # pooling is built in, so it is not a separate concern.
-    "psycopg[binary,pool]>=3.2,<4",
     "python-dotenv>=1.0,<2",
     # Pinned exactly: unmaintained, and the most fragile dependency here.
     # protobuf is NOT declared - it arrives transitively via discord.py-self.
@@ -25,6 +22,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    # Only for scripts/export_neon_snapshot.py, the one-time read of the v1
+    # database. The application itself uses sqlite3 from the standard library.
+    "psycopg[binary]>=3.2,<4",
     "ruff>=0.14",
     "pytest>=8.0",
     "pyright>=1.1.400",

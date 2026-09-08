@@ -1,9 +1,9 @@
 """Endpoint behaviour for the custom-image routes.
 
-These cover the Phase 2 rewrite, where every read-modify-write was replaced by an
-atomic `db.mutate_*` call. That changed the control flow -- the mutator now
-reports why it failed so the route can still choose the right status code -- so
-the status codes are worth pinning down.
+These pin the status codes across two storage rewrites: Phase 2 replaced
+read-modify-write with atomic mutation, and Phase 3 replaced JSON documents with
+rows. Both changed the control flow underneath these routes while the responses
+had to stay identical, which is exactly what these assertions protect.
 """
 
 import json
@@ -14,7 +14,8 @@ def _post(client, path, payload):
 
 
 def _seed(db, mapping: dict) -> None:
-    db.mutate_custom_images(lambda data: data.update(mapping))
+    for name, urls in mapping.items():
+        db.add_custom_images(name, urls)
 
 
 class TestDeleteOne:
@@ -108,7 +109,7 @@ class TestReorder:
         """
         _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]})
         # Someone else uploads while the reorder dialog is open.
-        clean_db.mutate_custom_images(lambda d: d["Rem"].append("https://cdn/new.png"))
+        clean_db.add_custom_images("Rem", ["https://cdn/new.png"])
 
         r = _post(
             client,

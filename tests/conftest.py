@@ -2,150 +2,99 @@
 
 SAFETY, READ THIS FIRST
 -----------------------
-`upload_imgchest.py` calls `load_dotenv()` at import time, and `.env` holds the
-PRODUCTION Neon `DATABASE_URL`. Importing the application in a test therefore
-points it at live user data, and a write test would corrupt it.
+The hazard changed shape in Phase 3 but did not go away. It used to be "the app
+calls load_dotenv() at import and .env holds the production Neon URL, so an
+unguarded test would write to live user data". Now the database is a local file
+and the risk is writing to the *working* database instead of a throwaway one --
+still destructive, just quieter.
 
-Two things prevent that, and neither should be removed:
+Two things prevent it, and neither should be removed:
 
-1. `DATABASE_URL` is overwritten here at collection time, before any application
-   module is imported. `load_dotenv()` defaults to `override=False`, so it will
-   not clobber a value that is already set.
-2. `_assert_not_production()` refuses to run at all unless the URL resolves to a
-   local host, and rejects known managed-database hostnames outright.
+1. `DATABASE_PATH` is **always** overwritten at collection time, before any
+   application module is imported, so a value inherited from the environment or
+   from `.env` cannot reach the app.
+2. To point the suite at your own database, set `TEST_DATABASE_PATH` -- which is
+   opt-in and validated. `_assert_disposable()` refuses to run if the path is the
+   working database, or is anywhere outside a temporary directory.
 """
 
 import os
-import socket
-import subprocess
-import time
-from urllib.parse import urlparse
+import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 
-CONTAINER_NAME = "imgmgr-pgtest"
-CONTAINER_PORT = 55432
-DEFAULT_TEST_URL = f"postgresql://postgres:test@127.0.0.1:{CONTAINER_PORT}/imgmgr_test"
-
-# Substrings that indicate a hosted database. Never run tests against these.
-_PRODUCTION_MARKERS = (
-    "neon.tech",
-    "amazonaws.com",
-    "supabase.co",
-    "render.com",
-    "digitalocean.com",
-    "azure.com",
-    "googleapis.com",
-)
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.containers.internal"}
+_TMPDIR: str | None = None
 
 
-def _assert_not_production(url: str) -> None:
-    """Abort the whole run rather than risk touching live data."""
-    lowered = url.lower()
-    for marker in _PRODUCTION_MARKERS:
-        if marker in lowered:
-            raise pytest.UsageError(
-                f"Refusing to run tests: DATABASE_URL points at '{marker}', which looks "
-                f"like a production database. Set TEST_DATABASE_URL to a local database."
-            )
-    host = urlparse(url).hostname or ""
-    if host not in _LOCAL_HOSTS:
+def _assert_disposable(path: Path) -> None:
+    """Abort the run rather than risk writing to a database someone cares about."""
+    resolved = path.resolve()
+    default = (Path(__file__).resolve().parent.parent / "data" / "imgmanager.db").resolve()
+    if resolved == default:
         raise pytest.UsageError(
-            f"Refusing to run tests: database host '{host}' is not local. "
-            f"Tests may only run against localhost."
+            f"Refusing to run tests against the working database at {resolved}. "
+            f"Unset TEST_DATABASE_PATH and let the harness create a temporary one."
         )
-
-
-def _port_open(port: int) -> bool:
-    with socket.socket() as s:
-        s.settimeout(0.5)
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-def _start_container() -> None:
-    """Start a throwaway Postgres. Reuses one that is already running."""
-    if _port_open(CONTAINER_PORT):
-        return
-    subprocess.run(["podman", "rm", "-f", CONTAINER_NAME], capture_output=True, check=False)
-    result = subprocess.run(
-        [
-            "podman",
-            "run",
-            "-d",
-            "--name",
-            CONTAINER_NAME,
-            "-e",
-            "POSTGRES_PASSWORD=test",
-            "-e",
-            "POSTGRES_DB=imgmgr_test",
-            "-p",
-            f"{CONTAINER_PORT}:5432",
-            "docker.io/library/postgres:16-alpine",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    tmp_root = Path(tempfile.gettempdir()).resolve()
+    if tmp_root not in resolved.parents:
         raise pytest.UsageError(
-            "Could not start the test database.\n"
-            f"podman said: {result.stderr.strip()}\n\n"
-            "Either start podman, or point TEST_DATABASE_URL at a local Postgres."
+            f"Refusing to run tests against {resolved}: it is not inside "
+            f"{tmp_root}. Tests may only touch a throwaway database."
         )
-    for _ in range(60):
-        if _port_open(CONTAINER_PORT):
-            time.sleep(0.5)  # accepting connections is not the same as ready
-            return
-        time.sleep(0.5)
-    raise pytest.UsageError("Test database did not become ready within 30s.")
 
 
 def pytest_configure(config):
     """Runs before test modules are imported, which is what makes the guard work."""
-    url = os.environ.get("TEST_DATABASE_URL")
-    if not url:
-        _start_container()
-        url = DEFAULT_TEST_URL
-    _assert_not_production(url)
-    os.environ["DATABASE_URL"] = url
+    global _TMPDIR
+    override = os.environ.get("TEST_DATABASE_PATH")
+    if override:
+        path = Path(override)
+    else:
+        _TMPDIR = tempfile.mkdtemp(prefix="imgmanager-tests-")
+        path = Path(_TMPDIR) / "test.db"
+    # Validated whether it came from the environment or from us. DATABASE_PATH is
+    # overwritten unconditionally below so no inherited value survives.
+    _assert_disposable(path)
+    os.environ["DATABASE_PATH"] = str(path)
     # Keep the app from needing real credentials for unrelated services.
     os.environ.setdefault("IMGCHEST_API_KEY", "test-key-not-real")
     os.environ.setdefault("SECRET_KEY", "test-secret-not-real")
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    return os.environ["DATABASE_URL"]
+def pytest_unconfigure(config):
+    if _TMPDIR and os.path.isdir(_TMPDIR):
+        shutil.rmtree(_TMPDIR, ignore_errors=True)
 
 
 @pytest.fixture
-def clean_db(database_url):
-    """A database with the schema present and every table empty.
+def clean_db():
+    """An empty database with the schema applied.
 
-    Yields the `db` module. Import happens inside the fixture so that even an
-    accidental module-level import in a test file cannot dodge the guard above.
+    Imported inside the fixture so that even an accidental module-level import in
+    a test file cannot dodge the guard above.
     """
     import db as db_module
 
-    # Belt and braces: verify what the application actually resolved to.
-    _assert_not_production(os.environ["DATABASE_URL"])
+    _assert_disposable(db_module.database_path())
 
-    db_module._reset_pool()
-    # Opening the pool also creates the schema.
-    with db_module.transaction() as conn, conn.cursor() as cur:
-        cur.execute("TRUNCATE kv_store")
+    db_module._reset_db()
+    path = db_module.database_path()
+    for suffix in ("", "-wal", "-shm"):
+        candidate = Path(str(path) + suffix)
+        if candidate.exists():
+            candidate.unlink()
+
+    # Opening the connection applies the migrations.
+    db_module.get_connection()
     yield db_module
-    db_module._reset_pool()
+    db_module._reset_db()
 
 
 @pytest.fixture
 def client(clean_db):
-    """Flask test client against the clean test database.
-
-    Imported here rather than at module scope so the DATABASE_URL guard in
-    `pytest_configure` has already run before the app calls `load_dotenv()`.
-    """
+    """Flask test client against the clean test database."""
     from upload_imgchest import app
 
     app.config.update(TESTING=True)

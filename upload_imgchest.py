@@ -609,14 +609,7 @@ def save_character():
     if not ok:
         return jsonify({"error": err}), 400
     try:
-
-        def _save(saved: list) -> bool:
-            if any(char.get("name") == char_name for char in saved):
-                return False
-            saved.append(data)
-            return True
-
-        if not db.mutate_saved_characters(_save):
+        if not db.save_character(char_name):
             return jsonify({"error": "Character already saved"}), 400
         db.update_last_modified(char_name)
         return jsonify({"success": True, "message": "Character saved"})
@@ -693,15 +686,7 @@ def add_character():
 @app.route("/api/saved/<path:name>", methods=["DELETE"])
 def remove_saved(name):
     try:
-
-        def _remove(saved: list) -> bool:
-            kept = [char for char in saved if char.get("name") != name]
-            if len(kept) == len(saved):
-                return False
-            saved[:] = kept
-            return True
-
-        if not db.mutate_saved_characters(_remove):
+        if not db.unsave_character(name):
             return jsonify({"error": "Character not found in saved list"}), 404
         return jsonify({"success": True, "message": "Character removed"})
     except Exception as e:
@@ -767,7 +752,7 @@ def add_custom_image():
             main_error = errors[0] if errors else "No files were successfully uploaded"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.mutate_custom_images(lambda data: data.setdefault(char_name, []).extend(uploaded_links))
+        db.add_custom_images(char_name, uploaded_links)
         db.update_last_modified(char_name)
         print(
             f"[UPLOAD] updating custom_images for {char_name}, added {len(uploaded_links)} link(s)",
@@ -830,7 +815,7 @@ def import_custom_images_from_urls():
             main_error = errors[0] if errors else "No images were imported"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.mutate_custom_images(lambda data: data.setdefault(char_name, []).extend(uploaded_links))
+        db.add_custom_images(char_name, uploaded_links)
         db.update_last_modified(char_name)
         print(
             f"[IMPORT] updating custom_images for {char_name}, added {len(uploaded_links)} link(s)",
@@ -853,8 +838,9 @@ def import_custom_images_from_urls():
 @app.route("/api/custom-image/<path:char_name>", methods=["GET"])
 def get_custom_images(char_name):
     try:
-        data = db.get_custom_images()
-        return jsonify(data.get(char_name, []))
+        # Targeted query rather than loading every character's images and
+        # discarding all but one, which is what the JSON-document layout forced.
+        return jsonify(db.get_custom_images_for(char_name))
     except Exception as e:
         print(f"Error reading custom images: {e}")
     return jsonify([])
@@ -869,21 +855,7 @@ def reorder_custom_images():
         if not char_name or not new_order:
             return jsonify({"error": "Missing required fields"}), 400
 
-        def _reorder(data: dict) -> bool:
-            current = data.get(char_name)
-            if current is None:
-                return False
-            # Apply the requested order, but only to images that still exist,
-            # and keep any that were added after the client loaded the page.
-            # Assigning new_order wholesale would silently drop those.
-            existing = set(current)
-            ordered = [url for url in new_order if url in existing]
-            requested = set(new_order)
-            ordered.extend(url for url in current if url not in requested)
-            data[char_name] = ordered
-            return True
-
-        if not db.mutate_custom_images(_reorder):
+        if not db.reorder_custom_images(char_name, new_order):
             return jsonify({"error": "Character not found"}), 404
         db.update_last_modified(char_name)
         return jsonify({"message": "Order updated successfully"})
@@ -902,20 +874,10 @@ def delete_custom_image():
     image_url = data["image_url"]
 
     try:
-
-        def _delete(data: dict) -> str:
-            urls = data.get(char_name)
-            if urls is None:
-                return "no_character"
-            if image_url not in urls:
-                return "no_image"
-            urls.remove(image_url)
-            return "deleted"
-
-        outcome = db.mutate_custom_images(_delete)
+        outcome = db.delete_custom_images(char_name, [image_url])
         if outcome == "no_character":
             return jsonify({"error": "Character not found"}), 404
-        if outcome == "no_image":
+        if outcome == "no_match":
             return jsonify({"error": "Image not found"}), 404
         db.update_last_modified(char_name)
         return jsonify({"success": True, "message": "Image deleted"})
@@ -935,19 +897,7 @@ def delete_custom_images():
         return jsonify({"error": "image_urls must be a list"}), 400
 
     try:
-        doomed = set(image_urls)
-
-        def _delete(data: dict) -> str:
-            urls = data.get(char_name)
-            if urls is None:
-                return "no_character"
-            kept = [url for url in urls if url not in doomed]
-            if len(kept) == len(urls):
-                return "no_match"
-            urls[:] = kept
-            return "deleted"
-
-        outcome = db.mutate_custom_images(_delete)
+        outcome = db.delete_custom_images(char_name, image_urls)
         if outcome == "no_character":
             return jsonify({"error": "Character not found"}), 404
         if outcome == "no_match":
@@ -994,33 +944,9 @@ def edit_character():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    if new_name != orig_name:
-        # Each document is renamed under its own lock. They are not renamed in
-        # one transaction because they are separate keys; a failure part-way
-        # leaves the others consistent, which is why each is logged separately.
-        def _rename_key(data: dict) -> None:
-            if orig_name in data:
-                data[new_name] = data.pop(orig_name)
-
-        try:
-            db.mutate_custom_images(_rename_key)
-        except Exception as e:
-            print(f"Error renaming custom_images: {e}")
-
-        def _rename_saved(saved: list) -> None:
-            for entry in saved:
-                if entry.get("name") == orig_name:
-                    entry["name"] = new_name
-                    break
-
-        try:
-            db.mutate_saved_characters(_rename_saved)
-        except Exception as e:
-            print(f"Error renaming in saved_characters: {e}")
-        try:
-            db.mutate_last_updated(_rename_key)
-        except Exception as e:
-            print(f"Error renaming in last_updated: {e}")
+    # No rename cascade: images, bookmarks and the timestamp all hang off
+    # characters.id, so update_character above is the entire rename. v1 needed
+    # 30 lines here rewriting three separate documents, able to half-fail.
 
     db.update_last_modified(new_name)
     return jsonify({"success": True, "message": "Character updated", "new_name": new_name})
