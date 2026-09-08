@@ -47,3 +47,14 @@ include = ["."]
 exclude = ["frontend", "**/node_modules", "**/__pycache__", ".venv", "character_images"]
 pythonVersion = "3.13"
 reportMissingModuleSource = "none"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Flat layout: the application modules sit at the repo root. `python -m pytest`
+# adds the CWD to sys.path but the `pytest` entry point does not, so without this
+# `uv run pytest` fails to import `db`.
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: tests that start containers or sleep",
+]

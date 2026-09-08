@@ -64,19 +64,44 @@ deep-link fallback (`/character/Rem`) returns 200.
 
 ---
 
-## Phase 1 — Test harness
+## Phase 1 — Test harness — **COMPLETE**
 
-**This was originally Phase 7, and that was an ordering error.** The headline test — "concurrent
-adds to one character both persist" — is the acceptance criterion for the data-layer rewrite in
-Phase 2. Without it there is no way to prove the data-loss bug is actually fixed, so it has to come
-first.
+**This was originally Phase 7, and that was an ordering error.** The headline test —
+"concurrent adds to one character both persist" — is the acceptance criterion for the data-layer
+rewrite in Phase 2. Without it there is no way to prove the data-loss bug is actually fixed, so it
+had to come first.
 
-- [ ] **`pytest`** on the backend, **`vitest` + `@testing-library/react`** on the frontend (vitest
-      shares Vite's config, so setup is near-zero).
-- [ ] **Write the concurrency test first and watch it fail** against the current code. That failure
-      is the baseline for Phase 2.
-- [ ] Cover the rest as the features land: ownership rule, report thresholds, dedupe, role
-      permissions. Detail in the Testing section below.
+- [x] **`pytest`** on the backend, **`vitest` + `@testing-library/react`** on the frontend.
+- [x] **The concurrency test is written and it fails**, exactly as predicted: with two threads
+      forced to interleave by a barrier, one image is silently lost. The bug is now demonstrated
+      rather than argued. It carries `@pytest.mark.xfail(strict=True)`, so the suite stays green
+      *and* the bug cannot be quietly fixed and forgotten — when Phase 2 lands, the test XPASSes,
+      which **fails the suite** until the marker is removed.
+- [x] **Production-database guard.** `upload_imgchest.py` calls `load_dotenv()` at import time and
+      `.env` holds the live Neon URL, so an unguarded test run would write to real user data.
+      `tests/conftest.py` overwrites `DATABASE_URL` at collection time — before any application
+      module is imported — and refuses to run against a non-local host or a known managed-database
+      hostname. All three behaviours are verified, including that `load_dotenv()` does not override
+      a pre-set variable.
+- [x] **Zero-setup test database.** If `TEST_DATABASE_URL` is unset, the harness starts a throwaway
+      `postgres:16-alpine` container via podman and reuses it between runs.
+- [x] **Frontend tests worth having, not just a smoke test.** 21 tests covering the `$ai` command
+      splitter (every part within Discord's limit, every part independently pasteable, no URL ever
+      split or lost — asserted across a sweep of limits) and download filename de-duplication.
+      These cover both functions where Phase 0's `let`→`const` fixes landed. A `Toast` component
+      test proves React 19 + testing-library 16 + zustand 5 work together after the upgrades.
+- [x] **`docs/DEVELOPMENT.md`** records the commands and the conventions behind them.
+
+### Still to cover, as the features land
+
+Ownership rule, report thresholds, dedupe, and role permissions — see the Testing detail section
+below. Those tests are written alongside the phases that introduce the behaviour.
+
+### Verified
+
+`uv run pytest` → 2 passed, 1 xfailed. `npm test` → 21 passed. Both documented commands were run
+as written; `pythonpath = ["."]` was added to `pyproject.toml` after `uv run pytest` turned out to
+fail where `python -m pytest` succeeded (the entry point does not add the CWD to `sys.path`).
 
 ---
 

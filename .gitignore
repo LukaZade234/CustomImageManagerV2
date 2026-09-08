@@ -26,6 +26,8 @@ pip-delete-this-directory.txt
 # Build artifacts
 frontend/node_modules
 frontend/dist
+frontend/coverage
+.pytest_cache/
 
 # User-specific data (not project code)
 add_to_csv.txt
