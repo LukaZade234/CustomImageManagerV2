@@ -12,7 +12,7 @@ export function uniqueFilenames(urls) {
   const used = new Set()
   const result = []
   for (const url of urls) {
-    let base = sanitizeFilenameFromUrl(url)
+    const base = sanitizeFilenameFromUrl(url)
     if (!used.has(base)) {
       used.add(base)
       result.push(base)

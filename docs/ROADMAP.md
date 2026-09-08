@@ -9,34 +9,58 @@ Phases 5 onward are largely independent of each other.
 
 ---
 
-## Phase 0 — Runtime and toolchain
+## Phase 0 — Runtime and toolchain — **COMPLETE**
 
 Nothing downstream is trustworthy until the environment is reproducible and one Python version is
-agreed on. Four sources currently disagree (`.python-version` 3.13, the venv 3.14.6, the Dockerfile
-3.11, pyright 3.11), there is no lockfile, and 8 of 10 dependencies have no upper bound.
+agreed on. On arrival four sources disagreed (`.python-version` 3.13, the venv 3.14.6, the
+Dockerfile 3.11, pyright 3.11), there was no lockfile, and 8 of 10 dependencies had no upper bound.
 
-- [ ] **Adopt `uv`.** Replaces pip + venv + pyenv, produces a real lockfile, and pins the
-      interpreter — it fixes the version mismatch and the reproducibility gap in one move.
-- [ ] **Choose one Python version** and set it in `.python-version`, the `Dockerfile`, and
-      `pyrightconfig.json`. Verify `discord.py-self==2.1.0` on it — it is a pinned, unmaintained
-      library and is the most likely thing to break on a newer interpreter.
-- [ ] **Add `ruff`** for linting and formatting (replaces flake8 + black + isort).
-- [ ] **Install `pyright`** or drop `pyrightconfig.json`. Right now the config exists but the tool
-      is not in `requirements.txt`, so type checking is aspirational.
-- [ ] **Drop `protobuf`** from `requirements.txt` — never imported by our code, transitive via
-      `discord.py-self`. Pinning another package's transitive dependency only creates conflicts.
-- [ ] **Upgrade the frontend majors:** React 18→19, react-router-dom 6→7, zustand 4→5, Vite 5→8.
-      This also clears all **5 npm vulnerabilities (2 high)** in `esbuild`, `nanoid`, and
-      `react-router`. Do it now, while the components are still intact — not after they are split.
-- [ ] **Add `biome`** (lint + format in one tool) or eslint + prettier.
-- [ ] **Decide on TypeScript.** `@types/react` and `@types/react-dom` are already installed with no
-      TypeScript in the project. Either commit to TS — this is the cheapest it will ever be, right
-      before the big components get split — or remove the unused type packages.
+- [x] **Adopted `uv`.** `pyproject.toml` + `uv.lock` replace `requirements.txt`. `uv sync --locked`
+      verifies the lockfile matches.
+- [x] **Standardised on Python 3.13.** Verified empirically first: `discord.py-self==2.1.0` — the
+      pinned, unmaintained dependency and the most likely thing to break — installs and imports
+      cleanly on 3.12, 3.13 **and** 3.14, so the choice was free. 3.13 chosen for its long support
+      window; 3.14 is a poor bet for a project pinned to an unmaintained library.
+- [x] **All dependencies now carry upper bounds.** `flask>=2.0` would have accepted Flask 4.0.
+- [x] **Dropped `protobuf`.** Transitive via `discord.py-self`; verified protobuf 7 works with
+      `discord_protos`, so the old `<7` bound was a forward-guard, not a known break.
+- [x] **Added `ruff`.** 42 safe fixes applied; the codebase is formatted. `pyrightconfig.json`
+      folded into `pyproject.toml`, and `pyright` is now an actual dev dependency.
+- [x] **Rebuilt the `Dockerfile`** on `python:3.13-slim`, installing from `uv.lock` with
+      dependencies in their own cache layer, and `npm ci` instead of `npm install`.
+- [x] **Upgraded all four frontend majors:** React 18→19, react-router-dom 6→7, zustand 4→5,
+      Vite 5→8 (plugin-react 6). Done one at a time with a build check after each. **npm audit is
+      now clean** — all 5 vulnerabilities gone.
+- [x] **Added `biome`** (`biome.jsonc`). 226 findings triaged down to 19 real ones by disabling
+      three noisy rule sets, with the reason for each recorded in the config. Safe fixes applied.
+- [x] **Adopted TypeScript incrementally.** `tsconfig.json` with `allowJs: true` and
+      `checkJs: false`, so existing `.js`/`.jsx` keep working untouched and only converted files
+      are checked. `src/types.ts` holds the current API shapes and is the first thing Phase 3
+      updates.
 - [ ] **Remove `flask-compress`** once Cloudflare is in front; the edge does Brotli, which beats
-      gzip, and origin-side compression just burns CPU. Not before the CDN lands.
+      gzip, and origin-side compression just burns CPU. **Deliberately not done yet** — it must not
+      land before the CDN (Phase 5).
 
 Keep `flask-cors`: once the SPA is on Pages the API is genuinely cross-origin, and cookie identity
 makes CORS subtle enough (no `*` with credentials) that hand-rolling it is a mistake.
+
+### Deliberately deferred out of Phase 0
+
+- **The Biome format sweep across `src/`.** Unlike Python formatting, reformatting JSX rewraps
+  markup and inserts `{' '}` to preserve whitespace. With no test suite yet and
+  `CharacterPage.jsx` due to be split in Phase 10, the risk/benefit is wrong right now. The
+  formatter is configured and matches the existing style (single quotes, no semicolons, 2-space);
+  run `npm run format` as part of Phase 10, when the files are being rewritten anyway.
+- **16 ruff and 19 biome findings that need judgement** (`SIM102`, `SIM103`, `B904`, `E741`,
+  `useParseIntRadix`, `noArrayIndexKey`, `useExhaustiveDependencies`). These alter logic, so they
+  wait for the Phase 1 test harness.
+
+### Verified
+
+`uv sync --locked` clean; `ruff format --check` clean; gunicorn boots on 3.13 and serves
+`/api/health` and the SPA shell; frontend builds; `tsc --noEmit` passes; the served page
+references the new bundle, the bundle returns HTTP 200 as `text/javascript`, and the SPA
+deep-link fallback (`/character/Rem`) returns 200.
 
 ---
 

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
+  "files": { "includes": ["src/**", "*.js", "*.json"] },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    // Matches the existing hand-written style so enabling the formatter
+    // is not a 4000-line rewrite.
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "all"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        // 102 hits on hand-written CSS that works correctly. A stylistic
+        // opinion about selector order, not a defect.
+        "noDescendingSpecificity": "off"
+      },
+      "complexity": {
+        // !important is used deliberately for dark-mode overrides.
+        "noImportantStyles": "off"
+      },
+      "suspicious": {
+        // False positives: flags arrow callbacks passed to forEach, which
+        // discards return values. Verified both hits are harmless.
+        "useIterableCallbackReturn": "off"
+      }
+    }
+  }
+}

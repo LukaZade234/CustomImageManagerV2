@@ -47,7 +47,7 @@ export function splitAiCommandForLimit(charName, urls, maxLen) {
   while (i < tokens.length) {
     const rest = tokens.slice(i)
     let take = 1
-    let segment = buildAiSegment(charName, rest.slice(0, take))
+    const segment = buildAiSegment(charName, rest.slice(0, take))
     if (segment.length > maxLen) {
       parts.push(segment)
       i += 1

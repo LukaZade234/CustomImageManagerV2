@@ -130,12 +130,12 @@ export const useStore = create((set, get) => ({
     if (!oldName || !newName || oldName === newName) return
     set((s) => {
       const customImages = { ...s.customImages }
-      if (Object.prototype.hasOwnProperty.call(customImages, oldName)) {
+      if (Object.hasOwn(customImages, oldName)) {
         customImages[newName] = customImages[oldName]
         delete customImages[oldName]
       }
       const lastUpdated = { ...s.lastUpdated }
-      if (Object.prototype.hasOwnProperty.call(lastUpdated, oldName)) {
+      if (Object.hasOwn(lastUpdated, oldName)) {
         lastUpdated[newName] = lastUpdated[oldName]
         delete lastUpdated[oldName]
       }
