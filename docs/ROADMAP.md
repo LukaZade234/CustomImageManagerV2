@@ -154,48 +154,63 @@ writes against the pool, and shuts down cleanly on SIGTERM.
 ## Phase 3 — Data model
 
 Everything about ownership and moderation depends on images being addressable records rather than
-bare strings. Built directly on the Phase 2 data layer — with pooling and transactions already
-correct underneath, this schema change is far less risky.
+bare strings. Built on the Phase 2 data layer, so pooling and transactions are already correct
+underneath. Engine and shape settled in `DECISIONS.md` §8.
 
-- [ ] **Replace the JSONB blobs with real tables.** New: `identities`, `custom_images`,
-      `user_hidden`, `image_takes`, `image_reports`. Keep `characters`, `saved_characters`, and
-      `last_updated` in the KV store for now — they are not causing problems.
+- [ ] **Move to SQLite.** `sqlite3` is stdlib, so `psycopg` leaves the dependency list. Per
+      connection: `foreign_keys = ON` (SQLite does **not** enforce them by default),
+      `journal_mode = WAL`, `busy_timeout`, `synchronous = NORMAL`.
+- [ ] **Replace the JSONB documents with tables.**
 
       ```sql
-      CREATE TABLE identities (
-        id TEXT PRIMARY KEY, handle TEXT NOT NULL,
-        discord_id TEXT UNIQUE,
-        role TEXT NOT NULL DEFAULT 'user',   -- user | moderator | owner
-        created_at TIMESTAMPTZ DEFAULT now()
-      );
-      CREATE TABLE custom_images (
-        id BIGSERIAL PRIMARY KEY,
-        character_name TEXT NOT NULL, url TEXT NOT NULL,
-        content_hash TEXT, position INT,
-        added_by TEXT REFERENCES identities(id), added_at TIMESTAMPTZ DEFAULT now(),
-        state TEXT NOT NULL DEFAULT 'active',   -- active | removed
-        removed_by TEXT, removed_at TIMESTAMPTZ, removed_reason TEXT,
-        UNIQUE (character_name, url)
-      );
-      CREATE TABLE user_hidden   (identity_id TEXT, image_id BIGINT, PRIMARY KEY (identity_id, image_id));
-      CREATE TABLE image_takes   (image_id BIGINT, identity_id TEXT, kind TEXT, at TIMESTAMPTZ DEFAULT now());
-      CREATE TABLE image_reports (image_id BIGINT, identity_id TEXT, reason TEXT, at TIMESTAMPTZ DEFAULT now(),
-                                  PRIMARY KEY (image_id, identity_id));
-      CREATE INDEX ON custom_images (character_name, state);
+      characters    (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, series, rank,
+                     main_image_url, updated_at)
+      identities    (id TEXT PRIMARY KEY, handle, discord_id UNIQUE,
+                     role TEXT NOT NULL DEFAULT 'user', created_at)
+      custom_images (id INTEGER PRIMARY KEY,
+                     character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                     url TEXT NOT NULL, content_hash, position INTEGER NOT NULL,
+                     added_by REFERENCES identities(id), added_at,
+                     state TEXT NOT NULL DEFAULT 'active',
+                     removed_by, removed_at, removed_reason,
+                     UNIQUE (character_id, url))
+      saved         (identity_id, character_id)
+      user_hidden   (identity_id, image_id)
+      image_takes   (image_id, identity_id, kind, at)
+      image_reports (image_id, identity_id, reason, at)
       ```
 
-      `UNIQUE (character_name, url)` gives URL dedupe for free. `content_hash` catches the same
-      picture re-uploaded under a different ImgChest URL.
-
-- [ ] **A migration tool.** Alembic or numbered SQL files. Currently there is only
-      `CREATE TABLE IF NOT EXISTS` at startup with no versioning.
+- [ ] **Surrogate id for characters.** Renaming becomes one `UPDATE`; delete the 67-line rename
+      cascade in `edit_character` and its half-failure modes.
+- [ ] **`last_updated` becomes `characters.updated_at`** — a column, not a parallel map to keep in
+      step. `/api/last-updated` converts to the Unix timestamps the frontend already sorts on.
+- [ ] **Bookmarks become per-identity.** They are currently one global list shared by every
+      visitor. Decide what happens to the existing entries on migration — most likely assign them
+      to the owner.
+- [ ] **Drop the Phase 2 advisory lock** where it is no longer needed: two inserts into
+      `custom_images` do not contend, so there is nothing left to serialise.
+- [ ] **Migration script.** Export the four JSON documents from the live Neon database, load into
+      the new SQLite schema preserving array order into `position`, leave `added_by` NULL. Legacy
+      images therefore have no owner, so nobody can remove them except via Report — an acceptable
+      and arguably ideal outcome. Idempotent.
+- [ ] **Simplify the test harness.** The podman/PostgreSQL container in `tests/conftest.py` becomes
+      a temp file, so tests get faster and lose a dependency. **Keep an equivalent guard** — the
+      hazard becomes "don't run tests against the real database file" rather than "don't connect to
+      Neon", and it is no less real.
 - [ ] **A settings module.** Environment variables are read ad hoc across several files; centralise
-      them with validation at startup so a missing `SECRET_KEY` fails loudly rather than silently
-      falling back to `'dev-key-change-in-production'`.
-- [ ] **Data migration script.** Read the existing `custom_images` blob out of the old database,
-      insert one row per URL preserving array order into `position`, leave `added_by` NULL.
-      Idempotent (`ON CONFLICT DO NOTHING`). Legacy images therefore have no owner, which means
-      nobody can remove them except through Report — an acceptable and arguably ideal outcome.
+      them with validation at startup.
+
+### Prerequisite for seeding ~50,000 characters
+
+Not part of this phase, and **blocking** before the roster grows. The frontend loads every
+character into the zustand store on startup and filters client-side — fine at 1,000 (~150 KB),
+untenable at 50,000 (7–10 MB per page load).
+
+- [ ] **Server-side search with pagination**, replacing client-side filtering. Index on `name` and
+      `series`; SQLite FTS5 if substring matching proves too slow.
+- [ ] **Find a data source.** No ready-made dataset was found — `LilJamJam/MudaeDB` is
+      series-bundle notes in Markdown, `marsn3/mudaetracker` is the Top 1000 already in hand.
+      `mudae.net` is the likelier source but needs scraping.
 
 ---
 
@@ -247,10 +262,11 @@ Goal: get off DigitalOcean and Neon entirely, at zero recurring cost. Rationale 
       | Risks | Awkward signup, regional capacity shortages, idle reclamation | Outages, ISP terms |
 
 - [ ] **Cloudflare Tunnel to the origin.** No port forwarding, no static IP, TLS at the edge.
-- [ ] **PostgreSQL on the origin box.** Co-located with the app — the app is chatty with the
-      database and the user is not (`DECISIONS.md` §3).
-- [ ] **Backups.** `pg_dump` to R2 on a cron. This is now self-hosted data with no managed provider
-      behind it, so backups are not optional. Verify a restore actually works.
+- [ ] **SQLite on the origin box.** One file next to the app; no database service to run
+      (`DECISIONS.md` §8). There is no network hop to the database at all.
+- [ ] **Litestream replicating to R2.** Continuous, so a dead box costs seconds rather than
+      however long since the last dump. This is self-hosted data with no provider behind it, so
+      backups are not optional — **verify a restore actually works** before cutting over.
 - [ ] **Cut over DNS**, confirm, then decommission DigitalOcean and Neon.
 - [x] **Delete `.github/workflows/build-frontend.yml`.** _(done)_ It existed only because the
       DigitalOcean Python buildpack could not build a frontend. Cloudflare Pages builds from

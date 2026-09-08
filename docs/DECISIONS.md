@@ -232,8 +232,13 @@ attract attention than from a datacenter one.
 
 The app makes several database round trips per request; the user makes one request. Co-locating
 the database with the application therefore removes far more total latency than edge-locating it
-would, and edge databases would optimize the hop that is already cheap. PostgreSQL runs on the
-same box as the origin, with `pg_dump` backups to R2 on a cron.
+would, and edge databases would optimize the hop that is already cheap. The database therefore
+lives on the origin box.
+
+**Superseded in part by section 8:** this originally specified PostgreSQL with `pg_dump` backups on
+a cron. The engine is now SQLite, replicated continuously to R2 by Litestream. The reasoning above
+is unchanged and in fact strengthened — with SQLite there is no network hop to the database at
+all.
 
 ---
 
@@ -295,8 +300,13 @@ gunicorn workers, silently loses concurrent writes today. Users experience that 
 vanishing, which is indistinguishable from griefing but entirely unrelated.
 
 Ownership, soft-delete state, reports and takes all become columns and joins rather than parallel
-structures. `characters`, `saved_characters`, and `last_updated` can stay in the KV store — they
-are not the problem.
+structures.
+
+**Extended by section 8**, which supersedes this section's final scope. An earlier draft kept
+`characters`, `saved_characters` and `last_updated` in the KV store on the grounds that they were
+not causing problems. That was too conservative: `last_updated` is a parallel map that has to be
+kept in step, `saved_characters` is a single list shared by every visitor, and keeping the
+character name as a key is what makes renaming a 67-line cascade. All of them become tables.
 
 ---
 
@@ -392,7 +402,95 @@ still whole and a test harness exists to catch regressions.
 
 ---
 
-## 8. Smaller decisions
+## 8. The v2 data model
+
+### SQLite on the origin box, not PostgreSQL
+
+Neon is being dropped for cost, and the replacement is **SQLite in a single file**, continuously
+replicated to Cloudflare R2 by Litestream.
+
+The deciding facts are about size and write pattern, not about the database. There are ~1,000
+characters today and perhaps 50,000 if the full Mudae roster is ever seeded; custom images are URL
+strings. That is **tens of megabytes at the outside**, and writes are human-paced — someone adding
+an image, bookmarking, or hiding something. Nothing here needs a database server.
+
+What SQLite buys:
+
+- **No service to operate.** On a self-hosted box, Postgres is another thing to patch, monitor and
+  restart after a reboot. SQLite is a file the application opens.
+- **`sqlite3` is in the standard library**, so `psycopg` leaves the dependency list.
+- **Better durability than a dump cron.** Litestream streams every change to R2 continuously, so a
+  dead server costs seconds of data. A `pg_dump` schedule costs however long since the last run.
+  Durability is the primary goal — this library is irreplaceable accumulated work.
+- **Inspection is copying a file** and opening it in a desktop GUI, rather than an SSH tunnel to a
+  database client.
+
+The real trade-off is single-writer. At this write volume it is theoretical, and SQLite in WAL mode
+handles multiple reader processes and several worker threads without difficulty.
+
+**An argument that was used and then withdrawn:** an earlier draft justified SQLite partly on the
+grounds that the Discord self-bot forces a single process anyway. That reasoning was wrong. The
+bot's single-process behaviour is an artifact of running it inside the web application, and Phase 8
+moves it out regardless. It is an authoring-time convenience that nobody waits on during normal
+use, and it must not be treated as a constraint on the data layer, the worker count, or anything
+else. The SQLite decision stands on operational grounds alone.
+
+### Characters get a surrogate id
+
+The character *name* is currently the primary key across four separate documents, which is why
+`edit_character` is 67 lines — most of it a rename cascade updating three documents in sequence,
+able to half-fail. With `characters.id`, renaming is one `UPDATE` and the cascade and its failure
+modes cease to exist. `name` stays `UNIQUE`, so the existing `/character/<name>` routes keep
+working by looking the name up.
+
+### Everything becomes a table; nothing stays JSON
+
+```
+characters      (id, name UNIQUE, series, rank, main_image_url, updated_at)
+identities      (id, handle, discord_id UNIQUE, role, created_at)
+custom_images   (id, character_id FK, url, content_hash, position,
+                 added_by FK, added_at, state, removed_by, removed_at, removed_reason,
+                 UNIQUE (character_id, url))
+saved           (identity_id, character_id)
+user_hidden     (identity_id, image_id)
+image_takes     (image_id, identity_id, kind, at)
+image_reports   (image_id, identity_id, reason, at)
+```
+
+Three consequences worth stating:
+
+- **`last_updated` stops being a document** and becomes `characters.updated_at` — one column
+  instead of a parallel map that has to be kept in step with everything else.
+- **`UNIQUE (character_id, url)`** makes duplicate rejection a property of the schema rather than a
+  task to remember.
+- **Bookmarks become per-person.** `saved_characters` is currently a *single global list*: if
+  anyone bookmarks a character, everyone sees it. That is almost certainly not intended, and it
+  fixes itself the moment bookmarks hang off an identity.
+
+The Phase 2 advisory lock can go once images are rows: two inserts into `custom_images` do not
+contend, so there is nothing left to serialise.
+
+### 50,000 characters: searchable names, pages on demand
+
+If the full Mudae roster is seeded, most of those characters will never receive a custom image.
+Rather than 50,000 mostly-empty pages, all names are **searchable and autocompleteable**, and a
+character page becomes meaningful when someone first adds an image to it. Browsing stays useful,
+and the Discord bot stops being needed for name and series lookup.
+
+**This is not yet actionable.** A search for a public dataset turned up `LilJamJam/MudaeDB`
+(series-bundle notes in Markdown, not a character list) and `marsn3/mudaetracker` (the Top 1000,
+which is already in hand). No ready-made 50k dataset was found; `mudae.net` is the likelier source
+but would need scraping. The schema is therefore built to *support* 50k, while seeding continues
+from the existing ~1,000.
+
+**Blocking prerequisite before any such seeding.** The frontend currently loads *every* character
+into the zustand store on startup and filters client-side. At 1,000 that is ~150 KB; at 50,000 it
+is 7–10 MB per page load, which is untenable — especially for the overseas users the hosting plan
+exists to serve. Server-side search with pagination must land before the roster grows.
+
+---
+
+## 9. Smaller decisions
 
 - **The 1000 committed PNGs stay for now.** They are default main images for the top 1000
   characters by rank, not custom images users take away, so their value is low. They move to R2
