@@ -69,6 +69,26 @@ npm run test:watch
 npm run test:coverage
 ```
 
+## Frontend deployment configuration
+
+`frontend/src/config.js` is the single place that knows where things live:
+
+| Variable | Unset (local dev) | Production |
+|---|---|---|
+| `VITE_API_BASE_URL` | empty — Vite proxies to Flask | `https://api.<domain>` |
+| `VITE_IMAGE_BASE_URL` | empty — Flask serves from disk | `https://images.<domain>` |
+
+Both are **inlined at build time**, so changing either needs a rebuild, and nothing
+secret may go in them. Copy `frontend/.env.example` to `.env.production` for a
+local production-shaped build.
+
+Requests always use `credentials: 'include'`, never `'same-origin'`. Once the SPA
+is on Pages, `'same-origin'` silently stops sending cookies — which would break
+identity in a way that reads as "everyone is a new person" rather than as an
+error. That obliges the API to send `Access-Control-Allow-Credentials` and to name
+an exact origin, which is why `CORS_ORIGINS=*` is refused at startup rather than
+tolerated.
+
 ## Quality gates
 
 ```bash

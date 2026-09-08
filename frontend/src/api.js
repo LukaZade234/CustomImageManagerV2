@@ -1,4 +1,4 @@
-const API_BASE = ''
+import { API_BASE, CREDENTIALS, imageUrl } from './config'
 
 /** @param {Response} res @param {string} text @param {Record<string, unknown>} parsed */
 function messageFromFailedResponse(res, text, parsed) {
@@ -32,14 +32,11 @@ function toNetworkError(err) {
   return err
 }
 
-function getImageUrl(imagePath) {
-  if (!imagePath) return ''
-  if (imagePath.startsWith('http') || imagePath.startsWith('//')) return imagePath
-  return `/character_images/${imagePath}`
-}
+/** Re-exported so existing imports keep working; the logic lives in config.js. */
+const getImageUrl = imageUrl
 
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, { ...options, credentials: 'same-origin' })
+  const res = await fetch(`${API_BASE}${path}`, { ...options, credentials: CREDENTIALS })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || err.message || res.statusText)
@@ -61,7 +58,7 @@ export const apiClient = {
     const maxAttempts = 4
 
     const attemptOnce = () =>
-      fetch(url, { method: 'POST', body: formData, credentials: 'same-origin' })
+      fetch(url, { method: 'POST', body: formData, credentials: CREDENTIALS })
         .catch((e) => {
           throw toNetworkError(e)
         })
@@ -104,7 +101,7 @@ export const apiClient = {
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
+      credentials: CREDENTIALS,
       body: JSON.stringify({ character_name: characterName, urls }),
     })
       .catch((e) => {
@@ -127,9 +124,9 @@ export const apiClient = {
         return j
       }),
   reorderCustomImages: (charName, newOrder) => api('/api/reorder-custom-images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_name: charName, new_order: newOrder }) }),
-  setMainImage: (formData) => fetch(`${API_BASE}/api/set-main-image`, { method: 'POST', body: formData, credentials: 'same-origin' }).then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'Upload failed') })),
+  setMainImage: (formData) => fetch(`${API_BASE}/api/set-main-image`, { method: 'POST', body: formData, credentials: CREDENTIALS }).then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'Upload failed') })),
   editCharacter: (data) => api('/api/edit-character', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
-  addCharacter: (formData) => fetch(`${API_BASE}/api/add-character`, { method: 'POST', body: formData, credentials: 'same-origin' }).then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'Failed') })),
+  addCharacter: (formData) => fetch(`${API_BASE}/api/add-character`, { method: 'POST', body: formData, credentials: CREDENTIALS }).then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'Failed') })),
   mudaeStatus: () => api('/api/mudae/status'),
   mudaeLookupCharacter: (name, add = false) =>
     api('/api/mudae/lookup-character', {
@@ -147,7 +144,7 @@ export const apiClient = {
     fetch(`${API_BASE}/api/mudae/add-series`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
+      credentials: CREDENTIALS,
       body: JSON.stringify({ series }),
     })
       .catch((e) => {
@@ -170,7 +167,7 @@ export const apiClient = {
     const res = await fetch(`${API_BASE}/api/mudae/add-series?stream=1`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      credentials: 'same-origin',
+      credentials: CREDENTIALS,
       body: JSON.stringify({ series }),
     }).catch((e) => {
       throw toNetworkError(e)

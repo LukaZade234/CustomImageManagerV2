@@ -319,7 +319,8 @@ nav-button/reaction handling). It breaks whenever Mudae changes its output.
 Bulk series import streams progress to the browser over **SSE**, with cancellation via a
 `threading.Event` (`:128`).
 
-**Risk:** automating a user account violates Discord's Terms of Service. `DEPLOY.md` already
+**Risk:** automating a user account violates Discord's Terms of Service. v1's `DEPLOY.md` (since
+replaced by `DEPLOYMENT.md`) already
 notes this. The account can be banned, which would take out all Mudae features.
 
 ---

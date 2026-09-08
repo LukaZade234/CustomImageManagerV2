@@ -376,10 +376,26 @@ def _validate_character_name(name):
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-key-change-in-production")
 
-# CORS: set CORS_ORIGINS env (comma-separated) to restrict, e.g. "https://your-app.ondigitalocean.app,http://localhost:5000"
-_origins = os.environ.get("CORS_ORIGINS", "*")
-cors_origins = [o.strip() for o in _origins.split(",")] if _origins != "*" else "*"
-CORS(app, origins=cors_origins)
+# CORS.
+#
+# The SPA moved to Cloudflare Pages, so in production the browser calls this API
+# from a different origin and must send the identity cookie with it. That means
+# credentialed CORS, and browsers reject credentialed requests against a wildcard
+# origin -- so "*" is refused outright rather than failing later in a way that
+# looks like "nobody is ever logged in".
+#
+# Unset means same-origin only, which is correct for local development (the Vite
+# dev server proxies to Flask) and for Flask serving the built SPA itself.
+_origins = os.environ.get("CORS_ORIGINS", "").strip()
+if _origins == "*":
+    raise RuntimeError(
+        "CORS_ORIGINS='*' is not allowed: this API sends credentials, and browsers "
+        "reject Access-Control-Allow-Origin: * on credentialed requests. List the "
+        "exact origins instead, e.g. CORS_ORIGINS=https://imgmanager.example.com"
+    )
+cors_origins = [o.strip() for o in _origins.split(",") if o.strip()]
+if cors_origins:
+    CORS(app, origins=cors_origins, supports_credentials=True)
 Compress(app)
 
 

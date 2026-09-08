@@ -1,0 +1,31 @@
+# Litestream: continuous replication of the SQLite database to Cloudflare R2.
+#
+# Install to /etc/litestream.yml. Replace every <PLACEHOLDER>.
+#
+# This is what makes SQLite a responsible choice for data you cannot lose.
+# Litestream ships the write-ahead log to R2 as it is written, so losing the
+# machine costs seconds, not "however long since the last backup ran".
+#
+# Restore with:
+#   litestream restore -o /var/lib/imgmanager/imgmanager.db \
+#     s3://<BUCKET>/imgmanager.db
+
+access-key-id: <R2_ACCESS_KEY_ID>
+secret-access-key: <R2_SECRET_ACCESS_KEY>
+
+dbs:
+  - path: /var/lib/imgmanager/imgmanager.db
+    replicas:
+      - type: s3
+        # R2 is S3-compatible. The account id is on the R2 page of the
+        # Cloudflare dashboard.
+        endpoint: https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com
+        bucket: <R2_BUCKET_NAME>
+        path: imgmanager.db
+        region: auto
+
+        # Keep a full day of point-in-time restore granularity, and snapshots
+        # for a month. At a few megabytes this costs essentially nothing.
+        retention: 720h
+        snapshot-interval: 24h
+        validation-interval: 12h

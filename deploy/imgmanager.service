@@ -1,0 +1,44 @@
+# systemd unit for the API. Install to /etc/systemd/system/imgmanager.service,
+# then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now imgmanager
+#
+# Litestream runs gunicorn as a child process rather than as a separate service.
+# That guarantees replication is running whenever the app is, and that it flushes
+# on shutdown -- a separate unit can race and miss the final writes.
+
+[Unit]
+Description=ImgManager API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=imgmanager
+Group=imgmanager
+WorkingDirectory=/opt/imgmanager
+
+Environment=DATABASE_PATH=/var/lib/imgmanager/imgmanager.db
+Environment=PORT=8080
+# Only the Pages origin. Wildcards are refused at startup because the API sends
+# credentials; see the CORS block in upload_imgchest.py.
+Environment=CORS_ORIGINS=https://<YOUR_PAGES_DOMAIN>
+# Must be a stable secret: it signs the identity cookies. If it changes, every
+# visitor silently becomes a new person.
+EnvironmentFile=/etc/imgmanager/secrets.env
+
+ExecStart=/usr/local/bin/litestream replicate -config /etc/litestream.yml -exec \
+    "/opt/imgmanager/.venv/bin/gunicorn -c /opt/imgmanager/gunicorn.conf.py app:app"
+
+Restart=always
+RestartSec=5
+
+# Hardening: the app needs to read its code and write only its database.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/imgmanager
+
+[Install]
+WantedBy=multi-user.target

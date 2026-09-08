@@ -1,0 +1,26 @@
+# Cloudflare Tunnel: exposes the API without opening a port, forwarding a
+# firewall, or having a static IP. Works identically on a home server and a
+# cloud VM, which is what makes the origin choice reversible later.
+#
+# Install to /etc/cloudflared/config.yml. Set up with:
+#   cloudflared tunnel login
+#   cloudflared tunnel create imgmanager
+#   cloudflared tunnel route dns imgmanager api.<YOUR_DOMAIN>
+#   sudo cloudflared service install
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: api.<YOUR_DOMAIN>
+    service: http://localhost:8080
+    originRequest:
+      # Series imports stream for minutes. Without this the tunnel closes the
+      # connection long before the import finishes.
+      noTLSVerify: false
+      connectTimeout: 30s
+      # Cloudflare's edge caps a proxied response at 100s of silence; the SSE
+      # stream emits progress far more often than that, so it stays open.
+      keepAliveTimeout: 90s
+  # Everything else is refused rather than reaching the origin.
+  - service: http_status:404

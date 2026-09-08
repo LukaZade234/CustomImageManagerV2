@@ -253,40 +253,44 @@ timeout question disappears entirely rather than being worked around.
 
 ---
 
-## Phase 5 — Hosting migration
+## Phase 5 — Hosting migration — **CODE COMPLETE, provisioning outstanding**
 
-Goal: get off DigitalOcean and Neon entirely, at zero recurring cost. Rationale in
-`DECISIONS.md` §3.
+Everything the repository can do is done. What remains needs your Cloudflare account, a domain and
+an origin box, and is written out step by step in `docs/DEPLOYMENT.md`.
 
-- [ ] **Frontend to Cloudflare Pages.** Free, global edge, custom domain. Split the SPA out of
-      Flask; the API becomes a separate origin, so CORS must be configured deliberately rather
-      than left at `*`.
-- [ ] **`character_images/` to R2.** 1000 PNGs, 151 MB, currently served by Flask off local disk on
-      every request. R2 has free egress. Later these should move to ImgChest, but R2 is the
-      immediate step.
-- [ ] **Stand up the origin box.** Two documented options — decide at build time, since Cloudflare
-      Tunnel makes them interchangeable and switching later costs one config change:
+### Done in the repository
 
-      | | Oracle Cloud Always Free | Home server |
-      |---|---|---|
-      | Cost | Free permanently | Free |
-      | Spec | 4 ARM cores / 24 GB RAM | Existing repurposed PC |
-      | Uptime | Datacenter | Domestic power and internet |
-      | Bandwidth | ~10 TB/mo egress | Home upload speed |
-      | Risks | Awkward signup, regional capacity shortages, idle reclamation | Outages, ISP terms |
+- [x] **The frontend can live on a different origin.** `frontend/src/config.js` centralises
+      `VITE_API_BASE_URL` and `VITE_IMAGE_BASE_URL`; `api.js` and `downloadCustomImages.js` no
+      longer assume same-origin. Both were hardcoding `/api/...` and `window.location.origin`.
+- [x] **`credentials: 'include'` everywhere**, replacing `'same-origin'`. This is the subtle one:
+      once the SPA is on Pages, `'same-origin'` silently stops sending cookies, so the Phase 6
+      identity cookie would fail as "everyone is a new person on every request" rather than as an
+      error.
+- [x] **CORS hardened for credentialed cross-origin.** `CORS_ORIGINS=*` is now **refused at
+      startup** — browsers reject credentialed requests against a wildcard, so failing loudly at
+      boot beats failing silently in someone's browser. Unset means same-origin only.
+      *(This also completes the CORS item listed under Phase 7.)*
+- [x] **Deployment artifacts** in `deploy/`: `litestream.yml`, `imgmanager.service` (Litestream
+      supervising gunicorn, so replication cannot be running-but-not), `cloudflared-config.yml`,
+      and `upload-character-images-to-r2.sh`.
+- [x] **`docs/DEPLOYMENT.md`** replaces the DigitalOcean `DEPLOY.md`, which is deleted.
+- [x] **13 new tests** pinning the contract: 7 on the frontend config (credentials mode, base-URL
+      joining, image URL resolution) and 6 on CORS, including that the app refuses to start on a
+      wildcard.
 
-- [ ] **Cloudflare Tunnel to the origin.** No port forwarding, no static IP, TLS at the edge.
-- [ ] **SQLite on the origin box.** One file next to the app; no database service to run
-      (`DECISIONS.md` §8). There is no network hop to the database at all.
-- [ ] **Litestream replicating to R2.** Continuous, so a dead box costs seconds rather than
-      however long since the last dump. This is self-hosted data with no provider behind it, so
-      backups are not optional — **verify a restore actually works** before cutting over.
-- [ ] **Cut over DNS**, confirm, then decommission DigitalOcean and Neon.
-- [x] **Delete `.github/workflows/build-frontend.yml`.** _(done)_ It existed only because the
-      DigitalOcean Python buildpack could not build a frontend. Cloudflare Pages builds from
-      source, so the force-committed `frontend/dist` is no longer needed.
-- [x] **Resolve the `Dockerfile` vs `.do/app.yaml` split.** _(done)_ `.do/` deleted; `Dockerfile`
-      kept as the single deployment description, since it suits a self-hosted origin.
+### Outstanding — needs your accounts
+
+- [ ] Create the R2 buckets (assets + backups) and a custom domain for the assets one.
+- [ ] Upload `character_images/` to R2 with `deploy/upload-character-images-to-r2.sh`.
+- [ ] Choose and provision the origin box: **Oracle Cloud Always Free** or the **home server**.
+      Cloudflare Tunnel makes them interchangeable, so this stays a late, reversible decision.
+- [ ] Set up the Tunnel, install the systemd unit, and generate a **permanent** `SECRET_KEY`.
+- [ ] Create the Pages project and set the two `VITE_*` build variables.
+- [ ] Run the migration on the origin, cut DNS over, **verify a Litestream restore actually
+      works**, and only then decommission DigitalOcean and Neon.
+- [ ] **Remove `flask-compress`** once Cloudflare is in front — the edge does Brotli, which beats
+      gzip, and origin-side compression then only burns CPU. Not before.
 
 ---
 
@@ -335,8 +339,9 @@ here seems wrong, read the rationale before changing it.
 
 Independent of the above and worth doing early. A script can currently empty the entire library.
 
-- [ ] **Lock down CORS.** `CORS(app, origins='*')` lets any webpage drive a visitor's browser into
-      the mutating endpoints. With the SPA on Pages this must be an explicit origin allowlist.
+- [x] **Lock down CORS.** _(done in Phase 5)_ `*` is now refused at startup, unset means
+      same-origin only, and an explicit allowlist is required. Splitting the frontend onto its own
+      origin forced this to be correct rather than merely tightened.
 - [ ] **Per-identity rate limits** on add, hide, and report. There is nothing at all today.
 - [ ] **Auto-cooldown** for an identity reporting or hiding at an implausible rate.
 - [ ] **Re-audit the SSRF guards** (`_safe_import_image_url`, `_host_resolves_only_to_public_ips`)
