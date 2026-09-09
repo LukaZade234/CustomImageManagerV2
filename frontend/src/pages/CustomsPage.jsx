@@ -123,7 +123,7 @@ export default function CustomsPage() {
     <Card as="section" padding="lg" className="customs-page">
       <h1 className="page-title">Browse Customs</h1>
       <div className="customs-controls">
-        <div className="customs-search-wrap">
+        <div className="search-field">
           <Input
             type="search"
             aria-label={searchMode === 'name' ? 'Search by character name' : 'Search by series'}

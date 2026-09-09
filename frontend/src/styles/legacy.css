@@ -60,7 +60,7 @@
 .navbar-center.search-container {
   display: block;
   width: 100%;
-  max-width: none;
+  max-width: 680px;
 }
 .navbar-right {
   display: flex;
@@ -71,29 +71,6 @@
   min-width: 0;
 }
 /* Nav links: same rhythm as search pill (rounded, 44px min touch height) */
-
-/* Search: the field carries its own border via Input, and the Name/Series
-   switch sits inside it on the right. */
-.search-input-wrapper {
-  position: relative;
-  flex: 1 1 260px;
-  min-width: 0;
-  /* Room for the Name/Series switch that overlays the right of the field. */
-  --search-toggle-width: 150px;
-}
-
-.search-input-wrapper .char-search-input {
-  height: var(--nav-control-min-h);
-  padding-right: var(--search-toggle-width);
-  border-radius: var(--radius-pill);
-}
-
-.search-input-wrapper .search-toggle-wrapper {
-  position: absolute;
-  top: 50%;
-  right: var(--space-1);
-  transform: translateY(-50%);
-}
 
 /* Search field + sort: a row on wide viewports, wrapping on narrow ones. */
 .search-bar-cluster {
@@ -687,48 +664,37 @@
   display: inline-flex;
 } /* Customs Page */
 .customs-controls {
-  margin-bottom: 1.25rem;
   display: flex;
-  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-}
-.customs-search-wrap {
-  flex: 1 1 280px;
-  min-width: 0;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
 }
 .customs-sort-field {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
   flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
 }
 @media (min-width: 480px) {
   .customs-sort-field {
     flex-direction: row;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2);
   }
 }
 .customs-sort-label {
   font-size: var(--type-meta);
-  font-weight: 600;
+  font-weight: var(--weight-medium);
   color: var(--text-muted);
   white-space: nowrap;
 }
 .customs-sort-select {
-  min-height: var(--nav-control-min-h);
+  width: auto;
   min-width: 160px;
-  padding: 0 14px;
+  min-height: var(--nav-control-min-h);
   border-radius: var(--nav-control-radius);
-  border: 1px solid var(--border);
-  font-size: var(--type-meta);
-  font-weight: 500;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  box-sizing: border-box;
 }
 .customs-count-line {
   margin-bottom: 1.25rem;

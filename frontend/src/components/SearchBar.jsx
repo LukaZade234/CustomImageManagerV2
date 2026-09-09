@@ -52,10 +52,9 @@ export default function SearchBar() {
 
   return (
     <div className="search-bar-cluster">
-      <div className="search-input-wrapper">
+      <div className="search-field">
         <Input
           type="search"
-          className="char-search-input"
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value)
@@ -66,7 +65,6 @@ export default function SearchBar() {
           autoComplete="off"
         />
         <SegmentedControl
-          className="search-toggle-wrapper"
           name="search-mode"
           label="Search by"
           value={mode}

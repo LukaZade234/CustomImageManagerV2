@@ -191,3 +191,47 @@
 .error-boundary__message {
   margin-bottom: var(--space-4);
 }
+
+/* ---- Search field --------------------------------------------------------
+ * Shared by the navbar and the customs page. The Name/Series switch overlays
+ * the right of the input, so the field reserves room for it.
+ */
+.search-field {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 560px;
+  --search-toggle-width: 150px;
+}
+
+.search-field .ui-input {
+  height: var(--nav-control-min-h);
+  padding-right: var(--search-toggle-width);
+  border-radius: var(--radius-pill);
+}
+
+.search-field .ui-segmented {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  transform: translateY(-50%);
+}
+
+/* Below this the switch would crowd the text, so it drops beneath the field. */
+@media (max-width: 480px) {
+  .search-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .search-field .ui-input {
+    padding-right: var(--space-3);
+  }
+
+  .search-field .ui-segmented {
+    position: static;
+    align-self: flex-start;
+    transform: none;
+  }
+}
