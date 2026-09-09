@@ -19,7 +19,7 @@ if sys.platform.startswith("win"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-from flask import Flask, Response, abort, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -32,6 +32,7 @@ except ImportError:
 
 # Import utility functions
 import db
+import discord_auth
 import identity
 import mudae_discord
 from image_utils import convert_to_png, validate_image_file
@@ -572,6 +573,9 @@ RATE_LIMITS = {
     "report": _limits_from_env("report", [(5, 60), (20, 3600)]),
     # Each Mudae call burns one of Discord's ~1000 daily identify calls.
     "mudae": _limits_from_env("mudae", [(10, 60), (60, 3600)]),
+    # Sign-in is cheap for us but hits Discord's API, and a loop here would look
+    # like an attack from their side.
+    "auth": _limits_from_env("auth", [(10, 60), (40, 3600)]),
 }
 
 
@@ -663,6 +667,76 @@ def list_customs():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/auth/discord/start", methods=["GET"])
+@rate_limited("auth")
+def discord_auth_start():
+    """Send the browser to Discord's consent screen.
+
+    `next` is carried through the signed state so you come back to the page you
+    started on, and is restricted to a path on our own frontend -- accepting a
+    full URL here is how an OAuth callback becomes an open redirect.
+    """
+    if not discord_auth.configured():
+        return jsonify({"error": "Discord sign-in is not configured"}), 503
+    next_path = discord_auth.safe_next_path(request.args.get("next"))
+    state = discord_auth.sign_state(app.config["SECRET_KEY"], next_path)
+    return redirect(discord_auth.authorize_url(state))
+
+
+@app.route("/api/auth/discord/callback", methods=["GET"])
+@rate_limited("auth")
+def discord_auth_callback():
+    """Where Discord sends the browser back.
+
+    Errors redirect to the frontend with a query flag rather than rendering JSON:
+    the person here is in a browser mid-flow, and a raw error body is a dead end.
+    """
+    if not discord_auth.configured():
+        return jsonify({"error": "Discord sign-in is not configured"}), 503
+
+    base = discord_auth.frontend_base()
+    next_path = discord_auth.verify_state(app.config["SECRET_KEY"], request.args.get("state"))
+    if next_path is None:
+        # Forged, tampered or simply left open too long.
+        return redirect(f"{base}/?signin=expired")
+    if request.args.get("error"):
+        # The user pressed Cancel on the consent screen.
+        return redirect(f"{base}{next_path}?signin=cancelled")
+
+    code = request.args.get("code")
+    if not code:
+        return redirect(f"{base}{next_path}?signin=failed")
+
+    try:
+        profile = discord_auth.fetch_user(discord_auth.exchange_code(code))
+    except (ValueError, requests.RequestException) as e:
+        print(f"[AUTH] Discord sign-in failed: {e}", flush=True)
+        return redirect(f"{base}{next_path}?signin=failed")
+
+    result = db.bind_discord_identity(
+        identity.current_identity().id,
+        profile["id"],
+        display_name=profile["name"],
+        owner_discord_id=discord_auth.owner_discord_id(),
+    )
+    # The caller may now be a different identity than the one they arrived with,
+    # so the cookie has to be reissued rather than left pointing at the old one.
+    identity.adopt(result["identity_id"])
+    print(f"[AUTH] signed in as {result['role']} (merged={result['merged']})", flush=True)
+    return redirect(f"{base}{next_path}?signin=ok")
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout():
+    """Forget the current identity in this browser.
+
+    Deliberately not a delete: the identity and everything it owns stays, and
+    signing in again reaches it. This only hands out a fresh anonymous cookie.
+    """
+    identity.adopt(identity.new_identity_id())
+    return jsonify({"success": True})
+
+
 @app.route("/api/me", methods=["GET"])
 def get_me():
     """Who the caller is, as far as the server is concerned.
@@ -681,6 +755,7 @@ def get_me():
             "is_moderator": me.is_moderator,
             "is_owner": me.is_owner,
             "signed_in": me.discord_id is not None,
+            "discord_available": discord_auth.configured(),
         }
     )
 

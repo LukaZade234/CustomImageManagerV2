@@ -76,6 +76,19 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  /**
+   * Hand this browser a fresh anonymous identity.
+   *
+   * Not a delete: the account and everything it owns stays, and signing in
+   * again reaches it. Saved characters are per identity, so they have to be
+   * reloaded rather than left showing the previous person's list.
+   */
+  signOut: async () => {
+    await apiClient.logout()
+    await get().loadMe()
+    await get().loadSaved()
+  },
+
   /** One character’s images from GET /api/custom-image/<name>, with ownership. */
   loadCustomImagesForCharacter: async (characterName) => {
     if (!characterName) return

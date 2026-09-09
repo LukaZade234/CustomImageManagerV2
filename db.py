@@ -848,6 +848,98 @@ def get_identity(identity_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def _merge_identity(conn: sqlite3.Connection, source: str, target: str) -> dict:
+    """Move everything owned by `source` onto `target`, then delete `source`.
+
+    Used when someone signs in on a browser holding a fresh anonymous identity
+    and Discord says they are an account bound to an older one. Without this,
+    uploading and then signing in would silently orphan what you just added --
+    exactly the frustration this phase exists to remove.
+
+    UPDATE OR IGNORE on the three tables with composite primary keys: you may
+    already have hidden or reported the same image from the other browser, and
+    the collision means the target already has the row. Whatever the update
+    skips is deleted afterwards rather than left pointing at a dead identity.
+    """
+    moved = {}
+    for table, column in (("custom_images", "added_by"), ("custom_images", "removed_by")):
+        cur = conn.execute(f"UPDATE {table} SET {column} = ? WHERE {column} = ?", (target, source))
+        moved[column] = cur.rowcount
+
+    for table in ("saved", "user_hidden", "image_reports"):
+        cur = conn.execute(
+            f"UPDATE OR IGNORE {table} SET identity_id = ? WHERE identity_id = ?",
+            (target, source),
+        )
+        moved[table] = cur.rowcount
+        conn.execute(f"DELETE FROM {table} WHERE identity_id = ?", (source,))
+
+    cur = conn.execute(
+        "UPDATE image_takes SET identity_id = ? WHERE identity_id = ?", (target, source)
+    )
+    moved["image_takes"] = cur.rowcount
+
+    # Not carried over. These are ephemeral counters that the sweep would drop
+    # anyway, and merging two identities' buckets would punish the account for
+    # the anonymous session's usage.
+    conn.execute("DELETE FROM rate_limit_hits WHERE identity_id = ?", (source,))
+    conn.execute("DELETE FROM identities WHERE id = ?", (source,))
+    return moved
+
+
+def bind_discord_identity(
+    current_id: str, discord_id: str, *, display_name: str = "", owner_discord_id: str = ""
+) -> dict:
+    """Attach a Discord account to an identity, adopting an existing one if there is one.
+
+    Returns {'identity_id', 'merged', 'role'} -- `identity_id` is who the caller
+    is from now on, which may not be who they were a moment ago.
+    """
+    with transaction() as conn:
+        _ensure_identity(conn, current_id)
+        existing = conn.execute(
+            "SELECT id FROM identities WHERE discord_id = ?", (discord_id,)
+        ).fetchone()
+
+        merged = False
+        if existing is None:
+            target = current_id
+            conn.execute(
+                "UPDATE identities SET discord_id = ? WHERE id = ?", (discord_id, current_id)
+            )
+        else:
+            target = existing["id"]
+            if target != current_id:
+                _merge_identity(conn, current_id, target)
+                merged = True
+
+        if display_name:
+            conn.execute("UPDATE identities SET handle = ? WHERE id = ?", (display_name, target))
+
+        # The owner is bootstrapped by matching an environment variable at login,
+        # so there is no admin password anywhere and no chicken-and-egg problem.
+        # Only ever promotes: signing in must not demote an existing moderator.
+        if owner_discord_id and discord_id == owner_discord_id:
+            conn.execute(
+                "UPDATE identities SET role = 'owner' WHERE id = ? AND role != 'owner'",
+                (target,),
+            )
+
+        role = conn.execute("SELECT role FROM identities WHERE id = ?", (target,)).fetchone()[
+            "role"
+        ]
+        return {"identity_id": target, "merged": merged, "role": role}
+
+
+def set_role(identity_id: str, role: str) -> bool:
+    """Promote or demote. Owner-only at the route level."""
+    if role not in ("user", "moderator", "owner"):
+        raise ValueError(f"Unknown role: {role!r}")
+    with transaction() as conn:
+        cur = conn.execute("UPDATE identities SET role = ? WHERE id = ?", (role, identity_id))
+        return bool(cur.rowcount)
+
+
 def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:
     """False if already bookmarked by this identity."""
     with transaction() as conn:

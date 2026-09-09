@@ -162,6 +162,7 @@ export const apiClient = {
       body: JSON.stringify({ image_ids: imageIds, kind }),
     }).catch(() => null),
   getMe: () => api('/api/me'),
+  logout: () => api('/api/auth/logout', { method: 'POST' }),
   importCustomImagesFromUrls: (characterName, urls) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',

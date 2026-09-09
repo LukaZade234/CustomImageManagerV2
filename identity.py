@@ -195,6 +195,18 @@ def persist_identity(response):
     return response
 
 
+def adopt(identity_id: str) -> None:
+    """Become a different identity for the rest of this request, and reissue the cookie.
+
+    Signing in can hand you an identity you did not arrive with -- the one your
+    Discord account was already bound to -- so the cookie has to be rewritten
+    rather than left pointing at the anonymous one.
+    """
+    g.identity_id = identity_id
+    g.identity_is_new = True
+    g.identity_loaded = None
+
+
 def current_identity() -> Identity:
     """The caller. Never None -- an id is minted for anyone without one."""
     cached = getattr(g, "identity_loaded", None)

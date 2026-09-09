@@ -396,3 +396,41 @@
   opacity: 0.55;
   transition: opacity var(--duration) var(--ease);
 }
+
+/* Sign-in is optional, so it stays quiet: the handle is the affordance and the
+   button sits with the other nav controls rather than demanding attention. */
+.navbar-handle {
+  background: none;
+  border: 0;
+  font: inherit;
+}
+
+.navbar-handle--signed-in {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.navbar-handle--signed-in:hover {
+  color: var(--text);
+}
+
+.navbar-role {
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--type-micro);
+  text-transform: capitalize;
+}
+
+.navbar-signin {
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+@media (max-width: 1200px) {
+  .navbar-signin span {
+    display: none;
+  }
+}

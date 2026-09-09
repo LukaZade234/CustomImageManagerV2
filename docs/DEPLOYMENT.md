@@ -361,7 +361,11 @@ sqlite3 /var/lib/imgmanager/restored.db "SELECT COUNT(*) FROM custom_images;"
 | `CORS_ORIGINS` | origin | yes | Exact Pages origin. `*` is refused. |
 | `PORT` | origin | no | Default 8080 |
 | `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` | origin | no | See `gunicorn.conf.py` |
-| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import |
+| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**) |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | origin | no | Sign-in (an **OAuth app**, unrelated to the above) |
+| `DISCORD_REDIRECT_URI` | origin | with sign-in | Must match Discord exactly. Not derived: behind the Tunnel the app sees `localhost:8080` |
+| `OWNER_DISCORD_ID` | origin | no | Grants the owner role at login |
+| `FRONTEND_URL` | origin | no | Where to send the browser after sign-in. Defaults to the first `CORS_ORIGINS` entry |
 | `VITE_API_BASE_URL` | Pages | yes | Build-time |
 | `VITE_IMAGE_BASE_URL` | Pages | yes | Build-time |
 

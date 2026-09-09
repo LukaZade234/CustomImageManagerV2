@@ -49,3 +49,12 @@ export function imageUrl(imagePath) {
   const base = IMAGE_BASE || ''
   return `${base}/character_images/${imagePath}`
 }
+
+/**
+ * Discord sign-in is a full-page redirect, not a fetch: the browser has to visit
+ * Discord and be sent back. `next` returns you to the page you left, and the
+ * server restricts it to a path on this site.
+ */
+export function signInUrl(nextPath = '/') {
+  return `${API_BASE}/api/auth/discord/start?next=${encodeURIComponent(nextPath)}`
+}

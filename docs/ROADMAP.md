@@ -303,7 +303,7 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
 
 ---
 
-## Phase 6 — Identity and moderation — **COMPLETE except Discord OAuth**
+## Phase 6 — Identity and moderation — **COMPLETE**
 
 The design is settled in `DECISIONS.md` §1, §4, §5. This is implementation only — if something
 here seems wrong, read the rationale before changing it.
@@ -317,13 +317,17 @@ here seems wrong, read the rationale before changing it.
       configuration without one and generates an ephemeral key with a warning locally. The old
       `dev-key-change-in-production` default is gone: shipped to production it would have let
       anyone forge another user's identity cookie. `CORS_ORIGINS` is the signal for "deployed".
-- [ ] **Optional Discord OAuth.** Blocked on registering a Discord application —
-      `DISCORD_USER_TOKEN` is a self-bot token and cannot be used for OAuth. Needs
-      `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `OWNER_DISCORD_ID`. The schema column and the
-      `signed_in` flag on `/api/me` are already in place.
+- [x] **Optional Discord OAuth.** `discord_auth.py`, `identify` scope only. Signing in binds the
+      current cookie pseudonym to a Discord account; if that account is already bound to an older
+      identity, the anonymous one is **merged into it** — uploads, bookmarks, hidden set, reports
+      and takes all follow — so signing in never orphans what you just added. The `next` path is
+      restricted to a path on our own frontend, because accepting a full URL is how an OAuth
+      callback becomes an open redirect. Needs `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`,
+      `DISCORD_REDIRECT_URI` and `OWNER_DISCORD_ID`; unset means the UI simply does not offer it.
 - [x] **Roles.** `identities.role` is read on every request that needs it and surfaced through
-      `/api/me`. Moderator and owner both bypass the ownership check. Owner bootstrapping waits on
-      OAuth, since it keys off `OWNER_DISCORD_ID` at login.
+      `/api/me`. Moderator and owner both bypass the ownership check. The owner is bootstrapped by
+      matching `OWNER_DISCORD_ID` at login, so no admin password exists anywhere. Promotion only
+      ever promotes — signing in cannot demote an existing moderator.
 - [x] **Ownership rule on delete.** `remove_custom_images` soft-deletes only rows whose `added_by`
       matches the caller, or any row for a moderator. Returns `{removed, denied, missing}` so a
       partial refusal can be explained. Images migrated from v1 have `added_by IS NULL` and so
