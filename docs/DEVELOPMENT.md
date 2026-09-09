@@ -172,6 +172,62 @@ Four, and only four: **480, 768** (`769` for the `min-width` complement), **960,
 documented in `tokens.css` rather than declared, because media queries cannot read custom
 properties. The sheet previously mixed nine unnamed values in both directions.
 
+## Identity and ownership
+
+Every request has a caller. `identity.py` issues a signed cookie on first visit and
+`identity.current_identity()` resolves it; there is no login and never a login wall.
+
+Three rules that are easy to break:
+
+**Create the identity row before storing a reference to it.** Rows in `identities` are
+created lazily, on first write, so a cookie can exist with no row behind it. Any
+insert carrying an `identity_id` must call `db.ensure_identity` first or the foreign
+key rejects it. Code reading a role must tolerate a missing row and default to `user`.
+
+**Never return the identity id to the client.** The cookie is HttpOnly precisely so
+script cannot read it; handing the same value back in JSON gives that away for
+nothing. Ownership is reported as a handle plus an `is_mine` boolean, and `/api/me`
+returns no id at all. There is a test asserting exactly this.
+
+**Removal is always soft, and always scoped.** `db.remove_custom_images` sets
+`state='removed'`; nothing hard-deletes an image, because ImgChest keeps the file
+regardless and the moderation design depends on every removal being restorable. It
+removes only rows the caller owns unless they are a moderator, and returns
+`{removed, denied, missing}` rather than a bare success — a mixed selection is the
+normal case and the UI has to be able to explain a partial refusal.
+
+`SECRET_KEY` signs the cookies. It has no default: a deployed configuration (one with
+`CORS_ORIGINS` set) refuses to start without it, and local development gets a random
+per-process key with a warning. If it ever changes in production, every visitor
+silently becomes a new person and loses ownership of their uploads.
+
+## Rate limiting and URL fetching
+
+Every costly endpoint is wrapped in `@rate_limited("<action>")`. Limits live in
+`RATE_LIMITS` in `upload_imgchest.py`, one or more `(limit, window seconds)` pairs per
+action, each overridable with `RATE_LIMIT_<ACTION>="30/60,300/3600"`. A new endpoint
+that uploads, calls Discord, or writes in a loop needs one; the decorator raises
+`KeyError` on a name with no entry, which a test catches.
+
+The counter is `db.check_rate_limit`, which **increments before it reads**. Reading
+first and then incrementing lets two concurrent requests both see "one under the
+limit" — the same check-then-act race the database rules warn about. It counts
+attempts rather than successes on purpose: an upload that fails still cost an ImgChest
+call, and a client hammering failures is what needs stopping.
+
+**Two endpoints fetch a URL the caller supplies** — the drag-from-web import and the
+Mudae image proxy. Both run on the origin, inside a private network with a metadata
+service on it, so both go through `_safe_import_image_url` and
+`_get_with_validated_redirects`. Never call `requests.get` on a caller-supplied URL
+directly, and never pass `allow_redirects=True` with one: that follows the chain
+itself and hands back only the final URL, so a hop through a private host is fetched
+before anything can object. `_ip_is_blocked` covers the ranges `ipaddress` has no flag
+for, including IPv4-mapped IPv6 and RFC 6598 carrier NAT.
+
+Known residual risk, documented in the code: DNS rebinding. The hostname is resolved
+for validation and again by `requests` when it connects, so a hostile resolver can
+answer differently each time.
+
 ## Writing to the database
 
 `db.py` wraps SQLite (`sqlite3`, standard library). There is no ORM and no query

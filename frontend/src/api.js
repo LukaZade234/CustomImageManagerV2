@@ -58,7 +58,12 @@ async function api(path, options = {}) {
 export const apiClient = {
   getCharacters: () => api('/api/characters'),
   getSaved: () => api('/api/saved'),
-  getLastUpdated: () => api('/api/last-updated'),
+  getStats: () => api('/api/stats'),
+  listCustoms: ({ page = 1, perPage = 20, q = '', by = 'name', sort = 'recent' } = {}) => {
+    const params = new URLSearchParams({ page, per_page: perPage, by, sort })
+    if (q) params.set('q', q)
+    return api(`/api/customs?${params}`)
+  },
   saveCharacter: (data) =>
     api('/api/saved', {
       method: 'POST',
@@ -122,6 +127,42 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
     }),
+  hideImages: (imageIds) =>
+    api('/api/hide-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_ids: imageIds }),
+    }),
+  unhideImages: (imageIds) =>
+    api('/api/unhide-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_ids: imageIds }),
+    }),
+  restoreImages: (charName, imageUrls) =>
+    api('/api/restore-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
+    }),
+  getRemovedImages: (charName) => api(`/api/removed/${encodeURIComponent(charName)}`),
+  reportImage: (imageId, reason) =>
+    api('/api/report-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_id: imageId, reason }),
+    }),
+  /**
+   * Take logging drives nothing, so it must never surface an error or block the
+   * action it accompanies. Failures are swallowed deliberately.
+   */
+  recordTakes: (imageIds, kind) =>
+    api('/api/takes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_ids: imageIds, kind }),
+    }).catch(() => null),
+  getMe: () => api('/api/me'),
   importCustomImagesFromUrls: (characterName, urls) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',

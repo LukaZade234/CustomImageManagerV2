@@ -13,6 +13,7 @@ const THEME_LABELS = {
 export default function Navbar() {
   const theme = useStore((s) => s.theme)
   const cycleTheme = useStore((s) => s.cycleTheme)
+  const me = useStore((s) => s.me)
 
   return (
     <nav className="navbar">
@@ -83,6 +84,14 @@ export default function Navbar() {
             </svg>
             <span>Saved</span>
           </Button>
+          {me?.handle && (
+            <span
+              className="navbar-handle text-meta"
+              title={`You appear to others as "${me.handle}". No sign-in required; this follows your browser.`}
+            >
+              {me.handle}
+            </span>
+          )}
           <IconButton className="theme-toggle-btn" label={THEME_LABELS[theme]} onClick={cycleTheme}>
             {theme === 'dark' ? (
               <svg

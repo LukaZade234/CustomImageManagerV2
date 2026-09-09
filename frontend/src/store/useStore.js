@@ -15,8 +15,12 @@ function shouldRetryFetchError(e) {
 export const useStore = create((set, get) => ({
   characters: [],
   savedCharacters: [],
-  lastUpdated: {},
-  customImages: {},
+  // Per-character rows: id, url, owner, is_mine, hidden. Loaded on demand for
+  // the character page only. There is deliberately no library-wide image map any
+  // more -- Home and Customs ask the server for what they need.
+  characterImages: {},
+  stats: null,
+  me: null,
   currentCharacter: null,
   loading: false,
   error: null,
@@ -46,56 +50,41 @@ export const useStore = create((set, get) => ({
 
   loadSaved: async () => {
     try {
-      const [saved, lastUpd] = await Promise.all([apiClient.getSaved(), apiClient.getLastUpdated()])
-      set({ savedCharacters: saved || [], lastUpdated: lastUpd || {} })
-      const sorted = [...(saved || [])].sort(
-        (a, b) => (lastUpd[b.name] || 0) - (lastUpd[a.name] || 0),
-      )
-      set({ savedCharacters: sorted })
-    } catch (e) {
+      // Already ordered most-recently-updated first by the server, which knows
+      // the timestamps without shipping a map of all ~700 characters.
+      set({ savedCharacters: (await apiClient.getSaved()) || [] })
+    } catch {
       set({ savedCharacters: [] })
     }
   },
 
-  /** Full map — used by Home / Customs (stats, browse all). */
-  loadCustomImages: async () => {
-    const maxAttempts = 3
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        const data = await apiClient.getCustomImages()
-        set({ customImages: data || {} })
-        try {
-          const lastUpd = await apiClient.getLastUpdated()
-          if (lastUpd && typeof lastUpd === 'object') set({ lastUpdated: lastUpd })
-        } catch {
-          /* keep existing lastUpdated */
-        }
-        return
-      } catch (e) {
-        if (!shouldRetryFetchError(e) || attempt === maxAttempts - 1) break
-        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.random() * 200))
-      }
+  /** Two integers for the landing page, in place of the whole library. */
+  loadStats: async () => {
+    try {
+      set({ stats: await apiClient.getStats() })
+    } catch {
+      /* keep whatever we had; a stale count beats an empty page */
     }
-    /* Keep previous customImages — clearing on a failed refresh hid successful uploads and worsened batch UX. */
   },
 
-  /** One character’s URLs from GET /api/custom-image/<name> — merges into the map without loading everyone. */
+  /** Who the server thinks we are. Handle, role, sign-in state — never the id. */
+  loadMe: async () => {
+    try {
+      set({ me: await apiClient.getMe() })
+    } catch {
+      /* identity is best-effort; the page works without knowing the handle */
+    }
+  },
+
+  /** One character’s images from GET /api/custom-image/<name>, with ownership. */
   loadCustomImagesForCharacter: async (characterName) => {
     if (!characterName) return
     const maxAttempts = 3
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const urls = await apiClient.getCustomImagesForChar(characterName)
-        const list = Array.isArray(urls) ? urls : []
-        set((s) => ({
-          customImages: { ...s.customImages, [characterName]: list },
-        }))
-        try {
-          const lastUpd = await apiClient.getLastUpdated()
-          if (lastUpd && typeof lastUpd === 'object') set({ lastUpdated: lastUpd })
-        } catch {
-          /* keep */
-        }
+        const rows = await apiClient.getCustomImagesForChar(characterName)
+        const list = Array.isArray(rows) ? rows : []
+        set((s) => ({ characterImages: { ...s.characterImages, [characterName]: list } }))
         return
       } catch (e) {
         if (!shouldRetryFetchError(e) || attempt === maxAttempts - 1) break
@@ -105,41 +94,29 @@ export const useStore = create((set, get) => ({
     /* keep previous slice for this character */
   },
 
-  /** Append ImgChest URLs after a successful upload/import (server already saved). */
+  /**
+   * Refresh a character after a successful upload or import.
+   *
+   * Refetches rather than appending the URLs it was handed: the rows need real
+   * ids from the server before Hide or Report can act on them, and inventing
+   * placeholder entries would make those actions fail on exactly the images
+   * someone just added.
+   */
   appendCustomImageUrls: async (characterName, urls) => {
     if (!characterName || !urls?.length) return
-    set((s) => ({
-      customImages: {
-        ...s.customImages,
-        [characterName]: [...(s.customImages[characterName] || []), ...urls],
-      },
-    }))
-    try {
-      const lastUpd = await apiClient.getLastUpdated()
-      if (lastUpd && typeof lastUpd === 'object') set({ lastUpdated: lastUpd })
-    } catch {
-      /* keep */
-    }
+    await get().loadCustomImagesForCharacter(characterName)
   },
 
-  /**
-   * After server-side rename of a character, move custom image URLs + timestamps to the new key
-   * so Home/Customs stats do not double-count the old name.
-   */
+  /** After a server-side rename, move the character's cached rows to the new key. */
   renameCustomCharacterData: (oldName, newName) => {
     if (!oldName || !newName || oldName === newName) return
     set((s) => {
-      const customImages = { ...s.customImages }
-      if (Object.hasOwn(customImages, oldName)) {
-        customImages[newName] = customImages[oldName]
-        delete customImages[oldName]
+      const characterImages = { ...s.characterImages }
+      if (Object.hasOwn(characterImages, oldName)) {
+        characterImages[newName] = characterImages[oldName]
+        delete characterImages[oldName]
       }
-      const lastUpdated = { ...s.lastUpdated }
-      if (Object.hasOwn(lastUpdated, oldName)) {
-        lastUpdated[newName] = lastUpdated[oldName]
-        delete lastUpdated[oldName]
-      }
-      return { customImages, lastUpdated }
+      return { characterImages }
     })
   },
 

@@ -294,67 +294,90 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
       confirm `SELECT COUNT(*) FROM custom_images` returns 8547. An untested backup is not a
       backup, and after cut-over this box holds the only copy.
 - [ ] **Decide the cut-over.** Both sites are live now and **their data has forked** — anything
-      added on v1 from this point does not appear on v2. Re-run the migration immediately before
-      switching users across.
+      added on v1 from this point does not appear on v2, and because the migration is insert-only,
+      anything *deleted* on v1 is not removed from v2 either. The procedure, the rollback boundary
+      and the three decisions it forces are in **[CUTOVER.md](CUTOVER.md)**.
 - [ ] **Decommission** the DigitalOcean app and the Neon database, only after the above.
 - [ ] **Remove `flask-compress`.** Now actionable: Cloudflare is in front and does Brotli, so
       origin-side gzip only burns CPU.
 
 ---
 
-## Phase 6 — Identity and moderation
+## Phase 6 — Identity and moderation — **COMPLETE except Discord OAuth**
 
 The design is settled in `DECISIONS.md` §1, §4, §5. This is implementation only — if something
 here seems wrong, read the rationale before changing it.
 
-- [ ] **Cookie pseudonym identity.** A signed cookie (via `itsdangerous`, already a Flask
-      dependency) carrying a stable id, issued on first visit with a generated
-      adjective-plus-animal handle. Attach to `flask.g`; set it in an `after_request` hook. No
-      login screen, ever.
-- [ ] **`SECRET_KEY` becomes required.** It is currently set and never read. Once it signs identity
-      cookies, a changed or missing key silently turns every user into a new person on restart.
-      Validate at startup; document as a required secret.
-- [ ] **Optional Discord OAuth.** Binds an existing pseudonym to a real Discord account so identity
-      survives cookie loss. **Requires registering a new Discord application** —
-      `DISCORD_USER_TOKEN` is a self-bot token and cannot be used for OAuth. New vars:
-      `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `OWNER_DISCORD_ID`.
-- [ ] **Roles.** `user` / `moderator` / `owner` on `identities.role`. Owner bootstrapped by
-      matching `OWNER_DISCORD_ID` at login. Moderators can remove any image and restore from the
-      drawer; the owner can also promote and demote. **A fallback, not the primary mechanism.**
-- [ ] **Ownership rule on delete.** `POST /api/delete-custom-images` removes only rows where
-      `added_by` matches the caller (or the caller is moderator/owner). Sets `state='removed'`
-      rather than deleting. Returns per-image results so the UI can explain partial refusals.
-- [ ] **Hide-for-me.** `POST /api/hide-images` and `/api/unhide-images`, writing `user_hidden`.
-      Instant, unlimited, no global effect whatsoever.
-- [ ] **Report.** `POST /api/report-image` with a reason from `wrong_character | dead_link | nsfw |
-      duplicate`. On the second *distinct* reporter, set `state='removed'`. Objective criteria
-      only — never taste.
-- [ ] **Removed drawer.** `GET /api/removed/<character>` and `POST /api/restore-image`, restorable
-      by anyone. Nothing is ever hard-deleted.
-- [ ] **Take logging.** `POST /api/takes` fired by Download and Copy `$ai`. Logged, but **drives
-      nothing** except the optional sort. Deliberate — see `DECISIONS.md` §1.
-- [ ] **Frontend rework of delete mode.** Your own images get **Remove**; others' get **Hide**.
-      Mixed selections show both counts. Owner handle on hover. Hidden images filtered out with a
-      "Show N hidden" toggle. Report action in the image modal. **Add a confirmation step to bulk
-      removal** — there is none today.
-- [ ] **Fix the undo path.** The current 8-second undo calls `reorderCustomImages` to write a stale
-      array back wholesale, clobbering anyone else's concurrent edits. Point it at
-      restore/unhide instead.
+- [x] **Cookie pseudonym identity.** `identity.py`. A signed cookie (`itsdangerous`) carrying a
+      stable id, issued on first visit; the handle is *derived* from the id with blake2b rather
+      than stored, so it can be reconstructed anywhere without putting it in the cookie. Rows in
+      `identities` are created lazily on first write — a test asserts that browsing alone leaves
+      the table empty. No login screen.
+- [x] **`SECRET_KEY` becomes required.** `resolve_secret_key()` refuses to start a deployed
+      configuration without one and generates an ephemeral key with a warning locally. The old
+      `dev-key-change-in-production` default is gone: shipped to production it would have let
+      anyone forge another user's identity cookie. `CORS_ORIGINS` is the signal for "deployed".
+- [ ] **Optional Discord OAuth.** Blocked on registering a Discord application —
+      `DISCORD_USER_TOKEN` is a self-bot token and cannot be used for OAuth. Needs
+      `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `OWNER_DISCORD_ID`. The schema column and the
+      `signed_in` flag on `/api/me` are already in place.
+- [x] **Roles.** `identities.role` is read on every request that needs it and surfaced through
+      `/api/me`. Moderator and owner both bypass the ownership check. Owner bootstrapping waits on
+      OAuth, since it keys off `OWNER_DISCORD_ID` at login.
+- [x] **Ownership rule on delete.** `remove_custom_images` soft-deletes only rows whose `added_by`
+      matches the caller, or any row for a moderator. Returns `{removed, denied, missing}` so a
+      partial refusal can be explained. Images migrated from v1 have `added_by IS NULL` and so
+      cannot be removed by an ordinary user at all — intended.
+- [x] **Hide-for-me.** `POST /api/hide-images` / `/api/unhide-images`. Instant, unlimited, and
+      invisible to everyone else; a test pins that a hide changes nothing for a second viewer.
+- [x] **Report.** `POST /api/report-image`, four objective reasons, removal on the second
+      *distinct* reporter. The composite primary key is what makes one determined reporter unable
+      to reach the threshold alone.
+- [x] **Removed drawer.** `GET /api/removed/<character>` and `POST /api/restore-images`,
+      restorable by anyone. Nothing is ever hard-deleted.
+- [x] **Take logging.** `POST /api/takes` on Download and Copy `$ai`. Drives nothing.
+- [x] **Frontend rework of delete mode.** "Remove or hide": your images get **Remove mine (n)**,
+      everyone else's get **Hide theirs (n)**, both counts always shown. Attribution on every
+      image, hidden images filtered out behind a "Show N hidden" toggle, Report in the viewer, the
+      Removed drawer, and a confirmation step on bulk removal that did not exist before.
+- [x] **Fix the undo path.** It called `reorderCustomImages` with a pre-delete array, which could
+      not restore a removed image and clobbered concurrent edits. It now calls restore.
+
+Not done, and deliberately: **`saved` is per-identity from here on.** In v1 it was one global
+list, so on cut-over the migrated bookmarks stay under the legacy identity and nobody inherits
+them. There are no v2 users yet, so this costs nothing now.
 
 ---
 
 ## Phase 7 — Security
 
-Independent of the above and worth doing early. A script can currently empty the entire library.
-
 - [x] **Lock down CORS.** _(done in Phase 5)_ `*` is now refused at startup, unset means
-      same-origin only, and an explicit allowlist is required. Splitting the frontend onto its own
-      origin forced this to be correct rather than merely tightened.
-- [ ] **Per-identity rate limits** on add, hide, and report. There is nothing at all today.
-- [ ] **Auto-cooldown** for an identity reporting or hiding at an implausible rate.
-- [ ] **Re-audit the SSRF guards** (`_safe_import_image_url`, `_host_resolves_only_to_public_ips`)
-      after the move — they matter more on a self-hosted box sitting inside a home or cloud
-      network than on managed infrastructure.
+      same-origin only.
+- [x] **Per-identity rate limits.** There was nothing at all before this. `rate_limit_hits`
+      (migration 002) counts *attempts* per identity per action in fixed windows; the increment
+      happens before the count is read so two concurrent requests cannot both slip through. The
+      limit that matters is on uploads — each one is an ImgChest call against a shared key, so an
+      unbounded client can get that key throttled and take the app's purpose with it. Applied to
+      15 endpoints; each action has a burst window and an hourly one, overridable with
+      `RATE_LIMIT_<ACTION>="30/60,300/3600"`. Moderators get 10x, because a limit sized for a
+      visitor would block the person curating the site.
+- [x] **Auto-cooldown** for an identity reporting at an implausible rate — the same mechanism,
+      with report deliberately the tightest limit (5/min, 20/hour) since reports can remove other
+      people's work, while hiding affects nobody else and is generous.
+- [x] **Re-audit the SSRF guards.** Three real gaps found and closed:
+      - **IPv4-mapped IPv6** (`::ffff:169.254.169.254`) carried none of the stdlib flags and went
+        straight through. Now unwrapped and judged as the IPv4 address it carries.
+      - **Ranges `ipaddress` does not flag at all**: IPv6 site-local (`fec0::/10`) and RFC 6598
+        carrier NAT (`100.64.0.0/10`), the latter used by cloud providers for internal networks.
+      - **Only the final redirect was validated.** `allow_redirects=True` followed the chain
+        itself, so public → `192.168.1.1` → public passed the check *after* the private host had
+        already been fetched. Redirects are now stepped by hand with every hop validated first,
+        bounded at 5.
+
+      Residual risk, documented in the code rather than fixed: DNS rebinding. The name is resolved
+      for validation and then again by `requests` when it connects, so a hostile resolver can
+      answer differently each time. Closing it needs connecting to a pinned address with the Host
+      header set by hand.
 
 ---
 
@@ -377,14 +400,25 @@ Independent of the above and worth doing early. A script can currently empty the
 
 ## Phase 9 — Performance
 
-- [ ] **Kill the full-map fetch.** `GET /custom_images.json` returns every image URL for every
-      character, and `HomePage` downloads all of it to compute two numbers. Replace with an
-      `/api/stats` endpoint plus per-character fetches.
+- [x] **Kill the full-map fetch.** `GET /custom_images.json` returned every image URL for every
+      character — **486 KB raw, 81 KB gzipped** against the real library — and the home page
+      downloaded all of it to display two integers. Replaced by:
+      - `GET /api/stats` — **62 bytes**, the two counts.
+      - `GET /api/customs?page=&per_page=&q=&by=&sort=` — one page of the browse list with counts
+        and three previews per row, **7.2 KB** instead of 486 KB. Search, all seven sorts, and
+        pagination now happen in SQL. The sort key is whitelisted rather than interpolated, and
+        LIKE wildcards in the search term are escaped so `%` does not match everything.
+      - `GET /api/saved` now returns `updated_at` per row, which retired the separate
+        `/api/last-updated` fetch (**33 KB**) whose only remaining consumer was the client-side
+        sort. `lastUpdated` and the library-wide `customImages` map are gone from the store.
+
+      The old endpoint is left in place, commented as superseded, in case something outside the
+      app calls it. It should be deleted once that is ruled out.
+
+      This also unblocks growth: the plan is to seed tens of thousands of characters, at which
+      point filtering the whole library in the browser stops being possible at all.
 - [ ] **Adopt `@tanstack/react-query`.** Retry, backoff, and cache invalidation are currently
-      hand-rolled and duplicated across `useStore.js` and `api.js`. Its per-character caching is
-      also what makes killing the full-map fetch practical. Keep zustand alongside it — react-query
-      owns server state, zustand keeps owning UI state (dark mode, toasts, selection). They are
-      complementary, not competing.
+      hand-rolled in the store. Less pressing now that the two heavy fetches are gone.
 - [ ] **Serve character images from the CDN**, not from Flask off local disk (follows from R2).
 - [ ] **Reconsider gzip.** `flask-compress` runs on the origin; with Cloudflare in front, the edge
       can handle compression instead.

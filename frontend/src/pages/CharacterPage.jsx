@@ -3,8 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import ImageModal from '../components/ImageModal'
+import RemovedDrawer from '../components/RemovedDrawer'
+import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
-import { Button, Card, IconButton } from '../components/ui'
+import { Button, Card, ConfirmDialog, IconButton } from '../components/ui'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -114,7 +116,7 @@ export default function CharacterPage() {
   const navigate = useNavigate()
   const characters = useStore((s) => s.characters)
   const savedCharacters = useStore((s) => s.savedCharacters)
-  const customImages = useStore((s) => s.customImages)
+  const characterImages = useStore((s) => s.characterImages)
   const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
   const appendCustomImageUrls = useStore((s) => s.appendCustomImageUrls)
   const loadCharacters = useStore((s) => s.loadCharacters)
@@ -126,8 +128,17 @@ export default function CharacterPage() {
 
   const char =
     characters.find((c) => c.name === name) || savedCharacters.find((c) => c.name === name)
-  const customs = customImages[name] || []
   const isSaved = savedCharacters.some((s) => s.name === name)
+
+  const [showHidden, setShowHidden] = useState(false)
+  const allRows = characterImages[name] || []
+  const hiddenCount = allRows.filter((row) => row.hidden).length
+  // Hidden images drop out of the gallery entirely unless you ask for them.
+  // That is the whole value of hide-for-me: it has to actually get them out of
+  // the way, or people go back to deleting other people's images.
+  const rows = showHidden ? allRows : allRows.filter((row) => !row.hidden)
+  const customs = rows.map((row) => row.url)
+  const rowByUrl = new Map(allRows.map((row) => [row.url, row]))
 
   const [editMode, setEditMode] = useState(false)
   const [editName, setEditName] = useState('')
@@ -143,6 +154,9 @@ export default function CharacterPage() {
   const [downloadMode, setDownloadMode] = useState(false)
   const [reorderMode, setReorderMode] = useState(false)
   const [selectedUrls, setSelectedUrls] = useState([])
+  const [confirmRemove, setConfirmRemove] = useState(null)
+  const [reportTarget, setReportTarget] = useState(null)
+  const [removedDrawer, setRemovedDrawer] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [modalIndex, setModalIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
@@ -627,11 +641,17 @@ export default function CharacterPage() {
     setCustomDragOver(false)
   }
 
+  const recordTakes = (urls, kind) => {
+    const ids = urls.map((url) => rowByUrl.get(url)?.id).filter((id) => id != null)
+    if (ids.length) apiClient.recordTakes(ids, kind)
+  }
+
   const handleDownloadSelected = async () => {
     if (!selectedUrls.length) {
       addToast('Select at least one image, or tap Select All', 'info')
       return
     }
+    recordTakes(selectedUrls, 'download')
     try {
       if (typeof window.showDirectoryPicker === 'function') {
         const dirHandle = await window.showDirectoryPicker()
@@ -654,22 +674,92 @@ export default function CharacterPage() {
     }
   }
 
-  const handleDeleteSelected = async () => {
-    if (!selectedUrls.length) return
-    const orderBeforeDelete = [...customs]
+  // You can only remove what you added, so a selection splits in two and the
+  // toolbar has to offer both actions. DECISIONS.md section 1.
+  const selectedRows = selectedUrls.map((url) => rowByUrl.get(url)).filter(Boolean)
+  const mineSelected = selectedRows.filter((row) => row.is_mine)
+  const othersSelected = selectedRows.filter((row) => !row.is_mine)
+
+  const removeOwnImages = async () => {
+    setConfirmRemove(null)
+    const urls = mineSelected.map((row) => row.url)
+    if (!urls.length) return
     try {
-      await apiClient.deleteCustomImages(name, selectedUrls)
+      const result = await apiClient.deleteCustomImages(name, urls)
       await loadCustomImagesForCharacter(name)
-      const n = selectedUrls.length
-      addToast(`${n} custom image${n === 1 ? '' : 's'} removed`, 'success', {
+      const removed = result?.removed?.length ?? urls.length
+      addToast(`${removed} image${removed === 1 ? '' : 's'} removed`, 'success', {
         onUndo: async () => {
-          await apiClient.reorderCustomImages(name, orderBeforeDelete)
+          // Restore, not reorder. The old undo wrote a stale array back through
+          // reorderCustomImages, which clobbered anyone else's concurrent edits
+          // and could not bring a removed image back at all.
+          await apiClient.restoreImages(name, urls)
           await loadCustomImagesForCharacter(name)
-          resetModes()
           addToast('Images restored', 'info')
         },
       })
       resetModes()
+    } catch (err) {
+      addToast(err.message, 'error')
+    }
+  }
+
+  const handleRemoveSelected = () => {
+    if (!mineSelected.length) return
+    setConfirmRemove(mineSelected.length)
+  }
+
+  const handleHideSelected = async () => {
+    const ids = othersSelected.map((row) => row.id)
+    if (!ids.length) return
+    try {
+      await apiClient.hideImages(ids)
+      await loadCustomImagesForCharacter(name)
+      addToast(`${ids.length} image${ids.length === 1 ? '' : 's'} hidden for you`, 'success', {
+        onUndo: async () => {
+          await apiClient.unhideImages(ids)
+          await loadCustomImagesForCharacter(name)
+          addToast('Images shown again', 'info')
+        },
+      })
+      resetModes()
+    } catch (err) {
+      addToast(err.message, 'error')
+    }
+  }
+
+  const handleUnhideAll = async () => {
+    const ids = allRows.filter((row) => row.hidden).map((row) => row.id)
+    if (!ids.length) return
+    try {
+      await apiClient.unhideImages(ids)
+      await loadCustomImagesForCharacter(name)
+      addToast('Hidden images restored to your view', 'success')
+    } catch (err) {
+      addToast(err.message, 'error')
+    }
+  }
+
+  const openRemovedDrawer = async () => {
+    try {
+      setRemovedDrawer(await apiClient.getRemovedImages(name))
+    } catch (err) {
+      addToast(err.message, 'error')
+    }
+  }
+
+  const handleReport = async (imageId, reason) => {
+    setReportTarget(null)
+    try {
+      const result = await apiClient.reportImage(imageId, reason)
+      await loadCustomImagesForCharacter(name)
+      if (result.removed) {
+        addToast('Reported. That was the second report, so the image was removed.', 'success')
+      } else if (result.already_reported) {
+        addToast('You have already reported this image', 'info')
+      } else {
+        addToast('Reported. One more report from someone else will remove it.', 'success')
+      }
     } catch (err) {
       addToast(err.message, 'error')
     }
@@ -690,6 +780,7 @@ export default function CharacterPage() {
   const generateAiCommand = () => {
     const urls = selectedUrls.length ? selectedUrls : customs
     const charName = editMode ? editName : char.name
+    recordTakes(urls, 'copy_command')
     const cmd = buildAiCommand(charName, urls)
     if (cmd.length < DISCORD_LIMIT_REGULAR) {
       navigator.clipboard
@@ -1097,7 +1188,17 @@ export default function CharacterPage() {
               )}
               {deleteMode && (
                 <>
-                  <Button variant="danger" size="sm" onClick={handleDeleteSelected}>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleRemoveSelected}
+                    disabled={mineSelected.length === 0}
+                    title={
+                      mineSelected.length === 0
+                        ? 'You can only remove images you added'
+                        : 'Remove your own images'
+                    }
+                  >
                     <svg
                       aria-hidden="true"
                       width="16"
@@ -1110,7 +1211,31 @@ export default function CharacterPage() {
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
-                    Delete Selected ({selectedUrls.length})
+                    Remove mine ({mineSelected.length})
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleHideSelected}
+                    disabled={othersSelected.length === 0}
+                    title={
+                      othersSelected.length === 0
+                        ? "Select someone else's image to hide it"
+                        : 'Hide these for you only. Nobody else is affected.'
+                    }
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                    Hide theirs ({othersSelected.length})
                   </Button>
                   <Button variant="secondary" size="sm" onClick={resetModes}>
                     Cancel
@@ -1166,6 +1291,30 @@ export default function CharacterPage() {
                   </Button>
                 </>
               )}
+              {!aiMode && !deleteMode && !downloadMode && !reorderMode && hiddenCount > 0 && (
+                <Button
+                  size="sm"
+                  onClick={() => setShowHidden((v) => !v)}
+                  title="Images you have hidden are only hidden for you"
+                >
+                  {showHidden ? 'Hide them again' : `Show ${hiddenCount} hidden`}
+                </Button>
+              )}
+              {!aiMode && !deleteMode && !downloadMode && !reorderMode && showHidden && (
+                <Button size="sm" onClick={handleUnhideAll}>
+                  Unhide all ({hiddenCount})
+                </Button>
+              )}
+              {!aiMode && !deleteMode && !downloadMode && !reorderMode && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openRemovedDrawer}
+                  title="Nothing is deleted permanently — see what was removed and put it back"
+                >
+                  Removed
+                </Button>
+              )}
               {!aiMode && !deleteMode && !downloadMode && !reorderMode && (
                 <>
                   <Button
@@ -1188,7 +1337,7 @@ export default function CharacterPage() {
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
-                    Delete
+                    Remove or hide
                   </Button>
                   <Button
                     variant="secondary"
@@ -1303,14 +1452,21 @@ export default function CharacterPage() {
           onDragOver={onGalleryDragOver}
           onDragLeave={onGalleryDragLeave}
         >
-          {customs.map((url, idx) => {
+          {rows.map((row, idx) => {
+            const url = row.url
             const isDropTarget = reorderMode && reorderDropTargetIndex === idx
             const isDragSource = reorderMode && reorderDragIndices?.includes(idx)
+            const attribution = row.is_mine
+              ? 'Added by you'
+              : row.owner
+                ? `Added by ${row.owner}`
+                : 'Added before ownership was tracked'
             return (
               <div
                 key={url}
                 data-reorder-slot={idx}
-                className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''}`}
+                className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''} ${row.is_mine ? 'is-mine' : ''} ${row.hidden ? 'is-hidden' : ''}`}
+                title={attribution}
                 onClick={() => {
                   if (ignoreNextReorderItemClickRef.current) {
                     ignoreNextReorderItemClickRef.current = false
@@ -1335,6 +1491,12 @@ export default function CharacterPage() {
                     !aiMode && !deleteMode && !downloadMode && !reorderMode && openModal(idx)
                   }
                 />
+                {deleteMode && (
+                  <span className={`gallery-owner-tag ${row.is_mine ? 'is-mine' : ''}`}>
+                    {row.is_mine ? 'Yours' : row.owner || 'No owner'}
+                  </span>
+                )}
+                {row.hidden && <span className="gallery-owner-tag is-hidden">Hidden</span>}
                 {isDropTarget && (
                   <span className="reorder-drop-label" aria-hidden>
                     Drop here
@@ -1353,6 +1515,40 @@ export default function CharacterPage() {
           onClose={() => setModalOpen(false)}
           onPrev={() => setModalIndex((i) => Math.max(0, i - 1))}
           onNext={() => setModalIndex((i) => Math.min(galleryModalImages.length - 1, i + 1))}
+          onReport={rows[modalIndex] ? () => setReportTarget(rows[modalIndex]) : undefined}
+        />
+      )}
+      {confirmRemove !== null && (
+        <ConfirmDialog
+          title={`Remove ${confirmRemove} image${confirmRemove === 1 ? '' : 's'}?`}
+          body={
+            <>
+              These are yours to remove. They move to the Removed list rather than being deleted, so
+              you or anyone else can restore them later.
+            </>
+          }
+          confirmLabel="Remove"
+          variant="danger"
+          onConfirm={removeOwnImages}
+          onCancel={() => setConfirmRemove(null)}
+        />
+      )}
+      {reportTarget && (
+        <ReportDialog
+          onSubmit={(reason) => handleReport(reportTarget.id, reason)}
+          onCancel={() => setReportTarget(null)}
+        />
+      )}
+      {removedDrawer && (
+        <RemovedDrawer
+          characterName={name}
+          items={removedDrawer}
+          onRestore={async (url) => {
+            await apiClient.restoreImages(name, [url])
+            await loadCustomImagesForCharacter(name)
+            addToast('Image restored', 'success')
+          }}
+          onClose={() => setRemovedDrawer(null)}
         />
       )}
       {uploadErrorDialog && (

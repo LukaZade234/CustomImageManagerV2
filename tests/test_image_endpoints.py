@@ -13,9 +13,17 @@ def _post(client, path, payload):
     return client.post(path, data=json.dumps(payload), content_type="application/json")
 
 
-def _seed(db, mapping: dict) -> None:
+def _seed(db, mapping: dict, owner: str | None = None) -> None:
+    """Seed images, optionally attributed to an owner.
+
+    Phase 6 made removal ownership-scoped, so a test that expects a delete to
+    succeed has to seed images the caller actually owns. Unowned images (the
+    v1-migrated case) are covered in test_moderation.py.
+    """
+    if owner is not None:
+        db.ensure_identity(owner)
     for name, urls in mapping.items():
-        db.add_custom_images(name, urls)
+        db.add_custom_images(name, urls, added_by=owner)
 
 
 class TestDeleteOne:
@@ -26,8 +34,8 @@ class TestDeleteOne:
         assert r.status_code == 404
         assert r.get_json()["error"] == "Character not found"
 
-    def test_unknown_image_is_404(self, client, clean_db):
-        _seed(clean_db, {"Rem": ["https://cdn/a.png"]})
+    def test_unknown_image_is_404(self, client, clean_db, identity_id):
+        _seed(clean_db, {"Rem": ["https://cdn/a.png"]}, identity_id)
         r = _post(
             client,
             "/api/delete-custom-image",
@@ -36,8 +44,8 @@ class TestDeleteOne:
         assert r.status_code == 404
         assert r.get_json()["error"] == "Image not found"
 
-    def test_deletes_only_the_named_image(self, client, clean_db):
-        _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]})
+    def test_deletes_only_the_named_image(self, client, clean_db, identity_id):
+        _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]}, identity_id)
         r = _post(
             client,
             "/api/delete-custom-image",
@@ -54,20 +62,25 @@ class TestDeleteMany:
         )
         assert r.status_code == 404
 
-    def test_no_match_reports_success_without_deleting(self, client, clean_db):
-        """Pre-existing behaviour: 200 with an explanatory message, not an error."""
-        _seed(clean_db, {"Rem": ["https://cdn/a.png"]})
+    def test_no_match_reports_the_breakdown_rather_than_an_error(
+        self, client, clean_db, identity_id
+    ):
+        """Still 200. Phase 6 replaced the message with a per-URL breakdown so a
+        partial refusal can be explained instead of silently dropped."""
+        _seed(clean_db, {"Rem": ["https://cdn/a.png"]}, identity_id)
         r = _post(
             client,
             "/api/delete-custom-images",
             {"character_name": "Rem", "image_urls": ["https://cdn/zz.png"]},
         )
         assert r.status_code == 200
-        assert "No images were deleted" in r.get_json()["message"]
+        body = r.get_json()
+        assert body["removed"] == []
+        assert body["missing"] == ["https://cdn/zz.png"]
         assert clean_db.get_custom_images()["Rem"] == ["https://cdn/a.png"]
 
-    def test_deletes_the_named_subset_and_keeps_order(self, client, clean_db):
-        _seed(clean_db, {"Rem": [f"https://cdn/{c}.png" for c in "abcd"]})
+    def test_deletes_the_named_subset_and_keeps_order(self, client, clean_db, identity_id):
+        _seed(clean_db, {"Rem": [f"https://cdn/{c}.png" for c in "abcd"]}, identity_id)
         r = _post(
             client,
             "/api/delete-custom-images",

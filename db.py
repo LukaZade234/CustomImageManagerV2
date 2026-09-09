@@ -21,10 +21,13 @@ import atexit
 import os
 import sqlite3
 import threading
+import time
 from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+
+import identity
 
 _REPO_ROOT = Path(__file__).resolve().parent
 _MIGRATIONS_DIR = _REPO_ROOT / "migrations"
@@ -278,16 +281,168 @@ def get_custom_images() -> dict:
     return out
 
 
-def get_custom_images_for(char_name: str) -> list[str]:
+# Whitelisted, never interpolated from user input. Each entry is an ORDER BY
+# fragment; a caller passes the key, not the SQL.
+_CUSTOMS_SORTS = {
+    # NULL updated_at means "never modified"; SQLite sorts NULL lowest, so DESC
+    # already puts those last, which is what v1 did.
+    "recent": "c.updated_at DESC, c.name COLLATE NOCASE ASC",
+    # rank is TEXT and often empty, so unranked characters go last rather than
+    # sorting as zero.
+    "rank_asc": "CASE WHEN c.rank = '' THEN 1 ELSE 0 END, CAST(c.rank AS INTEGER) ASC",
+    "name_asc": "c.name COLLATE NOCASE ASC",
+    "name_desc": "c.name COLLATE NOCASE DESC",
+    "series_asc": "c.series COLLATE NOCASE ASC, c.name COLLATE NOCASE ASC",
+    "count_desc": "image_count DESC, c.name COLLATE NOCASE ASC",
+    "count_asc": "image_count ASC, c.name COLLATE NOCASE ASC",
+}
+
+CUSTOMS_SORT_KEYS = tuple(_CUSTOMS_SORTS)
+
+
+def get_custom_image_stats() -> dict:
+    """The two numbers the landing page shows.
+
+    Previously the frontend downloaded every image URL for every character --
+    around 475 KB -- and counted them in the browser.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) AS images, COUNT(DISTINCT character_id) AS characters"
+        "  FROM custom_images WHERE state = 'active'"
+    ).fetchone()
+    return {"custom_images": row["images"], "characters_with_customs": row["characters"]}
+
+
+def list_characters_with_customs(
+    *,
+    query: str = "",
+    mode: str = "name",
+    sort: str = "recent",
+    page: int = 1,
+    per_page: int = 20,
+    preview_count: int = 3,
+) -> dict:
+    """One page of the browse-customs list, searched and sorted in SQL.
+
+    Doing this in the browser meant shipping the entire library to render twenty
+    rows, and it does not survive the roster growing -- the plan is to seed tens
+    of thousands of characters, at which point client-side filtering stops being
+    an option at all.
+    """
+    order_by = _CUSTOMS_SORTS.get(sort) or _CUSTOMS_SORTS["recent"]
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+
+    column = "c.series" if mode == "series" else "c.name"
+    term = (query or "").strip()
+    where = "i.state = 'active'"
+    params: list = []
+    if term:
+        # LIKE with COLLATE NOCASE rather than lower(): it uses the existing
+        # NOCASE indexes on name and series.
+        where += f" AND {column} LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+
+    conn = get_connection()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM ("
+        "  SELECT c.id FROM characters c"
+        "  JOIN custom_images i ON i.character_id = c.id"
+        f" WHERE {where} GROUP BY c.id)",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        "SELECT c.id AS id, c.name AS name, c.series AS series, c.rank AS rank,"
+        "       c.main_image_url AS image, COUNT(i.id) AS image_count"
+        "  FROM characters c"
+        "  JOIN custom_images i ON i.character_id = c.id"
+        f" WHERE {where}"
+        " GROUP BY c.id"
+        f" ORDER BY {order_by}"
+        " LIMIT ? OFFSET ?",
+        (*params, per_page, (page - 1) * per_page),
+    ).fetchall()
+
+    items = [
+        {
+            "name": r["name"],
+            "series": r["series"],
+            "rank": r["rank"],
+            "image": r["image"],
+            "count": r["image_count"],
+            "previews": [],
+        }
+        for r in rows
+    ]
+
+    # Previews for this page only, in one query rather than one per row.
+    if rows and preview_count > 0:
+        ids = [r["id"] for r in rows]
+        by_id: dict[int, list[str]] = {i: [] for i in ids}
+        placeholders = ",".join("?" for _ in ids)
+        previews = conn.execute(
+            "SELECT character_id, url FROM custom_images"
+            f" WHERE state = 'active' AND character_id IN ({placeholders})"
+            " ORDER BY character_id, position, id",
+            ids,
+        )
+        for row in previews:
+            bucket = by_id[row["character_id"]]
+            if len(bucket) < preview_count:
+                bucket.append(row["url"])
+        for item, r in zip(items, rows, strict=True):
+            item["previews"] = by_id[r["id"]]
+
+    return {
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": max(1, -(-total // per_page)),
+    }
+
+
+def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[dict]:
+    """Active images for a character, with ownership and this viewer's hidden set.
+
+    Note what is *not* returned: `added_by` itself. Clients get the owner's
+    handle and a boolean for "yours", never the raw id -- the id is the thing the
+    identity cookie protects, and ownership can only be decided here anyway.
+    """
     conn = get_connection()
     rows = conn.execute(
-        "SELECT i.url AS url"
-        "  FROM custom_images i JOIN characters c ON c.id = i.character_id"
+        "SELECT i.id AS id, i.url AS url, i.added_by AS added_by,"
+        "       owner.handle AS owner_handle,"
+        "       (hidden.image_id IS NOT NULL) AS is_hidden"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        "  LEFT JOIN identities owner ON owner.id = i.added_by"
+        "  LEFT JOIN user_hidden hidden"
+        "    ON hidden.image_id = i.id AND hidden.identity_id = ?"
         " WHERE c.name = ? AND i.state = 'active'"
         " ORDER BY i.position, i.id",
-        (char_name,),
+        (viewer_id, char_name),
     )
-    return [r["url"] for r in rows]
+    return [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            # NULL for images migrated from v1: nobody owns them, so nobody can
+            # remove them except a moderator or the report threshold.
+            "owner": r["owner_handle"],
+            "is_mine": bool(viewer_id) and r["added_by"] == viewer_id,
+            "hidden": bool(r["is_hidden"]),
+        }
+        for r in rows
+    ]
+
+
+def get_custom_images_for(char_name: str) -> list[str]:
+    """Just the URLs, in order. For callers that do not care who owns what."""
+    return [row["url"] for row in get_custom_image_rows(char_name)]
 
 
 def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None = None) -> int:
@@ -297,6 +452,10 @@ def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None 
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
+        # The identities row is created lazily, so it may not exist yet; without
+        # this the added_by foreign key rejects the insert.
+        if added_by is not None:
+            _ensure_identity(conn, added_by)
         row = conn.execute(
             "SELECT COALESCE(MAX(position), -1) AS p FROM custom_images WHERE character_id = ?",
             (char_id,),
@@ -316,28 +475,312 @@ def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None 
         return added
 
 
-def delete_custom_images(char_name: str, urls: Iterable[str]) -> str:
-    """Remove images. Returns 'no_character', 'no_match' or 'deleted'.
+def remove_custom_images(
+    char_name: str,
+    urls: Iterable[str],
+    actor_id: str,
+    *,
+    is_moderator: bool = False,
+    reason: str | None = None,
+) -> dict | None:
+    """Soft-delete images the actor is allowed to remove.
 
-    Hard delete for now; Phase 6 turns this into a soft delete by setting
-    `state='removed'` so the Removed drawer can restore it.
+    This is the rule that makes griefing unimplementable rather than merely
+    discouraged (DECISIONS.md section 1): **you can only remove images you
+    added.** Moderators are the documented manual fallback, not the mechanism.
+
+    Images migrated from v1 have `added_by IS NULL` -- nobody owns them, so no
+    ordinary user can remove them. That is the intended outcome, not an
+    oversight: the alternative is letting anyone delete the entire inherited
+    library.
+
+    Nothing is ever hard-deleted. ImgChest keeps the file regardless, so a
+    removal is always restorable and the Removed drawer costs nothing.
+
+    Returns None if the character is unknown, otherwise a report of what
+    happened to each URL, so the caller can explain a partial refusal instead of
+    silently dropping half the request.
     """
-    doomed = list(urls)
+    doomed = list(dict.fromkeys(urls))
     with transaction() as conn:
         char_id = _character_id(conn, char_name)
         if char_id is None:
-            return "no_character"
+            return None
+        result: dict[str, list[str]] = {"removed": [], "denied": [], "missing": []}
         if not doomed:
-            return "no_match"
+            return result
+
         placeholders = ",".join("?" for _ in doomed)
-        cur = conn.execute(
-            f"DELETE FROM custom_images WHERE character_id = ? AND url IN ({placeholders})",
+        rows = conn.execute(
+            f"SELECT id, url, added_by FROM custom_images"
+            f" WHERE character_id = ? AND state = 'active' AND url IN ({placeholders})",
             (char_id, *doomed),
+        ).fetchall()
+        by_url = {r["url"]: r for r in rows}
+
+        removable = []
+        for url in doomed:
+            row = by_url.get(url)
+            if row is None:
+                result["missing"].append(url)
+            elif is_moderator or (row["added_by"] is not None and row["added_by"] == actor_id):
+                removable.append(row)
+            else:
+                result["denied"].append(url)
+
+        if removable:
+            _ensure_identity(conn, actor_id)
+            now = _now()
+            conn.executemany(
+                "UPDATE custom_images"
+                "   SET state = 'removed', removed_by = ?, removed_at = ?, removed_reason = ?"
+                " WHERE id = ?",
+                [(actor_id, now, reason, row["id"]) for row in removable],
+            )
+            conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (now, char_id))
+            result["removed"] = [row["url"] for row in removable]
+        return result
+
+
+def get_removed_for(char_name: str) -> list[dict]:
+    """The Removed drawer: everything soft-deleted for this character."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.id AS id, i.url AS url, i.removed_at AS removed_at,"
+        "       i.removed_reason AS removed_reason,"
+        "       remover.handle AS removed_by_handle"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        "  LEFT JOIN identities remover ON remover.id = i.removed_by"
+        " WHERE c.name = ? AND i.state = 'removed'"
+        " ORDER BY i.removed_at DESC, i.id DESC",
+        (char_name,),
+    )
+    return [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            "removed_by": r["removed_by_handle"],
+            "removed_at": r["removed_at"],
+            "reason": r["removed_reason"],
+        }
+        for r in rows
+    ]
+
+
+def restore_custom_images(char_name: str, urls: Iterable[str]) -> int:
+    """Un-remove images. Returns how many came back.
+
+    Deliberately open to anyone: restoring is not destructive, and a removal
+    that was wrong should be cheap for the next person to undo.
+    """
+    wanted = list(dict.fromkeys(urls))
+    if not wanted:
+        return 0
+    with transaction() as conn:
+        char_id = _character_id(conn, char_name)
+        if char_id is None:
+            return 0
+        placeholders = ",".join("?" for _ in wanted)
+        cur = conn.execute(
+            f"UPDATE custom_images"
+            f"   SET state = 'active', removed_by = NULL, removed_at = NULL,"
+            f"       removed_reason = NULL"
+            f" WHERE character_id = ? AND state = 'removed' AND url IN ({placeholders})",
+            (char_id, *wanted),
         )
-        if not cur.rowcount:
-            return "no_match"
-        conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
-        return "deleted"
+        if cur.rowcount:
+            conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
+        return cur.rowcount
+
+
+# --- Hide for me --------------------------------------------------------
+#
+# The pressure valve. Instant, unlimited, and invisible to everyone else, which
+# is what removes the reason to delete other people's images in the first place.
+
+
+def hide_images(identity_id: str, image_ids: Iterable[int]) -> int:
+    wanted = list(dict.fromkeys(image_ids))
+    if not wanted:
+        return 0
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        now = _now()
+        cur = conn.executemany(
+            "INSERT INTO user_hidden (identity_id, image_id, hidden_at) VALUES (?, ?, ?)"
+            " ON CONFLICT (identity_id, image_id) DO NOTHING",
+            [(identity_id, image_id, now) for image_id in wanted],
+        )
+        return cur.rowcount
+
+
+def unhide_images(identity_id: str, image_ids: Iterable[int]) -> int:
+    wanted = list(dict.fromkeys(image_ids))
+    if not wanted:
+        return 0
+    with transaction() as conn:
+        placeholders = ",".join("?" for _ in wanted)
+        cur = conn.execute(
+            f"DELETE FROM user_hidden WHERE identity_id = ? AND image_id IN ({placeholders})",
+            (identity_id, *wanted),
+        )
+        return cur.rowcount
+
+
+# --- Rate limiting ------------------------------------------------------
+
+# Expired windows are swept at most this often, from whichever request happens
+# to notice. A background job would be tidier but is not worth a process for a
+# table this small.
+_SWEEP_INTERVAL_SECONDS = 300
+_last_sweep = 0.0
+
+
+def _sweep_expired_rate_limits(conn: sqlite3.Connection, now: int) -> None:
+    global _last_sweep
+    if now - _last_sweep < _SWEEP_INTERVAL_SECONDS:
+        return
+    _last_sweep = now
+    # A day is comfortably longer than any window we use, so this only ever
+    # removes rows nothing can still be counting against.
+    conn.execute("DELETE FROM rate_limit_hits WHERE window_start < ?", (now - 86400,))
+
+
+def check_rate_limit(
+    identity_id: str, action: str, *, limit: int, per_seconds: int, now: int | None = None
+) -> tuple[bool, int]:
+    """Count one attempt. Returns (allowed, retry_after_seconds).
+
+    The increment happens *before* the count is read, so two concurrent requests
+    cannot both see "one under the limit" and both proceed. This is the same
+    "let the write decide, then read the outcome" pattern `_ensure_character`
+    uses, and for the same reason -- check-then-act is a race.
+
+    A blocked attempt still counts. That is deliberate: a client retrying into a
+    closed window should not get a free pass for doing so, and because the window
+    end is fixed, `retry_after` stays honest either way.
+    """
+    now = int(time.time()) if now is None else int(now)
+    window_start = now - (now % per_seconds)
+    with transaction() as conn:
+        _sweep_expired_rate_limits(conn, now)
+        conn.execute(
+            "INSERT INTO rate_limit_hits (identity_id, action, window_start, hits)"
+            " VALUES (?, ?, ?, 1)"
+            " ON CONFLICT (identity_id, action, window_start)"
+            " DO UPDATE SET hits = hits + 1",
+            (identity_id, action, window_start),
+        )
+        hits = conn.execute(
+            "SELECT hits FROM rate_limit_hits"
+            " WHERE identity_id = ? AND action = ? AND window_start = ?",
+            (identity_id, action, window_start),
+        ).fetchone()["hits"]
+
+    if hits <= limit:
+        return True, 0
+    return False, max(1, window_start + per_seconds - now)
+
+
+def rate_limit_usage(identity_id: str, action: str, per_seconds: int) -> int:
+    """Attempts recorded in the current window. For tests and diagnostics."""
+    now = int(time.time())
+    window_start = now - (now % per_seconds)
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT hits FROM rate_limit_hits"
+        " WHERE identity_id = ? AND action = ? AND window_start = ?",
+        (identity_id, action, window_start),
+    ).fetchone()
+    return row["hits"] if row else 0
+
+
+# --- Reports ------------------------------------------------------------
+#
+# Objective problems only: wrong character, dead link, NSFW, duplicate. Never
+# taste -- that is what hide-for-me is for. The primary key on
+# (image_id, identity_id) is what makes "two distinct reporters" meaningful:
+# one person cannot reach the threshold alone.
+
+REPORT_REASONS = ("wrong_character", "dead_link", "nsfw", "duplicate")
+
+# Two, not more, because the userbase is too small to produce a larger quorum
+# in any reasonable time (DECISIONS.md section 1). Removal is soft and anyone
+# can restore, so the cost of a wrong call is low.
+REPORT_REMOVAL_THRESHOLD = 2
+
+
+def report_image(image_id: int, identity_id: str, reason: str) -> dict | None:
+    """Record a report. Returns None if the image does not exist.
+
+    Otherwise {'reports': n, 'removed': bool, 'already_reported': bool}. Removal
+    happens on the second *distinct* reporter; a second report from the same
+    person changes nothing, which is the point of the composite primary key.
+    """
+    if reason not in REPORT_REASONS:
+        raise ValueError(f"Unknown report reason: {reason!r}")
+    with transaction() as conn:
+        row = conn.execute(
+            "SELECT id, character_id, state FROM custom_images WHERE id = ?", (image_id,)
+        ).fetchone()
+        if row is None:
+            return None
+
+        _ensure_identity(conn, identity_id)
+        cur = conn.execute(
+            "INSERT INTO image_reports (image_id, identity_id, reason, at)"
+            " VALUES (?, ?, ?, ?) ON CONFLICT (image_id, identity_id) DO NOTHING",
+            (image_id, identity_id, reason, _now()),
+        )
+        already_reported = not cur.rowcount
+
+        reports = conn.execute(
+            "SELECT COUNT(*) AS n FROM image_reports WHERE image_id = ?", (image_id,)
+        ).fetchone()["n"]
+
+        removed = row["state"] == "removed"
+        if not removed and reports >= REPORT_REMOVAL_THRESHOLD:
+            now = _now()
+            conn.execute(
+                "UPDATE custom_images"
+                "   SET state = 'removed', removed_at = ?, removed_reason = ?"
+                " WHERE id = ?",
+                (now, f"reported: {reason}", image_id),
+            )
+            # removed_by stays NULL: no single person made this call.
+            conn.execute(
+                "UPDATE characters SET updated_at = ? WHERE id = ?", (now, row["character_id"])
+            )
+            removed = True
+
+        return {"reports": reports, "removed": removed, "already_reported": already_reported}
+
+
+# --- Takes --------------------------------------------------------------
+
+
+def log_take(image_id: int, identity_id: str | None, kind: str) -> bool:
+    """Record that someone took an image away with them.
+
+    Deliberately drives nothing. It is logged because collecting it costs
+    nothing and keeps the option of designing a retirement policy later against
+    real evidence rather than a guess -- see DECISIONS.md section 1, where
+    retirement-by-disuse was rejected precisely for lack of that evidence.
+    """
+    if kind not in ("download", "copy_command"):
+        raise ValueError(f"Unknown take kind: {kind!r}")
+    with transaction() as conn:
+        exists = conn.execute("SELECT 1 FROM custom_images WHERE id = ?", (image_id,)).fetchone()
+        if exists is None:
+            return False
+        if identity_id is not None:
+            _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO image_takes (image_id, identity_id, kind, at) VALUES (?, ?, ?, ?)",
+            (image_id, identity_id, kind, _now()),
+        )
+        return True
 
 
 def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:
@@ -374,22 +817,54 @@ def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:
 
 
 def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
+    """Bookmarks, most recently updated first.
+
+    The timestamp comes back with each row so the client does not have to fetch
+    a last-updated map for all ~700 characters just to order a handful of
+    bookmarks. NULL updated_at means never modified, and SQLite sorts NULL
+    lowest, so DESC already puts those last.
+    """
     conn = get_connection()
     rows = conn.execute(
         "SELECT c.name AS name, c.series AS series, c.rank AS rank,"
-        "       c.main_image_url AS image"
+        "       c.main_image_url AS image, c.updated_at AS updated_at"
         "  FROM saved s JOIN characters c ON c.id = s.character_id"
-        " WHERE s.identity_id = ? ORDER BY s.created_at",
+        " WHERE s.identity_id = ?"
+        " ORDER BY c.updated_at DESC, s.created_at DESC",
         (identity_id,),
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def _ensure_identity(conn: sqlite3.Connection, identity_id: str) -> None:
+def _ensure_identity(conn: sqlite3.Connection, identity_id: str, handle: str | None = None) -> None:
+    """Create the row if this is the identity's first write.
+
+    Rows are created lazily: a cookie is issued to every visitor, but only
+    someone who actually stores something needs a row. INSERT-then-ignore rather
+    than check-then-insert, for the usual reason.
+    """
+    if handle is None:
+        handle = identity.handle_for(identity_id)
     conn.execute(
         "INSERT INTO identities (id, handle) VALUES (?, ?) ON CONFLICT (id) DO NOTHING",
-        (identity_id, "Legacy"),
+        (identity_id, handle),
     )
+
+
+def ensure_identity(identity_id: str, handle: str | None = None) -> None:
+    """Public form of the above, for callers outside a transaction."""
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id, handle)
+
+
+def get_identity(identity_id: str) -> dict | None:
+    """The stored row, or None if this identity has never written anything."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, handle, discord_id, role, created_at FROM identities WHERE id = ?",
+        (identity_id,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:

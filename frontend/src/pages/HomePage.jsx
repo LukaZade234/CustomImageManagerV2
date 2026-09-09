@@ -4,19 +4,19 @@ import { Card } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 export default function HomePage() {
-  const customImages = useStore((s) => s.customImages)
+  const stats = useStore((s) => s.stats)
   const loading = useStore((s) => s.loading)
   const error = useStore((s) => s.error)
-  const loadCustomImages = useStore((s) => s.loadCustomImages)
+  const loadStats = useStore((s) => s.loadStats)
 
   useEffect(() => {
-    loadCustomImages()
-  }, [loadCustomImages])
+    loadStats()
+  }, [loadStats])
 
-  const totalImages = Object.values(customImages).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-  const charsWithCustoms = Object.keys(customImages).filter(
-    (k) => (customImages[k]?.length || 0) > 0,
-  ).length
+  // Two integers from the server. This page used to download every image URL
+  // for every character -- about 475 KB -- and count them here.
+  const totalImages = stats?.custom_images ?? 0
+  const charsWithCustoms = stats?.characters_with_customs ?? 0
 
   if (loading) return <HomeLoadingState />
   if (error) return <div className="loading loading-error">Failed to load: {error}</div>

@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getImageUrl } from '../api'
+import { apiClient, getImageUrl } from '../api'
 import { Badge, Button, Card, EmptyState, Input, SegmentedControl, Select } from '../components/ui'
-import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
-const PREVIEW_COUNT = 3
 
 const SORT_OPTIONS = [
   { value: 'recent', label: 'Most Recent' },
@@ -18,11 +16,6 @@ const SORT_OPTIONS = [
 ]
 
 export default function CustomsPage() {
-  const characters = useStore((s) => s.characters)
-  const customImages = useStore((s) => s.customImages)
-  const loadCustomImages = useStore((s) => s.loadCustomImages)
-  /** Unix seconds per character — updated when customs change (server `last_updated`). */
-  const lastUpdated = useStore((s) => s.lastUpdated)
   const [search, setSearch] = useState('')
   const [searchMode, setSearchMode] = useState('name')
   const [sort, setSort] = useState('recent')
@@ -31,49 +24,51 @@ export default function CustomsPage() {
   const [pageJumpValue, setPageJumpValue] = useState('1')
   const pageJumpInputRef = useRef(null)
 
+  // Searching, sorting and paging all happen in SQL now. The page used to pull
+  // the entire library into memory and do the work here, which cost ~475 KB on
+  // every visit and would stop working outright once the roster grows.
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Debounced so typing does not fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   useEffect(() => {
-    loadCustomImages()
-  }, [loadCustomImages])
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250)
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const baseCustomsList = useMemo(() => {
-    const entries = Object.entries(customImages).filter(([, urls]) => urls?.length > 0)
-    return entries.map(([name, urls]) => {
-      const char = characters.find((c) => c.name === name) || { name, series: '', rank: '' }
-      const ts = lastUpdated[name]
-      const lastModified = typeof ts === 'number' && Number.isFinite(ts) ? ts : 0
-      return { ...char, customCount: urls.length, customUrls: urls, lastModified }
-    })
-  }, [customImages, characters, lastUpdated])
-
-  const searchFiltered = useMemo(() => {
-    if (!search.trim()) return baseCustomsList
-    const q = search.trim().toLowerCase()
-    if (searchMode === 'name') {
-      return baseCustomsList.filter((c) => c.name.toLowerCase().includes(q))
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    apiClient
+      .listCustoms({ page, perPage: PAGE_SIZE, q: debouncedSearch, by: searchMode, sort })
+      .then((data) => {
+        if (cancelled) return
+        setResult(data)
+        setError(null)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-    return baseCustomsList.filter((c) => (c.series || '').toLowerCase().includes(q))
-  }, [baseCustomsList, search, searchMode])
+  }, [page, debouncedSearch, searchMode, sort])
 
-  const customsList = useMemo(() => {
-    const filtered = [...searchFiltered]
-    if (sort === 'recent') filtered.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
-    if (sort === 'rank_asc')
-      filtered.sort((a, b) => (parseInt(a.rank) || 9999) - (parseInt(b.rank) || 9999))
-    if (sort === 'name_asc') filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    if (sort === 'name_desc') filtered.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
-    if (sort === 'series_asc')
-      filtered.sort((a, b) => (a.series || '').localeCompare(b.series || ''))
-    if (sort === 'count_desc') filtered.sort((a, b) => b.customCount - a.customCount)
-    if (sort === 'count_asc') filtered.sort((a, b) => a.customCount - b.customCount)
-    return filtered
-  }, [searchFiltered, sort])
+  const items = result?.items ?? []
+  const total = result?.total ?? 0
+  const totalPages = result?.total_pages ?? 1
+  const hasSearch = Boolean(debouncedSearch)
+  // Only meaningful once a response has arrived; before that the page is loading,
+  // not empty.
+  const emptySearchNoMatches = Boolean(result) && hasSearch && total === 0
+  const totalGlobalEmpty = Boolean(result) && !hasSearch && total === 0
 
-  const hasSearch = Boolean(search.trim())
-  const emptySearchNoMatches = hasSearch && customsList.length === 0 && baseCustomsList.length > 0
-  const totalGlobalEmpty = baseCustomsList.length === 0
-
-  const totalPages = Math.ceil(customsList.length / PAGE_SIZE) || 1
-
+  // A shrinking result set can leave you past the last page.
   useEffect(() => {
     setPage((p) => Math.min(p, totalPages))
   }, [totalPages])
@@ -85,10 +80,6 @@ export default function CustomsPage() {
   useEffect(() => {
     if (!pageJumpEditing) setPageJumpValue(String(page))
   }, [page, pageJumpEditing])
-  const paginatedList = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE
-    return customsList.slice(start, start + PAGE_SIZE)
-  }, [customsList, page])
 
   const resetToPage1 = () => setPage(1)
 
@@ -171,6 +162,26 @@ export default function CustomsPage() {
         </div>
       </div>
 
+      {error && (
+        <EmptyState
+          title="Could not load the list"
+          description={error}
+          action={<Button onClick={() => setPage((p) => p)}>Try again</Button>}
+        />
+      )}
+
+      {loading && !result && (
+        <div className="customs-list" aria-busy="true" aria-live="polite">
+          <p className="sr-only">Loading customs…</p>
+          {Array.from({ length: 6 }, (_, i) => i).map((i) => (
+            <div key={i} className="customs-skeleton-row">
+              <div className="skeleton-line skeleton-line--title" />
+              <div className="skeleton-line skeleton-line--body" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {totalGlobalEmpty && (
         <EmptyState
           title="No custom images yet"
@@ -188,13 +199,13 @@ export default function CustomsPage() {
         />
       )}
 
-      {!totalGlobalEmpty && !emptySearchNoMatches && (
-        <>
+      {result && !totalGlobalEmpty && !emptySearchNoMatches && (
+        <div className={loading ? 'is-refetching' : undefined}>
           <p id="customsCount" className="text-meta customs-count-line">
-            {customsList.length} characters with custom images. Showing page {page} of {totalPages}.
+            {total} characters with custom images. Showing page {page} of {totalPages}.
           </p>
           <div className="customs-list">
-            {paginatedList.map((c) => (
+            {items.map((c) => (
               <Link
                 key={c.name}
                 to={`/character/${encodeURIComponent(c.name)}`}
@@ -206,13 +217,13 @@ export default function CustomsPage() {
                     <h3>{c.name}</h3>
                     {c.series && <p>{c.series}</p>}
                     <p>
-                      <Badge>{c.customCount} images</Badge>
+                      <Badge>{c.count} images</Badge>
                     </p>
                   </div>
                 </div>
-                {c.customUrls?.length > 0 && (
+                {c.previews?.length > 0 && (
                   <div className="customs-preview-row">
-                    {c.customUrls.slice(0, PREVIEW_COUNT).map((url) => (
+                    {c.previews.map((url) => (
                       <img
                         key={url}
                         src={getImageUrl(url)}
@@ -225,7 +236,7 @@ export default function CustomsPage() {
               </Link>
             ))}
           </div>
-        </>
+        </div>
       )}
       {!totalGlobalEmpty && !emptySearchNoMatches && totalPages > 1 && (
         <div className="customs-pagination">
