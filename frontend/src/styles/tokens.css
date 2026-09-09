@@ -59,9 +59,11 @@
 
   /* ---- Status ------------------------------------------------------ */
   --success: #0f7a3d;
+  --success-fg: #ffffff;
   --success-subtle: #e4f4ea;
   --danger: #b3261e;
   --danger-hover: #96201a;
+  --danger-fg: #ffffff;
   --danger-subtle: #fbeae9;
   --warning: #8a5a00;
   --warning-subtle: #fbf1de;
@@ -173,9 +175,11 @@
     --accent-fg: #08232a;
 
     --success: #48c07a;
+    --success-fg: #062313;
     --success-subtle: #12301f;
     --danger: #f2857a;
     --danger-hover: #f7a49b;
+    --danger-fg: #2b1210;
     --danger-subtle: #35191a;
     --warning: #e0b341;
     --warning-subtle: #33280f;
@@ -208,9 +212,11 @@
   --accent-fg: #08232a;
 
   --success: #48c07a;
+  --success-fg: #062313;
   --success-subtle: #12301f;
   --danger: #f2857a;
   --danger-hover: #f7a49b;
+  --danger-fg: #2b1210;
   --danger-subtle: #35191a;
   --warning: #e0b341;
   --warning-subtle: #33280f;

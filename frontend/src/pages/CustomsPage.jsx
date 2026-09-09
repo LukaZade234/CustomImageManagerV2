@@ -119,8 +119,8 @@ export default function CustomsPage() {
   }
 
   return (
-    <div id="customsPage" className="customs-page">
-      <h2 className="page-title">Browse Customs</h2>
+    <div className="customs-page">
+      <h1 className="page-title">Browse Customs</h1>
       <div className="customs-controls">
         <div className="search-input-wrapper customs-search-wrap">
           <input
@@ -210,7 +210,7 @@ export default function CustomsPage() {
           <p id="customsCount" className="text-meta customs-count-line">
             {customsList.length} characters with custom images. Showing page {page} of {totalPages}.
           </p>
-          <div id="customsList" className="search-result-list">
+          <div className="customs-list search-result-list">
             {paginatedList.map((c) => (
               <Link
                 key={c.name}

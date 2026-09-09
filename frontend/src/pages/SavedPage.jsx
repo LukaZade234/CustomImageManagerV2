@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { getImageUrl } from '../api'
+import { Card, EmptyState, IconButton } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 export default function SavedPage() {
@@ -25,11 +26,14 @@ export default function SavedPage() {
   }
 
   return (
-    <div id="savedPage" className="saved-page">
-      <h2 className="page-title">Saved Characters</h2>
+    <Card as="section" padding="lg" className="saved-page">
+      <h1 className="page-title">Saved Characters</h1>
       <p className="page-subtitle">Your personal collection of bookmarked characters.</p>
       {savedCharacters.length === 0 ? (
-        <p className="empty-saved">No saved characters yet.</p>
+        <EmptyState
+          title="No saved characters yet"
+          description="Bookmark a character from its page and it will show up here for quick access."
+        />
       ) : (
         <div className="saved-characters-grid">
           {savedCharacters.map((char) => (
@@ -44,30 +48,30 @@ export default function SavedPage() {
                 ) : (
                   <div className="no-image-placeholder">No Image</div>
                 )}
-                <button
-                  type="button"
+                <IconButton
+                  size="sm"
                   className="saved-card-unsave-btn"
                   onClick={(e) => handleUnsave(e, char.name)}
-                  title="Unsave"
-                  aria-label="Unsave character"
+                  label={`Remove ${char.name} from saved`}
                 >
                   <svg
-                    width="16"
-                    height="16"
+                    width="14"
+                    height="14"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
+                    aria-hidden="true"
                   >
                     <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                   </svg>
-                </button>
+                </IconButton>
               </div>
               <h4>{char.name}</h4>
             </Link>
           ))}
         </div>
       )}
-    </div>
+    </Card>
   )
 }

@@ -883,9 +883,9 @@ export default function CharacterPage() {
   const galleryModalImages = customs.map((u) => getImageUrl(u) || u).filter(Boolean)
 
   return (
-    <div id="selectedCharacter" className="character-page">
+    <div className="character-page">
       <div className="character-top-section">
-        <div id="charInfo" className="char-info-section">
+        <div className="char-info-section">
           {!editMode ? (
             <div id="charDisplayMode">
               <h3 id="charNameDisplay" className="display-title">
@@ -905,6 +905,7 @@ export default function CharacterPage() {
                   title="Edit name, series, rank, and main image"
                 >
                   <svg
+                    aria-hidden="true"
                     width="16"
                     height="16"
                     viewBox="0 0 24 24"
@@ -927,6 +928,7 @@ export default function CharacterPage() {
                   }}
                 >
                   <svg
+                    aria-hidden="true"
                     width="16"
                     height="16"
                     viewBox="0 0 24 24"
@@ -1000,7 +1002,7 @@ export default function CharacterPage() {
             </div>
           )}
         </div>
-        <div id="charImageContainer" className="char-image-section">
+        <div className="char-image-section">
           <div
             className={`image-wrapper ${editMode ? 'edit-mode' : ''} ${dragOver ? 'drag-over-main' : ''}`}
             onClick={() => editMode && mainInputRef.current?.click()}
@@ -1061,6 +1063,7 @@ export default function CharacterPage() {
             aria-label={isSaved ? 'Unsave' : 'Save'}
           >
             <svg
+              aria-hidden="true"
               width="18"
               height="18"
               viewBox="0 0 24 24"
@@ -1075,8 +1078,7 @@ export default function CharacterPage() {
       </div>
 
       <div
-        id="customImagesSection"
-        className={customDragOver ? 'drag-over' : ''}
+        className={`custom-images-section ${customDragOver ? 'drag-over' : ''}`}
         onDragOver={handleCustomSectionDragOver}
         onDragLeave={handleCustomSectionDragLeave}
         onDrop={handleCustomDrop}
@@ -1101,6 +1103,7 @@ export default function CharacterPage() {
                     }}
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1147,6 +1150,7 @@ export default function CharacterPage() {
                     }}
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1185,6 +1189,7 @@ export default function CharacterPage() {
                     }
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1257,6 +1262,7 @@ export default function CharacterPage() {
                     style={{ padding: '6px 12px', fontSize: '0.9em' }}
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1278,6 +1284,7 @@ export default function CharacterPage() {
                     title="Download selected custom images to a folder"
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1299,6 +1306,7 @@ export default function CharacterPage() {
                     style={{ padding: '6px 12px', fontSize: '0.9em' }}
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1329,6 +1337,7 @@ export default function CharacterPage() {
                     title="Add Custom Image"
                   >
                     <svg
+                      aria-hidden="true"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1400,8 +1409,7 @@ export default function CharacterPage() {
           </div>
         )}
         <div
-          id="customImagesGallery"
-          className={reorderDragIndices ? 'reorder-drag-active' : ''}
+          className={`custom-images-gallery ${reorderDragIndices ? 'reorder-drag-active' : ''}`}
           onDragOver={onGalleryDragOver}
           onDragLeave={onGalleryDragLeave}
         >

@@ -38,7 +38,7 @@ export default function SearchResultsPage() {
   if (loading && characters.length === 0) {
     return (
       <div id="searchPage" className="search-results-page page-loading-shell" aria-busy="true">
-        <h2 className="page-title">Search Results</h2>
+        <h1 className="page-title">Search Results</h1>
         <p
           className="text-meta page-loading-lead"
           style={{ textAlign: 'left', marginBottom: '1rem' }}
@@ -61,8 +61,8 @@ export default function SearchResultsPage() {
   }
 
   return (
-    <div id="searchPage" className="search-results-page">
-      <h2 className="page-title">Search Results</h2>
+    <div className="search-results-page">
+      <h1 className="page-title">Search Results</h1>
       <p className="search-results-count text-meta">
         {matches.length === 0
           ? 'No characters found'

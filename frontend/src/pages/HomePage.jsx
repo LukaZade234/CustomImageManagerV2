@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import HomeLoadingState from '../components/HomeLoadingState'
+import { Card } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 export default function HomePage() {
-  const characters = useStore((s) => s.characters)
   const customImages = useStore((s) => s.customImages)
   const loading = useStore((s) => s.loading)
   const error = useStore((s) => s.error)
@@ -22,8 +22,8 @@ export default function HomePage() {
   if (error) return <div className="loading loading-error">Failed to load: {error}</div>
 
   return (
-    <div id="uploadSection" className="home-page">
-      <h2 className="page-title">Welcome to ImgManager</h2>
+    <Card as="section" padding="lg" className="home-page">
+      <h1 className="page-title">Welcome to ImgManager</h1>
       <p className="page-subtitle">
         The ultimate tool for managing your character collection. Customize your favorite characters
         with ease, organize unlimited custom images, and generate bulk commands instantly.
@@ -32,6 +32,7 @@ export default function HomePage() {
         <div className="stat-card">
           <div className="stat-icon image-icon">
             <svg
+              aria-hidden="true"
               width="24"
               height="24"
               viewBox="0 0 24 24"
@@ -47,13 +48,14 @@ export default function HomePage() {
             </svg>
           </div>
           <div className="stat-info">
-            <span className="stat-value">{totalImages}</span>
+            <span className="stat-value tabular">{totalImages}</span>
             <span className="stat-label">Custom Images</span>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon char-icon">
             <svg
+              aria-hidden="true"
               width="24"
               height="24"
               viewBox="0 0 24 24"
@@ -68,7 +70,7 @@ export default function HomePage() {
             </svg>
           </div>
           <div className="stat-info">
-            <span className="stat-value">{charsWithCustoms}</span>
+            <span className="stat-value tabular">{charsWithCustoms}</span>
             <span className="stat-label">Characters Customized</span>
           </div>
         </div>
@@ -99,6 +101,6 @@ export default function HomePage() {
           </li>
         </ul>
       </div>
-    </div>
+    </Card>
   )
 }

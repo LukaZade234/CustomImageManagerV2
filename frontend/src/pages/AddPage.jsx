@@ -322,8 +322,8 @@ export default function AddPage() {
   }
 
   return (
-    <div id="addPage" className="add-page">
-      <h2 className="page-title">Add New Character</h2>
+    <div className="add-page">
+      <h1 className="page-title">Add New Character</h1>
 
       {mudaeConfigured === false && (
         <p
@@ -651,6 +651,7 @@ export default function AddPage() {
               }
             >
               <svg
+                aria-hidden="true"
                 width="24"
                 height="24"
                 viewBox="0 0 24 24"

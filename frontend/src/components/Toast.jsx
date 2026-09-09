@@ -5,6 +5,7 @@ function ToastIcon({ type }) {
     return (
       <span className="toast-icon toast-icon--success" aria-hidden>
         <svg
+          aria-hidden="true"
           width="20"
           height="20"
           viewBox="0 0 24 24"
@@ -23,6 +24,7 @@ function ToastIcon({ type }) {
     return (
       <span className="toast-icon toast-icon--error" aria-hidden>
         <svg
+          aria-hidden="true"
           width="20"
           height="20"
           viewBox="0 0 24 24"
@@ -40,6 +42,7 @@ function ToastIcon({ type }) {
   return (
     <span className="toast-icon toast-icon--info" aria-hidden>
       <svg
+        aria-hidden="true"
         width="20"
         height="20"
         viewBox="0 0 24 24"

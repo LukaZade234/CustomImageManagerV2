@@ -109,6 +109,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         <div className="ai-command-limit-dialog__header">
           <span className="ai-command-limit-dialog__header-icon" aria-hidden="true">
             <svg
+              aria-hidden="true"
               width="22"
               height="22"
               viewBox="0 0 24 24"
