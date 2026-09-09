@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiClient } from '../api'
+import { applyTheme, nextTheme, persistTheme, readStoredTheme, THEMES } from '../theme'
 
 /** Transient browser / gateway failures worth retrying (not 4xx validation). */
 function shouldRetryFetchError(e) {
@@ -19,16 +20,16 @@ export const useStore = create((set, get) => ({
   currentCharacter: null,
   loading: false,
   error: null,
-  darkMode: typeof localStorage !== 'undefined' ? localStorage.getItem('darkMode') === 'true' : false,
+  theme: readStoredTheme(),
 
-  setDarkMode: (v) => {
-    set({ darkMode: v })
-    if (typeof document !== 'undefined') document.body.classList.toggle('dark-mode', v)
-    if (typeof localStorage !== 'undefined') localStorage.setItem('darkMode', v ? 'true' : 'false')
+  setTheme: (theme) => {
+    if (!THEMES.includes(theme)) return
+    set({ theme })
+    applyTheme(theme)
+    persistTheme(theme)
   },
-  toggleDarkMode: () => {
-    const v = !get().darkMode
-    get().setDarkMode(v)
+  cycleTheme: () => {
+    get().setTheme(nextTheme(get().theme))
   },
 
   loadCharacters: async () => {
@@ -45,12 +46,11 @@ export const useStore = create((set, get) => ({
 
   loadSaved: async () => {
     try {
-      const [saved, lastUpd] = await Promise.all([
-        apiClient.getSaved(),
-        apiClient.getLastUpdated(),
-      ])
+      const [saved, lastUpd] = await Promise.all([apiClient.getSaved(), apiClient.getLastUpdated()])
       set({ savedCharacters: saved || [], lastUpdated: lastUpd || {} })
-      const sorted = [...(saved || [])].sort((a, b) => (lastUpd[b.name] || 0) - (lastUpd[a.name] || 0))
+      const sorted = [...(saved || [])].sort(
+        (a, b) => (lastUpd[b.name] || 0) - (lastUpd[a.name] || 0),
+      )
       set({ savedCharacters: sorted })
     } catch (e) {
       set({ savedCharacters: [] })

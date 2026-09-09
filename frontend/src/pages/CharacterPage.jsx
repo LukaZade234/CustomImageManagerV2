@@ -1,18 +1,26 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useStore } from '../store/useStore'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
+import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import ImageModal from '../components/ImageModal'
 import UploadErrorDialog from '../components/UploadErrorDialog'
-import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
+import { Button, Card, IconButton } from '../components/ui'
+import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
-  splitAiCommandForLimit,
-  DISCORD_LIMIT_REGULAR,
   DISCORD_LIMIT_NITRO,
+  DISCORD_LIMIT_REGULAR,
+  splitAiCommandForLimit,
 } from '../utils/aiCommandDiscord'
-import { writeCustomImagesToDirectory, downloadCustomImagesViaBrowser } from '../utils/downloadCustomImages'
-import { extractImageUrlsFromDataTransfer, dataTransferHasWebImageDrag, dedupeImageUrls } from '../utils/dragImageUrls'
+import {
+  downloadCustomImagesViaBrowser,
+  writeCustomImagesToDirectory,
+} from '../utils/downloadCustomImages'
+import {
+  dataTransferHasWebImageDrag,
+  dedupeImageUrls,
+  extractImageUrlsFromDataTransfer,
+} from '../utils/dragImageUrls'
 
 /** Must match server MAX_FILE_SIZE in upload_imgchest.py (30 MiB) */
 const MAX_CUSTOM_IMAGE_BYTES = 30 * 1024 * 1024
@@ -116,7 +124,8 @@ export default function CharacterPage() {
   const removeSaved = useStore((s) => s.removeSaved)
   const addToast = useStore((s) => s.addToast)
 
-  const char = characters.find((c) => c.name === name) || savedCharacters.find((c) => c.name === name)
+  const char =
+    characters.find((c) => c.name === name) || savedCharacters.find((c) => c.name === name)
   const customs = customImages[name] || []
   const isSaved = savedCharacters.some((s) => s.name === name)
 
@@ -173,7 +182,8 @@ export default function CharacterPage() {
   }, [char])
 
   useEffect(() => {
-    apiClient.mudaeStatus()
+    apiClient
+      .mudaeStatus()
       .then((r) => setMudaeConfigured(!!r.configured))
       .catch(() => setMudaeConfigured(false))
   }, [])
@@ -259,7 +269,8 @@ export default function CharacterPage() {
   useEffect(() => {
     return () => {
       if (typeof reorderTouchCleanupRef.current === 'function') reorderTouchCleanupRef.current()
-      if (typeof reorderTouchCancelPendingRef.current === 'function') reorderTouchCancelPendingRef.current()
+      if (typeof reorderTouchCancelPendingRef.current === 'function')
+        reorderTouchCancelPendingRef.current()
       const p = reorderTouchPendingRef.current
       if (p?.timerId) clearTimeout(p.timerId)
       reorderTouchPendingRef.current = null
@@ -330,7 +341,7 @@ export default function CharacterPage() {
       if (indices.includes(startIndex)) return indices
       return [startIndex]
     },
-    [customs, selectedUrls]
+    [customs, selectedUrls],
   )
 
   const beginReorderDrag = useCallback(
@@ -340,7 +351,7 @@ export default function CharacterPage() {
       dragItemRef.current = index
       setReorderDragIndices(indices)
     },
-    [getIndicesToMove]
+    [getIndicesToMove],
   )
 
   const applyReorder = useCallback(
@@ -353,7 +364,7 @@ export default function CharacterPage() {
         })
         .catch((err) => addToast(err.message, 'error'))
     },
-    [name, loadCustomImagesForCharacter, addToast]
+    [name, loadCustomImagesForCharacter, addToast],
   )
 
   if (!char) return <div className="loading">Character not found</div>
@@ -361,7 +372,12 @@ export default function CharacterPage() {
   const handleSaveEdit = async () => {
     setLoading(true)
     try {
-      await apiClient.editCharacter({ original_name: name, new_name: editName, series: editSeries, rank: editRank })
+      await apiClient.editCharacter({
+        original_name: name,
+        new_name: editName,
+        series: editSeries,
+        rank: editRank,
+      })
       await loadCharacters()
       await loadSaved()
       if (name !== editName) {
@@ -414,10 +430,13 @@ export default function CharacterPage() {
     const fd = new FormData()
     fd.append('file', file)
     fd.append('character_name', name)
-    apiClient.setMainImage(fd).then((res) => {
-      setMainImage(res.image_url)
-      addToast('Main image updated', 'success')
-    }).catch((err) => addToast(err.message, 'error'))
+    apiClient
+      .setMainImage(fd)
+      .then((res) => {
+        setMainImage(res.image_url)
+        addToast('Main image updated', 'success')
+      })
+      .catch((err) => addToast(err.message, 'error'))
   }
 
   const handleMudaeRefreshMain = async () => {
@@ -490,7 +509,7 @@ export default function CharacterPage() {
       } else if (ok > 0) {
         addToast(
           `${ok} of ${total} image${ok !== 1 ? 's' : ''} uploaded. ${errors.length} failed — open the error panel to read and copy details.`,
-          'error'
+          'error',
         )
       } else {
         addToast(`No images uploaded — open the error panel for full details.`, 'error')
@@ -537,7 +556,7 @@ export default function CharacterPage() {
       deduped.length > 1
         ? 'Importing one image from the web (extra URLs ignored)…'
         : 'Importing image from the web…',
-      'info'
+      'info',
     )
     try {
       const res = await apiClient.importCustomImagesFromUrls(name, list)
@@ -617,12 +636,15 @@ export default function CharacterPage() {
       if (typeof window.showDirectoryPicker === 'function') {
         const dirHandle = await window.showDirectoryPicker()
         await writeCustomImagesToDirectory(selectedUrls, dirHandle)
-        addToast(`Saved ${selectedUrls.length} image${selectedUrls.length === 1 ? '' : 's'} to the folder you chose`, 'success')
+        addToast(
+          `Saved ${selectedUrls.length} image${selectedUrls.length === 1 ? '' : 's'} to the folder you chose`,
+          'success',
+        )
       } else {
         await downloadCustomImagesViaBrowser(selectedUrls)
         addToast(
           'Downloads started. For choosing a folder, use Chrome or Edge. Other browsers save to your default download folder.',
-          'info'
+          'info',
         )
       }
       resetModes()
@@ -655,7 +677,9 @@ export default function CharacterPage() {
 
   const toggleSelect = (url) => {
     if (aiMode || deleteMode || downloadMode || reorderMode) {
-      setSelectedUrls((prev) => (prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]))
+      setSelectedUrls((prev) =>
+        prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
+      )
     }
   }
 
@@ -860,107 +884,187 @@ export default function CharacterPage() {
   const galleryModalImages = customs.map((u) => getImageUrl(u) || u).filter(Boolean)
 
   return (
-    <div id="selectedCharacter" className="character-page">
+    <Card as="article" padding="lg" className="character-page">
       <div className="character-top-section">
-      <div id="charInfo" className="char-info-section">
-        {!editMode ? (
-          <div id="charDisplayMode">
-            <h3 id="charNameDisplay" className="display-title">{char.name}</h3>
-            <p id="charSeriesDisplay" className="text-body">{char.series || '—'}</p>
-            <p id="charRankDisplay" className="text-meta">Rank: {char.rank || '—'}</p>
-            <div className="bottom-controls char-page-actions">
-              <button type="button" className="action-btn" onClick={() => setEditMode(true)} title="Edit name, series, rank, and main image">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px' }}>
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                Edit Character
-              </button>
-              <button type="button" className="action-btn" onClick={() => { resetModes(); setAiMode(true) }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px' }}>
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                Get $ai Command
-              </button>
+        <div className="char-info-section">
+          {!editMode ? (
+            <div id="charDisplayMode">
+              <h3 id="charNameDisplay" className="display-title">
+                {char.name}
+              </h3>
+              <p id="charSeriesDisplay" className="text-body">
+                {char.series || '—'}
+              </p>
+              <p id="charRankDisplay" className="text-meta">
+                Rank: {char.rank || '—'}
+              </p>
+              <div className="char-page-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => setEditMode(true)}
+                  title="Edit name, series, rank, and main image"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Edit Character
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    resetModes()
+                    setAiMode(true)
+                  }}
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Get $ai Command
+                </Button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div id="charEditMode">
-            <div className="edit-form-container">
-              <div className="edit-group full-width">
-                <label htmlFor="editCharName">Name</label>
-                <input id="editCharName" type="text" className="modern-input" placeholder="Character Name" value={editName} onChange={(e) => setEditName(e.target.value)} />
-              </div>
-              <div className="edit-group full-width">
-                <label htmlFor="editCharSeries">Series</label>
-                <input id="editCharSeries" type="text" className="modern-input" placeholder="Series Name" value={editSeries} onChange={(e) => setEditSeries(e.target.value)} autoComplete="off" />
-              </div>
-              <div className="edit-group full-width">
-                <label htmlFor="editCharRank">Rank</label>
-                <input id="editCharRank" type="number" className="modern-input" placeholder="#" value={editRank} onChange={(e) => setEditRank(e.target.value)} />
-              </div>
-              <div className="edit-actions">
-                <button type="button" className="action-btn primary" onClick={handleSaveEdit} disabled={loading}>Save Changes</button>
-                <button type="button" className="action-btn secondary" onClick={() => setEditMode(false)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-      <div id="charImageContainer" className="char-image-section">
-        <div
-          className={`image-wrapper ${editMode ? 'edit-mode' : ''} ${dragOver ? 'drag-over-main' : ''}`}
-          onClick={() => editMode && mainInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); editMode && setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={editMode ? handleMainImageDrop : undefined}
-          role={editMode ? 'button' : undefined}
-          tabIndex={editMode ? 0 : undefined}
-          onKeyDown={(e) => editMode && e.key === 'Enter' && mainInputRef.current?.click()}
-        >
-          <input ref={mainInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleMainImageChange} />
-          {mainImage ? (
-            <img id="charImageDisplay" src={getImageUrl(mainImage)} alt={char.name} className="char-main-image-full" />
           ) : (
-            <div className="char-main-placeholder">No image</div>
+            <div id="charEditMode">
+              <div className="edit-form-container">
+                <div className="edit-group full-width">
+                  <label htmlFor="editCharName">Name</label>
+                  <input
+                    id="editCharName"
+                    type="text"
+                    className="modern-input"
+                    placeholder="Character Name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div className="edit-group full-width">
+                  <label htmlFor="editCharSeries">Series</label>
+                  <input
+                    id="editCharSeries"
+                    type="text"
+                    className="modern-input"
+                    placeholder="Series Name"
+                    value={editSeries}
+                    onChange={(e) => setEditSeries(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="edit-group full-width">
+                  <label htmlFor="editCharRank">Rank</label>
+                  <input
+                    id="editCharRank"
+                    type="number"
+                    className="modern-input"
+                    placeholder="#"
+                    value={editRank}
+                    onChange={(e) => setEditRank(e.target.value)}
+                  />
+                </div>
+                <div className="edit-actions">
+                  <Button variant="primary" onClick={handleSaveEdit} disabled={loading}>
+                    Save Changes
+                  </Button>
+                  <Button variant="secondary" onClick={() => setEditMode(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
-          {editMode && <div className="image-overlay"><span>Click or Drop to Change</span></div>}
         </div>
-        {mudaeConfigured && (
-          <div className="mudae-main-actions" style={{ marginTop: '0.65rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="action-btn secondary"
-              disabled={mudaeMainBusy || loading}
-              onClick={handleMudaeRefreshMain}
-              title="Run $im via Mudae and set the card image as main"
-            >
-              {mudaeMainBusy ? 'Updating from Mudae…' : 'Update main from Mudae'}
-            </button>
+        <div className="char-image-section">
+          <div
+            className={`image-wrapper ${editMode ? 'edit-mode' : ''} ${dragOver ? 'drag-over-main' : ''}`}
+            onClick={() => editMode && mainInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              editMode && setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={editMode ? handleMainImageDrop : undefined}
+            role={editMode ? 'button' : undefined}
+            tabIndex={editMode ? 0 : undefined}
+            onKeyDown={(e) => editMode && e.key === 'Enter' && mainInputRef.current?.click()}
+          >
+            <input
+              ref={mainInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleMainImageChange}
+            />
+            {mainImage ? (
+              <img
+                id="charImageDisplay"
+                src={getImageUrl(mainImage)}
+                alt={char.name}
+                className="char-main-image-full"
+              />
+            ) : (
+              <div className="char-main-placeholder">No image</div>
+            )}
+            {editMode && (
+              <div className="image-overlay">
+                <span>Click or Drop to Change</span>
+              </div>
+            )}
           </div>
-        )}
-        <button
-          type="button"
-          className={`save-button ${isSaved ? 'saved' : ''}`}
-          onClick={handleToggleSave}
-          title={isSaved ? 'Unsave' : 'Save'}
-          aria-label={isSaved ? 'Unsave' : 'Save'}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-        </button>
-      </div>
+          {mudaeConfigured && (
+            <div className="char-mudae-actions">
+              <Button
+                variant="secondary"
+                disabled={mudaeMainBusy || loading}
+                onClick={handleMudaeRefreshMain}
+                title="Run $im via Mudae and set the card image as main"
+              >
+                {mudaeMainBusy ? 'Updating from Mudae…' : 'Update main from Mudae'}
+              </Button>
+            </div>
+          )}
+          <IconButton
+            className={`save-button ${isSaved ? 'saved' : ''}`}
+            onClick={handleToggleSave}
+            label={isSaved ? 'Remove from saved' : 'Save this character'}
+            aria-pressed={isSaved}
+          >
+            <svg
+              aria-hidden="true"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </IconButton>
+        </div>
       </div>
 
       <div
-        id="customImagesSection"
-        className={customDragOver ? 'drag-over' : ''}
+        className={`custom-images-section ${customDragOver ? 'drag-over' : ''}`}
         onDragOver={handleCustomSectionDragOver}
         onDragLeave={handleCustomSectionDragLeave}
         onDrop={handleCustomDrop}
-        style={{ display: 'block' }}
       >
         <div className="custom-images-header-row">
           <h3 className="section-heading custom-images-heading">Custom Images</h3>
@@ -968,82 +1072,155 @@ export default function CharacterPage() {
             <div className="char-custom-toolbar-actions" id="char-custom-toolbar-actions">
               {aiMode && (
                 <>
-                  <button type="button" className="action-btn" onClick={generateAiCommand} style={{ padding: '6px 12px', fontSize: '0.9em', backgroundColor: '#28a745', color: 'white', borderColor: '#28a745' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                  <Button variant="success" size="sm" onClick={generateAiCommand}>
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                     </svg>
                     Copy Command ({selectedUrls.length || customs.length})
-                  </button>
-                  <button type="button" className="action-btn" onClick={selectAllImages} style={{ padding: '6px 12px', fontSize: '0.9em' }}>Select All</button>
-                  <button type="button" className="action-btn" onClick={resetModes} style={{ padding: '6px 12px', fontSize: '0.9em' }}>Cancel</button>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={selectAllImages}>
+                    Select All
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={resetModes}>
+                    Cancel
+                  </Button>
                 </>
               )}
               {deleteMode && (
                 <>
-                  <button type="button" className="action-btn" onClick={handleDeleteSelected} style={{ padding: '6px 12px', fontSize: '0.9em', backgroundColor: '#dc3545', color: 'white', borderColor: '#dc3545' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                  <Button variant="danger" size="sm" onClick={handleDeleteSelected}>
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                     Delete Selected ({selectedUrls.length})
-                  </button>
-                  <button type="button" className="action-btn" onClick={resetModes} style={{ padding: '6px 12px', fontSize: '0.9em' }}>Cancel</button>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={resetModes}>
+                    Cancel
+                  </Button>
                 </>
               )}
               {downloadMode && (
                 <>
-                  <button
-                    type="button"
-                    className="action-btn primary"
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={handleDownloadSelected}
                     disabled={selectedUrls.length === 0}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                    title={selectedUrls.length === 0 ? 'Select images first' : 'Choose a folder and save files there'}
+                    title={
+                      selectedUrls.length === 0
+                        ? 'Select images first'
+                        : 'Choose a folder and save files there'
+                    }
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                     Download ({selectedUrls.length})
-                  </button>
-                  <button type="button" className="action-btn" onClick={selectAllImages} style={{ padding: '6px 12px', fontSize: '0.9em' }}>Select All</button>
-                  <button type="button" className="action-btn" onClick={resetModes} style={{ padding: '6px 12px', fontSize: '0.9em' }}>Cancel</button>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={selectAllImages}>
+                    Select All
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={resetModes}>
+                    Cancel
+                  </Button>
                 </>
               )}
               {reorderMode && !aiMode && !deleteMode && !downloadMode && (
                 <>
-                  <button type="button" className="action-btn" onClick={() => setSelectedUrls([])} style={{ padding: '6px 12px', fontSize: '0.9em' }}>
+                  <Button variant="secondary" size="sm" onClick={() => setSelectedUrls([])}>
                     Clear selection
-                  </button>
-                  <button type="button" className="action-btn secondary" onClick={cancelReorder} style={{ padding: '6px 12px', fontSize: '0.9em' }}>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={cancelReorder}>
                     Cancel
-                  </button>
-                  <button type="button" className="action-btn primary" onClick={doneReorder} style={{ padding: '6px 12px', fontSize: '0.9em' }}>
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={doneReorder}>
                     Done
-                  </button>
+                  </Button>
                 </>
               )}
               {!aiMode && !deleteMode && !downloadMode && !reorderMode && (
                 <>
-                  <button type="button" className="action-btn" onClick={() => { resetModes(); setDeleteMode(true) }} style={{ padding: '6px 12px', fontSize: '0.9em' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      resetModes()
+                      setDeleteMode(true)
+                    }}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                     Delete
-                  </button>
-                  <button type="button" className="action-btn" onClick={enterDownloadMode} style={{ padding: '6px 12px', fontSize: '0.9em' }} title="Download selected custom images to a folder">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={enterDownloadMode}
+                    title="Download selected custom images to a folder"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                     Download
-                  </button>
-                  <button type="button" className="action-btn" onClick={enterReorderMode} style={{ padding: '6px 12px', fontSize: '0.9em' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={enterReorderMode}>
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <polyline points="5 9 2 12 5 15" />
                       <polyline points="9 5 12 2 15 5" />
                       <polyline points="19 9 22 12 19 15" />
@@ -1052,21 +1229,28 @@ export default function CharacterPage() {
                       <line x1="12" y1="2" x2="12" y2="22" />
                     </svg>
                     Reorder
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     disabled={!!customUploadProgress}
                     onClick={() => customInputRef.current?.click()}
-                    style={{ padding: '6px 12px', fontSize: '0.9em', opacity: customUploadProgress ? 0.6 : 1 }}
                     title="Add Custom Image"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}>
+                    <svg
+                      aria-hidden="true"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                     Add Image
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -1077,20 +1261,32 @@ export default function CharacterPage() {
             <summary className="reorder-mode-hint-summary">How reorder works</summary>
             <div className="reorder-mode-hint-body">
               <p>
-                <strong>Desktop:</strong> drag a thumbnail to a new position. The page scrolls when you drag near the top or bottom edge.
+                <strong>Desktop:</strong> drag a thumbnail to a new position. The page scrolls when
+                you drag near the top or bottom edge.
               </p>
               <p>
-                <strong>Mobile / touch:</strong> <strong>press and hold</strong> a thumbnail until it is picked up, then drag and release where you want it.
+                <strong>Mobile / touch:</strong> <strong>press and hold</strong> a thumbnail until
+                it is picked up, then drag and release where you want it.
               </p>
               <p>
-                <strong>Move several at once:</strong> tap images to select them (or Clear selection), then drag any selected image — the whole group moves together.
+                <strong>Move several at once:</strong> tap images to select them (or Clear
+                selection), then drag any selected image — the whole group moves together.
               </p>
             </div>
           </details>
         )}
-        <input ref={customInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleAddCustomImage} disabled={!!customUploadProgress} />
-        <p style={{ textAlign: 'center', color: '#6c757d', margin: '10px 0', fontSize: '0.9em', border: '1px dashed #ccc', padding: '10px', borderRadius: '5px' }}>
-          Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add Image&quot;
+        <input
+          ref={customInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleAddCustomImage}
+          disabled={!!customUploadProgress}
+        />
+        <p className="gallery-drop-hint">
+          Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add
+          Image&quot;
         </p>
         {customUploadProgress && (
           <div className="custom-upload-progress" role="status" aria-live="polite">
@@ -1103,8 +1299,7 @@ export default function CharacterPage() {
           </div>
         )}
         <div
-          id="customImagesGallery"
-          className={reorderDragIndices ? 'reorder-drag-active' : ''}
+          className={`custom-images-gallery ${reorderDragIndices ? 'reorder-drag-active' : ''}`}
           onDragOver={onGalleryDragOver}
           onDragLeave={onGalleryDragLeave}
         >
@@ -1112,38 +1307,40 @@ export default function CharacterPage() {
             const isDropTarget = reorderMode && reorderDropTargetIndex === idx
             const isDragSource = reorderMode && reorderDragIndices?.includes(idx)
             return (
-            <div
-              key={url}
-              data-reorder-slot={idx}
-              className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''}`}
-              onClick={() => {
-                if (ignoreNextReorderItemClickRef.current) {
-                  ignoreNextReorderItemClickRef.current = false
-                  return
-                }
-                if (aiMode || deleteMode || downloadMode || reorderMode) toggleSelect(url)
-              }}
-              onTouchStart={(e) => reorderMode && onReorderItemTouchStart(e, idx)}
-              onDragStart={(e) => onDragStart(e, idx)}
-              onDragOver={(e) => onDragOver(e, idx)}
-              onDragEnd={onDragEnd}
-              draggable={reorderMode}
-              role={reorderMode ? 'button' : undefined}
-              tabIndex={reorderMode ? 0 : undefined}
-            >
-              <img
-                src={getImageUrl(url)}
-                alt=""
-                draggable={false}
-                className="custom-image-full"
-                onClick={() => !aiMode && !deleteMode && !downloadMode && !reorderMode && openModal(idx)}
-              />
-              {isDropTarget && (
-                <span className="reorder-drop-label" aria-hidden>
-                  Drop here
-                </span>
-              )}
-            </div>
+              <div
+                key={url}
+                data-reorder-slot={idx}
+                className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''}`}
+                onClick={() => {
+                  if (ignoreNextReorderItemClickRef.current) {
+                    ignoreNextReorderItemClickRef.current = false
+                    return
+                  }
+                  if (aiMode || deleteMode || downloadMode || reorderMode) toggleSelect(url)
+                }}
+                onTouchStart={(e) => reorderMode && onReorderItemTouchStart(e, idx)}
+                onDragStart={(e) => onDragStart(e, idx)}
+                onDragOver={(e) => onDragOver(e, idx)}
+                onDragEnd={onDragEnd}
+                draggable={reorderMode}
+                role={reorderMode ? 'button' : undefined}
+                tabIndex={reorderMode ? 0 : undefined}
+              >
+                <img
+                  src={getImageUrl(url)}
+                  alt=""
+                  draggable={false}
+                  className="custom-image-full"
+                  onClick={() =>
+                    !aiMode && !deleteMode && !downloadMode && !reorderMode && openModal(idx)
+                  }
+                />
+                {isDropTarget && (
+                  <span className="reorder-drop-label" aria-hidden>
+                    Drop here
+                  </span>
+                )}
+              </div>
             )
           })}
         </div>
@@ -1173,6 +1370,6 @@ export default function CharacterPage() {
           onClose={closeAiLimitDialog}
         />
       )}
-    </div>
+    </Card>
   )
 }

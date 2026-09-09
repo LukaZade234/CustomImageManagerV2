@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useStore } from '../store/useStore'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getImageUrl } from '../api'
+import { Card } from '../components/ui'
+import { useStore } from '../store/useStore'
 
 export default function SearchResultsPage() {
-  const searchQuery = useStore((s) => s.searchQuery)
-  const setSearchQuery = useStore((s) => s.setSearchQuery)
-  const mode = useStore((s) => s.searchMode)
+  // Read from the URL, not the store, so a result page is linkable and the
+  // back button works.
+  const [params] = useSearchParams()
+  const searchQuery = params.get('q') || ''
+  const mode = params.get('by') === 'series' ? 'series' : 'name'
   const sort = useStore((s) => s.searchSort)
   const characters = useStore((s) => s.characters)
   const loading = useStore((s) => s.loading)
@@ -16,7 +19,7 @@ export default function SearchResultsPage() {
     if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
     const filtered = characters.filter((c) => {
-      const field = mode === 'name' ? c.name : (c.series || '')
+      const field = mode === 'name' ? c.name : c.series || ''
       return field.toLowerCase().includes(q)
     })
     const sorted = [...filtered].sort((a, b) => {
@@ -29,37 +32,32 @@ export default function SearchResultsPage() {
   }, [searchQuery, mode, sort, characters])
 
   const handleSelect = (char) => {
-    setSearchQuery('')
     navigate(`/character/${encodeURIComponent(char.name)}`)
   }
 
-  if (!searchQuery.trim()) return null
-
   if (loading && characters.length === 0) {
     return (
-      <div id="searchPage" className="search-results-page page-loading-shell" aria-busy="true">
-        <h2 className="page-title">Search Results</h2>
-        <p className="text-meta page-loading-lead" style={{ textAlign: 'left', marginBottom: '1rem' }}>
-          Fetching character list…
-        </p>
+      <Card as="section" padding="lg" className="page-loading-shell" aria-busy="true">
+        <h1 className="page-title">Search Results</h1>
+        <p className="text-meta page-loading-lead search-skeleton-note">Fetching character list…</p>
         <div className="search-skeleton-list" aria-hidden>
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="search-skeleton-row">
               <div className="skeleton-circle search-skeleton-thumb" />
               <div className="search-skeleton-text">
-                <div className="skeleton-line skeleton-line--title" style={{ marginBottom: 8 }} />
-                <div className="skeleton-line skeleton-line--body" style={{ width: '40%' }} />
+                <div className="skeleton-line skeleton-line--title" />
+                <div className="skeleton-line skeleton-line--body" />
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div id="searchPage" className="search-results-page">
-      <h2 className="page-title">Search Results</h2>
+    <Card as="section" padding="lg">
+      <h1 className="page-title">Search Results</h1>
       <p className="search-results-count text-meta">
         {matches.length === 0
           ? 'No characters found'
@@ -84,6 +82,6 @@ export default function SearchResultsPage() {
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }

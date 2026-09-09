@@ -1,0 +1,374 @@
+/*
+ * Shared UI primitives. Loaded after legacy.css so a primitive always wins over
+ * a leftover page rule while the migration is in progress.
+ *
+ * Nothing in here may contain a colour literal, a raw spacing value, or a
+ * bespoke radius — that is the whole point of the file existing.
+ */
+
+/* ============================ Button ============================ */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.ui-btn--sm {
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--type-micro);
+}
+
+.ui-btn--icon {
+  padding: 0;
+  width: 34px;
+}
+
+.ui-btn--sm.ui-btn--icon {
+  width: 28px;
+}
+
+.ui-btn--round {
+  border-radius: var(--radius-pill);
+}
+
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Solid — one per screen at most. */
+.ui-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.ui-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* The workhorse: a hairline outline, not a filled shape. */
+.ui-btn--secondary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.ui-btn--secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.ui-btn--ghost {
+  color: var(--text-muted);
+}
+.ui-btn--ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.ui-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-fg);
+}
+.ui-btn--danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+}
+
+.ui-btn--success {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--success-fg);
+}
+
+/* Pressed / active toolbar state, e.g. a CharacterPage mode being on. */
+.ui-btn[aria-pressed="true"] {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ui-btn__spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: ui-spin 0.6s linear infinite;
+}
+
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================ Card ============================== */
+
+/*
+ * One surface recipe. Hairline border, no drop shadow — the "white card
+ * floating on grey with a big soft shadow" idiom is the main thing that read
+ * as dated.
+ */
+.ui-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.ui-card--pad-none {
+  padding: 0;
+}
+.ui-card--pad-sm {
+  padding: var(--space-4);
+}
+.ui-card--pad-md {
+  padding: var(--space-6);
+}
+.ui-card--pad-lg {
+  padding: var(--space-8);
+}
+
+@media (max-width: 768px) {
+  .ui-card--pad-md,
+  .ui-card--pad-lg {
+    padding: var(--space-4);
+  }
+}
+
+/* ============================ Badge ============================= */
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.ui-badge--accent {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.ui-badge--success {
+  background: var(--success-subtle);
+  color: var(--success);
+}
+.ui-badge--danger {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+.ui-badge--warning {
+  background: var(--warning-subtle);
+  color: var(--warning);
+}
+
+/* ============================ Inputs ============================ */
+
+.ui-input,
+.ui-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--type-meta);
+  transition: border-color var(--duration-fast) var(--ease);
+}
+
+.ui-input::placeholder {
+  color: var(--text-subtle);
+}
+
+.ui-input:hover:not(:disabled),
+.ui-select:hover:not(:disabled) {
+  border-color: var(--text-subtle);
+}
+
+.ui-input.is-invalid {
+  border-color: var(--danger);
+}
+
+.ui-input:disabled,
+.ui-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ui-select {
+  padding-right: var(--space-6);
+  cursor: pointer;
+}
+
+/* ============================ Field ============================= */
+
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ui-field__label {
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+}
+
+.ui-field__hint {
+  margin: 0;
+  font-size: var(--type-micro);
+  color: var(--text-subtle);
+}
+
+.ui-field__error {
+  margin: 0;
+  font-size: var(--type-micro);
+  color: var(--danger);
+}
+
+/* ====================== Segmented control ======================= */
+
+.ui-segmented {
+  display: inline-flex;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+}
+
+.ui-segmented__option {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  min-height: 26px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.ui-segmented__option.is-selected {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The radio is visually hidden, so the ring has to be drawn on its label. */
+.ui-segmented__option:has(:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ============================ Modal ============================= */
+
+.ui-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--scrim);
+}
+
+.ui-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100vh - var(--space-16));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+}
+
+.ui-modal--sm {
+  max-width: 420px;
+}
+.ui-modal--md {
+  max-width: 560px;
+}
+.ui-modal--lg {
+  max-width: 860px;
+}
+
+.ui-modal__header {
+  padding: var(--space-5) var(--space-6) 0;
+}
+
+.ui-modal__title {
+  margin: 0;
+  font-size: var(--type-section);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-title);
+  color: var(--text);
+}
+
+.ui-modal__body {
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  overflow-y: auto;
+  color: var(--text-muted);
+}
+
+.ui-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border);
+}
+
+/* ========================== Empty state ========================= */
+
+.ui-empty {
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+
+.ui-empty__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+}
+
+.ui-empty__desc {
+  margin: 0 auto;
+  max-width: 38rem;
+  color: var(--text-muted);
+}
+
+.ui-empty__action {
+  margin-top: var(--space-5);
+}

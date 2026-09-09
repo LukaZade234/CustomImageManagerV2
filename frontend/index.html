@@ -9,13 +9,20 @@
     />
     <meta name="google-site-verification" content="7U-EcXYg_g_s3VD9qSfqlEPrIKelnXNfJf9gYwUfyqM" />
     <title>ImgManager — Mudae custom image helper</title>
+    <script>
+      /* Runs before first paint so an explicit theme choice never flashes the
+         other theme. No attribute at all means "follow the OS". */
+      try {
+        var t = localStorage.getItem('theme');
+        if (t !== 'light' && t !== 'dark') {
+          var legacy = localStorage.getItem('darkMode');
+          t = legacy === 'true' ? 'dark' : legacy === 'false' ? 'light' : null;
+        }
+        if (t) document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { /* private mode / blocked storage */ }
+    </script>
   </head>
   <body>
-    <script>
-      try {
-        if (localStorage.getItem('darkMode') === 'true') document.body.classList.add('dark-mode');
-      } catch (_) { /* private mode / blocked storage */ }
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

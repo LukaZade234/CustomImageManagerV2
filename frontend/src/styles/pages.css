@@ -1,0 +1,236 @@
+/*
+ * Styles written against the design system, for markup that has already been
+ * migrated off legacy.css. New page-level rules belong here, not there.
+ */
+
+/* ---- Add page: the Mudae authoring panel --------------------------------
+ * These classes replaced 42 inline style objects, four of which hardcoded hex
+ * colours that had no dark-mode counterpart.
+ */
+.mudae-panel {
+  max-width: 640px;
+  margin: 0 0 var(--space-8);
+}
+
+.mudae-panel > .section-heading {
+  margin-top: 0;
+}
+
+.mudae-setup-hint {
+  max-width: 640px;
+  margin-bottom: var(--space-5);
+  color: var(--text-muted);
+}
+
+.mudae-note {
+  margin: 0 0 var(--space-4);
+  font-size: var(--type-meta);
+  color: var(--text-muted);
+}
+
+.mudae-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.mudae-row .modern-input,
+.mudae-row .ui-input {
+  flex: 1 1 200px;
+}
+
+.mudae-candidates {
+  margin-top: var(--space-3);
+}
+
+.mudae-candidates__label {
+  margin-bottom: var(--space-1);
+  font-weight: var(--weight-semibold);
+}
+
+.mudae-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.mudae-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.mudae-preview__img {
+  width: 96px;
+  height: 128px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.mudae-preview__meta {
+  color: var(--text-muted);
+}
+
+.mudae-preview__hint {
+  margin-bottom: 0;
+  font-size: var(--type-micro);
+  color: var(--text-subtle);
+}
+
+.mudae-divider {
+  margin: var(--space-6) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.mudae-progress {
+  margin-top: var(--space-4);
+  font-size: var(--type-meta);
+}
+
+.mudae-progress__label {
+  margin-bottom: var(--space-2);
+}
+
+.mudae-result {
+  margin-top: var(--space-3);
+  font-size: var(--type-meta);
+}
+
+.mudae-result details {
+  margin-top: var(--space-2);
+}
+
+.mudae-result summary {
+  cursor: pointer;
+}
+
+.mudae-item--ok {
+  color: var(--success);
+}
+
+.mudae-item--warn {
+  color: var(--warning);
+}
+
+.form-error {
+  margin-top: var(--space-4);
+  color: var(--danger);
+}
+
+.file-upload-hint {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+
+.mudae-scroll-list {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.add-char-panel {
+  max-width: 500px;
+  margin: 0;
+}
+
+.add-char-panel > .section-heading {
+  margin-top: 0;
+}
+
+.add-char-form {
+  max-width: 100%;
+}
+
+.file-upload-box .file-upload-icon {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--text-subtle);
+}
+
+.add-char-actions {
+  justify-content: flex-start;
+  margin-top: var(--space-6);
+}
+
+.char-mudae-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* Drop target for files and for images dragged in from other sites. */
+.gallery-drop-hint {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  text-align: center;
+}
+
+.search-skeleton-note {
+  margin-bottom: var(--space-4);
+  text-align: left;
+}
+
+.skeleton-line--title {
+  margin-bottom: var(--space-2);
+}
+
+.skeleton-line--body {
+  width: 40%;
+}
+
+.error-boundary__message {
+  margin-bottom: var(--space-4);
+}
+
+/* ---- Search field --------------------------------------------------------
+ * Shared by the navbar and the customs page. The Name/Series switch overlays
+ * the right of the input, so the field reserves room for it.
+ */
+.search-field {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
+  --search-toggle-width: 150px;
+}
+
+.search-field .ui-input {
+  height: var(--nav-control-min-h);
+  padding-right: var(--search-toggle-width);
+  border-radius: var(--radius-pill);
+}
+
+.search-field .ui-segmented {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  transform: translateY(-50%);
+}
+
+/* Below this the switch would crowd the text, so it drops beneath the field. */
+@media (max-width: 480px) {
+  .search-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .search-field .ui-input {
+    padding-right: var(--space-3);
+  }
+
+  .search-field .ui-segmented {
+    position: static;
+    align-self: flex-start;
+    transform: none;
+  }
+}

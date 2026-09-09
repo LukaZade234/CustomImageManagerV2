@@ -2,8 +2,15 @@ import { API_BASE, CREDENTIALS, imageUrl } from './config'
 
 /** @param {Response} res @param {string} text @param {Record<string, unknown>} parsed */
 function messageFromFailedResponse(res, text, parsed) {
-  const base = typeof parsed?.error === 'string' ? parsed.error : typeof parsed?.message === 'string' ? parsed.message : ''
-  const rawDetails = Array.isArray(parsed?.details) ? parsed.details.filter((d) => typeof d === 'string' && d.trim()) : []
+  const base =
+    typeof parsed?.error === 'string'
+      ? parsed.error
+      : typeof parsed?.message === 'string'
+        ? parsed.message
+        : ''
+  const rawDetails = Array.isArray(parsed?.details)
+    ? parsed.details.filter((d) => typeof d === 'string' && d.trim())
+    : []
   const extraDetails = rawDetails.filter((d) => d !== base)
   const details = extraDetails.length ? ` — ${extraDetails.join('; ')}` : ''
   if (base) return base + details
@@ -24,9 +31,12 @@ function messageFromFailedResponse(res, text, parsed) {
 
 function toNetworkError(err) {
   const m = err?.message || ''
-  if (err instanceof TypeError && (m === 'Failed to fetch' || m === 'Load failed' || /fetch/i.test(m))) {
+  if (
+    err instanceof TypeError &&
+    (m === 'Failed to fetch' || m === 'Load failed' || /fetch/i.test(m))
+  ) {
     return new Error(
-      'Network error: the browser could not complete the request. Common causes: lost connection, the app restarting, or a timeout. Try again in a moment.'
+      'Network error: the browser could not complete the request. Common causes: lost connection, the app restarting, or a timeout. Try again in a moment.',
     )
   }
   return err
@@ -49,7 +59,12 @@ export const apiClient = {
   getCharacters: () => api('/api/characters'),
   getSaved: () => api('/api/saved'),
   getLastUpdated: () => api('/api/last-updated'),
-  saveCharacter: (data) => api('/api/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  saveCharacter: (data) =>
+    api('/api/saved', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   removeSaved: (name) => api(`/api/saved/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   getCustomImages: () => api('/custom_images.json'),
   getCustomImagesForChar: (name) => api(`/api/custom-image/${encodeURIComponent(name)}`),
@@ -95,8 +110,18 @@ export const apiClient = {
     }
     throw lastErr
   },
-  deleteCustomImage: (charName, imageUrl) => api('/api/delete-custom-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_name: charName, image_url: imageUrl }) }),
-  deleteCustomImages: (charName, imageUrls) => api('/api/delete-custom-images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_name: charName, image_urls: imageUrls }) }),
+  deleteCustomImage: (charName, imageUrl) =>
+    api('/api/delete-custom-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, image_url: imageUrl }),
+    }),
+  deleteCustomImages: (charName, imageUrls) =>
+    api('/api/delete-custom-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
+    }),
   importCustomImagesFromUrls: (characterName, urls) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',
@@ -123,10 +148,42 @@ export const apiClient = {
         }
         return j
       }),
-  reorderCustomImages: (charName, newOrder) => api('/api/reorder-custom-images', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ character_name: charName, new_order: newOrder }) }),
-  setMainImage: (formData) => fetch(`${API_BASE}/api/set-main-image`, { method: 'POST', body: formData, credentials: CREDENTIALS }).then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'Upload failed') })),
-  editCharacter: (data) => api('/api/edit-character', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
-  addCharacter: (formData) => fetch(`${API_BASE}/api/add-character`, { method: 'POST', body: formData, credentials: CREDENTIALS }).then(r => r.ok ? r.json() : r.json().then(j => { throw new Error(j.error || 'Failed') })),
+  reorderCustomImages: (charName, newOrder) =>
+    api('/api/reorder-custom-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, new_order: newOrder }),
+    }),
+  setMainImage: (formData) =>
+    fetch(`${API_BASE}/api/set-main-image`, {
+      method: 'POST',
+      body: formData,
+      credentials: CREDENTIALS,
+    }).then((r) =>
+      r.ok
+        ? r.json()
+        : r.json().then((j) => {
+            throw new Error(j.error || 'Upload failed')
+          }),
+    ),
+  editCharacter: (data) =>
+    api('/api/edit-character', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  addCharacter: (formData) =>
+    fetch(`${API_BASE}/api/add-character`, {
+      method: 'POST',
+      body: formData,
+      credentials: CREDENTIALS,
+    }).then((r) =>
+      r.ok
+        ? r.json()
+        : r.json().then((j) => {
+            throw new Error(j.error || 'Failed')
+          }),
+    ),
   mudaeStatus: () => api('/api/mudae/status'),
   mudaeLookupCharacter: (name, add = false) =>
     api('/api/mudae/lookup-character', {
@@ -228,8 +285,7 @@ export const apiClient = {
     if (buffer.trim()) dispatchBlock(buffer)
     return finalResult
   },
-  mudaeCancelSeries: () =>
-    api('/api/mudae/cancel-series', { method: 'POST' }),
+  mudaeCancelSeries: () => api('/api/mudae/cancel-series', { method: 'POST' }),
   mudaeRefreshMainImage: (characterName) =>
     api('/api/mudae/refresh-main-image', {
       method: 'POST',

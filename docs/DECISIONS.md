@@ -490,7 +490,53 @@ exists to serve. Server-side search with pagination must land before the roster 
 
 ---
 
-## 9. Smaller decisions
+## 9. The visual design system
+
+**Problem.** The owner's assessment, unprompted: the UI "feels very cheap and doesn't give a sense
+of robustness at all, instead it feels like something made casually not at all like a proper website
+you would expect for something serious." That judgement was correct, and the causes were specific
+rather than a matter of taste — the diagnosis is in `ROADMAP.md` Phase 11.
+
+**Register: a dense, restrained tool.** Considered and rejected:
+
+- *An editorial gallery* — generous whitespace, large type, images as the primary surface. More
+  distinctive, but lower density fights the model the moderation design is built on: visitors treat
+  a character page as a **menu** they pick one to three images from and leave. Fewer images per
+  screen makes a longer menu worse, and the menu is expected to get longer.
+- *A warm, characterful product* — a defined accent with personality, softer geometry, a display
+  face, small moments of motion. Rejected because the content is anime character art, which is
+  already extremely colourful. Chrome with its own personality competes with it; chrome that
+  recedes lets it carry the page. The same reasoning moved the accent off Bootstrap blue to a
+  teal-cyan and dropped the accent colour from search-result titles.
+
+So: hairline borders rather than soft drop shadows, flat surfaces with elevation reserved for
+genuine overlays, tight tracking on headings, colour carrying state and meaning only.
+
+**Light and dark are equal.** Neither was designed first. Both derive from one token set and the
+site follows `prefers-color-scheme` by default, which it previously did not do at all. The
+alternative — keeping light canonical and deriving dark from it — was rejected because that is
+exactly how the site ended up with 144 hand-written `body.dark-mode` override selectors: dark as an
+afterthought applied on top rather than a peer of light.
+
+**Impeccable was evaluated and skipped.** `impeccable.style` is a design skill pack for AI coding
+agents — 23 commands, an anti-pattern list, and 61 deterministic detector rules; genuine, widely
+adopted, Apache-2.0. It was not adopted, for one reason: its leverage is highest when there is a
+design system for it to align things to, and there was none. Running its polish commands against
+2874 lines of ID-selectored legacy CSS would have produced scattered local improvements that
+immediately drifted apart again. It is worth revisiting now that a system exists — `critique`,
+`audit` and `polish` have something to work against. If it is adopted, prefer the hooks-free
+install (the plugin, or copying `dist/claude-code/.claude`) over `npx impeccable install`, which
+downloads a binary into `~/.impeccable/bin/` and installs hooks that run on every file edit.
+
+**Sequencing: foundation before Phase 6, surface after.** The token layer and the primitives are a
+pure refactor with no rework risk, and they make Phase 6's new controls — ownership badges,
+hide-for-me, report — cheap to build correctly. But the CharacterPage gallery and the home page
+information architecture are deliberately **not** done yet: Phase 6 changes what each gallery item
+must show, so restructuring the gallery now means restructuring it twice.
+
+---
+
+## 10. Smaller decisions
 
 - **The 1000 committed PNGs stay for now.** They are default main images for the top 1000
   characters by rank, not custom images users take away, so their value is low. They move to R2

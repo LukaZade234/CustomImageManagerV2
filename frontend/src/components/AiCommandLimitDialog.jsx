@@ -1,6 +1,8 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
-import { DISCORD_LIMIT_REGULAR, DISCORD_LIMIT_NITRO } from '../utils/aiCommandDiscord'
+import { DISCORD_LIMIT_NITRO, DISCORD_LIMIT_REGULAR } from '../utils/aiCommandDiscord'
+import { Button, useDialog } from './ui'
 
 function copyButtonLabel(partIndex, totalParts) {
   if (totalParts <= 1) return 'Copy command'
@@ -47,7 +49,7 @@ async function copyWithFallback(text, addToast) {
  * Shown when $ai command length >= 2000. Two card columns: Regular vs Nitro limits.
  */
 export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroParts, onClose }) {
-  const closeBtnRef = useRef(null)
+  const { dialogRef, onKeyDown, onBackdropClick } = useDialog({ onClose })
   const announceTimerRef = useRef(null)
   const addToast = useStore((s) => s.addToast)
   const [announce, setAnnounce] = useState('')
@@ -66,49 +68,34 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         }, 2000)
       }
     },
-    [addToast]
+    [addToast],
   )
-
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    const t = setTimeout(() => closeBtnRef.current?.focus(), 0)
-    return () => {
-      clearTimeout(t)
-      document.body.style.overflow = ''
-      if (announceTimerRef.current) clearTimeout(announceTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    const h = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose])
 
   const dialogDescId = 'ai-command-limit-desc'
 
-  return (
-    <div
-      className="upload-error-dialog-backdrop ai-command-limit-dialog-backdrop"
-      role="presentation"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+  return createPortal(
+    <div className="ui-modal-backdrop" role="presentation" onClick={onBackdropClick}>
       <div
-        className="upload-error-dialog ai-command-limit-dialog"
+        ref={dialogRef}
+        className="ui-modal ui-modal--lg ai-command-limit-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-command-limit-title"
         aria-describedby={dialogDescId}
-        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        onKeyDown={onKeyDown}
       >
         <div className="ai-command-limit-dialog__header">
           <span className="ai-command-limit-dialog__header-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              aria-hidden="true"
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -120,15 +107,20 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         </div>
 
         <div id={dialogDescId} className="ai-command-limit-dialog__summary-strip">
-          <strong>{charCount.toLocaleString()}</strong> characters — Discord allows <strong>{DISCORD_LIMIT_REGULAR.toLocaleString()}</strong> per
-          message (<strong>{DISCORD_LIMIT_NITRO.toLocaleString()}</strong> with Nitro). Copy each block as a separate message.
+          <strong>{charCount.toLocaleString()}</strong> characters — Discord allows{' '}
+          <strong>{DISCORD_LIMIT_REGULAR.toLocaleString()}</strong> per message (
+          <strong>{DISCORD_LIMIT_NITRO.toLocaleString()}</strong> with Nitro). Copy each block as a
+          separate message.
         </div>
 
         <div className="ai-command-limit-dialog__body">
           <div className="ai-command-limit-dialog__columns">
             <section className="ai-command-limit-dialog__column-card" aria-label="Regular Discord">
               <h3 className="ai-command-limit-dialog__column-title">
-                Regular <span className="ai-command-limit-dialog__limit-pill">{DISCORD_LIMIT_REGULAR.toLocaleString()} max</span>
+                Regular{' '}
+                <span className="ai-command-limit-dialog__limit-pill">
+                  {DISCORD_LIMIT_REGULAR.toLocaleString()} max
+                </span>
               </h3>
               <p className="ai-command-limit-dialog__column-meta">
                 {nonNitroParts.length} message{nonNitroParts.length === 1 ? '' : 's'}
@@ -143,7 +135,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
                       <li key={`n-${idx}`}>
                         <button
                           type="button"
-                          className={`action-btn secondary ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
+                          className={`ui-btn ui-btn--secondary ui-btn--sm ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
                           aria-label={wasCopied ? `${label} — copied` : label}
                           onClick={() => copyPart(partKey, text, label)}
                         >
@@ -158,7 +150,10 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
 
             <section className="ai-command-limit-dialog__column-card" aria-label="Discord Nitro">
               <h3 className="ai-command-limit-dialog__column-title">
-                Nitro <span className="ai-command-limit-dialog__limit-pill">{DISCORD_LIMIT_NITRO.toLocaleString()} max</span>
+                Nitro{' '}
+                <span className="ai-command-limit-dialog__limit-pill">
+                  {DISCORD_LIMIT_NITRO.toLocaleString()} max
+                </span>
               </h3>
               <p className="ai-command-limit-dialog__column-meta">
                 {nitroParts.length} message{nitroParts.length === 1 ? '' : 's'}
@@ -173,7 +168,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
                       <li key={`t-${idx}`}>
                         <button
                           type="button"
-                          className={`action-btn secondary ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
+                          className={`ui-btn ui-btn--secondary ui-btn--sm ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
                           aria-label={wasCopied ? `${label} — copied` : label}
                           onClick={() => copyPart(partKey, text, label)}
                         >
@@ -188,16 +183,20 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
           </div>
         </div>
 
-        <div className="ai-command-limit-dialog__footer upload-error-dialog__actions">
-          <button ref={closeBtnRef} type="button" className="action-btn secondary" onClick={onClose}>
-            Close
-          </button>
+        <div className="ai-command-limit-dialog__footer">
+          <Button onClick={onClose}>Close</Button>
         </div>
 
-        <div className="ai-command-limit-dialog__sr-only" role="status" aria-live="polite" aria-atomic="true">
+        <div
+          className="ai-command-limit-dialog__sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {announce}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

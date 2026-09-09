@@ -1,0 +1,14 @@
+/* Page frame. */
+
+.container {
+  max-width: var(--container-max);
+  margin: var(--space-10) auto;
+  padding: var(--space-3) var(--space-5) 0;
+}
+
+@media (max-width: 768px) {
+  .container {
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+  }
+}

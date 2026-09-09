@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useStore } from '../store/useStore'
 import { getImageUrl } from '../api'
+import { Badge, Button, Card, EmptyState, Input, SegmentedControl, Select } from '../components/ui'
+import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
 const PREVIEW_COUNT = 3
@@ -56,10 +57,12 @@ export default function CustomsPage() {
   const customsList = useMemo(() => {
     const filtered = [...searchFiltered]
     if (sort === 'recent') filtered.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
-    if (sort === 'rank_asc') filtered.sort((a, b) => (parseInt(a.rank) || 9999) - (parseInt(b.rank) || 9999))
+    if (sort === 'rank_asc')
+      filtered.sort((a, b) => (parseInt(a.rank) || 9999) - (parseInt(b.rank) || 9999))
     if (sort === 'name_asc') filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     if (sort === 'name_desc') filtered.sort((a, b) => (b.name || '').localeCompare(a.name || ''))
-    if (sort === 'series_asc') filtered.sort((a, b) => (a.series || '').localeCompare(b.series || ''))
+    if (sort === 'series_asc')
+      filtered.sort((a, b) => (a.series || '').localeCompare(b.series || ''))
     if (sort === 'count_desc') filtered.sort((a, b) => b.customCount - a.customCount)
     if (sort === 'count_asc') filtered.sort((a, b) => a.customCount - b.customCount)
     return filtered
@@ -117,71 +120,72 @@ export default function CustomsPage() {
   }
 
   return (
-    <div id="customsPage" className="customs-page">
-      <h2 className="page-title">Browse Customs</h2>
+    <Card as="section" padding="lg">
+      <h1 className="page-title">Browse Customs</h1>
       <div className="customs-controls">
-        <div className="search-input-wrapper customs-search-wrap">
-          <input
-            type="text"
-            className="char-search-input"
+        <div className="search-field">
+          <Input
+            type="search"
+            aria-label={searchMode === 'name' ? 'Search by character name' : 'Search by series'}
             placeholder={searchMode === 'name' ? 'Search by name...' : 'Search by series...'}
             value={search}
-            onChange={(e) => { setSearch(e.target.value); resetToPage1() }}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              resetToPage1()
+            }}
             autoComplete="off"
           />
-          <div className="search-toggle-wrapper search-toggle-visible">
-            <span
-              className={`toggle-label toggle-option ${searchMode === 'name' ? 'active' : ''}`}
-              onClick={() => { setSearchMode('name'); resetToPage1() }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setSearchMode('name')}
-            >
-              Name
-            </span>
-            <span
-              className={`toggle-label toggle-option ${searchMode === 'series' ? 'active' : ''}`}
-              onClick={() => { setSearchMode('series'); resetToPage1() }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setSearchMode('series')}
-            >
-              Series
-            </span>
-          </div>
+          <SegmentedControl
+            name="customs-search-mode"
+            label="Search by"
+            value={searchMode}
+            onChange={(v) => {
+              setSearchMode(v)
+              resetToPage1()
+            }}
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'series', label: 'Series' },
+            ]}
+          />
         </div>
         <div className="customs-sort-field">
-          <label htmlFor="customsSort" className="customs-sort-label">Sort by</label>
-          <select
+          <label htmlFor="customsSort" className="customs-sort-label">
+            Sort by
+          </label>
+          <Select
             id="customsSort"
             className="customs-sort-select"
             value={sort}
-            onChange={(e) => { setSort(e.target.value); resetToPage1() }}
+            onChange={(e) => {
+              setSort(e.target.value)
+              resetToPage1()
+            }}
           >
             {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
       {totalGlobalEmpty && (
-        <div className="empty-state">
-          <p className="empty-state-title">No custom images yet</p>
-          <p className="text-meta">Upload custom images from any character page, then they will appear here.</p>
-        </div>
+        <EmptyState
+          title="No custom images yet"
+          description="Upload custom images from any character page and they will appear here."
+        />
       )}
 
       {emptySearchNoMatches && (
-        <div className="empty-state empty-state--search">
-          <p className="empty-state-title">No matches</p>
-          <p className="text-meta">
-            Nothing matches &quot;{search.trim()}&quot; in {searchMode === 'name' ? 'character names' : 'series'}.
-          </p>
-          <button type="button" className="action-btn empty-state-clear" onClick={clearSearch}>
-            Clear search
-          </button>
-        </div>
+        <EmptyState
+          title="No matches"
+          description={`Nothing matches "${search.trim()}" in ${
+            searchMode === 'name' ? 'character names' : 'series'
+          }.`}
+          action={<Button onClick={clearSearch}>Clear search</Button>}
+        />
       )}
 
       {!totalGlobalEmpty && !emptySearchNoMatches && (
@@ -189,25 +193,32 @@ export default function CustomsPage() {
           <p id="customsCount" className="text-meta customs-count-line">
             {customsList.length} characters with custom images. Showing page {page} of {totalPages}.
           </p>
-          <div id="customsList" className="search-result-list">
+          <div className="customs-list">
             {paginatedList.map((c) => (
-              <Link key={c.name} to={`/character/${encodeURIComponent(c.name)}`} className="customs-item-with-preview">
+              <Link
+                key={c.name}
+                to={`/character/${encodeURIComponent(c.name)}`}
+                className="customs-item-with-preview"
+              >
                 <div className="customs-item-top">
                   <img src={getImageUrl(c.image)} alt="" className="search-result-img" />
-                  <div className="search-result-info" style={{ flex: 1 }}>
+                  <div className="search-result-info">
                     <h3>{c.name}</h3>
                     {c.series && <p>{c.series}</p>}
                     <p>
-                      <span className="badge" style={{ display: 'inline-block', marginLeft: '8px', padding: '2px 8px', background: '#e9ecef', borderRadius: '4px', fontSize: '0.8rem' }}>
-                        {c.customCount} images
-                      </span>
+                      <Badge>{c.customCount} images</Badge>
                     </p>
                   </div>
                 </div>
                 {c.customUrls?.length > 0 && (
                   <div className="customs-preview-row">
                     {c.customUrls.slice(0, PREVIEW_COUNT).map((url) => (
-                      <img key={url} src={getImageUrl(url)} alt="" className="customs-preview-thumb" />
+                      <img
+                        key={url}
+                        src={getImageUrl(url)}
+                        alt=""
+                        className="customs-preview-thumb"
+                      />
                     ))}
                   </div>
                 )}
@@ -218,24 +229,22 @@ export default function CustomsPage() {
       )}
       {!totalGlobalEmpty && !emptySearchNoMatches && totalPages > 1 && (
         <div className="customs-pagination">
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          <Button
+            variant="secondary"
             aria-label="First page"
             onClick={() => setPage(1)}
             disabled={page <= 1}
           >
             «
-          </button>
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          </Button>
+          <Button
+            variant="secondary"
             aria-label="Previous page"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
           >
             ‹
-          </button>
+          </Button>
           <span className="pagination-info">
             {pageJumpEditing ? (
               <>
@@ -260,36 +269,35 @@ export default function CustomsPage() {
                 of {totalPages}
               </>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 className="pagination-page-indicator"
                 onClick={startPageJump}
                 title="Click to jump to a page"
               >
                 Page {page} of {totalPages}
-              </button>
+              </Button>
             )}
           </span>
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          <Button
+            variant="secondary"
             aria-label="Next page"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
           >
             ›
-          </button>
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          </Button>
+          <Button
+            variant="secondary"
             aria-label="Last page"
             onClick={() => setPage(totalPages)}
             disabled={page >= totalPages}
           >
             »
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

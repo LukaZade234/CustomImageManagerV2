@@ -1,11 +1,17 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
+import { Input, SegmentedControl, Select } from './ui'
 
 const SORT_OPTIONS = [
   { value: 'rank', label: 'Rank (High-Low)' },
   { value: 'name', label: 'Name (A-Z)' },
   { value: 'series', label: 'Series (A-Z)' },
 ]
+
+export function searchPath(query, mode) {
+  return `/search?q=${encodeURIComponent(query)}&by=${mode}`
+}
 
 export default function SearchBar() {
   const searchQuery = useStore((s) => s.searchQuery)
@@ -14,97 +20,81 @@ export default function SearchBar() {
   const setMode = useStore((s) => s.setSearchMode)
   const sort = useStore((s) => s.searchSort)
   const setSort = useStore((s) => s.setSearchSort)
-  const [dropdownOpen, setDropdownOpen] = useState(false)
-  const dropdownRef = useRef(null)
 
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sort)?.label || sort
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
+
+  const onSearchRoute = location.pathname === '/search'
+  const urlQuery = onSearchRoute ? params.get('q') || '' : ''
+  const urlMode = params.get('by') === 'series' ? 'series' : 'name'
+
+  // The URL is the source of truth for what is being searched. This adopts it
+  // on any navigation — a shared link, the back button, or leaving the results
+  // page, which is what clears the field.
+  useEffect(() => {
+    setSearchQuery(urlQuery)
+  }, [urlQuery, setSearchQuery])
 
   useEffect(() => {
-    const h = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false)
-    }
-    document.addEventListener('click', h)
-    return () => document.removeEventListener('click', h)
-  }, [])
+    if (onSearchRoute) setMode(urlMode)
+  }, [onSearchRoute, urlMode, setMode])
 
-  const handleSortSelect = (value) => {
-    setSort(value)
-    setDropdownOpen(false)
+  const go = (query, nextMode) => {
+    if (!query) {
+      if (onSearchRoute) navigate('/', { replace: true })
+      return
+    }
+    // Replace while already searching, so a search does not leave one history
+    // entry per keystroke behind it.
+    navigate(searchPath(query, nextMode), { replace: onSearchRoute })
   }
 
   return (
     <div className="search-bar-cluster">
-      <div className="search-input-wrapper">
-        <input
-          type="text"
-          className="char-search-input"
+      <div className="search-field">
+        <Input
+          type="search"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value)
+            go(e.target.value, mode)
+          }}
           placeholder={mode === 'name' ? 'Search by name...' : 'Search by series...'}
+          aria-label={mode === 'name' ? 'Search by character name' : 'Search by series'}
           autoComplete="off"
         />
-        <div className="search-toggle-wrapper search-toggle-visible">
-          <span
-            className={`toggle-label toggle-option ${mode === 'name' ? 'active' : ''}`}
-            onClick={() => setMode('name')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setMode('name')}
-          >
-            Name
-          </span>
-          <span
-            className={`toggle-label toggle-option ${mode === 'series' ? 'active' : ''}`}
-            onClick={() => setMode('series')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setMode('series')}
-          >
-            Series
-          </span>
-        </div>
+        <SegmentedControl
+          name="search-mode"
+          label="Search by"
+          value={mode}
+          onChange={(v) => {
+            setMode(v)
+            go(searchQuery, v)
+          }}
+          options={[
+            { value: 'name', label: 'Name' },
+            { value: 'series', label: 'Series' },
+          ]}
+        />
       </div>
-      <div
-        className={`custom-dropdown navbar-sort-dropdown ${dropdownOpen ? 'active' : ''}`}
-        ref={dropdownRef}
+      {/*
+        Was a div-based listbox with a document-level click-outside listener, no
+        arrow-key navigation and no Escape. A native select does all of that,
+        and gets the platform's own picker on mobile.
+      */}
+      <Select
+        className="navbar-sort-select"
+        value={sort}
+        onChange={(e) => setSort(e.target.value)}
+        aria-label="Sort results"
       >
-        <div
-          className="dropdown-selected"
-          onClick={() => setDropdownOpen(!dropdownOpen)}
-          role="button"
-          tabIndex={0}
-          aria-label={`Sort by: ${sortLabel}`}
-          aria-expanded={dropdownOpen}
-          aria-haspopup="listbox"
-          title={`Sort: ${sortLabel}`}
-          onKeyDown={(e) => e.key === 'Enter' && setDropdownOpen(!dropdownOpen)}
-        >
-          <span className="selected-text">{sortLabel}</span>
-          <svg className="dropdown-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </div>
-        <div
-          className={`dropdown-options ${dropdownOpen ? 'show' : ''}`}
-          style={{ display: dropdownOpen ? 'block' : 'none' }}
-          role="listbox"
-          aria-label="Sort options"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <div
-              key={o.value}
-              className={`dropdown-option ${sort === o.value ? 'selected' : ''}`}
-              onClick={() => handleSortSelect(o.value)}
-              role="option"
-              tabIndex={0}
-              aria-selected={sort === o.value}
-              onKeyDown={(e) => e.key === 'Enter' && handleSortSelect(o.value)}
-            >
-              {o.label}
-            </div>
-          ))}
-        </div>
-      </div>
+        {SORT_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </Select>
     </div>
   )
 }

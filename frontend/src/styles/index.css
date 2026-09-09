@@ -1,0 +1,19 @@
+/*
+ * Style entrypoint. Order matters:
+ *   tokens  -> defines every custom property
+ *   base    -> element defaults and shared typography, reads tokens only
+ *   layout  -> the page frame
+ *   ui      -> the primitives, i.e. the default appearance of a control
+ *   legacy  -> the pre-token stylesheet, being migrated away page by page
+ *   pages   -> page rules already written against the system
+ *
+ * ui comes before legacy and pages because a call site must be able to adjust
+ * a primitive -- position a save button, pill-shape a search field. Putting it
+ * last inverted that and silently broke both search layouts.
+ */
+@import "./tokens.css";
+@import "./base.css";
+@import "./layout.css";
+@import "./ui.css";
+@import "./legacy.css";
+@import "./pages.css";

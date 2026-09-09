@@ -1,5 +1,5 @@
 import { getImageUrl } from '../api'
-import { CREDENTIALS, apiUrl } from '../config'
+import { apiUrl, CREDENTIALS } from '../config'
 
 /** Safe filename from stored image key / path */
 export function sanitizeFilenameFromUrl(url) {
@@ -66,7 +66,9 @@ export async function fetchCustomImageBlob(storedUrl) {
   }
   // getImageUrl already returns an absolute URL when IMAGE_BASE is configured;
   // otherwise resolve against the page origin as before.
-  const href = /^https?:\/\//i.test(path) ? path : new URL(path.startsWith('/') ? path : `/${path}`, window.location.origin).href
+  const href = /^https?:\/\//i.test(path)
+    ? path
+    : new URL(path.startsWith('/') ? path : `/${path}`, window.location.origin).href
   const res = await fetch(href, { credentials: CREDENTIALS })
   if (!res.ok) throw new Error(`Could not load image (${res.status})`)
   return res.blob()

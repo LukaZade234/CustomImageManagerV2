@@ -1,0 +1,243 @@
+/*
+ * Design tokens — the single source of truth for the visual system.
+ *
+ * Structure, and the reason for it:
+ *   1. :root                                    complete light palette + all non-colour scales
+ *   2. @media (prefers-color-scheme: dark)      system dark, unless the user explicitly chose light
+ *   3. :root[data-theme="dark"]                 explicit dark, wins over a light system preference
+ *
+ * Rule: no colour may have its ONLY definition inside a media query or a [data-theme] block.
+ * Block 1 must always resolve on its own, or a browser that never matches blocks 2 or 3 renders
+ * with missing values.
+ *
+ * Neutrals are tinted (hue ~222), never pure grey — untinted greys are the single most reliable
+ * "no palette was chosen" tell.
+ */
+
+:root {
+  /* ---- Neutral ramp (cool-tinted) ---------------------------------- */
+  --n-50: #f8f9fb;
+  --n-100: #f1f3f6;
+  --n-150: #e8ebf0;
+  --n-200: #dde1e8;
+  --n-300: #c8cdd7;
+  --n-400: #a2aab8;
+  --n-500: #7c8595;
+  --n-600: #5c6575;
+  --n-700: #444c5a;
+  --n-800: #2e3440;
+  --n-850: #222732;
+  --n-900: #1a1e26;
+  --n-950: #14171d;
+
+  /* ---- Semantic surfaces (light) ----------------------------------- */
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: var(--n-100);
+  --surface-hover: var(--n-100);
+
+  /* ---- Lines ------------------------------------------------------- */
+  /* A hairline border is the default separator in this system. Shadows are
+       reserved for things that genuinely float above the page. */
+  --border: #e2e6ec;
+  --border-strong: var(--n-300);
+
+  /* ---- Text -------------------------------------------------------- */
+  --text: #1c2029;
+  --text-muted: var(--n-600);
+  --text-subtle: var(--n-500);
+  --text-on-accent: #ffffff;
+
+  /* ---- Accent ------------------------------------------------------ */
+  /* Teal-cyan: deliberately not Bootstrap's #007bff and not the purple/violet
+       gradient cliche. Chrome recedes so the character art carries the colour. */
+  --accent: #0b7285;
+  --accent-hover: #095c6b;
+  --accent-subtle: #e3f2f5;
+  --accent-fg: var(--text-on-accent);
+
+  /* ---- Status ------------------------------------------------------ */
+  --success: #0f7a3d;
+  --success-fg: #ffffff;
+  --success-subtle: #e4f4ea;
+  --danger: #b3261e;
+  --danger-hover: #96201a;
+  --danger-fg: #ffffff;
+  --danger-subtle: #fbeae9;
+  --warning: #8a5a00;
+  --warning-subtle: #fbf1de;
+
+  /* ---- Focus ------------------------------------------------------- */
+  --focus-ring: var(--accent);
+  --focus-ring-offset: var(--bg);
+
+  /* ---- Elevation --------------------------------------------------- */
+  /* Only two. The old system had six ad-hoc rgba literals doing this job. */
+  --shadow-sm: 0 1px 2px rgb(16 20 28 / 0.06);
+  --shadow-overlay: 0 16px 48px -12px rgb(16 20 28 / 0.24);
+  --scrim: rgb(16 20 28 / 0.55);
+
+  /* ---- Spacing (4px base) ------------------------------------------ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radius ------------------------------------------------------ */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* ---- Typography -------------------------------------------------- */
+  --font-sans:
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --type-display: clamp(1.875rem, 4.5vw, 2.5rem);
+  --type-page-title: clamp(1.5rem, 3.2vw, 1.875rem);
+  --type-section: clamp(1.0625rem, 2vw, 1.25rem);
+  --type-body-lg: 1.0625rem;
+  --type-body: 1rem;
+  --type-meta: 0.875rem;
+  --type-micro: 0.8125rem;
+
+  --line-tight: 1.25;
+  --line-body: 1.5;
+  --line-relaxed: 1.6;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Negative tracking on large type is most of what separates considered
+       headings from default ones. */
+  --tracking-display: -0.022em;
+  --tracking-title: -0.015em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+
+  /* ---- Motion ------------------------------------------------------ */
+  /* No bounce/elastic easing anywhere — it reads as dated. */
+  --ease: cubic-bezier(0.2, 0, 0.13, 1);
+  --duration-fast: 120ms;
+  --duration: 180ms;
+
+  /* ---- Layout ------------------------------------------------------ */
+  --container-max: 1400px;
+  --control-min-h: 44px;
+  /* Navbar pill metrics, still referenced by the legacy sheet. */
+  --nav-control-min-h: var(--control-min-h);
+  --nav-control-gap: var(--space-2);
+  --nav-control-radius: 22px;
+  --nav-control-pad-x: var(--space-4);
+  --sticky-nav-height: 80px;
+  --sticky-nav-height-mobile: 148px;
+
+  /*
+   * ---- Breakpoints --------------------------------------------------
+   * Media queries cannot read custom properties, so these are documented
+   * rather than declared. Use only these four, and only these:
+   *
+   *   480px   small phone
+   *   768px   phone / tablet boundary (769px for the min-width complement)
+   *   960px   the navbar wraps to two rows below this
+   *   1200px  nav labels collapse to icons below this
+   *
+   * The sheet previously mixed nine unnamed values (380/480/520/640/720/
+   * 768/769/960/1200) in both directions.
+   */
+
+  /* ---- Layers ------------------------------------------------------ */
+  --z-nav: 100;
+  --z-dropdown: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+
+  color-scheme: light;
+}
+
+/* Dark tokens, defined once and referenced by both selectors below. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--n-950);
+    --surface: var(--n-900);
+    --surface-raised: var(--n-850);
+    --surface-sunken: #101317;
+    --surface-hover: var(--n-850);
+
+    --border: #2b313d;
+    --border-strong: #3b4351;
+
+    --text: #e6e9ef;
+    --text-muted: var(--n-400);
+    --text-subtle: var(--n-500);
+
+    --accent: #2fb3c4;
+    --accent-hover: #4cc6d6;
+    --accent-subtle: #123239;
+    --accent-fg: #08232a;
+
+    --success: #48c07a;
+    --success-fg: #062313;
+    --success-subtle: #12301f;
+    --danger: #f2857a;
+    --danger-hover: #f7a49b;
+    --danger-fg: #2b1210;
+    --danger-subtle: #35191a;
+    --warning: #e0b341;
+    --warning-subtle: #33280f;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.6);
+    --scrim: rgb(0 0 0 / 0.7);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--n-950);
+  --surface: var(--n-900);
+  --surface-raised: var(--n-850);
+  --surface-sunken: #101317;
+  --surface-hover: var(--n-850);
+
+  --border: #2b313d;
+  --border-strong: #3b4351;
+
+  --text: #e6e9ef;
+  --text-muted: var(--n-400);
+  --text-subtle: var(--n-500);
+
+  --accent: #2fb3c4;
+  --accent-hover: #4cc6d6;
+  --accent-subtle: #123239;
+  --accent-fg: #08232a;
+
+  --success: #48c07a;
+  --success-fg: #062313;
+  --success-subtle: #12301f;
+  --danger: #f2857a;
+  --danger-hover: #f7a49b;
+  --danger-fg: #2b1210;
+  --danger-subtle: #35191a;
+  --warning: #e0b341;
+  --warning-subtle: #33280f;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.6);
+  --scrim: rgb(0 0 0 / 0.7);
+
+  color-scheme: dark;
+}
