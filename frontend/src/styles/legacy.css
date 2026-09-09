@@ -20,9 +20,7 @@
   align-items: center;
   gap: var(--space-5);
   min-width: 0;
-  max-width: var(--container-max);
-  margin: 0 auto;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-6);
 }
 .navbar-brand {
   display: flex;
@@ -56,6 +54,11 @@
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  /* .container's content box: its max-width less its horizontal padding. The
+     auto margins centre the field in whatever the brand and actions leave, so
+     it tracks the cards on wide viewports and shrinks to fit on narrow ones. */
+  max-width: calc(var(--container-max) - var(--space-10));
+  margin: 0 auto;
 }
 /* Search + sort cluster: single child of navbar-center */
 .navbar-center.search-container {
