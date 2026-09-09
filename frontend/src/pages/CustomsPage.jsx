@@ -120,7 +120,7 @@ export default function CustomsPage() {
   }
 
   return (
-    <Card as="section" padding="lg" className="customs-page">
+    <Card as="section" padding="lg">
       <h1 className="page-title">Browse Customs</h1>
       <div className="customs-controls">
         <div className="search-field">

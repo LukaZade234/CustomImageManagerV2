@@ -323,7 +323,7 @@ export default function AddPage() {
   }
 
   return (
-    <Card as="section" padding="lg" className="add-page">
+    <Card as="section" padding="lg">
       <h1 className="page-title">Add New Character</h1>
 
       {mudaeConfigured === false && (

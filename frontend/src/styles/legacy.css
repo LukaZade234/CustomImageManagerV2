@@ -11,14 +11,18 @@
   position: sticky;
   top: 0;
   z-index: var(--z-nav);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-5);
-  min-width: 0;
-  padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--border);
   background-color: var(--surface);
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-width: 0;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
 }
 .navbar-brand {
   display: flex;
@@ -49,18 +53,14 @@
   min-height: var(--nav-control-min-h);
 }
 .navbar-center {
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 /* Search + sort cluster: single child of navbar-center */
 .navbar-center.search-container {
   display: block;
   width: 100%;
-  max-width: 680px;
 }
 .navbar-right {
   display: flex;
@@ -245,10 +245,6 @@
 }
 
 /* Saved Page Styles */
-.saved-page h2 {
-  margin-top: 0;
-  color: var(--text);
-}
 .saved-characters-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -336,10 +332,6 @@
   padding: 40px;
   color: var(--text-muted);
 } /* Add Character Page */
-.add-page h2 {
-  margin-top: 0;
-  color: var(--text);
-}
 .add-char-form {
   max-width: 400px;
   text-align: left;
@@ -488,10 +480,6 @@
 }
 
 /* Search Results Page (Google-style) */
-.search-results-page h2 {
-  margin-top: 0;
-  color: var(--text);
-}
 .search-results-count {
   margin-bottom: 1.25rem;
 }
@@ -676,6 +664,7 @@
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
+  margin-left: auto;
 }
 @media (min-width: 480px) {
   .customs-sort-field {
@@ -1698,11 +1687,11 @@ body.reorder-touch-dragging {
   html {
     scroll-padding-top: var(--sticky-nav-height-mobile);
   }
-  .navbar {
+  .navbar-inner {
     flex-wrap: wrap;
     align-items: center;
-    padding: 8px 12px 12px;
-    gap: 8px 10px;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3) var(--space-3);
   }
   .navbar-brand {
     order: 1;
@@ -1734,23 +1723,12 @@ body.reorder-touch-dragging {
     max-width: none;
     margin: 0;
   }
-  .home-page {
-    padding: 16px;
-  }
   .stats-dashboard {
     gap: 12px;
   }
   .stat-card {
     min-width: 0;
     flex: 1 1 calc(50% - 8px);
-  }
-  .customs-page,
-  .saved-page,
-  .add-page {
-    padding: 16px;
-  }
-  .search-results-page {
-    padding: 16px;
   }
   .search-result-item {
     gap: 12px;
@@ -1800,8 +1778,7 @@ body.reorder-touch-dragging {
 @media (max-width: 768px) {
   .character-page {
     flex-direction: column;
-    padding: 16px;
-    gap: 16px;
+    gap: var(--space-4);
     overflow-x: hidden;
   }
   .character-top-section {

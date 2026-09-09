@@ -1,9 +1,19 @@
+import { Card } from './ui'
+
 /**
  * Shown while the app fetches characters / initial collection data on Home.
+ * Uses the same Card as HomePage so the frame does not appear only once the
+ * data lands.
  */
 export default function HomeLoadingState() {
   return (
-    <div className="home-page page-loading-shell" aria-busy="true" aria-live="polite">
+    <Card
+      as="section"
+      padding="lg"
+      className="page-loading-shell"
+      aria-busy="true"
+      aria-live="polite"
+    >
       <p className="text-meta page-loading-lead">Fetching characters and your collection…</p>
       <div className="skeleton-stats" aria-hidden>
         <div className="skeleton-stat-card">
@@ -27,6 +37,6 @@ export default function HomeLoadingState() {
           <div key={i} className="skeleton-line skeleton-line--body" />
         ))}
       </div>
-    </div>
+    </Card>
   )
 }

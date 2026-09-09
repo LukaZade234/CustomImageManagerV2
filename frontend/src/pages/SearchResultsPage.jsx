@@ -37,12 +37,7 @@ export default function SearchResultsPage() {
 
   if (loading && characters.length === 0) {
     return (
-      <Card
-        as="section"
-        padding="lg"
-        className="search-results-page page-loading-shell"
-        aria-busy="true"
-      >
+      <Card as="section" padding="lg" className="page-loading-shell" aria-busy="true">
         <h1 className="page-title">Search Results</h1>
         <p className="text-meta page-loading-lead search-skeleton-note">Fetching character list…</p>
         <div className="search-skeleton-list" aria-hidden>
@@ -61,7 +56,7 @@ export default function SearchResultsPage() {
   }
 
   return (
-    <Card as="section" padding="lg" className="search-results-page">
+    <Card as="section" padding="lg">
       <h1 className="page-title">Search Results</h1>
       <p className="search-results-count text-meta">
         {matches.length === 0

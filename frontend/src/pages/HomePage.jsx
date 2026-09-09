@@ -22,7 +22,7 @@ export default function HomePage() {
   if (error) return <div className="loading loading-error">Failed to load: {error}</div>
 
   return (
-    <Card as="section" padding="lg" className="home-page">
+    <Card as="section" padding="lg">
       <h1 className="page-title">Welcome to ImgManager</h1>
       <p className="page-subtitle">
         The ultimate tool for managing your character collection. Customize your favorite characters

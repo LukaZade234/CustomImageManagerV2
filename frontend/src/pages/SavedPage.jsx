@@ -26,7 +26,7 @@ export default function SavedPage() {
   }
 
   return (
-    <Card as="section" padding="lg" className="saved-page">
+    <Card as="section" padding="lg">
       <h1 className="page-title">Saved Characters</h1>
       <p className="page-subtitle">Your personal collection of bookmarked characters.</p>
       {savedCharacters.length === 0 ? (
