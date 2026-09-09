@@ -238,6 +238,52 @@ sudo systemctl stop imgmanager-update.timer
 
 ---
 
+## Origin hygiene
+
+One command tells you exactly what the internet can talk to:
+
+```bash
+sudo ss -tlnp
+```
+
+The expected state, and nothing else:
+
+| Port | Process | Exposure |
+|---|---|---|
+| `127.0.0.1:8080` | gunicorn | loopback only |
+| `127.0.0.1:20241` | cloudflared metrics | loopback only |
+| `127.0.0.53:53` | systemd-resolved | loopback only |
+| `0.0.0.0:22` | sshd | the only thing reachable |
+
+**gunicorn must be on `127.0.0.1`, never `0.0.0.0`.** `cloudflared` connects from
+the same machine, so binding wider buys nothing — and traffic arriving directly
+would bypass Cloudflare entirely: no edge cache, no DDoS protection, and the
+origin address discoverable by a port scan. This was wrong on the first
+deployment and only found by running the command above.
+
+**Purge `rpcbind` if present.** Some Ubuntu cloud images ship it listening on
+`0.0.0.0:111`. It is NFS plumbing, unused here, and a known amplification vector:
+
+```bash
+sudo systemctl disable --now rpcbind rpcbind.socket
+sudo apt purge -y rpcbind
+```
+
+**Enable unattended security updates**, since the design goal is never needing to
+SSH in:
+
+```bash
+sudo apt install -y unattended-upgrades
+sudo dpkg-reconfigure -plow unattended-upgrades
+```
+
+Worth re-running `ss -tlnp` after any significant change to the box. It is the
+cheapest security check available and the site works identically whether or not
+you get this right — the difference only appears the day a firewall rule changes
+by accident.
+
+---
+
 ## Things that actually went wrong the first time
 
 Collected from doing this for real. None are in Oracle's or Cloudflare's docs.
