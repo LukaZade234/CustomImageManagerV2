@@ -176,6 +176,68 @@ so re-running to pick up late changes before cut-over is safe.
 
 ---
 
+## Deploying changes
+
+The two halves update differently, and the asymmetry catches people out.
+
+**Frontend — automatic.** Push to `main` and Cloudflare Pages rebuilds and deploys
+in roughly one to three minutes. Nothing to do.
+
+**Backend — needs a pull.** Pushing to GitHub does nothing to the origin box on its
+own.
+
+If a change spans both halves, **update the backend first** and let Pages catch up.
+Otherwise a new frontend briefly talks to an old API, which produces confusing
+errors rather than an obvious failure.
+
+### Automatic backend deploys
+
+`deploy/update.sh` plus a systemd timer polls GitHub every two minutes and deploys
+new commits on `main`.
+
+**Polling rather than a webhook or GitHub Actions, deliberately.** The VM has no
+inbound ports open — the Tunnel only dials out — and that is worth preserving. A
+webhook would need an endpoint exposed and a shared secret; Actions would need SSH
+reachable. Polling needs neither, stores no credentials on GitHub, and cannot be
+triggered by anyone else. The cost is up to two minutes of latency, which roughly
+matches the Pages build anyway.
+
+The script is written to be safe unattended:
+
+- **exits silently when there is nothing new**, so the journal stays readable
+- **`flock`** prevents two deploys overlapping if a run takes longer than the timer
+- **only runs `uv sync` when `uv.lock` actually changed**, so most deploys are a
+  pull and a restart
+- **`--ff-only`**, so a diverged working tree stops the deploy rather than being
+  silently destroyed
+- **health-checks after restarting, and rolls back to the previous commit if the
+  new one does not serve traffic.** A bad push costs a few seconds of downtime
+  instead of leaving the site broken until somebody notices
+
+Install:
+
+```bash
+sudo cp /opt/imgmanager/deploy/imgmanager-update.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now imgmanager-update.timer
+systemctl list-timers imgmanager-update --no-pager
+```
+
+Watch it work:
+
+```bash
+journalctl -u imgmanager-update -f
+sudo /opt/imgmanager/deploy/update.sh      # force a check immediately
+```
+
+To pause automatic deploys while doing something delicate:
+
+```bash
+sudo systemctl stop imgmanager-update.timer
+```
+
+---
+
 ## Things that actually went wrong the first time
 
 Collected from doing this for real. None are in Oracle's or Cloudflare's docs.

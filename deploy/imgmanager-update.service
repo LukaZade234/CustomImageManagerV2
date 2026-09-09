@@ -1,0 +1,11 @@
+# One-shot deploy check. Driven by imgmanager-update.timer.
+[Unit]
+Description=Check for and deploy ImgManager updates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/imgmanager/deploy/update.sh
+# Needs root for systemctl and to drop to the app user for git.
+User=root

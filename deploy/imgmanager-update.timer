@@ -1,0 +1,18 @@
+# Polls GitHub for new commits on main.
+#
+# Polling rather than a webhook or GitHub Actions on purpose: the VM has no
+# inbound ports open at all -- the Cloudflare Tunnel only dials out -- and that
+# is worth keeping. This needs no secrets on GitHub, exposes nothing, and cannot
+# be triggered by anyone else.
+[Unit]
+Description=Poll for ImgManager updates
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+# Spread the load slightly so it is not on the exact minute every time.
+RandomizedDelaySec=30
+Unit=imgmanager-update.service
+
+[Install]
+WantedBy=timers.target
