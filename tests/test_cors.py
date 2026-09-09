@@ -78,3 +78,23 @@ def test_allowed_origin_gets_credentialed_cors_headers(cors_client):
 def test_disallowed_origin_gets_no_cors_headers(cors_client):
     r = cors_client.get("/api/health", headers={"Origin": "https://evil.example.com"})
     assert r.headers.get("Access-Control-Allow-Origin") is None
+
+
+def test_health_reports_the_deployed_revision(client):
+    """So you can tell which commit is actually serving.
+
+    The frontend deploys itself via Pages while the backend is pulled by a timer,
+    so the two halves can briefly be on different commits.
+    """
+    body = client.get("/api/health").get_json()
+    assert body["status"] == "ok"
+    assert body["service"] == "imgmanager"
+    assert body["revision"], "revision must never be empty"
+
+
+def test_health_revision_can_be_overridden(client, monkeypatch):
+    """APP_REVISION covers deployments that are not a git checkout."""
+    import upload_imgchest
+
+    monkeypatch.setattr(upload_imgchest, "_DEPLOYED_REVISION", "deadbee")
+    assert client.get("/api/health").get_json()["revision"] == "deadbee"

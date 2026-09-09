@@ -2,6 +2,7 @@ import io
 import ipaddress
 import json
 import os
+import subprocess
 import queue
 import re
 import socket
@@ -422,10 +423,39 @@ def _handle_database_configuration_error(exc):
     return jsonify({"error": str(exc)}), 503
 
 
+def _deployed_revision() -> str:
+    """Short commit hash of the running code.
+
+    Lets you confirm what is actually live, which matters because the frontend
+    deploys itself via Pages while the backend is pulled by a timer -- so the two
+    halves can briefly be on different commits. Resolved once at import.
+    """
+    override = os.environ.get("APP_REVISION")
+    if override:
+        return override
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        # Not a git checkout, git missing, or the timeout fired. Never fatal:
+        # health must answer even when it cannot identify itself.
+        return "unknown"
+
+
+_DEPLOYED_REVISION = _deployed_revision()
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     """Lightweight liveness for load balancers and probes (no heavy work)."""
-    return jsonify({"status": "ok", "service": "imgmanager"})
+    return jsonify({"status": "ok", "service": "imgmanager", "revision": _DEPLOYED_REVISION})
 
 
 @app.route("/api/last-updated", methods=["GET"])
