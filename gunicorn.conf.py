@@ -44,7 +44,15 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
-bind = f"0.0.0.0:{os.environ.get('PORT', '8080')}"
+# Localhost only. Nothing should reach the app except cloudflared, which
+# connects from this machine -- the tunnel dials out to Cloudflare rather than
+# accepting connections. Binding 0.0.0.0 would leave the origin exposed the
+# moment the cloud firewall was misconfigured, and traffic arriving that way
+# would bypass Cloudflare entirely: no edge caching, no DDoS protection, and
+# the real origin address discoverable by a port scan.
+#
+# Override only if something genuinely off-box must reach it directly.
+bind = f"{os.environ.get('WEB_BIND_HOST', '127.0.0.1')}:{os.environ.get('PORT', '8080')}"
 
 # Two processes give crash resilience: if one dies the other keeps serving while
 # gunicorn restarts it. More than that buys little, because the threads below
