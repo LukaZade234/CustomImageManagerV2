@@ -4,7 +4,7 @@ import { useDialog } from './ui'
 
 const SWIPE_THRESHOLD_PX = 50
 
-export default function ImageModal({ images, currentIndex, onClose, onPrev, onNext }) {
+export default function ImageModal({ images, currentIndex, onClose, onPrev, onNext, onReport }) {
   const { dialogRef, onKeyDown, onBackdropClick } = useDialog({ onClose })
   const touchStartRef = useRef(null)
 
@@ -86,6 +86,16 @@ export default function ImageModal({ images, currentIndex, onClose, onPrev, onNe
       <div className="image-modal-counter" aria-live="polite">
         {currentIndex + 1} / {images.length}
       </div>
+      {onReport && (
+        <button
+          type="button"
+          className="image-modal-report"
+          onClick={onReport}
+          title="Report this image for an objective problem"
+        >
+          Report
+        </button>
+      )}
     </div>,
     document.body,
   )

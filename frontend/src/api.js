@@ -122,6 +122,42 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
     }),
+  hideImages: (imageIds) =>
+    api('/api/hide-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_ids: imageIds }),
+    }),
+  unhideImages: (imageIds) =>
+    api('/api/unhide-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_ids: imageIds }),
+    }),
+  restoreImages: (charName, imageUrls) =>
+    api('/api/restore-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
+    }),
+  getRemovedImages: (charName) => api(`/api/removed/${encodeURIComponent(charName)}`),
+  reportImage: (imageId, reason) =>
+    api('/api/report-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_id: imageId, reason }),
+    }),
+  /**
+   * Take logging drives nothing, so it must never surface an error or block the
+   * action it accompanies. Failures are swallowed deliberately.
+   */
+  recordTakes: (imageIds, kind) =>
+    api('/api/takes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_ids: imageIds, kind }),
+    }).catch(() => null),
+  getMe: () => api('/api/me'),
   importCustomImagesFromUrls: (characterName, urls) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',

@@ -17,6 +17,12 @@ export const useStore = create((set, get) => ({
   savedCharacters: [],
   lastUpdated: {},
   customImages: {},
+  // customImages holds the URL-only map from /custom_images.json, which Home and
+  // Customs use for counts and previews. characterImages holds the richer
+  // per-character rows -- id, owner, is_mine, hidden -- that only the character
+  // page needs. Keeping them apart avoids one map with two shapes in it.
+  characterImages: {},
+  me: null,
   currentCharacter: null,
   loading: false,
   error: null,
@@ -52,7 +58,7 @@ export const useStore = create((set, get) => ({
         (a, b) => (lastUpd[b.name] || 0) - (lastUpd[a.name] || 0),
       )
       set({ savedCharacters: sorted })
-    } catch (e) {
+    } catch {
       set({ savedCharacters: [] })
     }
   },
@@ -79,16 +85,28 @@ export const useStore = create((set, get) => ({
     /* Keep previous customImages — clearing on a failed refresh hid successful uploads and worsened batch UX. */
   },
 
-  /** One character’s URLs from GET /api/custom-image/<name> — merges into the map without loading everyone. */
+  /** Who the server thinks we are. Handle, role, sign-in state — never the id. */
+  loadMe: async () => {
+    try {
+      set({ me: await apiClient.getMe() })
+    } catch {
+      /* identity is best-effort; the page works without knowing the handle */
+    }
+  },
+
+  /** One character’s images from GET /api/custom-image/<name>, with ownership. */
   loadCustomImagesForCharacter: async (characterName) => {
     if (!characterName) return
     const maxAttempts = 3
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const urls = await apiClient.getCustomImagesForChar(characterName)
-        const list = Array.isArray(urls) ? urls : []
+        const rows = await apiClient.getCustomImagesForChar(characterName)
+        const list = Array.isArray(rows) ? rows : []
         set((s) => ({
-          customImages: { ...s.customImages, [characterName]: list },
+          characterImages: { ...s.characterImages, [characterName]: list },
+          // Keep the bulk map in step so Home and Customs counts do not go
+          // stale after a removal or restore on this page.
+          customImages: { ...s.customImages, [characterName]: list.map((row) => row.url) },
         }))
         try {
           const lastUpd = await apiClient.getLastUpdated()
@@ -114,6 +132,9 @@ export const useStore = create((set, get) => ({
         [characterName]: [...(s.customImages[characterName] || []), ...urls],
       },
     }))
+    // The rows need real ids from the server before Hide or Report can act on
+    // them, so refetch rather than inventing placeholder entries.
+    get().loadCustomImagesForCharacter(characterName)
     try {
       const lastUpd = await apiClient.getLastUpdated()
       if (lastUpd && typeof lastUpd === 'object') set({ lastUpdated: lastUpd })
@@ -134,12 +155,17 @@ export const useStore = create((set, get) => ({
         customImages[newName] = customImages[oldName]
         delete customImages[oldName]
       }
+      const characterImages = { ...s.characterImages }
+      if (Object.hasOwn(characterImages, oldName)) {
+        characterImages[newName] = characterImages[oldName]
+        delete characterImages[oldName]
+      }
       const lastUpdated = { ...s.lastUpdated }
       if (Object.hasOwn(lastUpdated, oldName)) {
         lastUpdated[newName] = lastUpdated[oldName]
         delete lastUpdated[oldName]
       }
-      return { customImages, lastUpdated }
+      return { customImages, characterImages, lastUpdated }
     })
   },
 
