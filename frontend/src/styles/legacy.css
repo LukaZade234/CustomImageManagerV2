@@ -5,59 +5,48 @@
  */
 
 /* Theme Toggle Button — matches nav pill hit area (min 44px touch) */
-.theme-toggle-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  border-radius: 50%;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  min-width: var(--nav-control-min-h);
-  min-height: var(--nav-control-min-h);
-  width: var(--nav-control-min-h);
-  height: var(--nav-control-min-h);
-  flex-shrink: 0;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.theme-toggle-btn:hover {
-  background-color: var(--surface-sunken);
-  color: var(--accent);
-}
 
 /* Navbar Styles */
 .navbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: var(--surface);
-  padding: 10px 30px;
-  box-shadow: var(--shadow-sm);
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  gap: 20px;
+  gap: var(--space-5);
   min-width: 0;
-  box-sizing: border-box;
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  background-color: var(--surface);
 }
 .navbar-brand {
-  font-size: 1.5em;
-  font-weight: bold;
-  color: var(--accent);
-  text-decoration: none;
   display: flex;
   align-items: center;
   flex-shrink: 0;
   min-width: 0;
   max-width: 100%;
+  color: var(--text);
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-title);
+  text-decoration: none;
 }
 .navbar-brand span {
-  margin-left: 10px;
+  margin-left: var(--space-2);
+}
+
+/* Nav controls sit at the taller touch height even though the base button is
+   34px, because they are the most-tapped targets on mobile. */
+.btn-nav {
+  min-height: var(--nav-control-min-h);
+  padding: 0 var(--nav-control-pad-x);
+  border-radius: var(--nav-control-radius);
+}
+
+.theme-toggle-btn {
+  width: var(--nav-control-min-h);
+  min-height: var(--nav-control-min-h);
 }
 .navbar-center {
   width: 100%;
@@ -82,53 +71,6 @@
   min-width: 0;
 }
 /* Nav links: same rhythm as search pill (rounded, 44px min touch height) */
-.btn-saved {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-decoration: none;
-  background-color: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  padding: 0 var(--nav-control-pad-x);
-  min-height: var(--nav-control-min-h);
-  border-radius: var(--nav-control-radius);
-  cursor: pointer;
-  transition: all 0.3s;
-  font-size: var(--type-meta);
-  font-weight: 600;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-.btn-saved:hover {
-  background-color: var(--accent);
-  color: var(--text-on-accent);
-}
-.btn-add-char {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-decoration: none;
-  background-color: var(--success);
-  color: var(--text-on-accent);
-  padding: 0 var(--nav-control-pad-x);
-  min-height: var(--nav-control-min-h);
-  border-radius: var(--nav-control-radius);
-  cursor: pointer;
-  transition: all 0.3s;
-  border: none;
-  margin: 0;
-  font-size: var(--type-meta);
-  font-weight: 600;
-  line-height: 1.2;
-  box-sizing: border-box;
-}
-.btn-add-char:hover {
-  background-color: var(--success);
-  color: var(--text-on-accent);
-}
 
 /* Search Styles */
 .search-input-wrapper {
@@ -1645,75 +1587,36 @@ body.reorder-touch-dragging {
 }
 
 /* Upload error dialog (replaces window.alert — stays until dismissed, copy-friendly) */
-.upload-error-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 3000;
-  background: var(--scrim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  box-sizing: border-box;
-}
-.upload-error-dialog {
-  background: var(--surface, var(--surface));
-  color: var(--text, var(--text));
-  max-width: 560px;
-  width: 100%;
-  max-height: min(90vh, 640px);
-  border-radius: 10px;
-  box-shadow: var(--shadow-overlay);
-  padding: 1.25rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-.upload-error-dialog__title {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 600;
-}
 .upload-error-dialog__hint {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--muted, var(--text-muted));
-  line-height: 1.4;
+  margin: 0 0 var(--space-3);
+  font-size: var(--type-meta);
+  color: var(--text-subtle);
 }
 .upload-error-dialog__body {
-  flex: 1;
-  min-height: 120px;
-  max-height: 42vh;
   width: 100%;
-  box-sizing: border-box;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
-  line-height: 1.45;
-  padding: 0.65rem 0.75rem;
+  min-height: 140px;
+  max-height: 42vh;
+  padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  resize: vertical;
+  border-radius: var(--radius-md);
   background: var(--surface-sunken);
   color: var(--text);
-}
-.upload-error-dialog__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-micro);
+  line-height: 1.5;
+  resize: vertical;
 }
 
 /* $ai command Discord length dialog (two columns: non-Nitro vs Nitro) */
-.ai-command-limit-dialog-backdrop {
-  z-index: 3100;
-}
+/* Renders its own header rather than using Modal's, so it supplies its own
+   padding and internal gap. */
 .ai-command-limit-dialog {
   position: relative;
+  gap: var(--space-3);
   max-width: min(960px, 100%);
-  width: 100%;
   max-height: min(92vh, 720px);
   min-height: 0;
+  padding: var(--space-5) var(--space-6);
   overflow: hidden;
 }
 .ai-command-limit-dialog__header {
@@ -1729,22 +1632,24 @@ body.reorder-touch-dragging {
 }
 .ai-command-limit-dialog__title {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  line-height: 1.3;
+  font-size: var(--type-section);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-title);
+  line-height: var(--line-tight);
+  color: var(--text);
 }
 .ai-command-limit-dialog__summary-strip {
   flex-shrink: 0;
   font-size: 0.875rem;
   line-height: 1.45;
-  color: var(--muted, var(--text-muted));
+  color: var(--text-muted);
   padding: 0.65rem 0.75rem;
   border-radius: 8px;
   background: var(--warning-subtle);
   border: 1px solid var(--warning);
 }
 .ai-command-limit-dialog__summary-strip strong {
-  color: var(--text, var(--text));
+  color: var(--text);
 }
 .ai-command-limit-dialog__body {
   flex: 1;
@@ -1779,7 +1684,7 @@ body.reorder-touch-dragging {
   margin: 0 0 0.35rem;
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--text, var(--text));
+  color: var(--text);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1796,7 +1701,7 @@ body.reorder-touch-dragging {
 .ai-command-limit-dialog__column-meta {
   margin: 0 0 0.5rem;
   font-size: 0.8rem;
-  color: var(--muted, var(--text-muted));
+  color: var(--text-muted);
 }
 .ai-command-limit-dialog__column-scroll {
   flex: 1;
@@ -2011,14 +1916,12 @@ body.reorder-touch-dragging {
 
 /* Responsive layout — nav, search, main */
 @media (max-width: 1200px) {
-  .btn-add-char span,
-  .btn-saved span {
+  .btn-nav span {
     display: none;
   }
-  .btn-add-char,
-  .btn-saved {
-    min-width: var(--nav-control-min-h);
-    padding: 0 12px;
+  .btn-nav {
+    width: var(--nav-control-min-h);
+    padding: 0;
   }
 }
 

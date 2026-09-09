@@ -16,13 +16,13 @@ vi.mock('../api', () => ({
   apiClient: new Proxy({}, { get: () => vi.fn().mockResolvedValue({}) }),
 }))
 
+import { useStore } from '../store/useStore'
 import AddPage from './AddPage'
 import CharacterPage from './CharacterPage'
 import CustomsPage from './CustomsPage'
 import HomePage from './HomePage'
 import SavedPage from './SavedPage'
 import SearchResultsPage from './SearchResultsPage'
-import { useStore } from '../store/useStore'
 
 const CHARACTERS = [
   { name: 'Ayanami Rei', series: 'Neon Genesis Evangelion', rank: 12, image: 'rei.png' },

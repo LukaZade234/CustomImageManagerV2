@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import SearchBar from './SearchBar'
+import { Button, IconButton } from './ui'
 
 /** Announces the current state, since the button cycles rather than toggles. */
 const THEME_LABELS = {
@@ -36,13 +37,7 @@ export default function Navbar() {
         <SearchBar />
       </div>
       <div className="navbar-right">
-        <button
-          type="button"
-          className="theme-toggle-btn"
-          title={THEME_LABELS[theme]}
-          onClick={cycleTheme}
-          aria-label={THEME_LABELS[theme]}
-        >
+        <IconButton className="theme-toggle-btn" label={THEME_LABELS[theme]} onClick={cycleTheme}>
           {theme === 'dark' ? (
             <svg
               width="20"
@@ -96,8 +91,8 @@ export default function Navbar() {
               <line x1="12" y1="17" x2="12" y2="21" />
             </svg>
           )}
-        </button>
-        <Link to="/add" className="btn-add-char">
+        </IconButton>
+        <Button as={Link} to="/add" variant="primary" className="btn-nav">
           <svg
             width="16"
             height="16"
@@ -111,8 +106,8 @@ export default function Navbar() {
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           <span>Add Character</span>
-        </Link>
-        <Link to="/customs" className="btn-saved">
+        </Button>
+        <Button as={Link} to="/customs" variant="ghost" className="btn-nav">
           <svg
             width="16"
             height="16"
@@ -127,8 +122,8 @@ export default function Navbar() {
             <polyline points="21 15 16 10 5 21" />
           </svg>
           <span>Customs</span>
-        </Link>
-        <Link to="/saved" className="btn-saved">
+        </Button>
+        <Button as={Link} to="/saved" variant="ghost" className="btn-nav">
           <svg
             width="16"
             height="16"
@@ -141,7 +136,7 @@ export default function Navbar() {
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
           <span>Saved</span>
-        </Link>
+        </Button>
       </div>
     </nav>
   )

@@ -10,6 +10,7 @@ import { cx } from '../../utils/cx'
  * than passing an inline style.
  */
 export default function Button({
+  as: Tag = 'button',
   variant = 'secondary',
   size = 'md',
   loading = false,
@@ -20,9 +21,13 @@ export default function Button({
   disabled,
   ...rest
 }) {
+  // Navigation that looks like a button must still be a link, so `as` lets a
+  // react-router <Link> wear the same styling without duplicating it.
+  const isButton = Tag === 'button'
+
   return (
-    <button
-      type="button"
+    <Tag
+      type={isButton ? 'button' : undefined}
       {...rest}
       className={cx(
         'ui-btn',
@@ -33,11 +38,11 @@ export default function Button({
         loading && 'is-loading',
         className,
       )}
-      disabled={disabled || loading}
+      disabled={isButton ? disabled || loading : undefined}
       aria-busy={loading || undefined}
     >
       {loading && <span className="ui-btn__spinner" aria-hidden="true" />}
       {children}
-    </button>
+    </Tag>
   )
 }

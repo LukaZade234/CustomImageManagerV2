@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { DISCORD_LIMIT_NITRO, DISCORD_LIMIT_REGULAR } from '../utils/aiCommandDiscord'
+import { Button, useDialog } from './ui'
 
 function copyButtonLabel(partIndex, totalParts) {
   if (totalParts <= 1) return 'Copy command'
@@ -47,7 +49,7 @@ async function copyWithFallback(text, addToast) {
  * Shown when $ai command length >= 2000. Two card columns: Regular vs Nitro limits.
  */
 export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroParts, onClose }) {
-  const closeBtnRef = useRef(null)
+  const { dialogRef, onKeyDown, onBackdropClick } = useDialog({ onClose })
   const announceTimerRef = useRef(null)
   const addToast = useStore((s) => s.addToast)
   const [announce, setAnnounce] = useState('')
@@ -69,42 +71,19 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
     [addToast],
   )
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    const t = setTimeout(() => closeBtnRef.current?.focus(), 0)
-    return () => {
-      clearTimeout(t)
-      document.body.style.overflow = ''
-      if (announceTimerRef.current) clearTimeout(announceTimerRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    const h = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose])
-
   const dialogDescId = 'ai-command-limit-desc'
 
-  return (
-    <div
-      className="upload-error-dialog-backdrop ai-command-limit-dialog-backdrop"
-      role="presentation"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+  return createPortal(
+    <div className="ui-modal-backdrop" role="presentation" onClick={onBackdropClick}>
       <div
-        className="upload-error-dialog ai-command-limit-dialog"
+        ref={dialogRef}
+        className="ui-modal ui-modal--lg ai-command-limit-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-command-limit-title"
         aria-describedby={dialogDescId}
-        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        onKeyDown={onKeyDown}
       >
         <div className="ai-command-limit-dialog__header">
           <span className="ai-command-limit-dialog__header-icon" aria-hidden="true">
@@ -156,7 +135,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
                       <li key={`n-${idx}`}>
                         <button
                           type="button"
-                          className={`action-btn secondary ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
+                          className={`ui-btn ui-btn--secondary ui-btn--sm ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
                           aria-label={wasCopied ? `${label} — copied` : label}
                           onClick={() => copyPart(partKey, text, label)}
                         >
@@ -189,7 +168,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
                       <li key={`t-${idx}`}>
                         <button
                           type="button"
-                          className={`action-btn secondary ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
+                          className={`ui-btn ui-btn--secondary ui-btn--sm ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
                           aria-label={wasCopied ? `${label} — copied` : label}
                           onClick={() => copyPart(partKey, text, label)}
                         >
@@ -205,14 +184,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         </div>
 
         <div className="ai-command-limit-dialog__footer upload-error-dialog__actions">
-          <button
-            ref={closeBtnRef}
-            type="button"
-            className="action-btn secondary"
-            onClick={onClose}
-          >
-            Close
-          </button>
+          <Button onClick={onClose}>Close</Button>
         </div>
 
         <div
@@ -224,6 +196,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
           {announce}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
