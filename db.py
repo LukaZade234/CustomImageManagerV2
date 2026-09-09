@@ -503,6 +503,93 @@ def unhide_images(identity_id: str, image_ids: Iterable[int]) -> int:
         return cur.rowcount
 
 
+# --- Reports ------------------------------------------------------------
+#
+# Objective problems only: wrong character, dead link, NSFW, duplicate. Never
+# taste -- that is what hide-for-me is for. The primary key on
+# (image_id, identity_id) is what makes "two distinct reporters" meaningful:
+# one person cannot reach the threshold alone.
+
+REPORT_REASONS = ("wrong_character", "dead_link", "nsfw", "duplicate")
+
+# Two, not more, because the userbase is too small to produce a larger quorum
+# in any reasonable time (DECISIONS.md section 1). Removal is soft and anyone
+# can restore, so the cost of a wrong call is low.
+REPORT_REMOVAL_THRESHOLD = 2
+
+
+def report_image(image_id: int, identity_id: str, reason: str) -> dict | None:
+    """Record a report. Returns None if the image does not exist.
+
+    Otherwise {'reports': n, 'removed': bool, 'already_reported': bool}. Removal
+    happens on the second *distinct* reporter; a second report from the same
+    person changes nothing, which is the point of the composite primary key.
+    """
+    if reason not in REPORT_REASONS:
+        raise ValueError(f"Unknown report reason: {reason!r}")
+    with transaction() as conn:
+        row = conn.execute(
+            "SELECT id, character_id, state FROM custom_images WHERE id = ?", (image_id,)
+        ).fetchone()
+        if row is None:
+            return None
+
+        _ensure_identity(conn, identity_id)
+        cur = conn.execute(
+            "INSERT INTO image_reports (image_id, identity_id, reason, at)"
+            " VALUES (?, ?, ?, ?) ON CONFLICT (image_id, identity_id) DO NOTHING",
+            (image_id, identity_id, reason, _now()),
+        )
+        already_reported = not cur.rowcount
+
+        reports = conn.execute(
+            "SELECT COUNT(*) AS n FROM image_reports WHERE image_id = ?", (image_id,)
+        ).fetchone()["n"]
+
+        removed = row["state"] == "removed"
+        if not removed and reports >= REPORT_REMOVAL_THRESHOLD:
+            now = _now()
+            conn.execute(
+                "UPDATE custom_images"
+                "   SET state = 'removed', removed_at = ?, removed_reason = ?"
+                " WHERE id = ?",
+                (now, f"reported: {reason}", image_id),
+            )
+            # removed_by stays NULL: no single person made this call.
+            conn.execute(
+                "UPDATE characters SET updated_at = ? WHERE id = ?", (now, row["character_id"])
+            )
+            removed = True
+
+        return {"reports": reports, "removed": removed, "already_reported": already_reported}
+
+
+# --- Takes --------------------------------------------------------------
+
+
+def log_take(image_id: int, identity_id: str | None, kind: str) -> bool:
+    """Record that someone took an image away with them.
+
+    Deliberately drives nothing. It is logged because collecting it costs
+    nothing and keeps the option of designing a retirement policy later against
+    real evidence rather than a guess -- see DECISIONS.md section 1, where
+    retirement-by-disuse was rejected precisely for lack of that evidence.
+    """
+    if kind not in ("download", "copy_command"):
+        raise ValueError(f"Unknown take kind: {kind!r}")
+    with transaction() as conn:
+        exists = conn.execute("SELECT 1 FROM custom_images WHERE id = ?", (image_id,)).fetchone()
+        if exists is None:
+            return False
+        if identity_id is not None:
+            _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO image_takes (image_id, identity_id, kind, at) VALUES (?, ?, ?, ?)",
+            (image_id, identity_id, kind, _now()),
+        )
+        return True
+
+
 def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:
     """Apply an ordering. False if the character is unknown.
 

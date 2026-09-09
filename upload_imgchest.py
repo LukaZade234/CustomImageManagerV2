@@ -1106,6 +1106,62 @@ def unhide_images():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/report-image", methods=["POST"])
+def report_image():
+    """Report an image for an objective problem.
+
+    Objective only -- wrong character, dead link, NSFW, duplicate. Taste is what
+    hide-for-me is for, and conflating the two is how a report queue turns into
+    a popularity contest (DECISIONS.md section 1).
+    """
+    data = request.get_json() or {}
+    image_id = data.get("image_id")
+    reason = data.get("reason")
+    if image_id is None or reason is None:
+        return jsonify({"error": "Missing image_id or reason"}), 400
+    try:
+        image_id = int(image_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "image_id must be an integer"}), 400
+    if reason not in db.REPORT_REASONS:
+        return jsonify({"error": f"reason must be one of: {', '.join(db.REPORT_REASONS)}"}), 400
+
+    try:
+        result = db.report_image(image_id, identity.current_identity().id, reason)
+        if result is None:
+            return jsonify({"error": "Image not found"}), 404
+        return jsonify({"success": True, **result})
+    except Exception as e:
+        print(f"Error reporting image: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/takes", methods=["POST"])
+def record_takes():
+    """Log that images were downloaded or copied into an $ai command.
+
+    Fire-and-forget on purpose: this drives nothing, so a failure here must
+    never surface to the user or block the action they actually asked for.
+    """
+    data = request.get_json() or {}
+    kind = data.get("kind")
+    ids, error = _image_ids_from(data)
+    if error:
+        return error
+    if kind not in ("download", "copy_command"):
+        return jsonify({"error": "kind must be 'download' or 'copy_command'"}), 400
+
+    me = identity.current_identity()
+    logged = 0
+    for image_id in ids:
+        try:
+            if db.log_take(image_id, me.id, kind):
+                logged += 1
+        except Exception as e:
+            print(f"Error logging take for image {image_id}: {e}")
+    return jsonify({"success": True, "logged": logged})
+
+
 @app.route("/api/edit-character", methods=["POST"])
 def edit_character():
     data = request.get_json()
