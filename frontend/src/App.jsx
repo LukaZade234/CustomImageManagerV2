@@ -1,15 +1,14 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
 import React, { useEffect } from 'react'
-import { useStore } from './store/useStore'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import Toast from './components/Toast'
+import AddPage from './pages/AddPage'
+import CharacterPage from './pages/CharacterPage'
+import CustomsPage from './pages/CustomsPage'
 import HomePage from './pages/HomePage'
 import SavedPage from './pages/SavedPage'
-import AddPage from './pages/AddPage'
-import CustomsPage from './pages/CustomsPage'
-import CharacterPage from './pages/CharacterPage'
 import SearchResultsPage from './pages/SearchResultsPage'
-import Toast from './components/Toast'
-import './App.css'
+import { useStore } from './store/useStore'
 
 /** Prevents a blank screen if a child throws (e.g. browser API quirks). */
 class AppErrorBoundary extends React.Component {
@@ -29,8 +28,14 @@ class AppErrorBoundary extends React.Component {
         <main className="container" style={{ paddingTop: 24 }}>
           <div className="home-page" style={{ padding: 24 }}>
             <h1 className="page-title">Something went wrong</h1>
-            <p className="text-body" style={{ marginBottom: 16 }}>{msg}</p>
-            <button type="button" className="action-btn primary" onClick={() => window.location.reload()}>
+            <p className="text-body" style={{ marginBottom: 16 }}>
+              {msg}
+            </p>
+            <button
+              type="button"
+              className="action-btn primary"
+              onClick={() => window.location.reload()}
+            >
               Reload page
             </button>
           </div>
@@ -44,18 +49,12 @@ class AppErrorBoundary extends React.Component {
 function App() {
   const loadCharacters = useStore((s) => s.loadCharacters)
   const loadSaved = useStore((s) => s.loadSaved)
-  const setDarkMode = useStore((s) => s.setDarkMode)
-  const darkMode = useStore((s) => s.darkMode)
   const searchQuery = useStore((s) => s.searchQuery)
 
   useEffect(() => {
     loadCharacters()
     loadSaved()
   }, [loadCharacters, loadSaved])
-
-  useEffect(() => {
-    setDarkMode(darkMode)
-  }, [darkMode, setDarkMode])
 
   return (
     <>
