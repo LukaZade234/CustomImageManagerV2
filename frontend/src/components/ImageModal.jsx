@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 const SWIPE_THRESHOLD_PX = 50
 
@@ -14,7 +14,7 @@ export default function ImageModal({ images, currentIndex, onClose, onPrev, onNe
     const root = dialogRef.current
     if (!root) return []
     return Array.from(root.querySelectorAll(FOCUSABLE)).filter(
-      (el) => el.offsetParent !== null || el.getClientRects().length > 0
+      (el) => el.offsetParent !== null || el.getClientRects().length > 0,
     )
   }, [])
 
@@ -67,7 +67,7 @@ export default function ImageModal({ images, currentIndex, onClose, onPrev, onNe
       if (dx > 0) onPrev()
       else onNext()
     },
-    [onPrev, onNext]
+    [onPrev, onNext],
   )
 
   const onKeyDownTrap = useCallback(
@@ -87,7 +87,7 @@ export default function ImageModal({ images, currentIndex, onClose, onPrev, onNe
         first.focus()
       }
     },
-    [getFocusables]
+    [getFocusables],
   )
 
   if (!images?.length) return null
@@ -109,12 +109,7 @@ export default function ImageModal({ images, currentIndex, onClose, onPrev, onNe
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
-      <button
-        type="button"
-        className="image-modal-close"
-        onClick={onClose}
-        aria-label="Close"
-      >
+      <button type="button" className="image-modal-close" onClick={onClose} aria-label="Close">
         &times;
       </button>
       {currentIndex > 0 && (

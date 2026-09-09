@@ -1,13 +1,17 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
-import { useStore } from '../store/useStore'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
+import { useStore } from '../store/useStore'
 
 /** Discord/CDN images often fail as bare <img src>; preview via backend proxy. */
 function mudaePreviewSrc(imageUrl) {
   if (!imageUrl) return ''
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('//')) {
+  if (
+    imageUrl.startsWith('http://') ||
+    imageUrl.startsWith('https://') ||
+    imageUrl.startsWith('//')
+  ) {
     const absolute = imageUrl.startsWith('//') ? `https:${imageUrl}` : imageUrl
     return `/api/mudae/proxy-image?url=${encodeURIComponent(absolute)}`
   }
@@ -52,7 +56,8 @@ export default function AddPage() {
   const addToast = useStore((s) => s.addToast)
 
   useEffect(() => {
-    apiClient.mudaeStatus()
+    apiClient
+      .mudaeStatus()
       .then((r) => setMudaeConfigured(!!r.configured))
       .catch(() => setMudaeConfigured(false))
   }, [])
@@ -321,16 +326,25 @@ export default function AddPage() {
       <h2 className="page-title">Add New Character</h2>
 
       {mudaeConfigured === false && (
-        <p className="mudae-setup-hint" style={{ maxWidth: '640px', marginBottom: '1.25rem', opacity: 0.85 }}>
+        <p
+          className="mudae-setup-hint"
+          style={{ maxWidth: '640px', marginBottom: '1.25rem', opacity: 0.85 }}
+        >
           Mudae import is not available.
         </p>
       )}
 
       {mudaeConfigured && (
-        <div className="edit-form-container mudae-panel" style={{ maxWidth: '640px', margin: '0 0 2rem' }}>
-          <h3 className="section-heading" style={{ marginTop: 0 }}>From Mudae</h3>
+        <div
+          className="edit-form-container mudae-panel"
+          style={{ maxWidth: '640px', margin: '0 0 2rem' }}
+        >
+          <h3 className="section-heading" style={{ marginTop: 0 }}>
+            From Mudae
+          </h3>
           <p style={{ marginTop: 0, opacity: 0.85, fontSize: '0.95em' }}>
-            Looks up claim rank, series, and main image using Mudae <code>$im</code> and <code>$ima</code>.
+            Looks up claim rank, series, and main image using Mudae <code>$im</code> and{' '}
+            <code>$ima</code>.
           </p>
 
           <div className="edit-group full-width">
@@ -388,20 +402,34 @@ export default function AddPage() {
           )}
 
           {mudaePreview && (
-            <div className="mudae-preview" style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'flex-start' }}>
+            <div
+              className="mudae-preview"
+              style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'flex-start' }}
+            >
               {mudaePreview.image_url && (
                 <img
                   src={mudaePreviewSrc(mudaePreview.image_url)}
                   alt={mudaePreview.name}
-                  style={{ width: 96, height: 128, objectFit: 'cover', borderRadius: 4, background: '#eee' }}
+                  style={{
+                    width: 96,
+                    height: 128,
+                    objectFit: 'cover',
+                    borderRadius: 4,
+                    background: '#eee',
+                  }}
                 />
               )}
               <div>
-                <div><strong>{mudaePreview.name}</strong></div>
+                <div>
+                  <strong>{mudaePreview.name}</strong>
+                </div>
                 <div style={{ opacity: 0.85 }}>{mudaePreview.series || '—'}</div>
-                <div style={{ opacity: 0.85 }}>Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}</div>
+                <div style={{ opacity: 0.85 }}>
+                  Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}
+                </div>
                 <p style={{ fontSize: '0.85em', opacity: 0.75, marginBottom: 0 }}>
-                  The manual form below was pre-filled, or use &quot;Add from Mudae&quot; to upload the image and save.
+                  The manual form below was pre-filled, or use &quot;Add from Mudae&quot; to upload
+                  the image and save.
                 </p>
               </div>
             </div>
@@ -412,7 +440,10 @@ export default function AddPage() {
           <form onSubmit={handleSeriesBulk}>
             <div className="edit-group full-width">
               <label htmlFor="mudaeSeriesBulk">Bulk-add series</label>
-              <div className="mudae-row" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div
+                className="mudae-row"
+                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
+              >
                 <SeriesSuggestInput
                   id="mudaeSeriesBulk"
                   placeholder="Exact series name"
@@ -421,7 +452,11 @@ export default function AddPage() {
                   suggestions={seriesSuggestions}
                   disabled={seriesBusy || seriesResolving}
                 />
-                <button type="submit" className="action-btn primary" disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}>
+                <button
+                  type="submit"
+                  className="action-btn primary"
+                  disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}
+                >
                   {seriesResolving ? 'Checking…' : seriesBusy ? 'Importing…' : 'Add entire series'}
                 </button>
                 {seriesBusy && (
@@ -436,7 +471,8 @@ export default function AddPage() {
                 )}
               </div>
               <p style={{ fontSize: '0.85em', opacity: 0.75, marginTop: '0.4rem' }}>
-                Runs <code>$ima</code> then <code>$im</code> per character. Large series can take several minutes; existing names are skipped.
+                Runs <code>$ima</code> then <code>$im</code> per character. Large series can take
+                several minutes; existing names are skipped.
               </p>
               {seriesCandidates.length > 0 && (
                 <div className="mudae-candidates" style={{ marginTop: '0.75rem' }}>
@@ -464,13 +500,18 @@ export default function AddPage() {
               <div style={{ marginBottom: '0.5rem' }}>
                 {seriesProgress.phase === 'starting' && 'Querying Mudae for series list…'}
                 {seriesProgress.phase === 'delay' && (
-                  <>Found {seriesProgress.totalListed} character{seriesProgress.totalListed !== 1 ? 's' : ''} in &quot;{seriesProgress.series}&quot; — waiting before lookups…</>
+                  <>
+                    Found {seriesProgress.totalListed} character
+                    {seriesProgress.totalListed !== 1 ? 's' : ''} in &quot;{seriesProgress.series}
+                    &quot; — waiting before lookups…
+                  </>
                 )}
                 {seriesProgress.phase === 'adding' && seriesProgress.current && (
                   <>
-                    Adding: <strong>{seriesProgress.current}</strong>
-                    {' '}
-                    ({seriesProgress.added.length + seriesProgress.skipped.length + seriesProgress.failed.length}
+                    Adding: <strong>{seriesProgress.current}</strong> (
+                    {seriesProgress.added.length +
+                      seriesProgress.skipped.length +
+                      seriesProgress.failed.length}
                     {seriesProgress.totalListed ? ` / ${seriesProgress.totalListed}` : ''})
                   </>
                 )}
@@ -478,9 +519,18 @@ export default function AddPage() {
                 {seriesProgress.phase === 'cancelled' && 'Stopping import…'}
               </div>
               {seriesProgress.added.length > 0 && (
-                <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.2rem', maxHeight: '160px', overflowY: 'auto' }}>
+                <ul
+                  style={{
+                    margin: '0.35rem 0 0',
+                    paddingLeft: '1.2rem',
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                  }}
+                >
                   {seriesProgress.added.map((c) => (
-                    <li key={c.name} style={{ color: '#198754' }}>{c.name}</li>
+                    <li key={c.name} style={{ color: '#198754' }}>
+                      {c.name}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -489,9 +539,18 @@ export default function AddPage() {
                   <summary style={{ cursor: 'pointer' }}>
                     Skipped — already in library ({seriesProgress.skipped.length})
                   </summary>
-                  <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.2rem', maxHeight: '160px', overflowY: 'auto' }}>
+                  <ul
+                    style={{
+                      margin: '0.35rem 0 0',
+                      paddingLeft: '1.2rem',
+                      maxHeight: '160px',
+                      overflowY: 'auto',
+                    }}
+                  >
                     {seriesProgress.skipped.map((name) => (
-                      <li key={name} style={{ color: '#856404' }}>{name}</li>
+                      <li key={name} style={{ color: '#856404' }}>
+                        {name}
+                      </li>
                     ))}
                   </ul>
                 </details>
@@ -527,7 +586,9 @@ export default function AddPage() {
                   <summary>Failed ({seriesResult.failed.length})</summary>
                   <ul>
                     {seriesResult.failed.map((f) => (
-                      <li key={f.name}>{f.name}: {f.error}</li>
+                      <li key={f.name}>
+                        {f.name}: {f.error}
+                      </li>
                     ))}
                   </ul>
                 </details>
@@ -541,7 +602,9 @@ export default function AddPage() {
       )}
 
       <div className="edit-form-container" style={{ maxWidth: '500px', margin: 0 }}>
-        <h3 className="section-heading" style={{ marginTop: 0 }}>Manual add</h3>
+        <h3 className="section-heading" style={{ marginTop: 0 }}>
+          Manual add
+        </h3>
         <form onSubmit={handleSubmit} className="add-char-form" style={{ maxWidth: '100%' }}>
           <div className="edit-group full-width">
             <label htmlFor="addCharName">Character Name</label>
@@ -583,9 +646,19 @@ export default function AddPage() {
               onClick={() => document.getElementById('addCharImage')?.click()}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && document.getElementById('addCharImage')?.click()}
+              onKeyDown={(e) =>
+                e.key === 'Enter' && document.getElementById('addCharImage')?.click()
+              }
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6c757d" strokeWidth="2" style={{ marginBottom: '8px', display: 'block' }}>
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#6c757d"
+                strokeWidth="2"
+                style={{ marginBottom: '8px', display: 'block' }}
+              >
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
@@ -608,7 +681,9 @@ export default function AddPage() {
             </button>
           </div>
           {status?.type === 'error' && (
-            <div id="addCharStatus" style={{ marginTop: '15px', color: '#dc3545' }}>{status.message}</div>
+            <div id="addCharStatus" style={{ marginTop: '15px', color: '#dc3545' }}>
+              {status.message}
+            </div>
           )}
         </form>
       </div>

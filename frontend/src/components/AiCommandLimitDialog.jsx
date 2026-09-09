@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { DISCORD_LIMIT_REGULAR, DISCORD_LIMIT_NITRO } from '../utils/aiCommandDiscord'
+import { DISCORD_LIMIT_NITRO, DISCORD_LIMIT_REGULAR } from '../utils/aiCommandDiscord'
 
 function copyButtonLabel(partIndex, totalParts) {
   if (totalParts <= 1) return 'Copy command'
@@ -66,7 +66,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         }, 2000)
       }
     },
-    [addToast]
+    [addToast],
   )
 
   useEffect(() => {
@@ -108,7 +108,14 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
       >
         <div className="ai-command-limit-dialog__header">
           <span className="ai-command-limit-dialog__header-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -120,15 +127,20 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         </div>
 
         <div id={dialogDescId} className="ai-command-limit-dialog__summary-strip">
-          <strong>{charCount.toLocaleString()}</strong> characters — Discord allows <strong>{DISCORD_LIMIT_REGULAR.toLocaleString()}</strong> per
-          message (<strong>{DISCORD_LIMIT_NITRO.toLocaleString()}</strong> with Nitro). Copy each block as a separate message.
+          <strong>{charCount.toLocaleString()}</strong> characters — Discord allows{' '}
+          <strong>{DISCORD_LIMIT_REGULAR.toLocaleString()}</strong> per message (
+          <strong>{DISCORD_LIMIT_NITRO.toLocaleString()}</strong> with Nitro). Copy each block as a
+          separate message.
         </div>
 
         <div className="ai-command-limit-dialog__body">
           <div className="ai-command-limit-dialog__columns">
             <section className="ai-command-limit-dialog__column-card" aria-label="Regular Discord">
               <h3 className="ai-command-limit-dialog__column-title">
-                Regular <span className="ai-command-limit-dialog__limit-pill">{DISCORD_LIMIT_REGULAR.toLocaleString()} max</span>
+                Regular{' '}
+                <span className="ai-command-limit-dialog__limit-pill">
+                  {DISCORD_LIMIT_REGULAR.toLocaleString()} max
+                </span>
               </h3>
               <p className="ai-command-limit-dialog__column-meta">
                 {nonNitroParts.length} message{nonNitroParts.length === 1 ? '' : 's'}
@@ -158,7 +170,10 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
 
             <section className="ai-command-limit-dialog__column-card" aria-label="Discord Nitro">
               <h3 className="ai-command-limit-dialog__column-title">
-                Nitro <span className="ai-command-limit-dialog__limit-pill">{DISCORD_LIMIT_NITRO.toLocaleString()} max</span>
+                Nitro{' '}
+                <span className="ai-command-limit-dialog__limit-pill">
+                  {DISCORD_LIMIT_NITRO.toLocaleString()} max
+                </span>
               </h3>
               <p className="ai-command-limit-dialog__column-meta">
                 {nitroParts.length} message{nitroParts.length === 1 ? '' : 's'}
@@ -189,12 +204,22 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
         </div>
 
         <div className="ai-command-limit-dialog__footer upload-error-dialog__actions">
-          <button ref={closeBtnRef} type="button" className="action-btn secondary" onClick={onClose}>
+          <button
+            ref={closeBtnRef}
+            type="button"
+            className="action-btn secondary"
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
 
-        <div className="ai-command-limit-dialog__sr-only" role="status" aria-live="polite" aria-atomic="true">
+        <div
+          className="ai-command-limit-dialog__sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {announce}
         </div>
       </div>

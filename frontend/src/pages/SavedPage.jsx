@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { useStore } from '../store/useStore'
 import { getImageUrl } from '../api'
+import { useStore } from '../store/useStore'
 
 export default function SavedPage() {
   const savedCharacters = useStore((s) => s.savedCharacters)
@@ -33,7 +33,11 @@ export default function SavedPage() {
       ) : (
         <div className="saved-characters-grid">
           {savedCharacters.map((char) => (
-            <Link key={char.name} to={`/character/${encodeURIComponent(char.name)}`} className="saved-character-card">
+            <Link
+              key={char.name}
+              to={`/character/${encodeURIComponent(char.name)}`}
+              className="saved-character-card"
+            >
               <div className="saved-card-image-wrap">
                 {getCharImage(char.name) ? (
                   <img src={getCharImage(char.name)} alt={char.name} />
@@ -47,7 +51,14 @@ export default function SavedPage() {
                   title="Unsave"
                   aria-label="Unsave character"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                   </svg>
                 </button>

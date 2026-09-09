@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 
 const SORT_OPTIONS = [
@@ -80,7 +80,16 @@ export default function SearchBar() {
           onKeyDown={(e) => e.key === 'Enter' && setDropdownOpen(!dropdownOpen)}
         >
           <span className="selected-text">{sortLabel}</span>
-          <svg className="dropdown-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <svg
+            className="dropdown-arrow"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+          >
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </div>

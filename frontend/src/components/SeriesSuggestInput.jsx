@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 export default function SeriesSuggestInput({
   id,
@@ -16,9 +16,7 @@ export default function SeriesSuggestInput({
 
   const filtered = useMemo(() => {
     const q = value.trim().toLowerCase()
-    const list = q
-      ? suggestions.filter((s) => s.toLowerCase().includes(q))
-      : suggestions
+    const list = q ? suggestions.filter((s) => s.toLowerCase().includes(q)) : suggestions
     return list.slice(0, 25)
   }, [value, suggestions])
 

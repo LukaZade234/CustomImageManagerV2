@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAiSegment,
   DISCORD_LIMIT_NITRO,
   DISCORD_LIMIT_REGULAR,
-  buildAiSegment,
   splitAiCommandForLimit,
 } from './aiCommandDiscord'
 

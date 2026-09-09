@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useStore } from '../store/useStore'
 
 /**
@@ -48,7 +48,10 @@ export default function UploadErrorDialog({ title, body, onClose }) {
     if (ok) {
       addToast('Copied to clipboard', 'success')
     } else {
-      addToast('Could not copy automatically. Select the text above and use Ctrl+C (or Cmd+C on Mac).', 'error')
+      addToast(
+        'Could not copy automatically. Select the text above and use Ctrl+C (or Cmd+C on Mac).',
+        'error',
+      )
     }
   }, [body, addToast])
 
@@ -91,7 +94,8 @@ export default function UploadErrorDialog({ title, body, onClose }) {
           {title || 'Upload issue'}
         </h2>
         <p className="upload-error-dialog__hint">
-          Text stays until you close this panel. Use Copy to grab the full message for support or debugging.
+          Text stays until you close this panel. Use Copy to grab the full message for support or
+          debugging.
         </p>
         <textarea
           className="upload-error-dialog__body"

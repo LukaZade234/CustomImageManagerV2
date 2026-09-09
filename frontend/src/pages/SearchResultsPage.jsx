@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useStore } from '../store/useStore'
 import { getImageUrl } from '../api'
+import { useStore } from '../store/useStore'
 
 export default function SearchResultsPage() {
   const searchQuery = useStore((s) => s.searchQuery)
@@ -16,7 +16,7 @@ export default function SearchResultsPage() {
     if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
     const filtered = characters.filter((c) => {
-      const field = mode === 'name' ? c.name : (c.series || '')
+      const field = mode === 'name' ? c.name : c.series || ''
       return field.toLowerCase().includes(q)
     })
     const sorted = [...filtered].sort((a, b) => {
@@ -39,7 +39,10 @@ export default function SearchResultsPage() {
     return (
       <div id="searchPage" className="search-results-page page-loading-shell" aria-busy="true">
         <h2 className="page-title">Search Results</h2>
-        <p className="text-meta page-loading-lead" style={{ textAlign: 'left', marginBottom: '1rem' }}>
+        <p
+          className="text-meta page-loading-lead"
+          style={{ textAlign: 'left', marginBottom: '1rem' }}
+        >
           Fetching character list…
         </p>
         <div className="search-skeleton-list" aria-hidden>
