@@ -60,6 +60,9 @@ img {
 }
 
 /* ---- Motion ---------------------------------------------------------- */
+/* biome-ignore-start lint/complexity/noImportantStyles: the reduced-motion
+   opt-out has to beat every animation declared anywhere, including inside
+   components, which is the one case !important is actually correct for. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -70,6 +73,7 @@ img {
     scroll-behavior: auto !important;
   }
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: end reduced-motion */
 
 /* ---- Shared typography ------------------------------------------------ */
 .display-title {

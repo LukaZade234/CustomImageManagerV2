@@ -49,7 +49,6 @@ class AppErrorBoundary extends React.Component {
 function App() {
   const loadCharacters = useStore((s) => s.loadCharacters)
   const loadSaved = useStore((s) => s.loadSaved)
-  const searchQuery = useStore((s) => s.searchQuery)
 
   useEffect(() => {
     loadCharacters()
@@ -62,18 +61,15 @@ function App() {
       <Toast />
       <AppErrorBoundary>
         <main className="container">
-          {searchQuery.trim() ? (
-            <SearchResultsPage />
-          ) : (
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/saved" element={<SavedPage />} />
-              <Route path="/add" element={<AddPage />} />
-              <Route path="/customs" element={<CustomsPage />} />
-              <Route path="/character/:name" element={<CharacterPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          )}
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/saved" element={<SavedPage />} />
+            <Route path="/add" element={<AddPage />} />
+            <Route path="/customs" element={<CustomsPage />} />
+            <Route path="/search" element={<SearchResultsPage />} />
+            <Route path="/character/:name" element={<CharacterPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
       </AppErrorBoundary>
     </>

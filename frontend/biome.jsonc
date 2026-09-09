@@ -21,13 +21,15 @@
     "rules": {
       "recommended": true,
       "style": {
-        // 102 hits on hand-written CSS that works correctly. A stylistic
-        // opinion about selector order, not a defect.
+        // Still noisy on the un-migrated half of legacy.css. Worth turning
+        // back on once that file is gone.
         "noDescendingSpecificity": "off"
       },
       "complexity": {
-        // !important is used deliberately for dark-mode overrides.
-        "noImportantStyles": "off"
+        // Was off because dark mode was implemented as !important overrides.
+        // The token layer removed all 33 of them, so the rule now guards
+        // against them coming back.
+        "noImportantStyles": "error"
       },
       "suspicious": {
         // False positives: flags arrow callbacks passed to forEach, which

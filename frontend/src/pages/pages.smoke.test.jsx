@@ -75,10 +75,17 @@ describe('page smoke tests', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
-  it('renders search results for a query', () => {
-    useStore.setState({ searchQuery: 'rei' })
-    renderAt(<SearchResultsPage />)
+  it('renders search results from the URL, not from store state', () => {
+    renderAt(<SearchResultsPage />, '/search?q=rei&by=name')
     expect(screen.getByRole('heading', { level: 1, name: /search results/i })).toBeInTheDocument()
+    expect(screen.getByText('Ayanami Rei')).toBeInTheDocument()
+    expect(screen.queryByText('Makise Kurisu')).not.toBeInTheDocument()
+  })
+
+  it('searches series when the URL says so', () => {
+    renderAt(<SearchResultsPage />, '/search?q=steins&by=series')
+    expect(screen.getByText('Makise Kurisu')).toBeInTheDocument()
+    expect(screen.queryByText('Ayanami Rei')).not.toBeInTheDocument()
   })
 
   it('renders a character page', () => {

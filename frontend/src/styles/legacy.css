@@ -704,7 +704,7 @@
   flex: 0 0 auto;
   min-width: 0;
 }
-@media (min-width: 520px) {
+@media (min-width: 480px) {
   .customs-sort-field {
     flex-direction: row;
     align-items: center;
@@ -1464,7 +1464,7 @@ body.reorder-touch-dragging {
   align-items: stretch;
   min-height: 0;
 }
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .ai-command-limit-dialog__columns {
     grid-template-columns: 1fr;
   }

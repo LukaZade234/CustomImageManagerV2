@@ -1,13 +1,15 @@
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getImageUrl } from '../api'
 import { Card } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 export default function SearchResultsPage() {
-  const searchQuery = useStore((s) => s.searchQuery)
-  const setSearchQuery = useStore((s) => s.setSearchQuery)
-  const mode = useStore((s) => s.searchMode)
+  // Read from the URL, not the store, so a result page is linkable and the
+  // back button works.
+  const [params] = useSearchParams()
+  const searchQuery = params.get('q') || ''
+  const mode = params.get('by') === 'series' ? 'series' : 'name'
   const sort = useStore((s) => s.searchSort)
   const characters = useStore((s) => s.characters)
   const loading = useStore((s) => s.loading)
@@ -30,11 +32,8 @@ export default function SearchResultsPage() {
   }, [searchQuery, mode, sort, characters])
 
   const handleSelect = (char) => {
-    setSearchQuery('')
     navigate(`/character/${encodeURIComponent(char.name)}`)
   }
-
-  if (!searchQuery.trim()) return null
 
   if (loading && characters.length === 0) {
     return (

@@ -144,6 +144,20 @@
   --sticky-nav-height: 80px;
   --sticky-nav-height-mobile: 148px;
 
+  /*
+   * ---- Breakpoints --------------------------------------------------
+   * Media queries cannot read custom properties, so these are documented
+   * rather than declared. Use only these four, and only these:
+   *
+   *   480px   small phone
+   *   768px   phone / tablet boundary (769px for the min-width complement)
+   *   960px   the navbar wraps to two rows below this
+   *   1200px  nav labels collapse to icons below this
+   *
+   * The sheet previously mixed nine unnamed values (380/480/520/640/720/
+   * 768/769/960/1200) in both directions.
+   */
+
   /* ---- Layers ------------------------------------------------------ */
   --z-nav: 100;
   --z-dropdown: 200;

@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
 import { Input, SegmentedControl, Select } from './ui'
 
@@ -7,6 +9,10 @@ const SORT_OPTIONS = [
   { value: 'series', label: 'Series (A-Z)' },
 ]
 
+export function searchPath(query, mode) {
+  return `/search?q=${encodeURIComponent(query)}&by=${mode}`
+}
+
 export default function SearchBar() {
   const searchQuery = useStore((s) => s.searchQuery)
   const setSearchQuery = useStore((s) => s.setSearchQuery)
@@ -15,6 +21,35 @@ export default function SearchBar() {
   const sort = useStore((s) => s.searchSort)
   const setSort = useStore((s) => s.setSearchSort)
 
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
+
+  const onSearchRoute = location.pathname === '/search'
+  const urlQuery = onSearchRoute ? params.get('q') || '' : ''
+  const urlMode = params.get('by') === 'series' ? 'series' : 'name'
+
+  // The URL is the source of truth for what is being searched. This adopts it
+  // on any navigation — a shared link, the back button, or leaving the results
+  // page, which is what clears the field.
+  useEffect(() => {
+    setSearchQuery(urlQuery)
+  }, [urlQuery, setSearchQuery])
+
+  useEffect(() => {
+    if (onSearchRoute) setMode(urlMode)
+  }, [onSearchRoute, urlMode, setMode])
+
+  const go = (query, nextMode) => {
+    if (!query) {
+      if (onSearchRoute) navigate('/', { replace: true })
+      return
+    }
+    // Replace while already searching, so a search does not leave one history
+    // entry per keystroke behind it.
+    navigate(searchPath(query, nextMode), { replace: onSearchRoute })
+  }
+
   return (
     <div className="search-bar-cluster">
       <div className="search-input-wrapper">
@@ -22,7 +57,10 @@ export default function SearchBar() {
           type="search"
           className="char-search-input"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value)
+            go(e.target.value, mode)
+          }}
           placeholder={mode === 'name' ? 'Search by name...' : 'Search by series...'}
           aria-label={mode === 'name' ? 'Search by character name' : 'Search by series'}
           autoComplete="off"
@@ -32,7 +70,10 @@ export default function SearchBar() {
           name="search-mode"
           label="Search by"
           value={mode}
-          onChange={setMode}
+          onChange={(v) => {
+            setMode(v)
+            go(searchQuery, v)
+          }}
           options={[
             { value: 'name', label: 'Name' },
             { value: 'series', label: 'Series' },
