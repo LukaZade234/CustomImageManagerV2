@@ -409,6 +409,62 @@ Independent of the above and worth doing early. A script can currently empty the
 
 ---
 
+## Phase 11 — Design system — **FOUNDATION COMPLETE**
+
+The frontend had no design system, which is why it read as cheap: 387 hex literals across 85
+distinct colours (the unmodified Bootstrap 4 defaults), the Windows default font stack, four
+page-shell recipes with different padding/radius/shadow for the same job, eight button styles
+sharing no base, three independent modal implementations, and dark mode as 144 hand-written
+override selectors. Every decision had been made locally, so nothing compounded.
+
+Register: a dense, restrained tool. Hairline borders over drop shadows, colour reserved for state
+and meaning, chrome receding so the character art carries the colour. Light and dark are equal,
+both derived from one token set, following `prefers-color-scheme` by default.
+
+- [x] **Token layer** — `styles/tokens.css`. Semantic colour, 4px spacing scale, four radii, two
+      elevations, weights and tracking, motion, layers. Neutrals tinted, never pure grey. Accent
+      moved off `#007bff`.
+- [x] **Three-state theming** — `system` / `light` / `dark` as a `data-theme` attribute on `<html>`,
+      absent for the system case. All 107 dark-mode rule blocks and all 33 `!important`s gone.
+      `noImportantStyles` re-enabled to keep them gone.
+- [x] **Typeface** — Geist, self-hosted as a 69 KB variable woff2 (SIL OFL), replacing
+      `'Segoe UI', Tahoma, Geneva, Verdana`.
+- [x] **Primitives** — `components/ui/`: Button, IconButton, Card, Badge, Input, Select, Field,
+      SegmentedControl, Modal, EmptyState, and the `useDialog` hook that all three dialogs had been
+      duplicating. Two of them gained a working Tab trap they had been missing while setting
+      `aria-modal`.
+- [x] **All six pages on one Card.** Inline style objects: 76 → 3, and the three are
+      `display: none` on hidden file inputs.
+- [x] **Search is a route.** `/search?q=&by=` replaces swapping the page content out from under the
+      router with no URL change. Results are linkable and the back button works.
+- [x] **Saved page is a real CSS grid**, replacing `width: calc(12.5% - 18px)` hardcoded to eight
+      columns plus four breakpoint overrides.
+- [x] **One `<h1>` per page.** The only `<h1>` in the app had been inside the error boundary.
+- [x] **Focus is visible again** — one `:focus-visible` ring replaces four `outline: none` rules
+      and five `!important` resets. Plus a `prefers-reduced-motion` guard.
+- [x] **Breakpoints** consolidated from nine unnamed values to four documented ones.
+- [x] **`pages.smoke.test.jsx`** renders every route, because the build does not type-check and a
+      missing import fails only in the browser.
+
+Still open, and deliberately after Phase 6 — ownership, hide-for-me and report controls change what
+each gallery item must show, so building this now means building it twice:
+
+- [ ] **The CharacterPage gallery.** Still ragged flexbox at a fixed 200px row height, so a
+      panoramic image occupies 680px beside a 130px portrait. The single worst-looking thing left.
+- [ ] **Home page information architecture.** Two stat cards and a feature bullet list, shown to
+      people already using the tool.
+- [ ] **Retire `legacy.css`** — 1888 lines, down from 2874. It now contains no colour literals, no
+      ID selectors and no `!important`, but it is still un-migrated markup.
+- [ ] **The remaining 22 Biome findings**, almost all `noStaticElementInteractions` and
+      `useKeyWithClickEvents` on div-as-button patterns in CharacterPage.
+- [ ] **Re-enable `noDescendingSpecificity`** once `legacy.css` is gone.
+
+Impeccable (`impeccable.style`, a design skill pack for AI coding agents) was evaluated and
+deliberately **skipped for now**. Its leverage is highest when there is a system to align to;
+there was none. Worth revisiting for `critique` / `audit` / `polish` against what now exists.
+
+---
+
 ## Testing detail (harness set up in Phase 1)
 
 The harness goes up in Phase 1. These are the rules worth covering, in the order they become

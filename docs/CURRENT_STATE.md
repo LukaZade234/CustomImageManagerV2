@@ -345,7 +345,9 @@ React 18 + react-router-dom 6 + zustand + Vite 5. 4,035 lines.
 entire map), `lastUpdated`, `darkMode`, `toasts`. No react-query/SWR, no normalized cache. Retry
 and backoff are hand-written in both `useStore.js:61` and `api.js:59`.
 
-**Only browser-persisted state is `localStorage['darkMode']`** (`useStore.js:22`).
+**Only browser-persisted state is the theme choice** — `localStorage['darkMode']` at the time this
+document was written, since replaced by `localStorage['theme']` with a three-state value
+(`system` / `light` / `dark`) and a migration from the old boolean. See `DEVELOPMENT.md`.
 
 **API client:** a plain object of functions in `api.js:51`, using a generic `api()` helper for
 JSON plus bespoke `fetch` calls for multipart and SSE. `mudaeAddSeriesStream` (`api.js:169`)

@@ -107,6 +107,71 @@ TypeScript is adopted **incrementally**: `allowJs: true`, `checkJs: false`. Exis
 `.js`/`.jsx` are not type-checked; convert a file to `.ts`/`.tsx` and it is. Shared API
 shapes live in `frontend/src/types.ts`.
 
+## Frontend styling
+
+There is no CSS framework and no CSS-in-JS. Styling is a token layer plus a small set of
+primitives, loaded in this order by `frontend/src/styles/index.css`:
+
+| File | What belongs in it |
+|---|---|
+| `tokens.css` | Every custom property. Colour, spacing, radius, elevation, type, motion, layers. |
+| `base.css` | Reset, element defaults, shared typography classes, the focus ring, `@font-face`. |
+| `layout.css` | The page frame. |
+| `legacy.css` | The pre-token stylesheet, being migrated away. **Nothing new goes here.** |
+| `pages.css` | Page rules already written against the system. New page CSS goes here. |
+| `ui.css` | The primitives. Loaded last so a primitive wins over a leftover legacy rule. |
+
+Four rules, all of which the codebase previously broke:
+
+**No colour literal outside `tokens.css`.** Not a hex value, not `white`, not an `rgba()`. If a
+colour is needed that no token expresses, add the token — in all three theme blocks. The old
+`App.css` had 387 hex literals across 85 distinct colours and no way to change any of them once.
+
+**No raw spacing, radius or shadow values.** Use `--space-*`, `--radius-*`, `--shadow-*`. A
+one-off positioning offset that is genuinely not spacing (`--search-toggle-width`) can be a local
+custom property on the rule that needs it, named and commented.
+
+**No inline `style` objects for appearance.** They cannot respond to the theme and they cannot be
+overridden. `style={{ display: 'none' }}` on a hidden file input is the only accepted use; anything
+else gets a class. There were 76 of these, four of which hardcoded colours with no dark-mode
+counterpart.
+
+**Reach for a primitive before writing a button, input, card or dialog.** `frontend/src/components/ui`
+exports `Button`, `IconButton`, `Card`, `Badge`, `Input`, `Select`, `Field`, `SegmentedControl`,
+`Modal`, `EmptyState` and the `useDialog` hook. If a caller needs a size or variant that does not
+exist, add it to the primitive rather than passing an inline override — the previous stylesheet had
+eight button styles sharing no base and the same size override repeated fifteen times in one file.
+
+### Theming
+
+Three states: `system` (the default), `light`, `dark`. The DOM contract is a `data-theme`
+attribute on `<html>`, **present only for an explicit choice** — its absence is what lets
+`prefers-color-scheme` decide. Never write `data-theme="system"`.
+
+`tokens.css` therefore defines every colour three times, and the order matters:
+
+```css
+:root { ... }                                              /* complete light palette */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { ... }                  /* system dark */
+}
+:root[data-theme="dark"] { ... }                           /* explicit dark wins */
+```
+
+A colour whose only definition lives inside a media query or a `[data-theme]` block will be
+missing in browsers that match neither. `frontend/src/theme.js` owns the storage key, the
+migration from the old `darkMode` boolean, and the cycle order; `index.html` repeats the read
+inline in `<head>` so an explicit choice never flashes the other theme.
+
+Dark mode used to be 144 hand-written `body.dark-mode` override selectors and 33 `!important`
+declarations. Do not add another. Biome's `noImportantStyles` is on to enforce it.
+
+### Breakpoints
+
+Four, and only four: **480, 768** (`769` for the `min-width` complement), **960, 1200**. They are
+documented in `tokens.css` rather than declared, because media queries cannot read custom
+properties. The sheet previously mixed nine unnamed values in both directions.
+
 ## Writing to the database
 
 `db.py` wraps SQLite (`sqlite3`, standard library). There is no ORM and no query
@@ -155,6 +220,10 @@ different hat.
 - **A `strict` xfail marks a known bug**, not a flaky test. When the bug is fixed the test
   XPASSes and fails the suite, forcing the marker to be removed. Do not convert one to a
   skip.
+- **The frontend build does not type-check JSX.** A component referencing an identifier it never
+  imported builds cleanly and fails only in the browser. `pages.smoke.test.jsx` renders every
+  route for exactly this reason — it caught precisely that bug during the design-system work.
+  Add a page there when you add a route.
 - **Gunicorn settings live in `gunicorn.conf.py`,** not in the command line, and each is
   commented with why. Override at runtime with `WEB_WORKERS`, `WEB_THREADS`, `WEB_TIMEOUT`.
   The worker class is `gthread` on purpose: gevent monkey-patches sockets and conflicts with
