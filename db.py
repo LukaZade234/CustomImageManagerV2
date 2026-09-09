@@ -26,6 +26,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+import identity
+
 _REPO_ROOT = Path(__file__).resolve().parent
 _MIGRATIONS_DIR = _REPO_ROOT / "migrations"
 
@@ -385,11 +387,35 @@ def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
     return [dict(r) for r in rows]
 
 
-def _ensure_identity(conn: sqlite3.Connection, identity_id: str) -> None:
+def _ensure_identity(conn: sqlite3.Connection, identity_id: str, handle: str | None = None) -> None:
+    """Create the row if this is the identity's first write.
+
+    Rows are created lazily: a cookie is issued to every visitor, but only
+    someone who actually stores something needs a row. INSERT-then-ignore rather
+    than check-then-insert, for the usual reason.
+    """
+    if handle is None:
+        handle = identity.handle_for(identity_id)
     conn.execute(
         "INSERT INTO identities (id, handle) VALUES (?, ?) ON CONFLICT (id) DO NOTHING",
-        (identity_id, "Legacy"),
+        (identity_id, handle),
     )
+
+
+def ensure_identity(identity_id: str, handle: str | None = None) -> None:
+    """Public form of the above, for callers outside a transaction."""
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id, handle)
+
+
+def get_identity(identity_id: str) -> dict | None:
+    """The stored row, or None if this identity has never written anything."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, handle, discord_id, role, created_at FROM identities WHERE id = ?",
+        (identity_id,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:

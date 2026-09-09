@@ -32,6 +32,7 @@ except ImportError:
 
 # Import utility functions
 import db
+import identity
 import mudae_discord
 from image_utils import convert_to_png, validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
@@ -375,7 +376,19 @@ def _validate_character_name(name):
 
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-key-change-in-production")
+
+# SECRET_KEY signs identity cookies from Phase 6 on, so it is load-bearing: a
+# changed key silently turns every visitor into a new person. resolve_secret_key
+# refuses to start a deployed configuration without one, and generates an
+# ephemeral key for local development.
+_secret_key, _secret_is_ephemeral = identity.resolve_secret_key()
+app.config["SECRET_KEY"] = _secret_key
+if _secret_is_ephemeral:
+    print(
+        "[IDENTITY] SECRET_KEY is unset; using a random key for this process. "
+        "Identities will reset when it restarts. Fine for local development.",
+        flush=True,
+    )
 
 # CORS.
 #
@@ -398,6 +411,12 @@ cors_origins = [o.strip() for o in _origins.split(",") if o.strip()]
 if cors_origins:
     CORS(app, origins=cors_origins, supports_credentials=True)
 Compress(app)
+
+# Every request resolves a caller; a visitor without a cookie is issued one on
+# the way out. Registered here rather than per-blueprint so no route can
+# accidentally run without an identity available.
+app.before_request(identity.load_identity)
+app.after_request(identity.persist_identity)
 
 
 @app.before_request
@@ -456,6 +475,28 @@ _DEPLOYED_REVISION = _deployed_revision()
 def health():
     """Lightweight liveness for load balancers and probes (no heavy work)."""
     return jsonify({"status": "ok", "service": "imgmanager", "revision": _DEPLOYED_REVISION})
+
+
+@app.route("/api/me", methods=["GET"])
+def get_me():
+    """Who the caller is, as far as the server is concerned.
+
+    Deliberately does not return the identity id. The cookie is HttpOnly so that
+    script cannot read or copy it; handing the same value back in JSON would
+    give that away for nothing. The frontend never needs the id -- ownership is
+    reported per image by the server, which is the only place it can be decided
+    anyway.
+    """
+    me = identity.current_identity()
+    return jsonify(
+        {
+            "handle": me.handle,
+            "role": me.role,
+            "is_moderator": me.is_moderator,
+            "is_owner": me.is_owner,
+            "signed_in": me.discord_id is not None,
+        }
+    )
 
 
 @app.route("/api/last-updated", methods=["GET"])
