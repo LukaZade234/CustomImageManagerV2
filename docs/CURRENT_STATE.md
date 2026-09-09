@@ -81,7 +81,7 @@ Both exist in the repo and disagree with each other:
 |---|---|---|
 | `IMGCHEST_API_KEY` | Yes | ImgChest uploads |
 | `DATABASE_URL` | Yes | Neon PostgreSQL |
-| `SECRET_KEY` | No | Set on `app.config` at `upload_imgchest.py:377` and **never read anywhere** |
+| `SECRET_KEY` | Yes (since Phase 6) | Signs identity cookies. Was set and never read at the time this document was written. |
 | `CORS_ORIGINS` | No | Comma-separated. **Defaults to `*`** |
 | `DISCORD_USER_TOKEN` | For Mudae | A real user account token (self-bot) |
 | `DISCORD_CHANNEL_ID` | For Mudae | Channel where `$im` / `$ima` are sent |
@@ -446,7 +446,7 @@ backslash paths from a pre-React era and has **zero references** anywhere in the
 | 5 npm vulnerabilities (2 high) | `esbuild`, `nanoid`, `react-router` | Fixed by the pending major upgrades |
 | Discord identify quota burn | `mudae_discord.py:1348` | Connect/disconnect per request, ~1000/day cap |
 | Discord self-bot ToS | `mudae_discord.py` | Account ban would remove all Mudae features |
-| `SECRET_KEY` unused | `upload_imgchest.py:377` | Falls back to a hardcoded dev key |
+| ~~`SECRET_KEY` unused~~ | — | Fixed in Phase 6: required in production, no hardcoded default. |
 | Health check checks nothing | `upload_imgchest.py:409` | Reports healthy with a dead database |
 | Full-map fetch on Home | `HomePage.jsx:16` | Unbounded payload growth |
 | Undo clobbers concurrent edits | `CharacterPage.jsx:635` | Restores a stale array wholesale |

@@ -302,44 +302,49 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
 
 ---
 
-## Phase 6 — Identity and moderation
+## Phase 6 — Identity and moderation — **COMPLETE except Discord OAuth**
 
 The design is settled in `DECISIONS.md` §1, §4, §5. This is implementation only — if something
 here seems wrong, read the rationale before changing it.
 
-- [ ] **Cookie pseudonym identity.** A signed cookie (via `itsdangerous`, already a Flask
-      dependency) carrying a stable id, issued on first visit with a generated
-      adjective-plus-animal handle. Attach to `flask.g`; set it in an `after_request` hook. No
-      login screen, ever.
-- [ ] **`SECRET_KEY` becomes required.** It is currently set and never read. Once it signs identity
-      cookies, a changed or missing key silently turns every user into a new person on restart.
-      Validate at startup; document as a required secret.
-- [ ] **Optional Discord OAuth.** Binds an existing pseudonym to a real Discord account so identity
-      survives cookie loss. **Requires registering a new Discord application** —
-      `DISCORD_USER_TOKEN` is a self-bot token and cannot be used for OAuth. New vars:
-      `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `OWNER_DISCORD_ID`.
-- [ ] **Roles.** `user` / `moderator` / `owner` on `identities.role`. Owner bootstrapped by
-      matching `OWNER_DISCORD_ID` at login. Moderators can remove any image and restore from the
-      drawer; the owner can also promote and demote. **A fallback, not the primary mechanism.**
-- [ ] **Ownership rule on delete.** `POST /api/delete-custom-images` removes only rows where
-      `added_by` matches the caller (or the caller is moderator/owner). Sets `state='removed'`
-      rather than deleting. Returns per-image results so the UI can explain partial refusals.
-- [ ] **Hide-for-me.** `POST /api/hide-images` and `/api/unhide-images`, writing `user_hidden`.
-      Instant, unlimited, no global effect whatsoever.
-- [ ] **Report.** `POST /api/report-image` with a reason from `wrong_character | dead_link | nsfw |
-      duplicate`. On the second *distinct* reporter, set `state='removed'`. Objective criteria
-      only — never taste.
-- [ ] **Removed drawer.** `GET /api/removed/<character>` and `POST /api/restore-image`, restorable
-      by anyone. Nothing is ever hard-deleted.
-- [ ] **Take logging.** `POST /api/takes` fired by Download and Copy `$ai`. Logged, but **drives
-      nothing** except the optional sort. Deliberate — see `DECISIONS.md` §1.
-- [ ] **Frontend rework of delete mode.** Your own images get **Remove**; others' get **Hide**.
-      Mixed selections show both counts. Owner handle on hover. Hidden images filtered out with a
-      "Show N hidden" toggle. Report action in the image modal. **Add a confirmation step to bulk
-      removal** — there is none today.
-- [ ] **Fix the undo path.** The current 8-second undo calls `reorderCustomImages` to write a stale
-      array back wholesale, clobbering anyone else's concurrent edits. Point it at
-      restore/unhide instead.
+- [x] **Cookie pseudonym identity.** `identity.py`. A signed cookie (`itsdangerous`) carrying a
+      stable id, issued on first visit; the handle is *derived* from the id with blake2b rather
+      than stored, so it can be reconstructed anywhere without putting it in the cookie. Rows in
+      `identities` are created lazily on first write — a test asserts that browsing alone leaves
+      the table empty. No login screen.
+- [x] **`SECRET_KEY` becomes required.** `resolve_secret_key()` refuses to start a deployed
+      configuration without one and generates an ephemeral key with a warning locally. The old
+      `dev-key-change-in-production` default is gone: shipped to production it would have let
+      anyone forge another user's identity cookie. `CORS_ORIGINS` is the signal for "deployed".
+- [ ] **Optional Discord OAuth.** Blocked on registering a Discord application —
+      `DISCORD_USER_TOKEN` is a self-bot token and cannot be used for OAuth. Needs
+      `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `OWNER_DISCORD_ID`. The schema column and the
+      `signed_in` flag on `/api/me` are already in place.
+- [x] **Roles.** `identities.role` is read on every request that needs it and surfaced through
+      `/api/me`. Moderator and owner both bypass the ownership check. Owner bootstrapping waits on
+      OAuth, since it keys off `OWNER_DISCORD_ID` at login.
+- [x] **Ownership rule on delete.** `remove_custom_images` soft-deletes only rows whose `added_by`
+      matches the caller, or any row for a moderator. Returns `{removed, denied, missing}` so a
+      partial refusal can be explained. Images migrated from v1 have `added_by IS NULL` and so
+      cannot be removed by an ordinary user at all — intended.
+- [x] **Hide-for-me.** `POST /api/hide-images` / `/api/unhide-images`. Instant, unlimited, and
+      invisible to everyone else; a test pins that a hide changes nothing for a second viewer.
+- [x] **Report.** `POST /api/report-image`, four objective reasons, removal on the second
+      *distinct* reporter. The composite primary key is what makes one determined reporter unable
+      to reach the threshold alone.
+- [x] **Removed drawer.** `GET /api/removed/<character>` and `POST /api/restore-images`,
+      restorable by anyone. Nothing is ever hard-deleted.
+- [x] **Take logging.** `POST /api/takes` on Download and Copy `$ai`. Drives nothing.
+- [x] **Frontend rework of delete mode.** "Remove or hide": your images get **Remove mine (n)**,
+      everyone else's get **Hide theirs (n)**, both counts always shown. Attribution on every
+      image, hidden images filtered out behind a "Show N hidden" toggle, Report in the viewer, the
+      Removed drawer, and a confirmation step on bulk removal that did not exist before.
+- [x] **Fix the undo path.** It called `reorderCustomImages` with a pre-delete array, which could
+      not restore a removed image and clobbered concurrent edits. It now calls restore.
+
+Not done, and deliberately: **`saved` is per-identity from here on.** In v1 it was one global
+list, so on cut-over the migrated bookmarks stay under the legacy identity and nobody inherits
+them. There are no v2 users yet, so this costs nothing now.
 
 ---
 
