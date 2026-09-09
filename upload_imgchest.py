@@ -9,7 +9,8 @@ import socket
 import sys
 import threading
 import uuid
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from functools import wraps
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 
@@ -126,19 +127,57 @@ def _allowed_image_proxy_url(url):
         return False
 
 
+# Ranges the stdlib does not flag but that must not be reachable from the origin.
+# `ipaddress` has no predicate for either.
+_EXTRA_BLOCKED_NETWORKS = (
+    # RFC 6598 carrier-grade NAT. Cloud providers use it for internal networks,
+    # so it is a live SSRF target, not a theoretical one.
+    ipaddress.ip_network("100.64.0.0/10"),
+    # RFC 2544 benchmarking range.
+    ipaddress.ip_network("198.18.0.0/15"),
+)
+
+# Enough to reach any legitimate CDN; far short of a redirect loop.
+_MAX_IMPORT_REDIRECTS = 5
+
+
+def _ip_is_blocked(ip):
+    """True for anything that is not a public, routable internet address."""
+    if ip.is_private or ip.is_loopback or ip.is_link_local:
+        return True
+    if ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        return True
+    # IPv6 site-local (fec0::/10). Deprecated, still routable on some networks,
+    # and carries none of the flags above.
+    if getattr(ip, "is_site_local", False):
+        return True
+    # An IPv4-mapped IPv6 address has to be judged as the IPv4 address it
+    # carries, or ::ffff:10.0.0.1 walks straight through.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None and _ip_is_blocked(mapped):
+        return True
+    return any(net.version == ip.version and ip in net for net in _EXTRA_BLOCKED_NETWORKS)
+
+
 def _host_resolves_only_to_public_ips(hostname):
-    """Block SSRF: reject if any resolved address is loopback, private, link-local, etc."""
+    """Block SSRF: reject if any resolved address is loopback, private, link-local, etc.
+
+    Residual risk, documented rather than fixed: this resolves the name, and then
+    `requests` resolves it again when it connects. A hostile DNS server can
+    answer public here and private there. Closing that needs connecting to a
+    pinned address with the Host header set by hand, which is a larger change
+    than it looks; the redirect handling below closes the cheaper variant of the
+    same trick.
+    """
     try:
         hostname = (hostname or "").lower().rstrip(".")
         if not hostname or hostname == "localhost":
             return False
         infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if not infos:
+            return False
         for res in infos:
-            addr = res[4][0]
-            ip = ipaddress.ip_address(addr)
-            if ip.is_private or ip.is_loopback or ip.is_link_local:
-                return False
-            if ip.is_reserved or ip.is_multicast:
+            if _ip_is_blocked(ipaddress.ip_address(res[4][0])):
                 return False
     except Exception:
         return False
@@ -217,22 +256,39 @@ def _guess_ext_from_response(content_type, final_url):
     return ".png"
 
 
+def _get_with_validated_redirects(url, **kwargs):
+    """GET a URL, validating **every** hop rather than only the last one.
+
+    `allow_redirects=True` follows the chain itself and hands back the final
+    URL, so a chain of public -> 192.168.1.1 -> public passed validation while
+    the request to the private host had already been made. Stepping the chain by
+    hand is the only way to check each target before it is fetched.
+
+    Returns the final response; the caller still owns closing it.
+    """
+    current = url
+    for _ in range(_MAX_IMPORT_REDIRECTS + 1):
+        if not _safe_import_image_url(current):
+            raise ValueError("URL not allowed or blocked (private hosts are not permitted)")
+        response = requests.get(
+            current, headers=_request_headers_for_image_import(current), **kwargs
+        )
+        if not response.is_redirect and not response.is_permanent_redirect:
+            return response
+        location = response.headers.get("Location")
+        response.close()
+        if not location:
+            raise ValueError("Redirect without a target")
+        current = urljoin(current, location)
+    raise ValueError("Too many redirects")
+
+
 def _fetch_image_from_url_for_import(url):
     """
     Download remote image to a temp file. Validates URL before and after redirects.
     Returns (temp_path, display_filename) or raises ValueError.
     """
-    if not _safe_import_image_url(url):
-        raise ValueError("URL not allowed or blocked (private hosts are not permitted)")
-    r = requests.get(
-        url,
-        timeout=60,
-        headers=_request_headers_for_image_import(url),
-        allow_redirects=True,
-        stream=True,
-    )
-    if not _safe_import_image_url(r.url):
-        raise ValueError("Redirect target is not allowed")
+    r = _get_with_validated_redirects(url, timeout=60, allow_redirects=False, stream=True)
     if r.status_code != 200:
         raise ValueError(f"Image server returned HTTP {r.status_code}")
     total = 0
@@ -471,10 +527,142 @@ def _deployed_revision() -> str:
 _DEPLOYED_REVISION = _deployed_revision()
 
 
+# --- Rate limiting ------------------------------------------------------
+#
+# There was none at all before this. The limit that actually matters is on
+# uploads: every one is an ImgChest API call against a shared key, so an
+# unbounded client can get that key throttled or blocked and take the app's
+# whole reason for existing with it. The rest are bounded because an endpoint
+# with no ceiling is a liability, not because abuse is expected.
+#
+# Each action carries one or more (limit, window seconds) pairs. Two windows let
+# a burst be allowed while a sustained rate is not: 30 uploads in a minute is a
+# person pasting a batch, 2000 in an hour is not a person.
+
+_RATE_LIMIT_MULTIPLIER_FOR_STAFF = 10
+
+
+def _limits_from_env(name: str, default: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Override with e.g. RATE_LIMIT_UPLOAD="30/60,300/3600"."""
+    raw = os.environ.get(f"RATE_LIMIT_{name.upper()}", "").strip()
+    if not raw:
+        return default
+    try:
+        return [
+            (int(part.split("/")[0]), int(part.split("/")[1]))
+            for part in raw.split(",")
+            if part.strip()
+        ] or default
+    except (ValueError, IndexError):
+        print(f"[RATELIMIT] Ignoring malformed RATE_LIMIT_{name.upper()}={raw!r}", flush=True)
+        return default
+
+
+RATE_LIMITS = {
+    "upload": _limits_from_env("upload", [(30, 60), (300, 3600)]),
+    "import_urls": _limits_from_env("import_urls", [(10, 60), (100, 3600)]),
+    "add_character": _limits_from_env("add_character", [(10, 60), (60, 3600)]),
+    "edit_character": _limits_from_env("edit_character", [(30, 60), (200, 3600)]),
+    "remove": _limits_from_env("remove", [(30, 60), (200, 3600)]),
+    "restore": _limits_from_env("restore", [(30, 60), (200, 3600)]),
+    # Hiding is harmless to everyone else, so this is generous -- it exists only
+    # to stop an endpoint being an unbounded write loop.
+    "hide": _limits_from_env("hide", [(120, 60), (1000, 3600)]),
+    # Reports can remove other people's work, so an implausible rate should cool
+    # down. This is the "auto-cooldown" the roadmap asks for: at two distinct
+    # reporters per removal, 20 an hour is far more than honest use needs.
+    "report": _limits_from_env("report", [(5, 60), (20, 3600)]),
+    # Each Mudae call burns one of Discord's ~1000 daily identify calls.
+    "mudae": _limits_from_env("mudae", [(10, 60), (60, 3600)]),
+}
+
+
+def rate_limited(action):
+    """Reject the caller with 429 once they exceed `RATE_LIMITS[action]`."""
+
+    def decorator(view):
+        @wraps(view)
+        def wrapper(*args, **kwargs):
+            me = identity.current_identity()
+            # Moderators and the owner do the bulk curation work, so a limit set
+            # for a visitor would block exactly the person maintaining the site.
+            scale = _RATE_LIMIT_MULTIPLIER_FOR_STAFF if me.is_moderator else 1
+            for limit, per_seconds in RATE_LIMITS[action]:
+                allowed, retry_after = db.check_rate_limit(
+                    me.id, action, limit=limit * scale, per_seconds=per_seconds
+                )
+                if not allowed:
+                    print(f"[RATELIMIT] {action} blocked for {me.handle}", flush=True)
+                    response = jsonify(
+                        {
+                            "error": "You are doing that too quickly. Wait a moment and try again.",
+                            "retry_after": retry_after,
+                        }
+                    )
+                    response.status_code = 429
+                    response.headers["Retry-After"] = str(retry_after)
+                    return response
+            return view(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     """Lightweight liveness for load balancers and probes (no heavy work)."""
     return jsonify({"status": "ok", "service": "imgmanager", "revision": _DEPLOYED_REVISION})
+
+
+@app.route("/api/stats", methods=["GET"])
+def get_stats():
+    """The two numbers on the landing page.
+
+    Replaces the home page's full-map fetch: it used to download every image URL
+    for every character -- around 475 KB uncompressed -- and count them in the
+    browser to display two integers.
+    """
+    try:
+        return jsonify(db.get_custom_image_stats())
+    except Exception as e:
+        print(f"Error reading stats: {e}")
+        return jsonify({"custom_images": 0, "characters_with_customs": 0})
+
+
+@app.route("/api/customs", methods=["GET"])
+def list_customs():
+    """One page of the browse-customs list, searched and sorted server-side.
+
+    The client used to hold the whole library in memory and filter it there,
+    which is both wasteful now and unworkable later: the roster is meant to grow
+    to tens of thousands of characters, at which point client-side filtering
+    stops being an option.
+    """
+    args = request.args
+    try:
+        page = int(args.get("page", 1))
+        per_page = int(args.get("per_page", 20))
+    except ValueError:
+        return jsonify({"error": "page and per_page must be integers"}), 400
+
+    sort = args.get("sort", "recent")
+    if sort not in db.CUSTOMS_SORT_KEYS:
+        return jsonify({"error": f"sort must be one of: {', '.join(db.CUSTOMS_SORT_KEYS)}"}), 400
+
+    try:
+        return jsonify(
+            db.list_characters_with_customs(
+                query=args.get("q", ""),
+                mode="series" if args.get("by") == "series" else "name",
+                sort=sort,
+                page=page,
+                per_page=per_page,
+            )
+        )
+    except Exception as e:
+        print(f"Error listing customs: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/me", methods=["GET"])
@@ -546,6 +734,9 @@ def get_character_image(filename):
 
 
 # Serve custom_images from PostgreSQL (JSON response; URL kept for API compatibility)
+# Superseded by /api/stats and /api/customs. Nothing in the SPA calls this any
+# more; it is kept only in case something outside the app does. Around 475 KB
+# uncompressed, so it should go once that is confirmed.
 @app.route("/custom_images.json")
 def serve_custom_images_json():
     try:
@@ -709,6 +900,7 @@ def save_character():
 
 
 @app.route("/api/add-character", methods=["POST"])
+@rate_limited("add_character")
 def add_character():
     """Add a new character."""
     name = request.form.get("name", "").strip()
@@ -782,6 +974,7 @@ def remove_saved(name):
 
 
 @app.route("/api/custom-image", methods=["POST"])
+@rate_limited("upload")
 def add_custom_image():
     try:
         if "character_name" not in request.form:
@@ -860,6 +1053,7 @@ def add_custom_image():
 
 
 @app.route("/api/import-custom-images-from-urls", methods=["POST"])
+@rate_limited("import_urls")
 def import_custom_images_from_urls():
     """Fetch image URLs server-side (drag-from-web: Pinterest, etc.) and add as custom images."""
     try:
@@ -959,6 +1153,7 @@ def reorder_custom_images():
 
 
 @app.route("/api/delete-custom-image", methods=["POST"])
+@rate_limited("remove")
 def delete_custom_image():
     """Remove a single image. 403 when it is not the caller's to remove."""
     data = request.get_json()
@@ -991,6 +1186,7 @@ def delete_custom_image():
 
 
 @app.route("/api/delete-custom-images", methods=["POST"])
+@rate_limited("remove")
 def delete_custom_images():
     """Remove the caller's own images from a selection.
 
@@ -1038,6 +1234,7 @@ def get_removed_images(char_name):
 
 
 @app.route("/api/restore-images", methods=["POST"])
+@rate_limited("restore")
 def restore_images():
     """Put removed images back.
 
@@ -1072,6 +1269,7 @@ def _image_ids_from(data):
 
 
 @app.route("/api/hide-images", methods=["POST"])
+@rate_limited("hide")
 def hide_images():
     """Hide images for the caller only.
 
@@ -1092,6 +1290,7 @@ def hide_images():
 
 
 @app.route("/api/unhide-images", methods=["POST"])
+@rate_limited("hide")
 def unhide_images():
     data = request.get_json() or {}
     ids, error = _image_ids_from(data)
@@ -1107,6 +1306,7 @@ def unhide_images():
 
 
 @app.route("/api/report-image", methods=["POST"])
+@rate_limited("report")
 def report_image():
     """Report an image for an objective problem.
 
@@ -1163,6 +1363,7 @@ def record_takes():
 
 
 @app.route("/api/edit-character", methods=["POST"])
+@rate_limited("edit_character")
 def edit_character():
     data = request.get_json()
     required = ["original_name", "new_name", "series", "rank"]
@@ -1206,6 +1407,7 @@ def edit_character():
 
 
 @app.route("/api/set-main-image", methods=["POST"])
+@rate_limited("edit_character")
 def set_main_image():
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -1350,14 +1552,7 @@ def mudae_proxy_image():
     if not _safe_import_image_url(url):
         return jsonify({"error": "URL not allowed"}), 403
     try:
-        r = requests.get(
-            url,
-            timeout=60,
-            headers=_request_headers_for_image_import(url),
-            allow_redirects=True,
-        )
-        if not _safe_import_image_url(r.url):
-            return jsonify({"error": "Redirect target not allowed"}), 403
+        r = _get_with_validated_redirects(url, timeout=60, allow_redirects=False)
         if r.status_code != 200:
             return jsonify({"error": f"Image server returned {r.status_code}"}), 502
         raw = r.content
@@ -1369,12 +1564,17 @@ def mudae_proxy_image():
         if "image/" not in ct and "octet-stream" not in ct:
             ct = "image/png"
         return Response(raw, mimetype=ct, headers={"Cache-Control": "private, max-age=300"})
+    except ValueError as e:
+        # A blocked redirect hop, not a transport failure.
+        print(f"[MUDAE] proxy-image refused: {e}", flush=True)
+        return jsonify({"error": "URL not allowed"}), 403
     except requests.RequestException as e:
         print(f"[MUDAE] proxy-image error: {type(e).__name__}: {e}", flush=True)
         return jsonify({"error": "Could not load image"}), 502
 
 
 @app.route("/api/mudae/lookup-character", methods=["POST"])
+@rate_limited("mudae")
 def mudae_lookup_character():
     """
     Lookup a character via Mudae $im.
@@ -1424,6 +1624,7 @@ def mudae_lookup_character():
 
 
 @app.route("/api/mudae/lookup-series", methods=["POST"])
+@rate_limited("mudae")
 def mudae_lookup_series():
     """
     Resolve a series name via Mudae $ima.
@@ -1450,6 +1651,7 @@ def mudae_lookup_series():
 
 
 @app.route("/api/mudae/add-series", methods=["POST"])
+@rate_limited("mudae")
 def mudae_add_series():
     """
     Bulk-add characters from a series via $ima then $im each.
@@ -1630,6 +1832,7 @@ def _run_mudae_add_series(series, existing, progress_cb=None):
 
 
 @app.route("/api/mudae/refresh-main-image", methods=["POST"])
+@rate_limited("mudae")
 def mudae_refresh_main_image():
     """Fetch character card image from Mudae $im and set as main image."""
     data = request.get_json(silent=True) or {}

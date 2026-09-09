@@ -201,6 +201,33 @@ normal case and the UI has to be able to explain a partial refusal.
 per-process key with a warning. If it ever changes in production, every visitor
 silently becomes a new person and loses ownership of their uploads.
 
+## Rate limiting and URL fetching
+
+Every costly endpoint is wrapped in `@rate_limited("<action>")`. Limits live in
+`RATE_LIMITS` in `upload_imgchest.py`, one or more `(limit, window seconds)` pairs per
+action, each overridable with `RATE_LIMIT_<ACTION>="30/60,300/3600"`. A new endpoint
+that uploads, calls Discord, or writes in a loop needs one; the decorator raises
+`KeyError` on a name with no entry, which a test catches.
+
+The counter is `db.check_rate_limit`, which **increments before it reads**. Reading
+first and then incrementing lets two concurrent requests both see "one under the
+limit" — the same check-then-act race the database rules warn about. It counts
+attempts rather than successes on purpose: an upload that fails still cost an ImgChest
+call, and a client hammering failures is what needs stopping.
+
+**Two endpoints fetch a URL the caller supplies** — the drag-from-web import and the
+Mudae image proxy. Both run on the origin, inside a private network with a metadata
+service on it, so both go through `_safe_import_image_url` and
+`_get_with_validated_redirects`. Never call `requests.get` on a caller-supplied URL
+directly, and never pass `allow_redirects=True` with one: that follows the chain
+itself and hands back only the final URL, so a hop through a private host is fetched
+before anything can object. `_ip_is_blocked` covers the ranges `ipaddress` has no flag
+for, including IPv4-mapped IPv6 and RFC 6598 carrier NAT.
+
+Known residual risk, documented in the code: DNS rebinding. The hostname is resolved
+for validation and again by `requests` when it connects, so a hostile resolver can
+answer differently each time.
+
 ## Writing to the database
 
 `db.py` wraps SQLite (`sqlite3`, standard library). There is no ORM and no query

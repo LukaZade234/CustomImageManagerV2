@@ -168,11 +168,12 @@ so re-running to pick up late changes before cut-over is safe.
 
 ## 6. Cut over, then decommission
 
-1. Point DNS at Pages, confirm the site works end to end — add an image, reorder,
-   download, copy an `$ai` command.
-2. Re-run the migration to catch anything added to v1 in the meantime.
-3. **Verify a restore works before trusting it** (see below).
-4. Only then delete the DigitalOcean app and the Neon database.
+See **[CUTOVER.md](CUTOVER.md)** — it is the only operation here that happens once
+and cannot be fully undone, so it has its own runbook with the pre-flight gates, the
+rollback boundary, and the three decisions it forces.
+
+In outline: freeze v1 writes, take a final snapshot, re-run the migration, verify,
+switch, soak, and only then delete the DigitalOcean app and the Neon database.
 
 ---
 

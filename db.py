@@ -21,6 +21,7 @@ import atexit
 import os
 import sqlite3
 import threading
+import time
 from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -280,6 +281,130 @@ def get_custom_images() -> dict:
     return out
 
 
+# Whitelisted, never interpolated from user input. Each entry is an ORDER BY
+# fragment; a caller passes the key, not the SQL.
+_CUSTOMS_SORTS = {
+    # NULL updated_at means "never modified"; SQLite sorts NULL lowest, so DESC
+    # already puts those last, which is what v1 did.
+    "recent": "c.updated_at DESC, c.name COLLATE NOCASE ASC",
+    # rank is TEXT and often empty, so unranked characters go last rather than
+    # sorting as zero.
+    "rank_asc": "CASE WHEN c.rank = '' THEN 1 ELSE 0 END, CAST(c.rank AS INTEGER) ASC",
+    "name_asc": "c.name COLLATE NOCASE ASC",
+    "name_desc": "c.name COLLATE NOCASE DESC",
+    "series_asc": "c.series COLLATE NOCASE ASC, c.name COLLATE NOCASE ASC",
+    "count_desc": "image_count DESC, c.name COLLATE NOCASE ASC",
+    "count_asc": "image_count ASC, c.name COLLATE NOCASE ASC",
+}
+
+CUSTOMS_SORT_KEYS = tuple(_CUSTOMS_SORTS)
+
+
+def get_custom_image_stats() -> dict:
+    """The two numbers the landing page shows.
+
+    Previously the frontend downloaded every image URL for every character --
+    around 475 KB -- and counted them in the browser.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) AS images, COUNT(DISTINCT character_id) AS characters"
+        "  FROM custom_images WHERE state = 'active'"
+    ).fetchone()
+    return {"custom_images": row["images"], "characters_with_customs": row["characters"]}
+
+
+def list_characters_with_customs(
+    *,
+    query: str = "",
+    mode: str = "name",
+    sort: str = "recent",
+    page: int = 1,
+    per_page: int = 20,
+    preview_count: int = 3,
+) -> dict:
+    """One page of the browse-customs list, searched and sorted in SQL.
+
+    Doing this in the browser meant shipping the entire library to render twenty
+    rows, and it does not survive the roster growing -- the plan is to seed tens
+    of thousands of characters, at which point client-side filtering stops being
+    an option at all.
+    """
+    order_by = _CUSTOMS_SORTS.get(sort) or _CUSTOMS_SORTS["recent"]
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+
+    column = "c.series" if mode == "series" else "c.name"
+    term = (query or "").strip()
+    where = "i.state = 'active'"
+    params: list = []
+    if term:
+        # LIKE with COLLATE NOCASE rather than lower(): it uses the existing
+        # NOCASE indexes on name and series.
+        where += f" AND {column} LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+
+    conn = get_connection()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM ("
+        "  SELECT c.id FROM characters c"
+        "  JOIN custom_images i ON i.character_id = c.id"
+        f" WHERE {where} GROUP BY c.id)",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        "SELECT c.id AS id, c.name AS name, c.series AS series, c.rank AS rank,"
+        "       c.main_image_url AS image, COUNT(i.id) AS image_count"
+        "  FROM characters c"
+        "  JOIN custom_images i ON i.character_id = c.id"
+        f" WHERE {where}"
+        " GROUP BY c.id"
+        f" ORDER BY {order_by}"
+        " LIMIT ? OFFSET ?",
+        (*params, per_page, (page - 1) * per_page),
+    ).fetchall()
+
+    items = [
+        {
+            "name": r["name"],
+            "series": r["series"],
+            "rank": r["rank"],
+            "image": r["image"],
+            "count": r["image_count"],
+            "previews": [],
+        }
+        for r in rows
+    ]
+
+    # Previews for this page only, in one query rather than one per row.
+    if rows and preview_count > 0:
+        ids = [r["id"] for r in rows]
+        by_id: dict[int, list[str]] = {i: [] for i in ids}
+        placeholders = ",".join("?" for _ in ids)
+        previews = conn.execute(
+            "SELECT character_id, url FROM custom_images"
+            f" WHERE state = 'active' AND character_id IN ({placeholders})"
+            " ORDER BY character_id, position, id",
+            ids,
+        )
+        for row in previews:
+            bucket = by_id[row["character_id"]]
+            if len(bucket) < preview_count:
+                bucket.append(row["url"])
+        for item, r in zip(items, rows, strict=True):
+            item["previews"] = by_id[r["id"]]
+
+    return {
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": max(1, -(-total // per_page)),
+    }
+
+
 def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[dict]:
     """Active images for a character, with ownership and this viewer's hidden set.
 
@@ -503,6 +628,74 @@ def unhide_images(identity_id: str, image_ids: Iterable[int]) -> int:
         return cur.rowcount
 
 
+# --- Rate limiting ------------------------------------------------------
+
+# Expired windows are swept at most this often, from whichever request happens
+# to notice. A background job would be tidier but is not worth a process for a
+# table this small.
+_SWEEP_INTERVAL_SECONDS = 300
+_last_sweep = 0.0
+
+
+def _sweep_expired_rate_limits(conn: sqlite3.Connection, now: int) -> None:
+    global _last_sweep
+    if now - _last_sweep < _SWEEP_INTERVAL_SECONDS:
+        return
+    _last_sweep = now
+    # A day is comfortably longer than any window we use, so this only ever
+    # removes rows nothing can still be counting against.
+    conn.execute("DELETE FROM rate_limit_hits WHERE window_start < ?", (now - 86400,))
+
+
+def check_rate_limit(
+    identity_id: str, action: str, *, limit: int, per_seconds: int, now: int | None = None
+) -> tuple[bool, int]:
+    """Count one attempt. Returns (allowed, retry_after_seconds).
+
+    The increment happens *before* the count is read, so two concurrent requests
+    cannot both see "one under the limit" and both proceed. This is the same
+    "let the write decide, then read the outcome" pattern `_ensure_character`
+    uses, and for the same reason -- check-then-act is a race.
+
+    A blocked attempt still counts. That is deliberate: a client retrying into a
+    closed window should not get a free pass for doing so, and because the window
+    end is fixed, `retry_after` stays honest either way.
+    """
+    now = int(time.time()) if now is None else int(now)
+    window_start = now - (now % per_seconds)
+    with transaction() as conn:
+        _sweep_expired_rate_limits(conn, now)
+        conn.execute(
+            "INSERT INTO rate_limit_hits (identity_id, action, window_start, hits)"
+            " VALUES (?, ?, ?, 1)"
+            " ON CONFLICT (identity_id, action, window_start)"
+            " DO UPDATE SET hits = hits + 1",
+            (identity_id, action, window_start),
+        )
+        hits = conn.execute(
+            "SELECT hits FROM rate_limit_hits"
+            " WHERE identity_id = ? AND action = ? AND window_start = ?",
+            (identity_id, action, window_start),
+        ).fetchone()["hits"]
+
+    if hits <= limit:
+        return True, 0
+    return False, max(1, window_start + per_seconds - now)
+
+
+def rate_limit_usage(identity_id: str, action: str, per_seconds: int) -> int:
+    """Attempts recorded in the current window. For tests and diagnostics."""
+    now = int(time.time())
+    window_start = now - (now % per_seconds)
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT hits FROM rate_limit_hits"
+        " WHERE identity_id = ? AND action = ? AND window_start = ?",
+        (identity_id, action, window_start),
+    ).fetchone()
+    return row["hits"] if row else 0
+
+
 # --- Reports ------------------------------------------------------------
 #
 # Objective problems only: wrong character, dead link, NSFW, duplicate. Never
@@ -624,12 +817,20 @@ def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:
 
 
 def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
+    """Bookmarks, most recently updated first.
+
+    The timestamp comes back with each row so the client does not have to fetch
+    a last-updated map for all ~700 characters just to order a handful of
+    bookmarks. NULL updated_at means never modified, and SQLite sorts NULL
+    lowest, so DESC already puts those last.
+    """
     conn = get_connection()
     rows = conn.execute(
         "SELECT c.name AS name, c.series AS series, c.rank AS rank,"
-        "       c.main_image_url AS image"
+        "       c.main_image_url AS image, c.updated_at AS updated_at"
         "  FROM saved s JOIN characters c ON c.id = s.character_id"
-        " WHERE s.identity_id = ? ORDER BY s.created_at",
+        " WHERE s.identity_id = ?"
+        " ORDER BY c.updated_at DESC, s.created_at DESC",
         (identity_id,),
     ).fetchall()
     return [dict(r) for r in rows]

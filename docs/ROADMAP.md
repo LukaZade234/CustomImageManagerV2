@@ -294,8 +294,9 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
       confirm `SELECT COUNT(*) FROM custom_images` returns 8547. An untested backup is not a
       backup, and after cut-over this box holds the only copy.
 - [ ] **Decide the cut-over.** Both sites are live now and **their data has forked** — anything
-      added on v1 from this point does not appear on v2. Re-run the migration immediately before
-      switching users across.
+      added on v1 from this point does not appear on v2, and because the migration is insert-only,
+      anything *deleted* on v1 is not removed from v2 either. The procedure, the rollback boundary
+      and the three decisions it forces are in **[CUTOVER.md](CUTOVER.md)**.
 - [ ] **Decommission** the DigitalOcean app and the Neon database, only after the above.
 - [ ] **Remove `flask-compress`.** Now actionable: Cloudflare is in front and does Brotli, so
       origin-side gzip only burns CPU.
@@ -350,16 +351,33 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ## Phase 7 — Security
 
-Independent of the above and worth doing early. A script can currently empty the entire library.
-
 - [x] **Lock down CORS.** _(done in Phase 5)_ `*` is now refused at startup, unset means
-      same-origin only, and an explicit allowlist is required. Splitting the frontend onto its own
-      origin forced this to be correct rather than merely tightened.
-- [ ] **Per-identity rate limits** on add, hide, and report. There is nothing at all today.
-- [ ] **Auto-cooldown** for an identity reporting or hiding at an implausible rate.
-- [ ] **Re-audit the SSRF guards** (`_safe_import_image_url`, `_host_resolves_only_to_public_ips`)
-      after the move — they matter more on a self-hosted box sitting inside a home or cloud
-      network than on managed infrastructure.
+      same-origin only.
+- [x] **Per-identity rate limits.** There was nothing at all before this. `rate_limit_hits`
+      (migration 002) counts *attempts* per identity per action in fixed windows; the increment
+      happens before the count is read so two concurrent requests cannot both slip through. The
+      limit that matters is on uploads — each one is an ImgChest call against a shared key, so an
+      unbounded client can get that key throttled and take the app's purpose with it. Applied to
+      15 endpoints; each action has a burst window and an hourly one, overridable with
+      `RATE_LIMIT_<ACTION>="30/60,300/3600"`. Moderators get 10x, because a limit sized for a
+      visitor would block the person curating the site.
+- [x] **Auto-cooldown** for an identity reporting at an implausible rate — the same mechanism,
+      with report deliberately the tightest limit (5/min, 20/hour) since reports can remove other
+      people's work, while hiding affects nobody else and is generous.
+- [x] **Re-audit the SSRF guards.** Three real gaps found and closed:
+      - **IPv4-mapped IPv6** (`::ffff:169.254.169.254`) carried none of the stdlib flags and went
+        straight through. Now unwrapped and judged as the IPv4 address it carries.
+      - **Ranges `ipaddress` does not flag at all**: IPv6 site-local (`fec0::/10`) and RFC 6598
+        carrier NAT (`100.64.0.0/10`), the latter used by cloud providers for internal networks.
+      - **Only the final redirect was validated.** `allow_redirects=True` followed the chain
+        itself, so public → `192.168.1.1` → public passed the check *after* the private host had
+        already been fetched. Redirects are now stepped by hand with every hop validated first,
+        bounded at 5.
+
+      Residual risk, documented in the code rather than fixed: DNS rebinding. The name is resolved
+      for validation and then again by `requests` when it connects, so a hostile resolver can
+      answer differently each time. Closing it needs connecting to a pinned address with the Host
+      header set by hand.
 
 ---
 
@@ -382,14 +400,25 @@ Independent of the above and worth doing early. A script can currently empty the
 
 ## Phase 9 — Performance
 
-- [ ] **Kill the full-map fetch.** `GET /custom_images.json` returns every image URL for every
-      character, and `HomePage` downloads all of it to compute two numbers. Replace with an
-      `/api/stats` endpoint plus per-character fetches.
+- [x] **Kill the full-map fetch.** `GET /custom_images.json` returned every image URL for every
+      character — **486 KB raw, 81 KB gzipped** against the real library — and the home page
+      downloaded all of it to display two integers. Replaced by:
+      - `GET /api/stats` — **62 bytes**, the two counts.
+      - `GET /api/customs?page=&per_page=&q=&by=&sort=` — one page of the browse list with counts
+        and three previews per row, **7.2 KB** instead of 486 KB. Search, all seven sorts, and
+        pagination now happen in SQL. The sort key is whitelisted rather than interpolated, and
+        LIKE wildcards in the search term are escaped so `%` does not match everything.
+      - `GET /api/saved` now returns `updated_at` per row, which retired the separate
+        `/api/last-updated` fetch (**33 KB**) whose only remaining consumer was the client-side
+        sort. `lastUpdated` and the library-wide `customImages` map are gone from the store.
+
+      The old endpoint is left in place, commented as superseded, in case something outside the
+      app calls it. It should be deleted once that is ruled out.
+
+      This also unblocks growth: the plan is to seed tens of thousands of characters, at which
+      point filtering the whole library in the browser stops being possible at all.
 - [ ] **Adopt `@tanstack/react-query`.** Retry, backoff, and cache invalidation are currently
-      hand-rolled and duplicated across `useStore.js` and `api.js`. Its per-character caching is
-      also what makes killing the full-map fetch practical. Keep zustand alongside it — react-query
-      owns server state, zustand keeps owning UI state (dark mode, toasts, selection). They are
-      complementary, not competing.
+      hand-rolled in the store. Less pressing now that the two heavy fetches are gone.
 - [ ] **Serve character images from the CDN**, not from Flask off local disk (follows from R2).
 - [ ] **Reconsider gzip.** `flask-compress` runs on the origin; with Cloudflare in front, the edge
       can handle compression instead.

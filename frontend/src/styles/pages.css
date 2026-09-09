@@ -378,3 +378,21 @@
   flex: 1;
   min-width: 0;
 }
+
+/* Customs list ------------------------------------------------------------ */
+
+.customs-skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* The previous page stays readable while the next one loads, rather than the
+   list blanking on every keystroke or page change. */
+.is-refetching {
+  opacity: 0.55;
+  transition: opacity var(--duration) var(--ease);
+}
