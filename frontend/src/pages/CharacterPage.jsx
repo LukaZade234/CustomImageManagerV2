@@ -4,6 +4,7 @@ import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import ImageModal from '../components/ImageModal'
 import UploadErrorDialog from '../components/UploadErrorDialog'
+import { Button, IconButton } from '../components/ui'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -898,9 +899,8 @@ export default function CharacterPage() {
                 Rank: {char.rank || '—'}
               </p>
               <div className="bottom-controls char-page-actions">
-                <button
-                  type="button"
-                  className="action-btn"
+                <Button
+                  variant="secondary"
                   onClick={() => setEditMode(true)}
                   title="Edit name, series, rank, and main image"
                 >
@@ -912,16 +912,14 @@ export default function CharacterPage() {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    style={{ marginRight: '5px' }}
                   >
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                   </svg>
                   Edit Character
-                </button>
-                <button
-                  type="button"
-                  className="action-btn"
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={() => {
                     resetModes()
                     setAiMode(true)
@@ -935,13 +933,12 @@ export default function CharacterPage() {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    style={{ marginRight: '5px' }}
                   >
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
                   Get $ai Command
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -982,21 +979,12 @@ export default function CharacterPage() {
                   />
                 </div>
                 <div className="edit-actions">
-                  <button
-                    type="button"
-                    className="action-btn primary"
-                    onClick={handleSaveEdit}
-                    disabled={loading}
-                  >
+                  <Button variant="primary" onClick={handleSaveEdit} disabled={loading}>
                     Save Changes
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn secondary"
-                    onClick={() => setEditMode(false)}
-                  >
+                  </Button>
+                  <Button variant="secondary" onClick={() => setEditMode(false)}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1044,23 +1032,21 @@ export default function CharacterPage() {
               className="mudae-main-actions"
               style={{ marginTop: '0.65rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
             >
-              <button
-                type="button"
-                className="action-btn secondary"
+              <Button
+                variant="secondary"
                 disabled={mudaeMainBusy || loading}
                 onClick={handleMudaeRefreshMain}
                 title="Run $im via Mudae and set the card image as main"
               >
                 {mudaeMainBusy ? 'Updating from Mudae…' : 'Update main from Mudae'}
-              </button>
+              </Button>
             </div>
           )}
-          <button
-            type="button"
+          <IconButton
             className={`save-button ${isSaved ? 'saved' : ''}`}
             onClick={handleToggleSave}
-            title={isSaved ? 'Unsave' : 'Save'}
-            aria-label={isSaved ? 'Unsave' : 'Save'}
+            label={isSaved ? 'Remove from saved' : 'Save this character'}
+            aria-pressed={isSaved}
           >
             <svg
               aria-hidden="true"
@@ -1073,7 +1059,7 @@ export default function CharacterPage() {
             >
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
-          </button>
+          </IconButton>
         </div>
       </div>
 
@@ -1090,18 +1076,7 @@ export default function CharacterPage() {
             <div className="char-custom-toolbar-actions" id="char-custom-toolbar-actions">
               {aiMode && (
                 <>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={generateAiCommand}
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '0.9em',
-                      backgroundColor: '#28a745',
-                      color: 'white',
-                      borderColor: '#28a745',
-                    }}
-                  >
+                  <Button variant="success" size="sm" onClick={generateAiCommand}>
                     <svg
                       aria-hidden="true"
                       width="16"
@@ -1110,45 +1085,23 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                     </svg>
                     Copy Command ({selectedUrls.length || customs.length})
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={selectAllImages}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={selectAllImages}>
                     Select All
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={resetModes}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={resetModes}>
                     Cancel
-                  </button>
+                  </Button>
                 </>
               )}
               {deleteMode && (
                 <>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={handleDeleteSelected}
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '0.9em',
-                      backgroundColor: '#dc3545',
-                      color: 'white',
-                      borderColor: '#dc3545',
-                    }}
-                  >
+                  <Button variant="danger" size="sm" onClick={handleDeleteSelected}>
                     <svg
                       aria-hidden="true"
                       width="16"
@@ -1157,31 +1110,24 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                     Delete Selected ({selectedUrls.length})
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={resetModes}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={resetModes}>
                     Cancel
-                  </button>
+                  </Button>
                 </>
               )}
               {downloadMode && (
                 <>
-                  <button
-                    type="button"
-                    className="action-btn primary"
+                  <Button
+                    variant="primary"
+                    size="sm"
                     onClick={handleDownloadSelected}
                     disabled={selectedUrls.length === 0}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
                     title={
                       selectedUrls.length === 0
                         ? 'Select images first'
@@ -1196,70 +1142,43 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                     Download ({selectedUrls.length})
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={selectAllImages}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={selectAllImages}>
                     Select All
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={resetModes}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={resetModes}>
                     Cancel
-                  </button>
+                  </Button>
                 </>
               )}
               {reorderMode && !aiMode && !deleteMode && !downloadMode && (
                 <>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={() => setSelectedUrls([])}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  <Button variant="secondary" size="sm" onClick={() => setSelectedUrls([])}>
                     Clear selection
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn secondary"
-                    onClick={cancelReorder}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={cancelReorder}>
                     Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn primary"
-                    onClick={doneReorder}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={doneReorder}>
                     Done
-                  </button>
+                  </Button>
                 </>
               )}
               {!aiMode && !deleteMode && !downloadMode && !reorderMode && (
                 <>
-                  <button
-                    type="button"
-                    className="action-btn"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => {
                       resetModes()
                       setDeleteMode(true)
                     }}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
                   >
                     <svg
                       aria-hidden="true"
@@ -1269,18 +1188,16 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                     Delete
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={enterDownloadMode}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
                     title="Download selected custom images to a folder"
                   >
                     <svg
@@ -1291,20 +1208,14 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                     Download
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
-                    onClick={enterReorderMode}
-                    style={{ padding: '6px 12px', fontSize: '0.9em' }}
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={enterReorderMode}>
                     <svg
                       aria-hidden="true"
                       width="16"
@@ -1313,7 +1224,6 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <polyline points="5 9 2 12 5 15" />
                       <polyline points="9 5 12 2 15 5" />
@@ -1323,17 +1233,12 @@ export default function CharacterPage() {
                       <line x1="12" y1="2" x2="12" y2="22" />
                     </svg>
                     Reorder
-                  </button>
-                  <button
-                    type="button"
-                    className="action-btn"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     disabled={!!customUploadProgress}
                     onClick={() => customInputRef.current?.click()}
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '0.9em',
-                      opacity: customUploadProgress ? 0.6 : 1,
-                    }}
                     title="Add Custom Image"
                   >
                     <svg
@@ -1344,13 +1249,12 @@ export default function CharacterPage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      style={{ marginRight: '5px', verticalAlign: 'text-bottom' }}
                     >
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                     Add Image
-                  </button>
+                  </Button>
                 </>
               )}
             </div>

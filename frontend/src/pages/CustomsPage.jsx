@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getImageUrl } from '../api'
+import { Badge, Button, Card, EmptyState, Input, SegmentedControl, Select } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
@@ -119,13 +120,13 @@ export default function CustomsPage() {
   }
 
   return (
-    <div className="customs-page">
+    <Card as="section" padding="lg" className="customs-page">
       <h1 className="page-title">Browse Customs</h1>
       <div className="customs-controls">
-        <div className="search-input-wrapper customs-search-wrap">
-          <input
-            type="text"
-            className="char-search-input"
+        <div className="customs-search-wrap">
+          <Input
+            type="search"
+            aria-label={searchMode === 'name' ? 'Search by character name' : 'Search by series'}
             placeholder={searchMode === 'name' ? 'Search by name...' : 'Search by series...'}
             value={search}
             onChange={(e) => {
@@ -134,38 +135,25 @@ export default function CustomsPage() {
             }}
             autoComplete="off"
           />
-          <div className="search-toggle-wrapper search-toggle-visible">
-            <span
-              className={`toggle-label toggle-option ${searchMode === 'name' ? 'active' : ''}`}
-              onClick={() => {
-                setSearchMode('name')
-                resetToPage1()
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setSearchMode('name')}
-            >
-              Name
-            </span>
-            <span
-              className={`toggle-label toggle-option ${searchMode === 'series' ? 'active' : ''}`}
-              onClick={() => {
-                setSearchMode('series')
-                resetToPage1()
-              }}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setSearchMode('series')}
-            >
-              Series
-            </span>
-          </div>
+          <SegmentedControl
+            name="customs-search-mode"
+            label="Search by"
+            value={searchMode}
+            onChange={(v) => {
+              setSearchMode(v)
+              resetToPage1()
+            }}
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'series', label: 'Series' },
+            ]}
+          />
         </div>
         <div className="customs-sort-field">
           <label htmlFor="customsSort" className="customs-sort-label">
             Sort by
           </label>
-          <select
+          <Select
             id="customsSort"
             className="customs-sort-select"
             value={sort}
@@ -179,30 +167,25 @@ export default function CustomsPage() {
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
       {totalGlobalEmpty && (
-        <div className="empty-state">
-          <p className="empty-state-title">No custom images yet</p>
-          <p className="text-meta">
-            Upload custom images from any character page, then they will appear here.
-          </p>
-        </div>
+        <EmptyState
+          title="No custom images yet"
+          description="Upload custom images from any character page and they will appear here."
+        />
       )}
 
       {emptySearchNoMatches && (
-        <div className="empty-state empty-state--search">
-          <p className="empty-state-title">No matches</p>
-          <p className="text-meta">
-            Nothing matches &quot;{search.trim()}&quot; in{' '}
-            {searchMode === 'name' ? 'character names' : 'series'}.
-          </p>
-          <button type="button" className="action-btn empty-state-clear" onClick={clearSearch}>
-            Clear search
-          </button>
-        </div>
+        <EmptyState
+          title="No matches"
+          description={`Nothing matches "${search.trim()}" in ${
+            searchMode === 'name' ? 'character names' : 'series'
+          }.`}
+          action={<Button onClick={clearSearch}>Clear search</Button>}
+        />
       )}
 
       {!totalGlobalEmpty && !emptySearchNoMatches && (
@@ -223,19 +206,7 @@ export default function CustomsPage() {
                     <h3>{c.name}</h3>
                     {c.series && <p>{c.series}</p>}
                     <p>
-                      <span
-                        className="badge"
-                        style={{
-                          display: 'inline-block',
-                          marginLeft: '8px',
-                          padding: '2px 8px',
-                          background: '#e9ecef',
-                          borderRadius: '4px',
-                          fontSize: '0.8rem',
-                        }}
-                      >
-                        {c.customCount} images
-                      </span>
+                      <Badge>{c.customCount} images</Badge>
                     </p>
                   </div>
                 </div>
@@ -258,24 +229,22 @@ export default function CustomsPage() {
       )}
       {!totalGlobalEmpty && !emptySearchNoMatches && totalPages > 1 && (
         <div className="customs-pagination">
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          <Button
+            variant="secondary"
             aria-label="First page"
             onClick={() => setPage(1)}
             disabled={page <= 1}
           >
             «
-          </button>
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          </Button>
+          <Button
+            variant="secondary"
             aria-label="Previous page"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
           >
             ‹
-          </button>
+          </Button>
           <span className="pagination-info">
             {pageJumpEditing ? (
               <>
@@ -300,36 +269,35 @@ export default function CustomsPage() {
                 of {totalPages}
               </>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 className="pagination-page-indicator"
                 onClick={startPageJump}
                 title="Click to jump to a page"
               >
                 Page {page} of {totalPages}
-              </button>
+              </Button>
             )}
           </span>
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          <Button
+            variant="secondary"
             aria-label="Next page"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
           >
             ›
-          </button>
-          <button
-            type="button"
-            className="action-btn customs-page-btn"
+          </Button>
+          <Button
+            variant="secondary"
             aria-label="Last page"
             onClick={() => setPage(totalPages)}
             disabled={page >= totalPages}
           >
             »
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

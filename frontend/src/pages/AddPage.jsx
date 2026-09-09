@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
+import { Button } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 /** Discord/CDN images often fail as bare <img src>; preview via backend proxy. */
@@ -360,22 +361,20 @@ export default function AddPage() {
                 onChange={(e) => setMudaeLookupName(e.target.value)}
                 disabled={mudaeBusy}
               />
-              <button
-                type="button"
-                className="action-btn secondary"
+              <Button
+                variant="secondary"
                 disabled={mudaeBusy || !mudaeLookupName.trim()}
                 onClick={() => handleMudaeLookup()}
               >
                 {mudaeBusy ? 'Querying…' : 'Lookup'}
-              </button>
-              <button
-                type="button"
-                className="action-btn primary"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={mudaeBusy || !(mudaePreview?.name || mudaeLookupName.trim())}
                 onClick={handleMudaeAdd}
               >
                 {mudaeBusy ? 'Working…' : 'Add from Mudae'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -384,10 +383,9 @@ export default function AddPage() {
               <div style={{ marginBottom: '0.35rem', fontWeight: 600 }}>Pick a match:</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                 {mudaeCandidates.map((c) => (
-                  <button
+                  <Button
+                    variant="secondary"
                     key={`${c.name}-${c.label}`}
-                    type="button"
-                    className="action-btn secondary"
                     disabled={mudaeBusy}
                     onClick={() => {
                       setMudaeLookupName(c.name)
@@ -395,7 +393,7 @@ export default function AddPage() {
                     }}
                   >
                     {c.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -452,22 +450,21 @@ export default function AddPage() {
                   suggestions={seriesSuggestions}
                   disabled={seriesBusy || seriesResolving}
                 />
-                <button
+                <Button
+                  variant="primary"
                   type="submit"
-                  className="action-btn primary"
                   disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}
                 >
                   {seriesResolving ? 'Checking…' : seriesBusy ? 'Importing…' : 'Add entire series'}
-                </button>
+                </Button>
                 {seriesBusy && (
-                  <button
-                    type="button"
-                    className="action-btn secondary"
+                  <Button
+                    variant="secondary"
                     disabled={seriesCancelling}
                     onClick={handleCancelSeries}
                   >
                     {seriesCancelling ? 'Cancelling…' : 'Cancel import'}
-                  </button>
+                  </Button>
                 )}
               </div>
               <p style={{ fontSize: '0.85em', opacity: 0.75, marginTop: '0.4rem' }}>
@@ -479,15 +476,14 @@ export default function AddPage() {
                   <div style={{ marginBottom: '0.35rem', fontWeight: 600 }}>Pick a series:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                     {seriesCandidates.map((c) => (
-                      <button
+                      <Button
+                        variant="secondary"
                         key={`${c.name}-${c.label}`}
-                        type="button"
-                        className="action-btn secondary"
                         disabled={seriesBusy || seriesResolving}
                         onClick={() => handlePickSeriesCandidate(c.name)}
                       >
                         {c.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -677,9 +673,9 @@ export default function AddPage() {
             </div>
           </div>
           <div className="edit-actions" style={{ justifyContent: 'flex-start', marginTop: '25px' }}>
-            <button type="submit" disabled={loading} className="action-btn primary">
+            <Button variant="primary" type="submit" disabled={loading}>
               {loading ? 'Adding...' : 'Add Character'}
-            </button>
+            </Button>
           </div>
           {status?.type === 'error' && (
             <div id="addCharStatus" style={{ marginTop: '15px', color: '#dc3545' }}>

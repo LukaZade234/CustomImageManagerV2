@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
+import { Input, SegmentedControl, Select } from './ui'
 
 const SORT_OPTIONS = [
   { value: 'rank', label: 'Rank (High-Low)' },
@@ -14,106 +14,48 @@ export default function SearchBar() {
   const setMode = useStore((s) => s.setSearchMode)
   const sort = useStore((s) => s.searchSort)
   const setSort = useStore((s) => s.setSearchSort)
-  const [dropdownOpen, setDropdownOpen] = useState(false)
-  const dropdownRef = useRef(null)
-
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sort)?.label || sort
-
-  useEffect(() => {
-    const h = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false)
-    }
-    document.addEventListener('click', h)
-    return () => document.removeEventListener('click', h)
-  }, [])
-
-  const handleSortSelect = (value) => {
-    setSort(value)
-    setDropdownOpen(false)
-  }
 
   return (
     <div className="search-bar-cluster">
       <div className="search-input-wrapper">
-        <input
-          type="text"
+        <Input
+          type="search"
           className="char-search-input"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder={mode === 'name' ? 'Search by name...' : 'Search by series...'}
+          aria-label={mode === 'name' ? 'Search by character name' : 'Search by series'}
           autoComplete="off"
         />
-        <div className="search-toggle-wrapper search-toggle-visible">
-          <span
-            className={`toggle-label toggle-option ${mode === 'name' ? 'active' : ''}`}
-            onClick={() => setMode('name')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setMode('name')}
-          >
-            Name
-          </span>
-          <span
-            className={`toggle-label toggle-option ${mode === 'series' ? 'active' : ''}`}
-            onClick={() => setMode('series')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setMode('series')}
-          >
-            Series
-          </span>
-        </div>
+        <SegmentedControl
+          className="search-toggle-wrapper"
+          name="search-mode"
+          label="Search by"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'name', label: 'Name' },
+            { value: 'series', label: 'Series' },
+          ]}
+        />
       </div>
-      <div
-        className={`custom-dropdown navbar-sort-dropdown ${dropdownOpen ? 'active' : ''}`}
-        ref={dropdownRef}
+      {/*
+        Was a div-based listbox with a document-level click-outside listener, no
+        arrow-key navigation and no Escape. A native select does all of that,
+        and gets the platform's own picker on mobile.
+      */}
+      <Select
+        className="navbar-sort-select"
+        value={sort}
+        onChange={(e) => setSort(e.target.value)}
+        aria-label="Sort results"
       >
-        <div
-          className="dropdown-selected"
-          onClick={() => setDropdownOpen(!dropdownOpen)}
-          role="button"
-          tabIndex={0}
-          aria-label={`Sort by: ${sortLabel}`}
-          aria-expanded={dropdownOpen}
-          aria-haspopup="listbox"
-          title={`Sort: ${sortLabel}`}
-          onKeyDown={(e) => e.key === 'Enter' && setDropdownOpen(!dropdownOpen)}
-        >
-          <span className="selected-text">{sortLabel}</span>
-          <svg
-            className="dropdown-arrow"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </div>
-        <div
-          className={`dropdown-options ${dropdownOpen ? 'show' : ''}`}
-          style={{ display: dropdownOpen ? 'block' : 'none' }}
-          role="listbox"
-          aria-label="Sort options"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <div
-              key={o.value}
-              className={`dropdown-option ${sort === o.value ? 'selected' : ''}`}
-              onClick={() => handleSortSelect(o.value)}
-              role="option"
-              tabIndex={0}
-              aria-selected={sort === o.value}
-              onKeyDown={(e) => e.key === 'Enter' && handleSortSelect(o.value)}
-            >
-              {o.label}
-            </div>
-          ))}
-        </div>
-      </div>
+        {SORT_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </Select>
     </div>
   )
 }
