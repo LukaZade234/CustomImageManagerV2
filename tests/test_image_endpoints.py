@@ -52,7 +52,7 @@ class TestDeleteOne:
             {"character_name": "Rem", "image_url": "https://cdn/a.png"},
         )
         assert r.status_code == 200
-        assert clean_db.get_custom_images()["Rem"] == ["https://cdn/b.png"]
+        assert clean_db.get_custom_images_for("Rem") == ["https://cdn/b.png"]
 
 
 class TestDeleteMany:
@@ -77,7 +77,7 @@ class TestDeleteMany:
         body = r.get_json()
         assert body["removed"] == []
         assert body["missing"] == ["https://cdn/zz.png"]
-        assert clean_db.get_custom_images()["Rem"] == ["https://cdn/a.png"]
+        assert clean_db.get_custom_images_for("Rem") == ["https://cdn/a.png"]
 
     def test_deletes_the_named_subset_and_keeps_order(self, client, clean_db, identity_id):
         _seed(clean_db, {"Rem": [f"https://cdn/{c}.png" for c in "abcd"]}, identity_id)
@@ -87,7 +87,7 @@ class TestDeleteMany:
             {"character_name": "Rem", "image_urls": ["https://cdn/b.png", "https://cdn/d.png"]},
         )
         assert r.status_code == 200
-        assert clean_db.get_custom_images()["Rem"] == ["https://cdn/a.png", "https://cdn/c.png"]
+        assert clean_db.get_custom_images_for("Rem") == ["https://cdn/a.png", "https://cdn/c.png"]
 
 
 class TestReorder:
@@ -108,7 +108,7 @@ class TestReorder:
             },
         )
         assert r.status_code == 200
-        assert clean_db.get_custom_images()["Rem"] == [
+        assert clean_db.get_custom_images_for("Rem") == [
             "https://cdn/c.png",
             "https://cdn/a.png",
             "https://cdn/b.png",
@@ -130,7 +130,7 @@ class TestReorder:
             {"character_name": "Rem", "new_order": ["https://cdn/b.png", "https://cdn/a.png"]},
         )
         assert r.status_code == 200
-        stored = clean_db.get_custom_images()["Rem"]
+        stored = clean_db.get_custom_images_for("Rem")
         assert stored[:2] == ["https://cdn/b.png", "https://cdn/a.png"], (
             "requested order not applied"
         )
@@ -147,7 +147,7 @@ class TestReorder:
             },
         )
         assert r.status_code == 200
-        assert clean_db.get_custom_images()["Rem"] == ["https://cdn/a.png"]
+        assert clean_db.get_custom_images_for("Rem") == ["https://cdn/a.png"]
 
 
 class TestSaved:

@@ -8,7 +8,6 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:5000',
       '/characters': 'http://localhost:5000',
-      '/custom_images.json': 'http://localhost:5000',
       '/character_images': 'http://localhost:5000',
       '/images': 'http://localhost:5000',
     },

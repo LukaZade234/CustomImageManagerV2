@@ -137,13 +137,20 @@ class TestSort:
 
 
 class TestPayloadSize:
-    def test_a_page_is_orders_of_magnitude_smaller_than_the_library(self, client, clean_db):
-        """The regression this whole change exists to prevent."""
-        _seed(clean_db, {f"Char{i:03d}": ("Series", "1", 12) for i in range(200)})
-        full_map = len(client.get("/custom_images.json").data)
-        one_page = len(client.get("/api/customs?per_page=20").data)
-        assert one_page * 10 < full_map, (
-            f"a page of 20 is {one_page} bytes against {full_map} for the whole map"
+    def test_a_page_does_not_grow_with_the_library(self, client, clean_db):
+        """The regression this whole change exists to prevent.
+
+        The old endpoint returned every URL for every character, so the response
+        grew without bound. A page must cost the same whether the library holds
+        twenty characters or two hundred.
+        """
+        _seed(clean_db, {f"Char{i:03d}": ("Series", "1", 12) for i in range(20)})
+        small = len(client.get("/api/customs?per_page=20").data)
+        _seed(clean_db, {f"More{i:03d}": ("Series", "1", 12) for i in range(180)})
+        large = len(client.get("/api/customs?per_page=20").data)
+        assert client.get("/api/customs").get_json()["total"] == 200
+        assert abs(large - small) < small * 0.2, (
+            f"a page went from {small} to {large} bytes as the library grew 10x"
         )
 
     def test_previews_are_capped_regardless_of_library_size(self, client, clean_db):

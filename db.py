@@ -262,25 +262,6 @@ def get_last_updated() -> dict:
 # --- Custom images ------------------------------------------------------
 
 
-def get_custom_images() -> dict:
-    """{name: [url, ...]} for every character with active images.
-
-    Same shape v1 served at /custom_images.json. Phase 9 replaces this endpoint
-    with per-character fetches plus a stats endpoint.
-    """
-    conn = get_connection()
-    out: dict[str, list[str]] = {}
-    rows = conn.execute(
-        "SELECT c.name AS name, i.url AS url"
-        "  FROM custom_images i JOIN characters c ON c.id = i.character_id"
-        " WHERE i.state = 'active'"
-        " ORDER BY c.name, i.position, i.id"
-    )
-    for row in rows:
-        out.setdefault(row["name"], []).append(row["url"])
-    return out
-
-
 # Whitelisted, never interpolated from user input. Each entry is an ORDER BY
 # fragment; a caller passes the key, not the SQL.
 _CUSTOMS_SORTS = {

@@ -20,7 +20,6 @@ if sys.platform.startswith("win"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
-from flask_compress import Compress
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -466,7 +465,6 @@ if _origins == "*":
 cors_origins = [o.strip() for o in _origins.split(",") if o.strip()]
 if cors_origins:
     CORS(app, origins=cors_origins, supports_credentials=True)
-Compress(app)
 
 # Every request resolves a caller; a visitor without a cookie is issued one on
 # the way out. Registered here rather than per-blueprint so no route can
@@ -731,21 +729,6 @@ def get_image(filename):
 @app.route("/character_images/<path:filename>")
 def get_character_image(filename):
     return send_from_directory("character_images", filename)
-
-
-# Serve custom_images from PostgreSQL (JSON response; URL kept for API compatibility)
-# Superseded by /api/stats and /api/customs. Nothing in the SPA calls this any
-# more; it is kept only in case something outside the app does. Around 475 KB
-# uncompressed, so it should go once that is confirmed.
-@app.route("/custom_images.json")
-def serve_custom_images_json():
-    try:
-        return jsonify(db.get_custom_images())
-    except db.DatabaseConfigurationError:
-        raise
-    except Exception as e:
-        print(f"Error serving custom_images: {e}")
-    return jsonify({})
 
 
 @app.route("/api/download-image-proxy", methods=["POST"])

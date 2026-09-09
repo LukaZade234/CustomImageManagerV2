@@ -71,7 +71,6 @@ export const apiClient = {
       body: JSON.stringify(data),
     }),
   removeSaved: (name) => api(`/api/saved/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  getCustomImages: () => api('/custom_images.json'),
   getCustomImagesForChar: (name) => api(`/api/custom-image/${encodeURIComponent(name)}`),
   addCustomImage: async (formData) => {
     const url = `${API_BASE}/api/custom-image`
