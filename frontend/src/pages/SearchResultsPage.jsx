@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getImageUrl } from '../api'
+import { Card } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 export default function SearchResultsPage() {
@@ -37,31 +38,31 @@ export default function SearchResultsPage() {
 
   if (loading && characters.length === 0) {
     return (
-      <div id="searchPage" className="search-results-page page-loading-shell" aria-busy="true">
+      <Card
+        as="section"
+        padding="lg"
+        className="search-results-page page-loading-shell"
+        aria-busy="true"
+      >
         <h1 className="page-title">Search Results</h1>
-        <p
-          className="text-meta page-loading-lead"
-          style={{ textAlign: 'left', marginBottom: '1rem' }}
-        >
-          Fetching character list…
-        </p>
+        <p className="text-meta page-loading-lead search-skeleton-note">Fetching character list…</p>
         <div className="search-skeleton-list" aria-hidden>
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="search-skeleton-row">
               <div className="skeleton-circle search-skeleton-thumb" />
               <div className="search-skeleton-text">
-                <div className="skeleton-line skeleton-line--title" style={{ marginBottom: 8 }} />
-                <div className="skeleton-line skeleton-line--body" style={{ width: '40%' }} />
+                <div className="skeleton-line skeleton-line--title" />
+                <div className="skeleton-line skeleton-line--body" />
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div className="search-results-page">
+    <Card as="section" padding="lg" className="search-results-page">
       <h1 className="page-title">Search Results</h1>
       <p className="search-results-count text-meta">
         {matches.length === 0
@@ -87,6 +88,6 @@ export default function SearchResultsPage() {
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }

@@ -202,7 +202,7 @@ export default function CustomsPage() {
               >
                 <div className="customs-item-top">
                   <img src={getImageUrl(c.image)} alt="" className="search-result-img" />
-                  <div className="search-result-info" style={{ flex: 1 }}>
+                  <div className="search-result-info">
                     <h3>{c.name}</h3>
                     {c.series && <p>{c.series}</p>}
                     <p>

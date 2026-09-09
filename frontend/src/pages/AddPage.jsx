@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
-import { Button } from '../components/ui'
+import { Button, Card } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 /** Discord/CDN images often fail as bare <img src>; preview via backend proxy. */
@@ -323,39 +323,28 @@ export default function AddPage() {
   }
 
   return (
-    <div className="add-page">
+    <Card as="section" padding="lg" className="add-page">
       <h1 className="page-title">Add New Character</h1>
 
       {mudaeConfigured === false && (
-        <p
-          className="mudae-setup-hint"
-          style={{ maxWidth: '640px', marginBottom: '1.25rem', opacity: 0.85 }}
-        >
-          Mudae import is not available.
-        </p>
+        <p className="mudae-setup-hint">Mudae import is not available.</p>
       )}
 
       {mudaeConfigured && (
-        <div
-          className="edit-form-container mudae-panel"
-          style={{ maxWidth: '640px', margin: '0 0 2rem' }}
-        >
-          <h3 className="section-heading" style={{ marginTop: 0 }}>
-            From Mudae
-          </h3>
-          <p style={{ marginTop: 0, opacity: 0.85, fontSize: '0.95em' }}>
+        <div className="edit-form-container mudae-panel">
+          <h3 className="section-heading">From Mudae</h3>
+          <p className="mudae-note">
             Looks up claim rank, series, and main image using Mudae <code>$im</code> and{' '}
             <code>$ima</code>.
           </p>
 
           <div className="edit-group full-width">
             <label htmlFor="mudaeCharName">Character name</label>
-            <div className="mudae-row" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div className="mudae-row">
               <input
                 id="mudaeCharName"
                 type="text"
                 className="modern-input"
-                style={{ flex: '1 1 200px' }}
                 placeholder="e.g. Rem"
                 value={mudaeLookupName}
                 onChange={(e) => setMudaeLookupName(e.target.value)}
@@ -379,9 +368,9 @@ export default function AddPage() {
           </div>
 
           {mudaeCandidates.length > 0 && (
-            <div className="mudae-candidates" style={{ marginTop: '0.75rem' }}>
-              <div style={{ marginBottom: '0.35rem', fontWeight: 600 }}>Pick a match:</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+            <div className="mudae-candidates">
+              <div className="mudae-candidates__label">Pick a match:</div>
+              <div className="mudae-chips">
                 {mudaeCandidates.map((c) => (
                   <Button
                     variant="secondary"
@@ -400,32 +389,23 @@ export default function AddPage() {
           )}
 
           {mudaePreview && (
-            <div
-              className="mudae-preview"
-              style={{ display: 'flex', gap: '1rem', marginTop: '1rem', alignItems: 'flex-start' }}
-            >
+            <div className="mudae-preview">
               {mudaePreview.image_url && (
                 <img
                   src={mudaePreviewSrc(mudaePreview.image_url)}
                   alt={mudaePreview.name}
-                  style={{
-                    width: 96,
-                    height: 128,
-                    objectFit: 'cover',
-                    borderRadius: 4,
-                    background: '#eee',
-                  }}
+                  className="mudae-preview__img"
                 />
               )}
               <div>
                 <div>
                   <strong>{mudaePreview.name}</strong>
                 </div>
-                <div style={{ opacity: 0.85 }}>{mudaePreview.series || '—'}</div>
-                <div style={{ opacity: 0.85 }}>
+                <div className="mudae-preview__meta">{mudaePreview.series || '—'}</div>
+                <div className="mudae-preview__meta">
                   Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}
                 </div>
-                <p style={{ fontSize: '0.85em', opacity: 0.75, marginBottom: 0 }}>
+                <p className="mudae-preview__hint">
                   The manual form below was pre-filled, or use &quot;Add from Mudae&quot; to upload
                   the image and save.
                 </p>
@@ -433,15 +413,12 @@ export default function AddPage() {
             </div>
           )}
 
-          <hr style={{ margin: '1.5rem 0', opacity: 0.25 }} />
+          <hr className="mudae-divider" />
 
           <form onSubmit={handleSeriesBulk}>
             <div className="edit-group full-width">
               <label htmlFor="mudaeSeriesBulk">Bulk-add series</label>
-              <div
-                className="mudae-row"
-                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-              >
+              <div className="mudae-row">
                 <SeriesSuggestInput
                   id="mudaeSeriesBulk"
                   placeholder="Exact series name"
@@ -467,14 +444,14 @@ export default function AddPage() {
                   </Button>
                 )}
               </div>
-              <p style={{ fontSize: '0.85em', opacity: 0.75, marginTop: '0.4rem' }}>
+              <p className="mudae-preview__hint">
                 Runs <code>$ima</code> then <code>$im</code> per character. Large series can take
                 several minutes; existing names are skipped.
               </p>
               {seriesCandidates.length > 0 && (
-                <div className="mudae-candidates" style={{ marginTop: '0.75rem' }}>
-                  <div style={{ marginBottom: '0.35rem', fontWeight: 600 }}>Pick a series:</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                <div className="mudae-candidates">
+                  <div className="mudae-candidates__label">Pick a series:</div>
+                  <div className="mudae-chips">
                     {seriesCandidates.map((c) => (
                       <Button
                         variant="secondary"
@@ -492,8 +469,8 @@ export default function AddPage() {
           </form>
 
           {seriesProgress && seriesBusy && (
-            <div className="mudae-series-progress" style={{ marginTop: '1rem', fontSize: '0.9em' }}>
-              <div style={{ marginBottom: '0.5rem' }}>
+            <div className="mudae-series-progress mudae-progress">
+              <div className="mudae-progress__label">
                 {seriesProgress.phase === 'starting' && 'Querying Mudae for series list…'}
                 {seriesProgress.phase === 'delay' && (
                   <>
@@ -515,36 +492,20 @@ export default function AddPage() {
                 {seriesProgress.phase === 'cancelled' && 'Stopping import…'}
               </div>
               {seriesProgress.added.length > 0 && (
-                <ul
-                  style={{
-                    margin: '0.35rem 0 0',
-                    paddingLeft: '1.2rem',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                  }}
-                >
+                <ul className="mudae-scroll-list">
                   {seriesProgress.added.map((c) => (
-                    <li key={c.name} style={{ color: '#198754' }}>
+                    <li key={c.name} className="mudae-item--ok">
                       {c.name}
                     </li>
                   ))}
                 </ul>
               )}
               {seriesProgress.skipped.length > 0 && (
-                <details open style={{ marginTop: '0.5rem' }}>
-                  <summary style={{ cursor: 'pointer' }}>
-                    Skipped — already in library ({seriesProgress.skipped.length})
-                  </summary>
-                  <ul
-                    style={{
-                      margin: '0.35rem 0 0',
-                      paddingLeft: '1.2rem',
-                      maxHeight: '160px',
-                      overflowY: 'auto',
-                    }}
-                  >
+                <details open>
+                  <summary>Skipped — already in library ({seriesProgress.skipped.length})</summary>
+                  <ul className="mudae-scroll-list">
                     {seriesProgress.skipped.map((name) => (
-                      <li key={name} style={{ color: '#856404' }}>
+                      <li key={name} className="mudae-item--warn">
                         {name}
                       </li>
                     ))}
@@ -555,10 +516,10 @@ export default function AddPage() {
           )}
 
           {seriesResult && !seriesResult.error && !seriesBusy && (
-            <div style={{ marginTop: '0.75rem', fontSize: '0.9em' }}>
+            <div className="mudae-result">
               <div>{seriesResult.message}</div>
               {Array.isArray(seriesResult.added) && seriesResult.added.length > 0 && (
-                <details open={seriesResult.cancelled} style={{ marginTop: '0.4rem' }}>
+                <details open={seriesResult.cancelled}>
                   <summary>Added ({seriesResult.added.length})</summary>
                   <ul>
                     {seriesResult.added.map((c) => (
@@ -568,7 +529,7 @@ export default function AddPage() {
                 </details>
               )}
               {Array.isArray(seriesResult.skipped) && seriesResult.skipped.length > 0 && (
-                <details style={{ marginTop: '0.4rem' }}>
+                <details>
                   <summary>Skipped — already in library ({seriesResult.skipped.length})</summary>
                   <ul>
                     {seriesResult.skipped.map((name) => (
@@ -578,7 +539,7 @@ export default function AddPage() {
                 </details>
               )}
               {Array.isArray(seriesResult.failed) && seriesResult.failed.length > 0 && (
-                <details style={{ marginTop: '0.4rem' }}>
+                <details>
                   <summary>Failed ({seriesResult.failed.length})</summary>
                   <ul>
                     {seriesResult.failed.map((f) => (
@@ -591,17 +552,13 @@ export default function AddPage() {
               )}
             </div>
           )}
-          {seriesResult?.error && (
-            <div style={{ marginTop: '0.75rem', color: '#dc3545' }}>{seriesResult.error}</div>
-          )}
+          {seriesResult?.error && <div className="form-error">{seriesResult.error}</div>}
         </div>
       )}
 
-      <div className="edit-form-container" style={{ maxWidth: '500px', margin: 0 }}>
-        <h3 className="section-heading" style={{ marginTop: 0 }}>
-          Manual add
-        </h3>
-        <form onSubmit={handleSubmit} className="add-char-form" style={{ maxWidth: '100%' }}>
+      <div className="edit-form-container add-char-panel">
+        <h3 className="section-heading">Manual add</h3>
+        <form onSubmit={handleSubmit} className="add-char-form">
           <div className="edit-group full-width">
             <label htmlFor="addCharName">Character Name</label>
             <input
@@ -635,7 +592,7 @@ export default function AddPage() {
               onChange={(e) => setRank(e.target.value)}
             />
           </div>
-          <div className="edit-group full-width" style={{ marginTop: '10px' }}>
+          <div className="edit-group full-width">
             <label>Main Photo (Optional)</label>
             <div
               className="file-upload-box"
@@ -652,15 +609,15 @@ export default function AddPage() {
                 height="24"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="#6c757d"
+                stroke="currentColor"
                 strokeWidth="2"
-                style={{ marginBottom: '8px', display: 'block' }}
+                className="file-upload-icon"
               >
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
-              <span id="addCharImageLabel" style={{ color: '#6c757d', fontSize: '0.9em' }}>
+              <span id="addCharImageLabel" className="file-upload-hint">
                 {imageFile ? imageFile.name : 'Click to select image (can be added later)'}
               </span>
               <input
@@ -672,18 +629,18 @@ export default function AddPage() {
               />
             </div>
           </div>
-          <div className="edit-actions" style={{ justifyContent: 'flex-start', marginTop: '25px' }}>
+          <div className="edit-actions add-char-actions">
             <Button variant="primary" type="submit" disabled={loading}>
               {loading ? 'Adding...' : 'Add Character'}
             </Button>
           </div>
           {status?.type === 'error' && (
-            <div id="addCharStatus" style={{ marginTop: '15px', color: '#dc3545' }}>
+            <div id="addCharStatus" className="form-error">
               {status.message}
             </div>
           )}
         </form>
       </div>
-    </div>
+    </Card>
   )
 }

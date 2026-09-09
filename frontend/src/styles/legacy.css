@@ -119,13 +119,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 40px;
-  background-color: var(--surface);
-  border-radius: 15px;
-  box-shadow: var(--shadow-overlay);
   max-width: 1200px;
   margin: 0 auto;
-  gap: 0;
 }
 .character-top-section {
   display: flex;
@@ -188,13 +183,13 @@
   width: 100%;
   max-width: 100%;
 }
-.char-page-actions .action-btn {
+.char-page-actions .ui-btn {
   width: 100%;
   justify-content: center;
   box-sizing: border-box;
 }
 @media (min-width: 480px) {
-  .char-page-actions .action-btn {
+  .char-page-actions .ui-btn {
     width: auto;
     align-self: flex-start;
   }
@@ -272,23 +267,7 @@
   cursor: default;
 }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  background-color: var(--surface-sunken);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 8px 16px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 0.9em;
-  transition: all 0.2s;
-}
-.action-btn:hover {
-  background-color: var(--surface-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-} /* Saved Page Styles */
+/* Saved Page Styles */
 .saved-page h2 {
   margin-top: 0;
   color: var(--text);
@@ -380,12 +359,6 @@
   padding: 40px;
   color: var(--text-muted);
 } /* Add Character Page */
-.add-page {
-  background: var(--surface);
-  padding: 30px;
-  border-radius: 10px;
-  box-shadow: var(--shadow-sm);
-}
 .add-page h2 {
   margin-top: 0;
   color: var(--text);
@@ -538,12 +511,6 @@
 }
 
 /* Search Results Page (Google-style) */
-.search-results-page {
-  background: var(--surface);
-  padding: 30px;
-  border-radius: 10px;
-  box-shadow: var(--shadow-sm);
-}
 .search-results-page h2 {
   margin-top: 0;
   color: var(--text);
@@ -589,9 +556,10 @@
   justify-content: center;
 }
 .search-result-info h3 {
-  margin: 0 0 5px 0;
-  font-size: 1.2em;
-  color: var(--accent);
+  margin: 0 0 var(--space-1);
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-medium);
+  color: var(--text);
 }
 .search-result-info p {
   margin: 2px 0;
@@ -600,20 +568,20 @@
 }
 
 /* Custom Images Section — full width of character card (not content-sized) */
+/* Also the drop target for files dragged onto the page, hence the dashed
+   border that only becomes visible in .drag-over. */
 .custom-images-section {
   width: 100%;
   max-width: 100%;
-  box-sizing: border-box;
-  background: var(--surface);
-  padding: 30px;
-  border-radius: 15px;
-  box-shadow: var(--shadow-overlay);
-  margin: 20px 0 0 0;
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
   align-self: stretch;
-  transition:
-    border-color 0.3s,
-    background-color 0.3s;
   border: 2px dashed transparent;
+  border-top-color: var(--border);
+  border-radius: var(--radius-lg);
+  transition:
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
 }
 .custom-images-section.drag-over {
   border-color: var(--accent);
@@ -718,12 +686,6 @@
 .gallery-item-wrapper {
   display: inline-flex;
 } /* Customs Page */
-.customs-page {
-  background: var(--surface);
-  padding: 30px;
-  border-radius: 10px;
-  box-shadow: var(--shadow-sm);
-}
 .customs-controls {
   margin-bottom: 1.25rem;
   display: flex;
@@ -826,7 +788,7 @@
   padding-top: 20px;
   border-top: 1px solid var(--border);
 }
-.customs-pagination .action-btn:disabled {
+.customs-pagination .ui-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1234,26 +1196,6 @@ body.reorder-touch-dragging {
   border-top: 1px solid var(--border);
   padding-top: 20px;
 }
-.action-btn.primary {
-  background-color: var(--accent);
-  color: var(--text-on-accent);
-  border: none;
-  padding: 10px 20px;
-}
-.action-btn.primary:hover {
-  background-color: var(--accent-hover);
-  color: var(--text-on-accent);
-}
-.action-btn.secondary {
-  background-color: var(--surface-hover);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  padding: 10px 20px;
-}
-.action-btn.secondary:hover {
-  background-color: var(--surface-hover);
-  color: var(--text);
-}
 .selected-text {
   font-size: 0.9em;
   color: var(--text-muted);
@@ -1583,12 +1525,12 @@ body.reorder-touch-dragging {
   text-align: center;
   flex-wrap: wrap;
 }
-.ai-command-limit-dialog__copy-btn--copied.action-btn.secondary {
+.ai-command-limit-dialog__copy-btn--copied {
   background-color: var(--success-subtle);
   border-color: var(--success);
   color: var(--success);
 }
-.ai-command-limit-dialog__copy-btn--copied.action-btn.secondary:hover {
+.ai-command-limit-dialog__copy-btn--copied:hover {
   background-color: var(--success-subtle);
   border-color: var(--success);
   color: var(--success);
@@ -1878,7 +1820,7 @@ body.reorder-touch-dragging {
     width: 100%;
     gap: 8px;
   }
-  .char-custom-toolbar-actions .action-btn {
+  .char-custom-toolbar-actions .ui-btn {
     width: 100%;
     justify-content: center;
     box-sizing: border-box;
@@ -1929,14 +1871,11 @@ body.reorder-touch-dragging {
     align-items: stretch;
     gap: 10px;
   }
-  .character-page .edit-actions .action-btn {
+  .character-page .edit-actions .ui-btn {
     width: 100%;
     justify-content: center;
     box-sizing: border-box;
   }
-}
-
-@media (max-width: 640px) {
 }
 
 @media (max-width: 480px) {

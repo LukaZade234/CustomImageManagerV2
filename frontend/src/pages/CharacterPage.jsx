@@ -4,7 +4,7 @@ import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import ImageModal from '../components/ImageModal'
 import UploadErrorDialog from '../components/UploadErrorDialog'
-import { Button, IconButton } from '../components/ui'
+import { Button, Card, IconButton } from '../components/ui'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -884,7 +884,7 @@ export default function CharacterPage() {
   const galleryModalImages = customs.map((u) => getImageUrl(u) || u).filter(Boolean)
 
   return (
-    <div className="character-page">
+    <Card as="article" padding="lg" className="character-page">
       <div className="character-top-section">
         <div className="char-info-section">
           {!editMode ? (
@@ -1028,10 +1028,7 @@ export default function CharacterPage() {
             )}
           </div>
           {mudaeConfigured && (
-            <div
-              className="mudae-main-actions"
-              style={{ marginTop: '0.65rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-            >
+            <div className="mudae-main-actions char-mudae-actions">
               <Button
                 variant="secondary"
                 disabled={mudaeMainBusy || loading}
@@ -1068,7 +1065,6 @@ export default function CharacterPage() {
         onDragOver={handleCustomSectionDragOver}
         onDragLeave={handleCustomSectionDragLeave}
         onDrop={handleCustomDrop}
-        style={{ display: 'block' }}
       >
         <div className="custom-images-header-row">
           <h3 className="section-heading custom-images-heading">Custom Images</h3>
@@ -1288,17 +1284,7 @@ export default function CharacterPage() {
           onChange={handleAddCustomImage}
           disabled={!!customUploadProgress}
         />
-        <p
-          style={{
-            textAlign: 'center',
-            color: '#6c757d',
-            margin: '10px 0',
-            fontSize: '0.9em',
-            border: '1px dashed #ccc',
-            padding: '10px',
-            borderRadius: '5px',
-          }}
-        >
+        <p className="gallery-drop-hint">
           Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add
           Image&quot;
         </p>
@@ -1384,6 +1370,6 @@ export default function CharacterPage() {
           onClose={closeAiLimitDialog}
         />
       )}
-    </div>
+    </Card>
   )
 }

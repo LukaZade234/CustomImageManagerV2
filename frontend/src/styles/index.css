@@ -4,10 +4,12 @@
  *   base    -> element defaults and shared typography, reads tokens only
  *   layout  -> page frame
  *   legacy  -> the pre-token stylesheet, being migrated away page by page
+ *   pages   -> page rules already written against the system
  *   ui      -> shared primitives, last so they win over leftover legacy rules
  */
 @import "./tokens.css";
 @import "./base.css";
 @import "./layout.css";
 @import "./legacy.css";
+@import "./pages.css";
 @import "./ui.css";
