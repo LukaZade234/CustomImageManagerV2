@@ -898,7 +898,7 @@ export default function CharacterPage() {
               <p id="charRankDisplay" className="text-meta">
                 Rank: {char.rank || '—'}
               </p>
-              <div className="bottom-controls char-page-actions">
+              <div className="char-page-actions">
                 <Button
                   variant="secondary"
                   onClick={() => setEditMode(true)}
@@ -1028,7 +1028,7 @@ export default function CharacterPage() {
             )}
           </div>
           {mudaeConfigured && (
-            <div className="mudae-main-actions char-mudae-actions">
+            <div className="char-mudae-actions">
               <Button
                 variant="secondary"
                 disabled={mudaeMainBusy || loading}

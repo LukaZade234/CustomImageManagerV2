@@ -183,7 +183,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
           </div>
         </div>
 
-        <div className="ai-command-limit-dialog__footer upload-error-dialog__actions">
+        <div className="ai-command-limit-dialog__footer">
           <Button onClick={onClose}>Close</Button>
         </div>
 

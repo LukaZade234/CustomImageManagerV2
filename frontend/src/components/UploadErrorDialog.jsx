@@ -62,7 +62,6 @@ export default function UploadErrorDialog({ title, body, onClose }) {
       onClose={onClose}
       title={title || 'Upload issue'}
       titleId="upload-error-dialog-title"
-      className="upload-error-dialog"
       footer={
         <>
           <Button onClick={handleCopy}>Copy details</Button>

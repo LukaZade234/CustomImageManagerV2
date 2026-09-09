@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
-import SearchBar from './SearchBar'
 import { useStore } from '../store/useStore'
+import SearchBar from './SearchBar'
 
 function LocationProbe() {
   const location = useLocation()

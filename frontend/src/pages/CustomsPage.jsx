@@ -193,7 +193,7 @@ export default function CustomsPage() {
           <p id="customsCount" className="text-meta customs-count-line">
             {customsList.length} characters with custom images. Showing page {page} of {totalPages}.
           </p>
-          <div className="customs-list search-result-list">
+          <div className="customs-list">
             {paginatedList.map((c) => (
               <Link
                 key={c.name}

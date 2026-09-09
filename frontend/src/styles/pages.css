@@ -187,3 +187,7 @@
 .skeleton-line--body {
   width: 40%;
 }
+
+.error-boundary__message {
+  margin-bottom: var(--space-4);
+}

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Toast from './components/Toast'
+import { Button, Card } from './components/ui'
 import AddPage from './pages/AddPage'
 import CharacterPage from './pages/CharacterPage'
 import CustomsPage from './pages/CustomsPage'
@@ -25,20 +26,14 @@ class AppErrorBoundary extends React.Component {
     if (this.state.err) {
       const msg = this.state.err?.message || String(this.state.err)
       return (
-        <main className="container" style={{ paddingTop: 24 }}>
-          <div className="home-page" style={{ padding: 24 }}>
+        <main className="container">
+          <Card padding="lg">
             <h1 className="page-title">Something went wrong</h1>
-            <p className="text-body" style={{ marginBottom: 16 }}>
-              {msg}
-            </p>
-            <button
-              type="button"
-              className="action-btn primary"
-              onClick={() => window.location.reload()}
-            >
+            <p className="text-body error-boundary__message">{msg}</p>
+            <Button variant="primary" onClick={() => window.location.reload()}>
               Reload page
-            </button>
-          </div>
+            </Button>
+          </Card>
         </main>
       )
     }

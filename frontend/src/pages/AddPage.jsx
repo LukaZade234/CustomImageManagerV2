@@ -469,7 +469,7 @@ export default function AddPage() {
           </form>
 
           {seriesProgress && seriesBusy && (
-            <div className="mudae-series-progress mudae-progress">
+            <div className="mudae-progress">
               <div className="mudae-progress__label">
                 {seriesProgress.phase === 'starting' && 'Querying Mudae for series list…'}
                 {seriesProgress.phase === 'delay' && (
