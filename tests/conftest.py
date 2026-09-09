@@ -100,3 +100,35 @@ def client(clean_db):
     app.config.update(TESTING=True)
     with app.test_client() as test_client:
         yield test_client
+
+
+@pytest.fixture
+def identity_id(client):
+    """The identity id behind the test client's cookie.
+
+    Tests need this to seed images *owned by the caller*, since the ownership
+    rule is the thing under test. It is deliberately awkward to obtain -- the
+    cookie is HttpOnly and /api/me does not return the id -- so it is unwrapped
+    here once rather than in every test.
+    """
+    from flask import current_app
+
+    import identity as identity_module
+    from upload_imgchest import app
+
+    client.get("/api/me")
+    with app.app_context():
+        token = client.get_cookie(identity_module.COOKIE_NAME).value
+        return identity_module.unsign(token, current_app.config["SECRET_KEY"])
+
+
+@pytest.fixture
+def make_moderator(clean_db, identity_id):
+    """Promote the test client's identity. Returns the callable, not the effect."""
+
+    def promote(role="moderator"):
+        clean_db.ensure_identity(identity_id)
+        with clean_db.transaction() as conn:
+            conn.execute("UPDATE identities SET role = ? WHERE id = ?", (role, identity_id))
+
+    return promote

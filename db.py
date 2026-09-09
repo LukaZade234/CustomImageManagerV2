@@ -280,16 +280,44 @@ def get_custom_images() -> dict:
     return out
 
 
-def get_custom_images_for(char_name: str) -> list[str]:
+def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[dict]:
+    """Active images for a character, with ownership and this viewer's hidden set.
+
+    Note what is *not* returned: `added_by` itself. Clients get the owner's
+    handle and a boolean for "yours", never the raw id -- the id is the thing the
+    identity cookie protects, and ownership can only be decided here anyway.
+    """
     conn = get_connection()
     rows = conn.execute(
-        "SELECT i.url AS url"
-        "  FROM custom_images i JOIN characters c ON c.id = i.character_id"
+        "SELECT i.id AS id, i.url AS url, i.added_by AS added_by,"
+        "       owner.handle AS owner_handle,"
+        "       (hidden.image_id IS NOT NULL) AS is_hidden"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        "  LEFT JOIN identities owner ON owner.id = i.added_by"
+        "  LEFT JOIN user_hidden hidden"
+        "    ON hidden.image_id = i.id AND hidden.identity_id = ?"
         " WHERE c.name = ? AND i.state = 'active'"
         " ORDER BY i.position, i.id",
-        (char_name,),
+        (viewer_id, char_name),
     )
-    return [r["url"] for r in rows]
+    return [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            # NULL for images migrated from v1: nobody owns them, so nobody can
+            # remove them except a moderator or the report threshold.
+            "owner": r["owner_handle"],
+            "is_mine": bool(viewer_id) and r["added_by"] == viewer_id,
+            "hidden": bool(r["is_hidden"]),
+        }
+        for r in rows
+    ]
+
+
+def get_custom_images_for(char_name: str) -> list[str]:
+    """Just the URLs, in order. For callers that do not care who owns what."""
+    return [row["url"] for row in get_custom_image_rows(char_name)]
 
 
 def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None = None) -> int:
@@ -299,6 +327,10 @@ def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None 
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
+        # The identities row is created lazily, so it may not exist yet; without
+        # this the added_by foreign key rejects the insert.
+        if added_by is not None:
+            _ensure_identity(conn, added_by)
         row = conn.execute(
             "SELECT COALESCE(MAX(position), -1) AS p FROM custom_images WHERE character_id = ?",
             (char_id,),
@@ -318,28 +350,157 @@ def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None 
         return added
 
 
-def delete_custom_images(char_name: str, urls: Iterable[str]) -> str:
-    """Remove images. Returns 'no_character', 'no_match' or 'deleted'.
+def remove_custom_images(
+    char_name: str,
+    urls: Iterable[str],
+    actor_id: str,
+    *,
+    is_moderator: bool = False,
+    reason: str | None = None,
+) -> dict | None:
+    """Soft-delete images the actor is allowed to remove.
 
-    Hard delete for now; Phase 6 turns this into a soft delete by setting
-    `state='removed'` so the Removed drawer can restore it.
+    This is the rule that makes griefing unimplementable rather than merely
+    discouraged (DECISIONS.md section 1): **you can only remove images you
+    added.** Moderators are the documented manual fallback, not the mechanism.
+
+    Images migrated from v1 have `added_by IS NULL` -- nobody owns them, so no
+    ordinary user can remove them. That is the intended outcome, not an
+    oversight: the alternative is letting anyone delete the entire inherited
+    library.
+
+    Nothing is ever hard-deleted. ImgChest keeps the file regardless, so a
+    removal is always restorable and the Removed drawer costs nothing.
+
+    Returns None if the character is unknown, otherwise a report of what
+    happened to each URL, so the caller can explain a partial refusal instead of
+    silently dropping half the request.
     """
-    doomed = list(urls)
+    doomed = list(dict.fromkeys(urls))
     with transaction() as conn:
         char_id = _character_id(conn, char_name)
         if char_id is None:
-            return "no_character"
+            return None
+        result: dict[str, list[str]] = {"removed": [], "denied": [], "missing": []}
         if not doomed:
-            return "no_match"
+            return result
+
         placeholders = ",".join("?" for _ in doomed)
-        cur = conn.execute(
-            f"DELETE FROM custom_images WHERE character_id = ? AND url IN ({placeholders})",
+        rows = conn.execute(
+            f"SELECT id, url, added_by FROM custom_images"
+            f" WHERE character_id = ? AND state = 'active' AND url IN ({placeholders})",
             (char_id, *doomed),
+        ).fetchall()
+        by_url = {r["url"]: r for r in rows}
+
+        removable = []
+        for url in doomed:
+            row = by_url.get(url)
+            if row is None:
+                result["missing"].append(url)
+            elif is_moderator or (row["added_by"] is not None and row["added_by"] == actor_id):
+                removable.append(row)
+            else:
+                result["denied"].append(url)
+
+        if removable:
+            _ensure_identity(conn, actor_id)
+            now = _now()
+            conn.executemany(
+                "UPDATE custom_images"
+                "   SET state = 'removed', removed_by = ?, removed_at = ?, removed_reason = ?"
+                " WHERE id = ?",
+                [(actor_id, now, reason, row["id"]) for row in removable],
+            )
+            conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (now, char_id))
+            result["removed"] = [row["url"] for row in removable]
+        return result
+
+
+def get_removed_for(char_name: str) -> list[dict]:
+    """The Removed drawer: everything soft-deleted for this character."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.id AS id, i.url AS url, i.removed_at AS removed_at,"
+        "       i.removed_reason AS removed_reason,"
+        "       remover.handle AS removed_by_handle"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        "  LEFT JOIN identities remover ON remover.id = i.removed_by"
+        " WHERE c.name = ? AND i.state = 'removed'"
+        " ORDER BY i.removed_at DESC, i.id DESC",
+        (char_name,),
+    )
+    return [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            "removed_by": r["removed_by_handle"],
+            "removed_at": r["removed_at"],
+            "reason": r["removed_reason"],
+        }
+        for r in rows
+    ]
+
+
+def restore_custom_images(char_name: str, urls: Iterable[str]) -> int:
+    """Un-remove images. Returns how many came back.
+
+    Deliberately open to anyone: restoring is not destructive, and a removal
+    that was wrong should be cheap for the next person to undo.
+    """
+    wanted = list(dict.fromkeys(urls))
+    if not wanted:
+        return 0
+    with transaction() as conn:
+        char_id = _character_id(conn, char_name)
+        if char_id is None:
+            return 0
+        placeholders = ",".join("?" for _ in wanted)
+        cur = conn.execute(
+            f"UPDATE custom_images"
+            f"   SET state = 'active', removed_by = NULL, removed_at = NULL,"
+            f"       removed_reason = NULL"
+            f" WHERE character_id = ? AND state = 'removed' AND url IN ({placeholders})",
+            (char_id, *wanted),
         )
-        if not cur.rowcount:
-            return "no_match"
-        conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
-        return "deleted"
+        if cur.rowcount:
+            conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
+        return cur.rowcount
+
+
+# --- Hide for me --------------------------------------------------------
+#
+# The pressure valve. Instant, unlimited, and invisible to everyone else, which
+# is what removes the reason to delete other people's images in the first place.
+
+
+def hide_images(identity_id: str, image_ids: Iterable[int]) -> int:
+    wanted = list(dict.fromkeys(image_ids))
+    if not wanted:
+        return 0
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        now = _now()
+        cur = conn.executemany(
+            "INSERT INTO user_hidden (identity_id, image_id, hidden_at) VALUES (?, ?, ?)"
+            " ON CONFLICT (identity_id, image_id) DO NOTHING",
+            [(identity_id, image_id, now) for image_id in wanted],
+        )
+        return cur.rowcount
+
+
+def unhide_images(identity_id: str, image_ids: Iterable[int]) -> int:
+    wanted = list(dict.fromkeys(image_ids))
+    if not wanted:
+        return 0
+    with transaction() as conn:
+        placeholders = ",".join("?" for _ in wanted)
+        cur = conn.execute(
+            f"DELETE FROM user_hidden WHERE identity_id = ? AND image_id IN ({placeholders})",
+            (identity_id, *wanted),
+        )
+        return cur.rowcount
 
 
 def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:

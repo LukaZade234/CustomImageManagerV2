@@ -839,7 +839,7 @@ def add_custom_image():
             main_error = errors[0] if errors else "No files were successfully uploaded"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.add_custom_images(char_name, uploaded_links)
+        db.add_custom_images(char_name, uploaded_links, added_by=identity.current_identity().id)
         db.update_last_modified(char_name)
         print(
             f"[UPLOAD] updating custom_images for {char_name}, added {len(uploaded_links)} link(s)",
@@ -902,7 +902,7 @@ def import_custom_images_from_urls():
             main_error = errors[0] if errors else "No images were imported"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.add_custom_images(char_name, uploaded_links)
+        db.add_custom_images(char_name, uploaded_links, added_by=identity.current_identity().id)
         db.update_last_modified(char_name)
         print(
             f"[IMPORT] updating custom_images for {char_name}, added {len(uploaded_links)} link(s)",
@@ -924,10 +924,16 @@ def import_custom_images_from_urls():
 
 @app.route("/api/custom-image/<path:char_name>", methods=["GET"])
 def get_custom_images(char_name):
+    """Active images for one character, annotated for the caller.
+
+    Each entry carries `is_mine` and `hidden` because both are per-viewer: the
+    client cannot work either out on its own, and ownership must be decided
+    server-side regardless.
+    """
     try:
         # Targeted query rather than loading every character's images and
         # discarding all but one, which is what the JSON-document layout forced.
-        return jsonify(db.get_custom_images_for(char_name))
+        return jsonify(db.get_custom_image_rows(char_name, identity.current_identity().id))
     except Exception as e:
         print(f"Error reading custom images: {e}")
     return jsonify([])
@@ -954,27 +960,44 @@ def reorder_custom_images():
 
 @app.route("/api/delete-custom-image", methods=["POST"])
 def delete_custom_image():
+    """Remove a single image. 403 when it is not the caller's to remove."""
     data = request.get_json()
     if not data or "character_name" not in data or "image_url" not in data:
         return jsonify({"error": "Missing data"}), 400
     char_name = data["character_name"]
     image_url = data["image_url"]
+    me = identity.current_identity()
 
     try:
-        outcome = db.delete_custom_images(char_name, [image_url])
-        if outcome == "no_character":
+        report = db.remove_custom_images(
+            char_name, [image_url], me.id, is_moderator=me.is_moderator
+        )
+        if report is None:
             return jsonify({"error": "Character not found"}), 404
-        if outcome == "no_match":
+        if report["missing"]:
             return jsonify({"error": "Image not found"}), 404
+        if report["denied"]:
+            return jsonify(
+                {
+                    "error": "You can only remove images you added. Hide it instead.",
+                    "denied": report["denied"],
+                }
+            ), 403
         db.update_last_modified(char_name)
-        return jsonify({"success": True, "message": "Image deleted"})
+        return jsonify({"success": True, "message": "Image removed"})
     except Exception as e:
-        print(f"Error deleting image: {e}")
+        print(f"Error removing image: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/delete-custom-images", methods=["POST"])
 def delete_custom_images():
+    """Remove the caller's own images from a selection.
+
+    Returns the full breakdown rather than a bare success, because a mixed
+    selection is the normal case: the UI has to be able to say "removed 3, 2
+    were not yours" instead of silently dropping half the request.
+    """
     data = request.get_json()
     if not data or "character_name" not in data or "image_urls" not in data:
         return jsonify({"error": "Missing data"}), 400
@@ -982,17 +1005,104 @@ def delete_custom_images():
     image_urls = data["image_urls"]
     if not isinstance(image_urls, list):
         return jsonify({"error": "image_urls must be a list"}), 400
+    me = identity.current_identity()
 
     try:
-        outcome = db.delete_custom_images(char_name, image_urls)
-        if outcome == "no_character":
+        report = db.remove_custom_images(char_name, image_urls, me.id, is_moderator=me.is_moderator)
+        if report is None:
             return jsonify({"error": "Character not found"}), 404
-        if outcome == "no_match":
-            return jsonify({"message": "No images were deleted (none matched)"})
-        db.update_last_modified(char_name)
-        return jsonify({"success": True, "message": "Images deleted"})
+        if report["removed"]:
+            db.update_last_modified(char_name)
+        return jsonify(
+            {
+                "success": True,
+                "removed": report["removed"],
+                "denied": report["denied"],
+                "missing": report["missing"],
+            }
+        )
     except Exception as e:
-        print(f"Error deleting images: {e}")
+        print(f"Error removing images: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/removed/<path:char_name>", methods=["GET"])
+def get_removed_images(char_name):
+    """The Removed drawer. Nothing is ever hard-deleted, so this is never empty
+    by accident -- if an image is gone from the gallery it is in here."""
+    try:
+        return jsonify(db.get_removed_for(char_name))
+    except Exception as e:
+        print(f"Error reading removed images: {e}")
+        return jsonify([])
+
+
+@app.route("/api/restore-images", methods=["POST"])
+def restore_images():
+    """Put removed images back.
+
+    Open to anyone on purpose: restoring is not destructive, and a removal that
+    was wrong should be cheap for the next person to undo.
+    """
+    data = request.get_json()
+    if not data or "character_name" not in data or "image_urls" not in data:
+        return jsonify({"error": "Missing data"}), 400
+    if not isinstance(data["image_urls"], list):
+        return jsonify({"error": "image_urls must be a list"}), 400
+
+    try:
+        restored = db.restore_custom_images(data["character_name"], data["image_urls"])
+        if restored:
+            db.update_last_modified(data["character_name"])
+        return jsonify({"success": True, "restored": restored})
+    except Exception as e:
+        print(f"Error restoring images: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _image_ids_from(data):
+    """Validate an image_ids payload. Returns (ids, error_response)."""
+    ids = data.get("image_ids")
+    if not isinstance(ids, list):
+        return None, (jsonify({"error": "image_ids must be a list"}), 400)
+    try:
+        return [int(i) for i in ids], None
+    except (TypeError, ValueError):
+        return None, (jsonify({"error": "image_ids must be integers"}), 400)
+
+
+@app.route("/api/hide-images", methods=["POST"])
+def hide_images():
+    """Hide images for the caller only.
+
+    This is the pressure valve that removes the reason to delete other people's
+    images: instant, unlimited, and with no effect on anyone else's view.
+    """
+    data = request.get_json() or {}
+    ids, error = _image_ids_from(data)
+    if error:
+        return error
+    try:
+        return jsonify(
+            {"success": True, "hidden": db.hide_images(identity.current_identity().id, ids)}
+        )
+    except Exception as e:
+        print(f"Error hiding images: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/unhide-images", methods=["POST"])
+def unhide_images():
+    data = request.get_json() or {}
+    ids, error = _image_ids_from(data)
+    if error:
+        return error
+    try:
+        return jsonify(
+            {"success": True, "unhidden": db.unhide_images(identity.current_identity().id, ids)}
+        )
+    except Exception as e:
+        print(f"Error unhiding images: {e}")
         return jsonify({"error": str(e)}), 500
 
 
