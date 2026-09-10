@@ -4,6 +4,7 @@ import { getImageUrl } from '../api'
 import HomeLoadingState from '../components/HomeLoadingState'
 import { Card } from '../components/ui'
 import { apiUrl } from '../config'
+import { useDragScroll } from '../hooks/useDragScroll'
 import { useStore } from '../store/useStore'
 
 /**
@@ -49,6 +50,12 @@ function Section({ title, action, children }) {
   )
 }
 
+/** Landscape and portrait both look deliberate; a missing size falls back to 3:4. */
+function ratioOf(width, height) {
+  if (!width || !height) return 0.75
+  return Math.min(2, Math.max(0.45, width / height))
+}
+
 const characterHref = (name) => `/character/${encodeURIComponent(name)}`
 const seriesHref = (series) => `/search?q=${encodeURIComponent(series)}&by=series`
 
@@ -57,6 +64,8 @@ export default function HomePage() {
   const loading = useStore((s) => s.loading)
   const error = useStore((s) => s.error)
   const loadStats = useStore((s) => s.loadStats)
+  // Above the early returns: hooks must run in the same order every render.
+  const dragScroll = useDragScroll()
 
   useEffect(() => {
     loadStats()
@@ -145,10 +154,14 @@ export default function HomePage() {
               </Link>
             }
           >
-            <ul className="home-recent">
+            <ul className="home-recent" {...dragScroll}>
               {recent.map((row) => (
                 <li key={row.id}>
-                  <Link className="home-recent__item" to={characterHref(row.character)}>
+                  <Link
+                    className="home-recent__item"
+                    to={characterHref(row.character)}
+                    style={{ '--ratio': ratioOf(row.width, row.height) }}
+                  >
                     <img
                       className="home-recent__thumb"
                       src={row.thumb ? apiUrl(row.thumb) : getImageUrl(row.url)}
@@ -169,7 +182,7 @@ export default function HomePage() {
 
       {bestCovered.length > 0 && (
         <Card as="section" padding="lg">
-          <Section title="Best covered">
+          <Section title="Most popular characters">
             <ol className="home-ranked">
               {bestCovered.map((c, i) => (
                 <li key={c.name}>
@@ -203,7 +216,7 @@ export default function HomePage() {
 
       {topSeries.length > 0 && (
         <Card as="section" padding="lg">
-          <Section title="Browse by series">
+          <Section title="Most popular series">
             <ul className="home-series">
               {topSeries.map((s) => (
                 <li key={s.series}>
@@ -228,7 +241,7 @@ export default function HomePage() {
               Counts images added by people signed in with Discord. Anonymous uploads are not
               ranked.
             </p>
-            <ol className="home-ranked home-ranked--compact">
+            <ol className="home-ranked">
               {contributors.map((c, i) => (
                 <li key={c.handle}>
                   <div className="home-ranked__item">
