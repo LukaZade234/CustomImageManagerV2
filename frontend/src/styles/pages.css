@@ -1420,3 +1420,189 @@ body.reorder-touch-dragging {
   border-radius: 10px;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
 }
+
+/* ---- Home page -----------------------------------------------------------
+ * Everything here is drawn from the library. The page used to be two stat cards
+ * above a bullet list explaining the site to people already using it.
+ */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.home-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.home-section__head .section-heading {
+  margin-bottom: 0;
+}
+.home-section__link {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: var(--type-meta);
+  text-decoration: none;
+}
+.home-section__link:hover {
+  text-decoration: underline;
+}
+.home-note {
+  margin: calc(var(--space-2) * -1) 0 var(--space-4);
+}
+
+/* Just added: a horizontal strip, because the newest images are the most direct
+   evidence that the site is alive. Scrolls rather than wraps so it stays one
+   line on any width. */
+.home-recent {
+  display: flex;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0 0 var(--space-2);
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.home-recent__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 116px;
+  color: inherit;
+  text-decoration: none;
+}
+/* Classed rather than a descendant `img` selector: the file already has several
+   rules matching `img` under a more specific ancestor, and a bare descendant
+   here collides with them for no benefit. */
+.home-recent__thumb {
+  width: 116px;
+  height: 156px;
+  object-fit: cover;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  transition: border-color var(--duration) var(--ease);
+}
+.home-recent__item:hover .home-recent__thumb {
+  border-color: var(--accent);
+}
+.home-recent__name {
+  font-size: var(--type-micro);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ranked lists: best-covered characters, and contributors. */
+.home-ranked {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.home-ranked--compact {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.home-ranked__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+a.home-ranked__item:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.home-ranked__rank {
+  flex-shrink: 0;
+  width: 1.5rem;
+  color: var(--text-subtle);
+  font-size: var(--type-meta);
+  text-align: right;
+}
+.home-ranked__thumb {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+}
+.home-ranked__thumb--empty {
+  display: block;
+}
+.home-ranked__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.home-ranked__title,
+.home-ranked__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-ranked__meta {
+  font-size: var(--type-micro);
+  color: var(--text-muted);
+}
+.home-ranked__count {
+  flex-shrink: 0;
+  padding-left: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+
+/* Series: the most under-used way into the library, so it gets real estate. */
+.home-series {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.home-series__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+.home-series__item:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+.home-series__name {
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-series__meta {
+  font-size: var(--type-micro);
+  color: var(--text-muted);
+}

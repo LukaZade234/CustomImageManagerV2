@@ -76,7 +76,9 @@ class TestUrlValidation:
         assert remote_images._safe_import_image_url(url) is False
 
     def test_a_normal_https_image_url_is_allowed(self):
-        assert remote_images._safe_import_image_url("https://cdn.imgchest.com/files/abc.png") is True
+        assert (
+            remote_images._safe_import_image_url("https://cdn.imgchest.com/files/abc.png") is True
+        )
 
 
 @pytest.fixture

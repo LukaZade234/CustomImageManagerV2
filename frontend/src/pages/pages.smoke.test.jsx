@@ -50,7 +50,7 @@ function renderAt(ui, route = '/') {
 describe('page smoke tests', () => {
   it('renders the home page with its counts', () => {
     renderAt(<HomePage />)
-    expect(screen.getByRole('heading', { level: 1, name: /welcome/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: /imgmanager/i })).toBeInTheDocument()
   })
 
   it('renders the saved page with a saved character', () => {
