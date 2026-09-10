@@ -434,3 +434,72 @@
     display: none;
   }
 }
+
+/* ---- Character gallery: justified rows -----------------------------------
+ * Every image is shown whole. Each row is scaled so it fills the width exactly,
+ * which is the only layout that stays tidy across the mix of tall character art,
+ * the occasional panorama and the odd GIF — the previous fixed-height rows left
+ * a 680px banner sitting beside a 130px portrait.
+ *
+ * How it works: an item's flex-basis is proportional to its aspect ratio, and so
+ * is its flex-grow. Flexbox then distributes the leftover space in the same
+ * proportion, which lands every item in a row at the same height. `--ratio` is
+ * measured in the browser as each image loads, because the server stores URLs
+ * and nothing about the images themselves.
+ */
+.custom-images-gallery {
+  --gallery-row-height: 220px;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 100%;
+}
+
+.custom-images-gallery .gallery-item-wrapper {
+  position: relative;
+  display: block;
+  /* Both proportional to the shape: basis sets the starting width, grow shares
+     out what is left over. */
+  flex: var(--ratio, 0.667) 1 calc(var(--ratio, 0.667) * var(--gallery-row-height));
+  min-width: 0;
+  aspect-ratio: var(--ratio, 0.667);
+  line-height: 0;
+}
+
+.custom-images-gallery .custom-image-full {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The wrapper already carries the image's own ratio, so this only guards
+     against sub-pixel rounding leaving a hairline gap. */
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-sunken);
+  cursor: pointer;
+  transition: opacity var(--duration) var(--ease);
+}
+
+/* Zero-height, no reorder slot: inert to layout and to hit-testing.
+ *
+ * flex-basis must be 0. Giving these a real basis makes them compete for space
+ * when wrapping, so they can spill onto a row of their own — at which point the
+ * last row of real images has nothing to share with and stretches full width,
+ * which is the exact problem they exist to prevent. With no basis and a large
+ * grow they add nothing until there is slack, then swallow all of it, leaving
+ * the last row sitting at its natural height. */
+.gallery-filler {
+  flex: 999 1 0;
+  height: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .custom-images-gallery {
+    --gallery-row-height: 150px;
+
+    gap: var(--space-1);
+  }
+}

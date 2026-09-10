@@ -120,3 +120,20 @@ def convert_to_png(input_path):
     except Exception as e:
         _log(f"convert_to_png FAILED: {input_path}: {type(e).__name__}: {e}")
         return None, f"Conversion failed: {str(e)}"
+
+
+def read_image_dimensions(path):
+    """(width, height) for an image on disk, or None if it cannot be read.
+
+    Opening with Pillow only parses the header, so this costs a few hundred
+    bytes of I/O rather than decoding the whole image. Never raises: a missing
+    size is a degraded gallery, not a failed upload.
+    """
+    try:
+        with Image.open(path) as img:
+            width, height = img.size
+        if width > 0 and height > 0:
+            return width, height
+    except Exception as e:
+        _log(f"read_image_dimensions failed for {path}: {type(e).__name__}: {e}")
+    return None

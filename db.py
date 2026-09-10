@@ -396,6 +396,7 @@ def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[
     conn = get_connection()
     rows = conn.execute(
         "SELECT i.id AS id, i.url AS url, i.added_by AS added_by,"
+        "       i.width AS width, i.height AS height,"
         "       owner.handle AS owner_handle,"
         "       (hidden.image_id IS NOT NULL) AS is_hidden"
         "  FROM custom_images i"
@@ -411,6 +412,10 @@ def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[
         {
             "id": r["id"],
             "url": r["url"],
+            # NULL until the backfill has seen this image. The gallery falls back
+            # to measuring on load, which is what it did before these existed.
+            "width": r["width"],
+            "height": r["height"],
             # NULL for images migrated from v1: nobody owns them, so nobody can
             # remove them except a moderator or the report threshold.
             "owner": r["owner_handle"],
@@ -426,10 +431,19 @@ def get_custom_images_for(char_name: str) -> list[str]:
     return [row["url"] for row in get_custom_image_rows(char_name)]
 
 
-def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None = None) -> int:
+def add_custom_images(
+    char_name: str,
+    urls: Iterable[str],
+    added_by: str | None = None,
+    dimensions: dict[str, tuple[int, int]] | None = None,
+) -> int:
     """Append images, skipping any URL already present. Returns how many landed.
 
     Two people adding at once no longer contend: these are separate INSERTs.
+
+    `dimensions` maps url -> (width, height). Supplying it is what keeps the
+    gallery from reflowing as images arrive; it is optional because the import
+    paths do not always have the file to hand.
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
@@ -443,11 +457,14 @@ def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None 
         ).fetchone()
         position = int(row["p"]) + 1
         added = 0
+        sizes = dimensions or {}
         for url in urls:
+            width, height = sizes.get(url, (None, None))
             cur = conn.execute(
-                "INSERT INTO custom_images (character_id, url, position, added_by, added_at)"
-                " VALUES (?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
-                (char_id, url, position, added_by, _now()),
+                "INSERT INTO custom_images"
+                " (character_id, url, position, added_by, added_at, width, height)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
+                (char_id, url, position, added_by, _now(), width, height),
             )
             if cur.rowcount:
                 position += 1
@@ -521,6 +538,28 @@ def remove_custom_images(
             conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (now, char_id))
             result["removed"] = [row["url"] for row in removable]
         return result
+
+
+def images_missing_dimensions(limit: int = 500) -> list[dict]:
+    """Rows the backfill still has to measure."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, url FROM custom_images WHERE width IS NULL OR height IS NULL LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [{"id": r["id"], "url": r["url"]} for r in rows]
+
+
+def set_image_dimensions(sizes: dict[int, tuple[int, int]]) -> int:
+    """Record measured dimensions. Returns how many rows were updated."""
+    if not sizes:
+        return 0
+    with transaction() as conn:
+        cur = conn.executemany(
+            "UPDATE custom_images SET width = ?, height = ? WHERE id = ?",
+            [(w, h, image_id) for image_id, (w, h) in sizes.items()],
+        )
+        return cur.rowcount
 
 
 def get_removed_for(char_name: str) -> list[dict]:

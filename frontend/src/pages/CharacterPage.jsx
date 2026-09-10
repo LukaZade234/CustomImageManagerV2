@@ -23,6 +23,7 @@ import {
   dedupeImageUrls,
   extractImageUrlsFromDataTransfer,
 } from '../utils/dragImageUrls'
+import { FILLERS, ratioFor, ratioOf } from '../utils/galleryRatios'
 
 /** Must match server MAX_FILE_SIZE in upload_imgchest.py (30 MiB) */
 const MAX_CUSTOM_IMAGE_BYTES = 30 * 1024 * 1024
@@ -157,6 +158,9 @@ export default function CharacterPage() {
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
   const [removedDrawer, setRemovedDrawer] = useState(null)
+  // Measured as images load; see utils/galleryRatios.js for why the server
+  // cannot supply these.
+  const [ratios, setRatios] = useState({})
   const [modalOpen, setModalOpen] = useState(false)
   const [modalIndex, setModalIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
@@ -746,6 +750,12 @@ export default function CharacterPage() {
     } catch (err) {
       addToast(err.message, 'error')
     }
+  }
+
+  const noteRatio = (imageId, element) => {
+    const ratio = ratioOf(element)
+    if (ratio === null) return
+    setRatios((prev) => (prev[imageId] === ratio ? prev : { ...prev, [imageId]: ratio }))
   }
 
   const handleReport = async (imageId, reason) => {
@@ -1465,6 +1475,10 @@ export default function CharacterPage() {
               <div
                 key={url}
                 data-reorder-slot={idx}
+                // The measured shape drives the row maths, so it has to reach
+                // CSS somehow; a custom property keeps the rules themselves in
+                // the stylesheet.
+                style={{ '--ratio': ratioFor(row, ratios[row.id]) }}
                 className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''} ${row.is_mine ? 'is-mine' : ''} ${row.hidden ? 'is-hidden' : ''}`}
                 title={attribution}
                 onClick={() => {
@@ -1487,6 +1501,15 @@ export default function CharacterPage() {
                   alt=""
                   draggable={false}
                   className="custom-image-full"
+                  /* A character can hold hundreds of images at ~1.9 MB each, so
+                     fetching them all on load is untenable on a slow connection.
+                     The row is already the right shape from the stored
+                     dimensions, so nothing moves when one arrives. */
+                  loading="lazy"
+                  decoding="async"
+                  width={row.width || undefined}
+                  height={row.height || undefined}
+                  onLoad={(e) => noteRatio(row.id, e.currentTarget)}
                   onClick={() =>
                     !aiMode && !deleteMode && !downloadMode && !reorderMode && openModal(idx)
                   }
@@ -1505,6 +1528,16 @@ export default function CharacterPage() {
               </div>
             )
           })}
+          {/*
+            Absorb the leftover space on the last row. Without these, flex-grow
+            stretches a single trailing image across the full width, which reads
+            as a bug rather than a layout. Zero height and no reorder slot, so
+            they are inert to both layout and hit-testing.
+          */}
+          {rows.length > 0 &&
+            FILLERS.map((id) => (
+              <span key={`filler-${id}`} className="gallery-filler" aria-hidden="true" />
+            ))}
         </div>
       </div>
 
