@@ -74,6 +74,10 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
   const dialogDescId = 'ai-command-limit-desc'
 
   return createPortal(
+    // Dismissing by clicking the backdrop is mouse convenience layered on top of
+    // the real controls: the dialog traps focus, Escape closes it, and it has a
+    // visible close button. Nothing here is denied to a keyboard user.
+    // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal, see above
     <div className="ui-modal-backdrop" role="presentation" onClick={onBackdropClick}>
       <div
         ref={dialogRef}
@@ -132,7 +136,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
                     const partKey = `regular-${idx}`
                     const wasCopied = copiedKeys.has(partKey)
                     return (
-                      <li key={`n-${idx}`}>
+                      <li key={partKey}>
                         <button
                           type="button"
                           className={`ui-btn ui-btn--secondary ui-btn--sm ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}
@@ -165,7 +169,7 @@ export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroPa
                     const partKey = `nitro-${idx}`
                     const wasCopied = copiedKeys.has(partKey)
                     return (
-                      <li key={`t-${idx}`}>
+                      <li key={partKey}>
                         <button
                           type="button"
                           className={`ui-btn ui-btn--secondary ui-btn--sm ai-command-limit-dialog__copy-btn${wasCopied ? ' ai-command-limit-dialog__copy-btn--copied' : ''}`}

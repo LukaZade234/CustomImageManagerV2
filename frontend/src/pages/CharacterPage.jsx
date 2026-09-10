@@ -516,6 +516,13 @@ export default function CharacterPage() {
         }}
       />
 
+      {/*
+        A drop target for files and for images dragged in from a web page. There
+        is no keyboard gesture for "drop a file", so nothing here is withheld
+        from a keyboard user: the toolbar's "Add Image" button reaches the same
+        upload path and is the accessible route to it.
+      */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: file drop zone, see above */}
       <div
         className={`custom-images-section ${upload.dragOver ? 'drag-over' : ''}`}
         onDragOver={upload.onDragOver}

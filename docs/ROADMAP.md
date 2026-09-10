@@ -535,13 +535,21 @@ both derived from one token set, following `prefers-color-scheme` by default.
 Still open, and deliberately after Phase 6 — ownership, hide-for-me and report controls change what
 each gallery item must show, so building this now means building it twice:
 
-- [ ] **The CharacterPage gallery.** Still ragged flexbox at a fixed 200px row height, so a
-      panoramic image occupies 680px beside a 130px portrait. The single worst-looking thing left.
+- [x] **The CharacterPage gallery.** _(done)_ Justified rows: each item's `flex-basis` and
+      `flex-grow` are both proportional to its aspect ratio, so a row ends flush at one height
+      with nothing cropped. Dimensions come from the database where known and are measured in the
+      browser where not, which also removed the reflow cascade on image-heavy characters.
 - [ ] **Home page information architecture.** Two stat cards and a feature bullet list, shown to
       people already using the tool.
-- [ ] **Retire `legacy.css`** — 1888 lines, down from 2874. It now contains no colour literals, no
+- [ ] **Retire `legacy.css`** — 1803 lines, down from 2874. It now contains no colour literals, no
       ID selectors and no `!important`, but it is still un-migrated markup.
-- [ ] **The remaining 22 Biome findings**, almost all `noStaticElementInteractions` and
+- [x] **The remaining Biome findings** _(done)_ — `biome check src` is clean. Most were real: the
+      gallery's two overlapping mouse-only handlers became one button per image, the series
+      autocomplete had `role="option"` on items no keyboard could select and now implements the
+      ARIA combobox pattern, the toast was a `role="button"` containing a button, and search
+      results became links so middle-click works. The four remaining suppressions are file drop
+      zones and backdrop dismissal, each with no keyboard equivalent to withhold.
+- [ ] _(superseded)_ The original note read: almost all `noStaticElementInteractions` and
       `useKeyWithClickEvents` on div-as-button patterns in CharacterPage.
 - [ ] **Re-enable `noDescendingSpecificity`** once `legacy.css` is gone.
 

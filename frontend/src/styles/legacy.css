@@ -341,9 +341,18 @@
 }
 
 /* Gallery Edit Styles */
+/* Each gallery item is a real <button> (see CustomImageGallery), so the browser
+   chrome has to be cleared before the layout rules below mean anything. */
 .gallery-item-wrapper {
   position: relative;
   display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
 }
 .gallery-item-wrapper.draggable {
   cursor: grab;
@@ -442,6 +451,33 @@
     var(--surface) 48%
   );
 }
+/* The toast's own dismiss control. The message takes the slack so this and Undo
+   stay at the trailing edge whatever the text length. */
+.toast-message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.toast-dismiss {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.toast-dismiss:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
 .toast-undo {
   flex-shrink: 0;
   margin: 0;
@@ -463,7 +499,34 @@
   background: var(--surface-sunken);
   border-color: var(--border-strong);
 }
-.toast--success .toast-undo {
+.toast--success /* The toast's own dismiss control. The message takes the slack so this and Undo
+   stay at the trailing edge whatever the text length. */
+.toast-message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.toast-dismiss {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.toast-dismiss:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.toast-undo {
   border-color: color-mix(in srgb, var(--success) 45%, transparent);
   color: var(--success);
 }
@@ -1066,6 +1129,12 @@ body.reorder-touch-dragging {
   border-bottom-right-radius: 8px;
   box-shadow: var(--shadow-sm);
 }
+/* The virtual cursor. Hover and keyboard share one highlight, so the mouse and
+   the arrow keys cannot disagree about which option is current. */
+.autocomplete-item.is-active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
 .autocomplete-item {
   padding: 10px 15px;
   cursor: pointer;
@@ -1227,7 +1296,10 @@ body.reorder-touch-dragging {
 }
 
 /* File Upload Box */
+/* This is a <label> for the file input, so it sits inside .edit-group and would
+   otherwise inherit that group's small uppercase label styling. */
 .file-upload-box {
+  display: block;
   border: 1px dashed var(--border);
   padding: 20px;
   border-radius: 8px;
@@ -1235,10 +1307,23 @@ body.reorder-touch-dragging {
   background: var(--surface);
   cursor: pointer;
   transition: all 0.2s;
+  font-size: var(--type-body);
+  font-weight: var(--weight-regular);
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: normal;
+  margin-bottom: 0;
 }
 .file-upload-box:hover {
   border-color: var(--accent);
   background: var(--surface-sunken);
+}
+/* The input itself is .sr-only, so the ring has to be drawn on the box it labels
+   or a keyboard user tabbing here would see nothing move. */
+.file-upload-box:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--accent);
 }
 
 /* Image Modal */

@@ -67,23 +67,24 @@ export default function Toast() {
 
   return (
     <div id="toast-container" aria-live="polite" aria-relevant="additions">
+      {/*
+        A toast is an announcement, so it is a status region rather than a
+        control. It used to be a div with role="button" that *contained* the
+        Undo button -- a button inside a button, which is invalid and is why
+        Undo needed stopPropagation to avoid also dismissing the toast. Clicking
+        anywhere to dismiss is gone with it; toasts already disappear on their
+        own after a few seconds, and the explicit control below is both
+        discoverable and reachable by keyboard, which the old one was not.
+      */}
       {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`toast toast--${t.type || 'info'}`}
-          onClick={() => removeToast(t.id)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && removeToast(t.id)}
-        >
+        <div key={t.id} className={`toast toast--${t.type || 'info'}`} role="status">
           <ToastIcon type={t.type} />
           <span className="toast-message">{t.msg}</span>
           {typeof t.onUndo === 'function' && (
             <button
               type="button"
               className="toast-undo"
-              onClick={async (e) => {
-                e.stopPropagation()
+              onClick={async () => {
                 try {
                   await t.onUndo()
                 } finally {
@@ -94,6 +95,14 @@ export default function Toast() {
               {t.undoLabel || 'Undo'}
             </button>
           )}
+          <button
+            type="button"
+            className="toast-dismiss"
+            onClick={() => removeToast(t.id)}
+            aria-label="Dismiss notification"
+          >
+            &times;
+          </button>
         </div>
       ))}
     </div>
