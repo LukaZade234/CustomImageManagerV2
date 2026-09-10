@@ -246,6 +246,11 @@ export function useGalleryReorder({ items, enabled, indicesFor, onReorder }) {
             onPointerMove,
             onPointerUp,
             onPointerCancel,
+            // Android fires contextmenu partway through a long press, which
+            // opens the browser's own image menu on top of the drag. Outside
+            // reorder mode that menu is useful, so this is scoped to the mode
+            // rather than applied to the gallery generally.
+            onContextMenu: (e) => e.preventDefault(),
           }
         : {},
     [enabled, onPointerDown, onPointerMove, onPointerUp, onPointerCancel],

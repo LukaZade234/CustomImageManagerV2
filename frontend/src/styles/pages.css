@@ -510,3 +510,17 @@
 .gallery-item-wrapper.reorder-mode {
   touch-action: manipulation;
 }
+
+/* Suppress the native long-press image callout while reordering.
+ *
+ * iOS shows a Save/Copy sheet and Android a context menu partway through the
+ * press that begins a drag, which makes reordering on a phone a race against
+ * the browser. Both are scoped to reorder mode: long-pressing an image to save
+ * it is a perfectly reasonable thing to want the rest of the time.
+ */
+.gallery-item-wrapper.reorder-mode,
+.gallery-item-wrapper.reorder-mode .custom-image-full {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

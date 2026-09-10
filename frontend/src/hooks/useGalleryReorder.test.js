@@ -183,6 +183,20 @@ describe('teardown', () => {
     expect(view.result.current.itemProps(0)).toEqual({})
   })
 
+  it('blocks the native image menu while reordering', () => {
+    // On a phone the browser's own long-press menu appears partway through the
+    // press that starts a drag, turning reordering into a race against it.
+    const { view } = setup()
+    const event = { preventDefault: vi.fn() }
+    view.result.current.itemProps(0).onContextMenu(event)
+    expect(event.preventDefault).toHaveBeenCalled()
+  })
+
+  it('leaves the native image menu alone outside reorder mode', () => {
+    const { view } = setup(vi.fn(), false)
+    expect(view.result.current.itemProps(0).onContextMenu).toBeUndefined()
+  })
+
   it('swallows exactly one click after a drag', () => {
     const { view } = setup()
     act(() => view.result.current.itemProps(0).onPointerDown(down(0)))
