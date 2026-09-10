@@ -503,3 +503,10 @@
     gap: var(--space-1);
   }
 }
+
+/* Reorder uses pointer events, so the browser must not treat a press on an item
+   as the start of a double-tap zoom. Scrolling stays available: the long press
+   that begins a drag requires the finger to be still, and a scroll cancels it. */
+.gallery-item-wrapper.reorder-mode {
+  touch-action: manipulation;
+}

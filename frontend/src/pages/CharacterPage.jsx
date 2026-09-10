@@ -8,6 +8,7 @@ import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, IconButton } from '../components/ui'
 import { apiUrl } from '../config'
+import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -31,11 +32,6 @@ import {
   isImageFileLike,
   MAX_CUSTOM_IMAGE_BYTES,
 } from '../utils/imageFiles'
-import { moveGroupInArray, ordersEqual } from '../utils/reorderArray'
-
-/** Mobile reorder: HTML5 DnD does not work with touch — long-press then drag */
-const REORDER_LONG_PRESS_MS = 450
-const REORDER_TOUCH_SLOP_PX = 14
 
 export default function CharacterPage() {
   const { name } = useParams()
@@ -96,24 +92,8 @@ export default function CharacterPage() {
   const customUploadLockRef = useRef(false)
   const mainInputRef = useRef(null)
   const customInputRef = useRef(null)
-  const dragItemRef = useRef(null)
-  const dragOverRef = useRef(null)
-  const dragIndicesRef = useRef(null)
-  /** Snapshot of custom image URLs when reorder session started (Cancel restores this order) */
+  /** Snapshot of the order when reorder mode opened, so Cancel can restore it. */
   const reorderSessionBaselineRef = useRef(null)
-  /** Drop target & dragged indices for reorder UI (refs alone don't re-render) */
-  const [reorderDropTargetIndex, setReorderDropTargetIndex] = useState(null)
-  const [reorderDragIndices, setReorderDragIndices] = useState(null)
-  /** Last pointer Y during reorder drag — drives continuous edge auto-scroll */
-  const reorderEdgePointerYRef = useRef(null)
-  /** Touch long-press before drag: { timerId, index, startX, startY } */
-  const reorderTouchPendingRef = useRef(null)
-  /** Ignore one synthetic click after a touch-based reorder (avoids toggling selection) */
-  const ignoreNextReorderItemClickRef = useRef(false)
-  /** Stable cleanup for window-level touch listeners */
-  const reorderTouchCleanupRef = useRef(null)
-  /** Cancels in-flight long-press (window listeners + timer) */
-  const reorderTouchCancelPendingRef = useRef(null)
 
   useEffect(() => {
     if (char) {
@@ -134,91 +114,6 @@ export default function CharacterPage() {
   useEffect(() => {
     loadCustomImagesForCharacter(name)
   }, [name, loadCustomImagesForCharacter])
-
-  useEffect(() => {
-    if (!reorderMode) {
-      if (typeof reorderTouchCleanupRef.current === 'function') {
-        reorderTouchCleanupRef.current()
-        reorderTouchCleanupRef.current = null
-      }
-      if (typeof reorderTouchCancelPendingRef.current === 'function') {
-        reorderTouchCancelPendingRef.current()
-        reorderTouchCancelPendingRef.current = null
-      }
-      const pending = reorderTouchPendingRef.current
-      if (pending?.timerId) clearTimeout(pending.timerId)
-      reorderTouchPendingRef.current = null
-      document.body.classList.remove('reorder-touch-dragging')
-      dragItemRef.current = null
-      dragOverRef.current = null
-      dragIndicesRef.current = null
-      setReorderDropTargetIndex(null)
-      setReorderDragIndices(null)
-    }
-  }, [reorderMode])
-
-  /**
-   * Continuous edge scroll while reorder-dragging: dragover only fires when the pointer moves,
-   * so we run a rAF loop and read the last known Y — scrolling keeps going while the pointer
-   * stays in the top/bottom bands.
-   */
-  useEffect(() => {
-    if (!reorderDragIndices) return
-    const edge = 100
-    const maxStep = 28
-    const minStep = 5
-    let rafId = 0
-
-    const onPointerMove = (e) => {
-      if (typeof e.clientY === 'number') reorderEdgePointerYRef.current = e.clientY
-    }
-
-    const tick = () => {
-      const y = reorderEdgePointerYRef.current
-      if (y != null) {
-        const h = window.innerHeight
-        if (y < edge) {
-          const d = edge - y
-          const step = Math.round(Math.min(maxStep, Math.max(minStep, 4 + d * 0.22)))
-          window.scrollBy(0, -step)
-        } else if (y > h - edge) {
-          const d = y - (h - edge)
-          const step = Math.round(Math.min(maxStep, Math.max(minStep, 4 + d * 0.22)))
-          window.scrollBy(0, step)
-        }
-      }
-      rafId = requestAnimationFrame(tick)
-    }
-
-    reorderEdgePointerYRef.current = null
-    document.addEventListener('dragover', onPointerMove, { passive: true })
-    document.addEventListener('drag', onPointerMove, { passive: true })
-    const onTouchMoveEdge = (e) => {
-      const t = e.touches && e.touches[0]
-      if (t) reorderEdgePointerYRef.current = t.clientY
-    }
-    document.addEventListener('touchmove', onTouchMoveEdge, { passive: true })
-    rafId = requestAnimationFrame(tick)
-
-    return () => {
-      cancelAnimationFrame(rafId)
-      document.removeEventListener('dragover', onPointerMove)
-      document.removeEventListener('drag', onPointerMove)
-      document.removeEventListener('touchmove', onTouchMoveEdge)
-      reorderEdgePointerYRef.current = null
-    }
-  }, [reorderDragIndices])
-
-  useEffect(() => {
-    return () => {
-      if (typeof reorderTouchCleanupRef.current === 'function') reorderTouchCleanupRef.current()
-      if (typeof reorderTouchCancelPendingRef.current === 'function')
-        reorderTouchCancelPendingRef.current()
-      const p = reorderTouchPendingRef.current
-      if (p?.timerId) clearTimeout(p.timerId)
-      reorderTouchPendingRef.current = null
-    }
-  }, [])
 
   const resetModes = useCallback(() => {
     setAiMode(false)
@@ -258,8 +153,6 @@ export default function CharacterPage() {
       reorderSessionBaselineRef.current = null
       setReorderMode(false)
       setSelectedUrls([])
-      setReorderDropTargetIndex(null)
-      setReorderDragIndices(null)
       addToast('Order reverted to before you started reordering.', 'info')
     } catch (e) {
       addToast(e.message || 'Could not revert order', 'error')
@@ -270,8 +163,6 @@ export default function CharacterPage() {
     reorderSessionBaselineRef.current = null
     setReorderMode(false)
     setSelectedUrls([])
-    setReorderDropTargetIndex(null)
-    setReorderDragIndices(null)
   }, [])
 
   const getIndicesToMove = useCallback(
@@ -287,15 +178,12 @@ export default function CharacterPage() {
     [customs, selectedUrls],
   )
 
-  const beginReorderDrag = useCallback(
-    (index) => {
-      const indices = getIndicesToMove(index)
-      dragIndicesRef.current = indices
-      dragItemRef.current = index
-      setReorderDragIndices(indices)
-    },
-    [getIndicesToMove],
-  )
+  const reorder = useGalleryReorder({
+    items: customs,
+    enabled: reorderMode,
+    indicesFor: getIndicesToMove,
+    onReorder: (next) => applyReorder(next),
+  })
 
   const applyReorder = useCallback(
     (newOrder) => {
@@ -743,161 +631,15 @@ export default function CharacterPage() {
     resetModes()
   }
 
-  const onDragStart = (e, index) => {
-    if (!reorderMode) return
-    beginReorderDrag(index)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', String(index))
-  }
-
-  const clearReorderTouchWindowListeners = () => {
-    if (typeof reorderTouchCleanupRef.current === 'function') {
-      reorderTouchCleanupRef.current()
-      reorderTouchCleanupRef.current = null
-    }
-  }
-
-  const resolveReorderSlotIndex = (clientX, clientY) => {
-    const el = document.elementFromPoint(clientX, clientY)
-    const slot = el && el.closest && el.closest('[data-reorder-slot]')
-    if (!slot) return null
-    const raw = slot.getAttribute('data-reorder-slot')
-    const i = raw != null ? Number.parseInt(raw, 10) : NaN
-    return Number.isFinite(i) ? i : null
-  }
-
-  const onDragOver = (e, index) => {
-    const fileDrag = dataTransferIsFileDrag(e.dataTransfer)
-    const webDrag = dataTransferHasWebImageDrag(e.dataTransfer)
-    const reorderInternal = reorderMode && reorderDragIndices && !fileDrag && !webDrag
-    if (reorderInternal) {
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      dragOverRef.current = index
-      setReorderDropTargetIndex(index)
-      return
-    }
+  /**
+   * Reordering no longer travels over HTML5 drag-and-drop, so a drag reaching
+   * the gallery can only have come from outside — a file, or an image dragged
+   * in from a web page. No inspection of dataTransfer is needed to tell them
+   * apart any more.
+   */
+  const onGalleryDragOver = (e) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-  }
-
-  const onDragEnd = () => {
-    const to = dragOverRef.current
-    const from = dragItemRef.current
-    const indices = dragIndicesRef.current
-    dragItemRef.current = null
-    dragOverRef.current = null
-    dragIndicesRef.current = null
-    setReorderDropTargetIndex(null)
-    setReorderDragIndices(null)
-    if (from == null || to == null || !indices?.length) return
-    const next = moveGroupInArray(customs, indices, to)
-    if (ordersEqual(next, customs)) return
-    applyReorder(next)
-  }
-
-  /** Long-press on a tile, then drag with finger (touch — native HTML5 DnD does not work). */
-  const onReorderItemTouchStart = (e, index) => {
-    if (!reorderMode || e.touches.length !== 1) return
-    clearReorderTouchWindowListeners()
-    if (typeof reorderTouchCancelPendingRef.current === 'function') {
-      reorderTouchCancelPendingRef.current()
-      reorderTouchCancelPendingRef.current = null
-    }
-    const orphan = reorderTouchPendingRef.current
-    if (orphan?.timerId) clearTimeout(orphan.timerId)
-    reorderTouchPendingRef.current = null
-    const t = e.touches[0]
-    const startX = t.clientX
-    const startY = t.clientY
-
-    const cancelPending = () => {
-      reorderTouchCancelPendingRef.current = null
-      const pend = reorderTouchPendingRef.current
-      if (pend?.timerId) clearTimeout(pend.timerId)
-      reorderTouchPendingRef.current = null
-      window.removeEventListener('touchmove', onMoveBeforeLongPress)
-      window.removeEventListener('touchend', cancelPending)
-      window.removeEventListener('touchcancel', cancelPending)
-    }
-    reorderTouchCancelPendingRef.current = cancelPending
-
-    function onMoveBeforeLongPress(ev) {
-      if (ev.touches.length !== 1) {
-        cancelPending()
-        return
-      }
-      const tt = ev.touches[0]
-      const dx = tt.clientX - startX
-      const dy = tt.clientY - startY
-      if (dx * dx + dy * dy > REORDER_TOUCH_SLOP_PX * REORDER_TOUCH_SLOP_PX) cancelPending()
-    }
-
-    const timerId = setTimeout(() => {
-      reorderTouchCancelPendingRef.current = null
-      reorderTouchPendingRef.current = null
-      window.removeEventListener('touchmove', onMoveBeforeLongPress)
-      window.removeEventListener('touchend', cancelPending)
-      window.removeEventListener('touchcancel', cancelPending)
-      beginReorderDrag(index)
-      ignoreNextReorderItemClickRef.current = true
-      reorderEdgePointerYRef.current = startY
-      dragOverRef.current = index
-      setReorderDropTargetIndex(index)
-
-      const onDragTouchMove = (ev) => {
-        if (ev.touches.length !== 1) return
-        ev.preventDefault()
-        const tt = ev.touches[0]
-        reorderEdgePointerYRef.current = tt.clientY
-        const slotIdx = resolveReorderSlotIndex(tt.clientX, tt.clientY)
-        if (slotIdx != null) {
-          dragOverRef.current = slotIdx
-          setReorderDropTargetIndex(slotIdx)
-        }
-      }
-
-      const onDragTouchEnd = () => {
-        document.body.classList.remove('reorder-touch-dragging')
-        window.removeEventListener('touchmove', onDragTouchMove)
-        window.removeEventListener('touchend', onDragTouchEnd)
-        window.removeEventListener('touchcancel', onDragTouchEnd)
-        reorderTouchCleanupRef.current = null
-        onDragEnd()
-      }
-
-      document.body.classList.add('reorder-touch-dragging')
-      window.addEventListener('touchmove', onDragTouchMove, { passive: false })
-      window.addEventListener('touchend', onDragTouchEnd)
-      window.addEventListener('touchcancel', onDragTouchEnd)
-      reorderTouchCleanupRef.current = () => {
-        document.body.classList.remove('reorder-touch-dragging')
-        window.removeEventListener('touchmove', onDragTouchMove)
-        window.removeEventListener('touchend', onDragTouchEnd)
-        window.removeEventListener('touchcancel', onDragTouchEnd)
-      }
-    }, REORDER_LONG_PRESS_MS)
-
-    reorderTouchPendingRef.current = { timerId, index, startX, startY }
-    window.addEventListener('touchmove', onMoveBeforeLongPress, { passive: true })
-    window.addEventListener('touchend', cancelPending)
-    window.addEventListener('touchcancel', cancelPending)
-  }
-
-  const onGalleryDragLeave = (e) => {
-    if (!reorderMode || !reorderDragIndices) return
-    const next = e.relatedTarget
-    if (next && e.currentTarget.contains(next)) return
-    setReorderDropTargetIndex(null)
-    dragOverRef.current = null
-  }
-
-  const onGalleryDragOver = (e) => {
-    const fileDrag = dataTransferIsFileDrag(e.dataTransfer)
-    const webDrag = dataTransferHasWebImageDrag(e.dataTransfer)
-    const reorderInternal = reorderMode && reorderDragIndices && !fileDrag && !webDrag
-    e.preventDefault()
-    e.dataTransfer.dropEffect = reorderInternal ? 'move' : 'copy'
   }
 
   const openModal = (index) => {
@@ -1383,14 +1125,13 @@ export default function CharacterPage() {
           </div>
         )}
         <div
-          className={`custom-images-gallery ${reorderDragIndices ? 'reorder-drag-active' : ''}`}
+          className={`custom-images-gallery ${reorder.isDragging ? 'reorder-drag-active' : ''}`}
           onDragOver={onGalleryDragOver}
-          onDragLeave={onGalleryDragLeave}
         >
           {rows.map((row, idx) => {
             const url = row.url
-            const isDropTarget = reorderMode && reorderDropTargetIndex === idx
-            const isDragSource = reorderMode && reorderDragIndices?.includes(idx)
+            const isDropTarget = reorderMode && reorder.dropTargetIndex === idx
+            const isDragSource = reorderMode && reorder.dragIndices?.includes(idx)
             const attribution = row.is_mine
               ? 'Added by you'
               : row.owner
@@ -1407,17 +1148,12 @@ export default function CharacterPage() {
                 className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''} ${row.is_mine ? 'is-mine' : ''} ${row.hidden ? 'is-hidden' : ''}`}
                 title={attribution}
                 onClick={() => {
-                  if (ignoreNextReorderItemClickRef.current) {
-                    ignoreNextReorderItemClickRef.current = false
-                    return
-                  }
+                  // A drag ends with a synthetic click on whatever the pointer
+                  // was over; that must not toggle a selection.
+                  if (reorder.consumeClickAfterDrag()) return
                   if (aiMode || deleteMode || downloadMode || reorderMode) toggleSelect(url)
                 }}
-                onTouchStart={(e) => reorderMode && onReorderItemTouchStart(e, idx)}
-                onDragStart={(e) => onDragStart(e, idx)}
-                onDragOver={(e) => onDragOver(e, idx)}
-                onDragEnd={onDragEnd}
-                draggable={reorderMode}
+                {...reorder.itemProps(idx)}
                 role={reorderMode ? 'button' : undefined}
                 tabIndex={reorderMode ? 0 : undefined}
               >
