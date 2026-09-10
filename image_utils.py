@@ -2,6 +2,8 @@ import os
 
 from PIL import Image, ImageOps
 
+import logs
+
 # Pillow 9.1+ exposes LANCZOS on Image.Resampling (preferred for type checkers).
 # Older Pillow used Image.LANCZOS.
 try:
@@ -71,8 +73,18 @@ def is_animated(file_path):
         return False
 
 
+_logger = logs.get(__name__)
+
+
 def _log(msg):
-    print(f"[IMG] {msg}", flush=True)
+    """Prose, deliberately.
+
+    These messages describe one step of a retry loop or a conversion, where the
+    useful thing is the running commentary rather than a queryable event. They
+    go through the logger so they carry a level and a timestamp and land in the
+    same stream as everything else.
+    """
+    _logger.info(msg)
 
 
 def validate_image_file(file_path):

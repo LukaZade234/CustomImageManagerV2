@@ -85,8 +85,12 @@ cloudflared tunnel route dns imgmanager api.<yourdomain>
 Copy `deploy/cloudflared-config.yml` to `/etc/cloudflared/config.yml`, fill in the
 tunnel UUID and hostname, then `sudo cloudflared service install`.
 
-Check `https://api.<yourdomain>/api/health` returns `{"status":"ok"}` before going
-further.
+Check `https://api.<yourdomain>/api/health` before going further. It now reads the
+database, so `{"status":"ok"}` means the app is genuinely serving rather than
+merely running — a 503 with a `database` field is the app telling you what is
+wrong. Check `characters` is the number you expect too: a count of 0 with
+`status: ok` is what an unmounted data volume looks like, since migrations run
+on connect and produce a valid but empty schema.
 
 ## 3. The origin box
 

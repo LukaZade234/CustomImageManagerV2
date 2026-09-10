@@ -91,8 +91,8 @@ class TestStore:
 
 
 class TestEndpoint:
-    """The route calls `_get_with_validated_redirects` as a name in
-    upload_imgchest's own namespace, so the patch goes there rather than on
+    """The route calls `_get_with_validated_redirects` as a name in its own
+    module's namespace, so the patch goes on routes.media rather than on
     remote_images, where the function is defined."""
 
     def _seed(self, db, url="https://cdn/a.png"):
@@ -118,7 +118,7 @@ class TestEndpoint:
             content = _png(1000, 1500)
 
         monkeypatch.setattr(
-            "upload_imgchest._get_with_validated_redirects", lambda url, **kw: _Response()
+            "routes.media._get_with_validated_redirects", lambda url, **kw: _Response()
         )
         assert not thumbnails.cache_path(image_id).exists()
         assert client.get(f"/thumbs/{image_id}.webp").status_code == 200
@@ -138,7 +138,7 @@ class TestEndpoint:
         def _boom(url, **kwargs):
             raise ValueError("upstream is down")
 
-        monkeypatch.setattr("upload_imgchest._get_with_validated_redirects", _boom)
+        monkeypatch.setattr("routes.media._get_with_validated_redirects", _boom)
         response = client.get(f"/thumbs/{image_id}.webp")
         assert response.status_code == 302
         assert response.headers["Location"] == "https://cdn/a.png"

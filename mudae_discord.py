@@ -20,6 +20,10 @@ from typing import Any
 import discord
 from discord.components import Button
 
+import logs
+
+log = logs.get(__name__)
+
 # Official Mudae application user id
 _DEFAULT_MUDAE_ID = 432610292342587392
 
@@ -228,7 +232,7 @@ def _ima_embed_changed(msg: discord.Message, prev_marker: str, prev_page_idx: in
 
 
 def _log_mudae_error(context: str, exc: Exception) -> None:
-    print(f"[MUDAE] {context}: {type(exc).__name__}: {exc}", flush=True)
+    log.warning("mudae.error", context=context, error=f"{type(exc).__name__}: {exc}")
 
 
 def _token() -> str:
@@ -903,10 +907,10 @@ class _MudaeSession:
                 if msg.created_at.timestamp() < not_before:
                     continue
                 if self._mudae_message_ready(msg):
-                    print(f"[MUDAE] polled Mudae reply message {msg.id}", flush=True)
+                    log.debug("mudae.reply_polled", message_id=msg.id)
                     return msg
         except Exception as exc:
-            print(f"[MUDAE] history poll failed: {type(exc).__name__}: {exc}", flush=True)
+            log.warning("mudae.history_poll_failed", error=f"{type(exc).__name__}: {exc}")
         return None
 
     async def _action_pause(self, extra: float = 0.0) -> None:
@@ -951,10 +955,10 @@ class _MudaeSession:
         try:
             await button.click()
             label = button.label or button.emoji or button.custom_id
-            print(f"[MUDAE] button.click() {label} on message {button.message.id}", flush=True)
+            log.debug("mudae.button_clicked", label=label, message_id=button.message.id)
             return True
         except Exception as exc:
-            print(f"[MUDAE] button.click() failed: {type(exc).__name__}: {exc}", flush=True)
+            log.warning("mudae.button_click_failed", error=f"{type(exc).__name__}: {exc}")
             return False
 
     async def _try_click_reaction(self, msg: discord.Message, reaction: discord.Reaction) -> bool:
@@ -964,15 +968,16 @@ class _MudaeSession:
                 await msg.remove_reaction(reaction.emoji, me)
                 await _cancellable_sleep(0.15)
         except Exception as exc:
-            print(f"[MUDAE] remove_reaction ({reaction.emoji}): {exc}", flush=True)
+            log.debug("mudae.remove_reaction_failed", emoji=str(reaction.emoji), error=str(exc))
         try:
             await msg.add_reaction(reaction)
-            print(f"[MUDAE] add_reaction {reaction.emoji} on message {msg.id}", flush=True)
+            log.debug("mudae.reaction_added", emoji=str(reaction.emoji), message_id=msg.id)
             return True
         except Exception as exc:
-            print(
-                f"[MUDAE] add_reaction failed ({reaction.emoji}): {type(exc).__name__}: {exc}",
-                flush=True,
+            log.warning(
+                "mudae.add_reaction_failed",
+                emoji=str(reaction.emoji),
+                error=f"{type(exc).__name__}: {exc}",
             )
             return False
 
@@ -1045,10 +1050,11 @@ class _MudaeSession:
         use_buttons = len(buttons) >= 2
 
         if not use_buttons and len(reactions) < 2:
-            print(
-                f"[MUDAE] pagination: need 2 nav controls, have {len(buttons)} button(s) and "
-                f"{len(reactions)} custom reaction(s) on message {msg.id}",
-                flush=True,
+            log.warning(
+                "mudae.pagination_unavailable",
+                message_id=msg.id,
+                buttons=len(buttons),
+                reactions=len(reactions),
             )
             return None
 
@@ -1077,10 +1083,7 @@ class _MudaeSession:
             if _ima_embed_changed(updated, prev_marker, prev_page_idx):
                 return updated, new_embed
 
-        print(
-            f"[MUDAE] pagination: no embed change after {mode} clicks on message {msg.id}",
-            flush=True,
-        )
+        log.warning("mudae.pagination_stalled", message_id=msg.id, mode=mode)
         return None
 
     async def __aenter__(self) -> _MudaeSession:
@@ -1156,10 +1159,7 @@ class _MudaeSession:
             return
         if not self._mudae_message_ready(message):
             return
-        print(
-            f"[MUDAE] captured Mudae reply message {message.id} (embeds={len(message.embeds)})",
-            flush=True,
-        )
+        log.debug("mudae.reply_captured", message_id=message.id, embeds=len(message.embeds))
         self._pending.set_result(message)
 
     async def _wait_for_pending_reply(self, timeout: float = REPLY_TIMEOUT_S) -> discord.Message:

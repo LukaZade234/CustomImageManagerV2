@@ -11,7 +11,7 @@ import ipaddress
 import pytest
 
 import remote_images
-import upload_imgchest as app_module
+from routes import mudae as mudae_routes
 
 
 class TestAddressClassification:
@@ -192,7 +192,7 @@ class TestRedirectHops:
 
 class TestProxyEndpoint:
     def test_a_blocked_url_is_403_not_500(self, client, clean_db, identity_id, monkeypatch):
-        monkeypatch.setattr(app_module.mudae_discord, "configured", lambda: True)
+        monkeypatch.setattr(mudae_routes.mudae_discord, "configured", lambda: True)
         r = client.get("/api/mudae/proxy-image?url=http://169.254.169.254/latest/meta-data/")
         assert r.status_code == 403
 
@@ -200,7 +200,7 @@ class TestProxyEndpoint:
         self, client, clean_db, identity_id, monkeypatch, resolving
     ):
         """A ValueError escaping as a 500 would leak that the guard even ran."""
-        monkeypatch.setattr(app_module.mudae_discord, "configured", lambda: True)
+        monkeypatch.setattr(mudae_routes.mudae_discord, "configured", lambda: True)
         monkeypatch.setattr(
             remote_images.requests,
             "get",

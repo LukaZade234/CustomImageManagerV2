@@ -6,6 +6,8 @@ import time
 import requests
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
+import logs
+
 
 class ImgChestError(Exception):
     """Raised when ImgChest API fails (rate limit, service down, etc)."""
@@ -26,8 +28,18 @@ _RETRYABLE_HTTP = frozenset({502, 503, 504})
 _IMGCHEST_POST_TIMEOUT = (30, 120)
 
 
+_logger = logs.get(__name__)
+
+
 def _log(msg):
-    print(f"[IMGCHEST] {msg}", flush=True)
+    """Prose, deliberately.
+
+    These messages describe one step of a retry loop or a conversion, where the
+    useful thing is the running commentary rather than a queryable event. They
+    go through the logger so they carry a level and a timestamp and land in the
+    same stream as everything else.
+    """
+    _logger.info(msg)
 
 
 def _backoff_seconds(attempt_index):

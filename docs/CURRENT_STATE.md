@@ -199,7 +199,15 @@ disappearing — indistinguishable from someone deleting them, but unrelated.
 
 | File | Lines | Role |
 |---|---|---|
-| `upload_imgchest.py` | 1717 | The Flask app — routes, app setup, the upload pipeline |
+| `upload_imgchest.py` | 248 | App construction, CORS, identity hooks, status endpoints |
+| `routes/customs.py` | 601 | Custom images: add, order, remove, hide, report |
+| `routes/mudae.py` | 454 | Mudae lookup, series import, portrait refresh |
+| `routes/characters.py` | 323 | Characters, saved list, main image |
+| `routes/media.py` | 117 | Thumbnails, static images, the download proxy |
+| `routes/auth.py` | 117 | Discord sign-in |
+| `routes/spa.py` | 56 | Serving the built React app |
+| `logs.py` | 140 | Logfmt logging, with identity attached inside a request |
+| `validation.py` | 33 | Character field limits and name checks |
 | `mudae_discord.py` | 1552 | Discord self-bot automation and Mudae embed parsing |
 | `db.py` | 1061 | SQLite/Postgres data layer |
 | `remote_images.py` | 330 | SSRF guards, remote fetch, ImgChest naming |
@@ -213,17 +221,24 @@ disappearing — indistinguishable from someone deleting them, but unrelated.
 | `app.py` | 10 | WSGI shim |
 | `scripts/` | 601 | Migration, backfill and snapshot scripts |
 
-### 5.1 `upload_imgchest.py`
+### 5.1 `upload_imgchest.py` and `routes/`
 
-Flask app construction, CORS, a `before_request` guard, an error handler, ~40 route handlers, the
-upload pipeline, and the Mudae endpoints. The SSRF guards and remote-fetch helpers now live in
-`remote_images.py` and the rate-limit policy in `ratelimit.py`, but the routes themselves are still
-one module — splitting them into blueprints is the remaining half of Phase 10.
+`@app.route` needs the app object to exist when the decorator runs, so every route had to sit below
+`app = Flask(__name__)` in one module — that, not neglect, is why the file was 1,700 lines. A
+Blueprint records the same declarations without an app, so each subject now lives in its own module
+under `routes/` and `upload_imgchest` attaches them at the bottom. The import goes one way only.
 
-Note for tests: a route calls an imported helper as a name in **this** module's namespace, so
-`monkeypatch.setattr("upload_imgchest._get_with_validated_redirects", ...)` patches what a route
-uses, while patching `remote_images` patches what the helper itself calls. Both are correct for
-different targets, and picking the wrong one fails silently.
+Paths are unchanged: a blueprint owns a subject, not a URL prefix. `upload_imgchest.py` keeps what
+belongs to the app rather than to any subject — the Flask object and SECRET_KEY, CORS, the identity
+hooks, the upload guard, the database-configuration error handler, and `/api/health`, `/api/stats`
+and `/api/last-updated`.
+
+**Note for tests.** A route calls an imported helper as a name in **its own** module's namespace.
+So `monkeypatch.setattr("routes.media._get_with_validated_redirects", ...)` patches what the
+thumbnail route uses, while patching `remote_images` patches what the helper itself calls. Both are
+correct for different targets, and picking the wrong one fails silently — the test passes for the
+wrong reason, or makes a real network call. Whenever a route moves module, every monkeypatch aimed
+at its old home has to move with it.
 
 App setup (`upload_imgchest.py:377`):
 ```python
@@ -251,7 +266,7 @@ Notable helpers:
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/api/health` | 409 | Static liveness dict; does **not** check the DB |
+| GET | `/api/health` | — | Reads the DB; 503 if unreachable. Reports revision and character count |
 | GET | `/api/last-updated` | 415 | `{char: timestamp}` |
 | GET | `/`, `/saved`, `/add`, `/customs`, `/character/<name>` | 432–436 | SPA shell, `Cache-Control: no-cache` |
 | GET | `/images/<filename>` | 451 | Serves `character_images/` off local disk |
@@ -458,7 +473,6 @@ backslash paths from a pre-React era and has **zero references** anywhere in the
 | Discord identify quota burn | `mudae_discord.py:1348` | Connect/disconnect per request, ~1000/day cap |
 | Discord self-bot ToS | `mudae_discord.py` | Account ban would remove all Mudae features |
 | ~~`SECRET_KEY` unused~~ | — | Fixed in Phase 6: required in production, no hardcoded default. |
-| Health check checks nothing | `upload_imgchest.py:409` | Reports healthy with a dead database |
 | Full-map fetch on Home | `HomePage.jsx:16` | Unbounded payload growth |
 | Undo clobbers concurrent edits | `CharacterPage.jsx:635` | Restores a stale array wholesale |
 | Dead code | `character_mapping.js`, `github_utils.py` | 260 KB and confusion |

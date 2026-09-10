@@ -13,6 +13,7 @@ from flask import jsonify
 
 import db
 import identity
+import logs
 
 # --- Rate limiting ------------------------------------------------------
 #
@@ -41,7 +42,7 @@ def _limits_from_env(name: str, default: list[tuple[int, int]]) -> list[tuple[in
             if part.strip()
         ] or default
     except (ValueError, IndexError):
-        print(f"[RATELIMIT] Ignoring malformed RATE_LIMIT_{name.upper()}={raw!r}", flush=True)
+        log.warning("ratelimit.bad_env", variable=f"RATE_LIMIT_{name.upper()}", value=raw)
         return default
 
 
@@ -67,6 +68,9 @@ RATE_LIMITS = {
 }
 
 
+log = logs.get(__name__)
+
+
 def rate_limited(action):
     """Reject the caller with 429 once they exceed `RATE_LIMITS[action]`."""
 
@@ -82,7 +86,12 @@ def rate_limited(action):
                     me.id, action, limit=limit * scale, per_seconds=per_seconds
                 )
                 if not allowed:
-                    print(f"[RATELIMIT] {action} blocked for {me.handle}", flush=True)
+                    log.info(
+                        "ratelimit.blocked",
+                        action=action,
+                        limit=limit * scale,
+                        per_seconds=per_seconds,
+                    )
                     response = jsonify(
                         {
                             "error": "You are doing that too quickly. Wait a moment and try again.",
@@ -97,4 +106,3 @@ def rate_limited(action):
         return wrapper
 
     return decorator
-

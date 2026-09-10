@@ -75,11 +75,6 @@ MAX_IMPORT_URLS = 20
 # Allowed image extensions
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
-# Character name validation
-MAX_CHAR_NAME_LENGTH = 200
-MAX_SERIES_LENGTH = 300
-MAX_RANK_LENGTH = 50
-
 # Match frontend dragImageUrls.js — strip when deduping web import batches
 _IMPORT_URL_TRACKING_PARAMS = frozenset(
     {
