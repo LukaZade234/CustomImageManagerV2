@@ -466,9 +466,12 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ## Phase 10 — Structure and code quality
 
-- [ ] **Split `upload_imgchest.py`** (1386 lines, the entire app) into blueprints: `images`,
-      `characters`, `mudae`, `auth`.
-- [ ] **Split `CharacterPage.jsx`** (1178 lines) and `AddPage.jsx` (617 lines).
+- [ ] **Split `upload_imgchest.py`** into blueprints: `images`, `characters`, `mudae`, `auth`.
+      _Partly done:_ `remote_images.py` (SSRF guards, remote fetch, ImgChest naming) and
+      `ratelimit.py` (limit policy and the decorator) are out; the routes are not yet.
+- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671. The four mutually exclusive
+      mode booleans became one `mode` value, and `GalleryToolbar` and `CharacterHeader` moved out
+      with tests of their own. `AddPage.jsx` (617 lines) is still to do.
 - [ ] **Structured logging** replacing `print(..., flush=True)` throughout, with identity attached
       to mutation logs — the beginnings of a real audit trail.
 - [ ] **A health check that touches the database.** The current one returns a static dict and

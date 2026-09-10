@@ -9,13 +9,12 @@ Two rules, both learned the hard way from what is already in the library:
   URL that does not end in .png, but it renders whatever bytes arrive.
 """
 
-import io
 
 import pytest
 from PIL import Image
 
 import image_utils
-from upload_imgchest import imgchest_filename
+from remote_images import imgchest_filename
 
 
 def _write(tmp_path, name, fmt, size=(800, 1200), mode="RGB", **kw):

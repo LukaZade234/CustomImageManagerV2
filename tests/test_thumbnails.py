@@ -91,6 +91,10 @@ class TestStore:
 
 
 class TestEndpoint:
+    """The route calls `_get_with_validated_redirects` as a name in
+    upload_imgchest's own namespace, so the patch goes there rather than on
+    remote_images, where the function is defined."""
+
     def _seed(self, db, url="https://cdn/a.png"):
         db.add_custom_images("Rem", [url])
         return db.get_custom_image_rows("Rem")[0]["id"]
