@@ -421,9 +421,23 @@ them. There are no v2 users yet, so this costs nothing now.
 
       This also unblocks growth: the plan is to seed tens of thousands of characters, at which
       point filtering the whole library in the browser stops being possible at all.
+- [x] **Gallery thumbnails.** The remaining half of the payload problem. `convert_to_png()` makes
+      every upload a lossless RGBA PNG averaging **1.9 MB**, and ImgChest serves no smaller
+      variants (`?w=`, `?width=`, `.webp`, `_thumb` were all tested and return the identical
+      full-size PNG), so smaller versions have to come from us. `thumbnails.py` renders a 600px
+      WebP at ~46 KB, generated on first request and cached to disk with `immutable` headers so
+      Cloudflare serves it from the edge thereafter. A first screenful of a 256-image character
+      went **488 MB → 22.9 MB** (dimensions plus lazy loading) **→ 548 KB**.
+
+      The ImgChest URL stays canonical throughout: it is what the database stores and what every
+      `$ai` command, download and lightbox uses, because Mudae accepts nothing else. Only the grid
+      renders WebP. Two tests pin that. GIFs are not thumbnailed — the animation is usually why the
+      image was chosen.
 - [ ] **Adopt `@tanstack/react-query`.** Retry, backoff, and cache invalidation are currently
       hand-rolled in the store. Less pressing now that the two heavy fetches are gone.
 - [ ] **Serve character images from the CDN**, not from Flask off local disk (follows from R2).
+      Generated thumbnails could move to R2 by the same route, which would also make them a
+      backup rather than derived data the origin has to hold.
 - [ ] **Reconsider gzip.** `flask-compress` runs on the origin; with Cloudflare in front, the edge
       can handle compression instead.
 

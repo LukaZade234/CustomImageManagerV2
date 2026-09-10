@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getImageUrl } from '../api'
+import { apiUrl } from '../config'
 import { Button, EmptyState, Modal } from './ui'
 
 /**
@@ -37,7 +38,11 @@ export default function RemovedDrawer({ characterName, items, onRestore, onClose
         <ul className="removed-drawer__list">
           {rows.map((row) => (
             <li key={row.id} className="removed-drawer__item">
-              <img src={getImageUrl(row.url)} alt="" className="removed-drawer__thumb" />
+              <img
+                src={row.thumb ? apiUrl(row.thumb) : getImageUrl(row.url)}
+                alt=""
+                className="removed-drawer__thumb"
+              />
               <div className="removed-drawer__meta">
                 <p className="text-meta">
                   {row.reason?.startsWith('reported:')

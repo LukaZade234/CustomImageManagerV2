@@ -7,6 +7,7 @@ import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, IconButton } from '../components/ui'
+import { apiUrl } from '../config'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -1497,7 +1498,13 @@ export default function CharacterPage() {
                 tabIndex={reorderMode ? 0 : undefined}
               >
                 <img
-                  src={getImageUrl(url)}
+                  /*
+                    The grid renders a small WebP; `url` stays the canonical
+                    ImgChest PNG and is what the lightbox, the download and every
+                    $ai command use, because Mudae accepts nothing else. Falls
+                    back to the original for GIFs, which are not thumbnailed.
+                  */
+                  src={row.thumb ? apiUrl(row.thumb) : getImageUrl(url)}
                   alt=""
                   draggable={false}
                   className="custom-image-full"

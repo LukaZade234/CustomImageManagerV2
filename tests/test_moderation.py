@@ -261,5 +261,14 @@ class TestOwnershipInTheReadPath:
         """Ownership is reported as a handle and a boolean, never as the id."""
         _seed_owned_by(clean_db, "Rem", ["https://cdn/mine.png"], identity_id)
         row = client.get("/api/custom-image/Rem").get_json()[0]
-        assert set(row) == {"id", "url", "width", "height", "owner", "is_mine", "hidden"}
+        assert set(row) == {
+            "id",
+            "url",
+            "thumb",
+            "width",
+            "height",
+            "owner",
+            "is_mine",
+            "hidden",
+        }
         assert identity_id not in json.dumps(row)

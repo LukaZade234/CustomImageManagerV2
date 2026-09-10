@@ -34,6 +34,7 @@ except ImportError:
 import db
 import discord_auth
 import identity
+import thumbnails
 import mudae_discord
 from image_utils import convert_to_png, read_image_dimensions, validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
@@ -625,6 +626,50 @@ def rate_limited(action):
 def health():
     """Lightweight liveness for load balancers and probes (no heavy work)."""
     return jsonify({"status": "ok", "service": "imgmanager", "revision": _DEPLOYED_REVISION})
+
+
+@app.route("/thumbs/<int:image_id>.webp", methods=["GET"])
+def serve_thumbnail(image_id):
+    """A small WebP of one image, generated on first request and cached.
+
+    Keyed by row id, so this can only be asked for images already in the
+    database; there is no way to hand it a URL of your choosing.
+
+    Any failure redirects to the original on ImgChest rather than erroring. A
+    thumbnail is an optimisation, and a missing one should cost bandwidth, not a
+    broken image.
+    """
+    path = thumbnails.cache_path(image_id)
+    if path.is_file():
+        return _thumbnail_response(path)
+
+    source = db.get_image_url(image_id)
+    if not source:
+        abort(404)
+    if not thumbnails.is_thumbnailable(source):
+        return redirect(source)
+
+    try:
+        response = _get_with_validated_redirects(source, timeout=30, allow_redirects=False)
+        if response.status_code != 200:
+            raise ValueError(f"source returned {response.status_code}")
+        thumbnails.store(image_id, thumbnails.render(response.content))
+    except Exception as e:
+        print(
+            f"[THUMB] {image_id} failed, serving the original: {type(e).__name__}: {e}", flush=True
+        )
+        return redirect(source)
+
+    return _thumbnail_response(path)
+
+
+def _thumbnail_response(path):
+    response = send_from_directory(path.parent.resolve(), path.name, mimetype="image/webp")
+    # Derived from an immutable source keyed by a row id that never changes its
+    # URL, so this can be cached hard. Cloudflare then serves it from the edge
+    # and the origin sees each thumbnail once, globally.
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @app.route("/api/stats", methods=["GET"])

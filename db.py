@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import identity
+import thumbnails
 
 _REPO_ROOT = Path(__file__).resolve().parent
 _MIGRATIONS_DIR = _REPO_ROOT / "migrations"
@@ -416,6 +417,10 @@ def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[
             # to measuring on load, which is what it did before these existed.
             "width": r["width"],
             "height": r["height"],
+            # What the grid renders. The `url` above stays canonical: it is what
+            # every $ai command, download and lightbox uses, because Mudae
+            # accepts nothing else.
+            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
             # NULL for images migrated from v1: nobody owns them, so nobody can
             # remove them except a moderator or the report threshold.
             "owner": r["owner_handle"],
@@ -540,6 +545,16 @@ def remove_custom_images(
         return result
 
 
+def get_image_url(image_id: int) -> str | None:
+    """The source URL for one image row, whatever its state.
+
+    Removed images keep their thumbnails working, which the Removed drawer needs.
+    """
+    conn = get_connection()
+    row = conn.execute("SELECT url FROM custom_images WHERE id = ?", (image_id,)).fetchone()
+    return row["url"] if row else None
+
+
 def images_missing_dimensions(limit: int = 500) -> list[dict]:
     """Rows the backfill still has to measure."""
     conn = get_connection()
@@ -580,6 +595,7 @@ def get_removed_for(char_name: str) -> list[dict]:
         {
             "id": r["id"],
             "url": r["url"],
+            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
             "removed_by": r["removed_by_handle"],
             "removed_at": r["removed_at"],
             "reason": r["removed_reason"],
