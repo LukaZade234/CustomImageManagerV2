@@ -228,6 +228,42 @@ Known residual risk, documented in the code: DNS rebinding. The hostname is reso
 for validation and again by `requests` when it connects, so a hostile resolver can
 answer differently each time.
 
+## Logging
+
+Never `print()`. Use the logger:
+
+```python
+import logs
+
+log = logs.get(__name__)
+
+log.info("customs.added", character=char_name, count=len(links))
+log.warning("upload.rejected", filename=fn, reason="too_large", size_mb=31.4)
+log.exception("customs.remove_failed")          # inside an `except`, keeps the traceback
+```
+
+Output is logfmt on stdout, which systemd sends to the journal:
+
+```
+2026-09-10T14:24:25Z ERROR customs.hide_failed path=/api/hide-images actor="Candid Whooper"
+```
+
+Three conventions, and only the first is arbitrary:
+
+- **The message is an event name**, `subject.verb_past_tense`, not a sentence. It is what you grep
+  for, so it has to survive rewording — `log.info("upload.succeeded")`, never
+  `log.info(f"upload of {fn} succeeded")`. Anything variable is a field.
+- **`log.exception` inside an `except`**, never `log.error(f"...: {e}")`. It keeps the traceback,
+  which the f-string throws away precisely when you need it.
+- **Do not pass identity or the request path.** A logging filter attaches `actor` and `path`
+  automatically inside a request, so every mutation is attributable whether or not the author
+  remembered. Outside a request — scripts, the self-bot — those fields are simply absent.
+
+`LOG_LEVEL` (default `INFO`) controls verbosity; the noisy per-file upload steps are `debug`.
+
+Reading them in production: `journalctl -u imgmanager -f`, and
+`journalctl -u imgmanager | grep 'actor="Some Name"'` for one person's trail.
+
 ## Writing to the database
 
 `db.py` wraps SQLite (`sqlite3`, standard library). There is no ORM and no query

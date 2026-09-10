@@ -243,6 +243,35 @@ def update_last_modified(char_name: str) -> None:
         conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
 
 
+def check_health() -> dict:
+    """Is the database usable, and does it hold anything?
+
+    Returns {"ok", "detail", "characters"}.
+
+    Two failure modes matter, and only one of them is an error:
+
+    - **Unusable.** The file cannot be opened or read. That is `ok: False`.
+    - **Usable but empty.** This is the shape an unmounted volume takes here.
+      `_connect()` applies migrations on first use, so a fresh empty file does
+      not stay schemaless — it comes back fully formed with zero rows, and any
+      check that only asks "does this table exist" reports it perfectly healthy.
+
+    The count is what separates that from a working deployment, so it is
+    reported rather than judged: zero characters is also what a legitimate fresh
+    install looks like before seeding, and 503 on a correct first boot would be
+    its own kind of lie. A human reading the endpoint, or a probe with a
+    threshold, can tell the two apart; this function will not guess.
+    """
+    try:
+        conn = get_connection()
+        row = conn.execute("SELECT count(*) AS n FROM characters").fetchone()
+    except DatabaseConfigurationError as exc:
+        return {"ok": False, "detail": str(exc), "characters": 0}
+    except sqlite3.Error as exc:
+        return {"ok": False, "detail": f"{type(exc).__name__}: {exc}", "characters": 0}
+    return {"ok": True, "detail": "ok", "characters": int(row["n"]) if row else 0}
+
+
 def get_last_updated() -> dict:
     """{name: unix_seconds}. Converted here because the frontend sorts numerically."""
     conn = get_connection()

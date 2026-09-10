@@ -13,8 +13,8 @@ and what is asserted is the wiring between them.
 import pytest
 from PIL import Image
 
-import upload_imgchest
 from imgchest_utils import ImgChestError
+from routes import mudae as mudae_routes
 
 
 def _fake_download(tmp_path):
@@ -31,7 +31,7 @@ def _fake_download(tmp_path):
 class TestUploadRemoteImage:
     def test_it_names_the_file_after_the_character(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            upload_imgchest, "_fetch_image_from_url_for_import", _fake_download(tmp_path)
+            mudae_routes, "_fetch_image_from_url_for_import", _fake_download(tmp_path)
         )
         seen = {}
 
@@ -39,9 +39,9 @@ class TestUploadRemoteImage:
             seen["name"] = upload_name
             return ("post-id", "https://cdn.imgchest.com/files/abc.png")
 
-        monkeypatch.setattr(upload_imgchest, "upload_to_imgchest", fake_upload)
+        monkeypatch.setattr(mudae_routes, "upload_to_imgchest", fake_upload)
 
-        link = upload_imgchest._upload_remote_image_to_imgchest(
+        link = mudae_routes._upload_remote_image_to_imgchest(
             "https://cdn.discordapp.com/x.png", "Ayanami Rei"
         )
 
@@ -51,18 +51,18 @@ class TestUploadRemoteImage:
 
     def test_an_empty_url_is_rejected_before_any_fetch(self):
         with pytest.raises(ValueError, match="No image URL"):
-            upload_imgchest._upload_remote_image_to_imgchest("", "Ayanami Rei")
+            mudae_routes._upload_remote_image_to_imgchest("", "Ayanami Rei")
 
     def test_the_temp_file_is_removed_even_when_the_upload_fails(self, tmp_path, monkeypatch):
         card = tmp_path / "card.png"
         Image.new("RGB", (400, 600), "red").save(card, "PNG")
         monkeypatch.setattr(
-            upload_imgchest,
+            mudae_routes,
             "_fetch_image_from_url_for_import",
             lambda url: (str(card), "card.png"),
         )
-        monkeypatch.setattr(upload_imgchest, "upload_to_imgchest", lambda *a, **kw: None)
+        monkeypatch.setattr(mudae_routes, "upload_to_imgchest", lambda *a, **kw: None)
 
         with pytest.raises(ImgChestError):
-            upload_imgchest._upload_remote_image_to_imgchest("https://x/y.png", "Rei")
+            mudae_routes._upload_remote_image_to_imgchest("https://x/y.png", "Rei")
         assert not card.exists()

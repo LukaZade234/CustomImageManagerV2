@@ -466,16 +466,22 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ## Phase 10 — Structure and code quality
 
-- [ ] **Split `upload_imgchest.py`** into blueprints: `images`, `characters`, `mudae`, `auth`.
-      _Partly done:_ `remote_images.py` (SSRF guards, remote fetch, ImgChest naming) and
-      `ratelimit.py` (limit policy and the decorator) are out; the routes are not yet.
+- [x] **Split `upload_imgchest.py`** _(done)_ — 1,717 lines down to 248. Six blueprints under
+      `routes/` (`auth`, `characters`, `customs`, `media`, `mudae`, `spa`) plus `remote_images.py`,
+      `ratelimit.py` and `validation.py`. Paths are unchanged; `tests/test_url_map.py` pins every
+      registered route so one going missing is a test failure rather than a production surprise.
 - [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671. The four mutually exclusive
       mode booleans became one `mode` value, and `GalleryToolbar` and `CharacterHeader` moved out
       with tests of their own. `AddPage.jsx` (617 lines) is still to do.
-- [ ] **Structured logging** replacing `print(..., flush=True)` throughout, with identity attached
-      to mutation logs — the beginnings of a real audit trail.
-- [ ] **A health check that touches the database.** The current one returns a static dict and
-      reports healthy with a dead database.
+- [x] **Structured logging** _(done)_ — `logs.py`, logfmt to stdout, replacing all 99
+      `print(..., flush=True)` calls except the four in the `__main__` CLI block, which are
+      genuine terminal output. Identity and request path attach automatically via a logging
+      filter, so no route has to remember; `LOG_LEVEL` controls verbosity.
+- [x] **A health check that touches the database.** _(done)_ `/api/health` now reads from
+      `characters` and answers 503 when that fails. It also reports the row count, because
+      migrations run on connect — so an unmounted volume comes back as a valid *empty* schema,
+      which any "does the table exist" check would call healthy. The count is reported rather
+      than judged, since a fresh install before seeding looks identical.
 - [x] **Delete dead code:** _(done)_ `character_mapping.js` (260 KB, zero references),
       `github_utils.py` (a single never-called function, left over from when data lived in a
       GitHub file instead of Postgres), `frontend/src/hooks/useMediaQuery.js` (exported, never
