@@ -25,93 +25,17 @@ import {
   extractImageUrlsFromDataTransfer,
 } from '../utils/dragImageUrls'
 import { FILLERS, ratioFor, ratioOf } from '../utils/galleryRatios'
-
-/** Must match server MAX_FILE_SIZE in upload_imgchest.py (30 MiB) */
-const MAX_CUSTOM_IMAGE_BYTES = 30 * 1024 * 1024
+import {
+  dataTransferIsFileDrag,
+  dedupeFilesByIdentity,
+  isImageFileLike,
+  MAX_CUSTOM_IMAGE_BYTES,
+} from '../utils/imageFiles'
+import { moveGroupInArray, ordersEqual } from '../utils/reorderArray'
 
 /** Mobile reorder: HTML5 DnD does not work with touch — long-press then drag */
 const REORDER_LONG_PRESS_MS = 450
 const REORDER_TOUCH_SLOP_PX = 14
-
-const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|ico)$/i
-
-/** MIME image/* or empty type with image extension (OS drag often omits MIME on Linux). */
-function isImageFileLike(file) {
-  if (!file) return false
-  if (file.type && file.type.startsWith('image/')) return true
-  if (typeof file.name === 'string' && IMAGE_EXT_RE.test(file.name)) return true
-  return false
-}
-
-function dataTransferIsFileDrag(dt) {
-  if (!dt) return false
-  try {
-    const { types, items } = dt
-    // DOMStringList (Firefox / older WebKit): has .contains, not .includes — check contains first
-    if (types) {
-      if (typeof types.contains === 'function' && types.contains('Files')) return true
-      if (typeof types.includes === 'function' && types.includes('Files')) return true
-      const typeArr = Array.from(types)
-      if (typeArr.includes('Files')) return true
-      if (typeArr.includes('application/x-moz-file')) return true
-    }
-    if (items && items.length) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file') return true
-      }
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-function adjustDropTarget(toIndex, pickedSet, len) {
-  if (len <= 0) return 0
-  let t = toIndex
-  if (t < 0) t = 0
-  if (t >= len) t = len - 1
-  if (!pickedSet.has(t)) return t
-  for (let i = t + 1; i < len; i++) if (!pickedSet.has(i)) return i
-  for (let i = t - 1; i >= 0; i--) if (!pickedSet.has(i)) return i
-  return 0
-}
-
-/** Move one contiguous group of indices to a drop target index (same visual order as `customs`). */
-function moveGroupInArray(arr, fromIndices, toIndex) {
-  const sorted = [...fromIndices].sort((a, b) => a - b)
-  const pickedSet = new Set(sorted)
-  const picked = sorted.map((i) => arr[i])
-  let t = toIndex
-  if (pickedSet.has(t)) {
-    t = adjustDropTarget(t, pickedSet, arr.length)
-  }
-  if (t < 0) t = 0
-  const without = arr.filter((_, i) => !pickedSet.has(i))
-  let insertBefore = 0
-  for (let i = 0; i < t && i < arr.length; i++) {
-    if (!pickedSet.has(i)) insertBefore++
-  }
-  return [...without.slice(0, insertBefore), ...picked, ...without.slice(insertBefore)]
-}
-
-function ordersEqual(a, b) {
-  if (a.length !== b.length) return false
-  return a.every((u, i) => u === b[i])
-}
-
-/** Some browsers list the same file more than once in a single drop. */
-function dedupeFilesByIdentity(fileList) {
-  const seen = new Set()
-  const out = []
-  for (const f of fileList) {
-    const key = `${f.name}\0${f.size}\0${f.lastModified}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(f)
-  }
-  return out
-}
 
 export default function CharacterPage() {
   const { name } = useParams()
