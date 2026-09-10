@@ -387,6 +387,18 @@ def list_characters_with_customs(
     }
 
 
+def count_custom_images(char_name: str) -> int:
+    """Active images for a character. Used to number new uploads."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE c.name = ? AND i.state = 'active'",
+        (char_name,),
+    ).fetchone()
+    return int(row["n"])
+
+
 def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[dict]:
     """Active images for a character, with ownership and this viewer's hidden set.
 

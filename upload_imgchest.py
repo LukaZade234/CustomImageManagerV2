@@ -8,7 +8,9 @@ import re
 import socket
 import sys
 import threading
+import unicodedata
 import uuid
+from datetime import UTC, datetime
 from functools import wraps
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
@@ -36,7 +38,13 @@ import discord_auth
 import identity
 import thumbnails
 import mudae_discord
-from image_utils import convert_to_png, read_image_dimensions, validate_image_file
+from image_utils import (
+    detect_format,
+    is_animated,
+    prepare_for_upload,
+    read_image_dimensions,
+    validate_image_file,
+)
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from mudae_discord import MudaeAmbiguousSeries, MudaeCancelled, MudaeError
 
@@ -47,6 +55,39 @@ def _safe_stored_filename(original_filename: str) -> str:
     if not base:
         base = f"upload_{uuid.uuid4().hex[:12]}"
     return base
+
+
+def _slug(text: str, limit: int = 40) -> str:
+    """A filename-safe fragment of a character name.
+
+    Unicode is folded rather than dropped, so 'Frédérica' stays readable instead
+    of collapsing to 'frdrica'.
+    """
+    folded = unicodedata.normalize("NFKD", text or "")
+    ascii_only = folded.encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-").lower()
+    return (cleaned or "unknown")[:limit].strip("-")
+
+
+def imgchest_filename(character_name: str, index: int | None = None, kind: str = "") -> str:
+    """What the image is called on ImgChest.
+
+    Every upload used to arrive there as `temp_custom_web_import_a1b2c3d4.png`,
+    which is unusable if you ever need to find something in that account. The
+    name now carries what you would sort or search by: which character it belongs
+    to, its position in that character's gallery, and when it was added.
+
+    The index is a snapshot — removing or reordering images later does not rename
+    anything on ImgChest — so treat it as "roughly where this came in", not a
+    key.
+    """
+    parts = [_slug(character_name)]
+    if kind:
+        parts.append(kind)
+    if index is not None:
+        parts.append(f"{index:03d}")
+    parts.append(datetime.now(UTC).strftime("%Y%m%d"))
+    return "-".join(parts) + ".png"
 
 
 # Max file size (30MB) - reject larger files to avoid memory issues
@@ -311,7 +352,7 @@ def _fetch_image_from_url_for_import(url):
     return temp_path, safe
 
 
-def _run_single_custom_upload_from_temp(temp_path, display_filename):
+def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name=None):
     """
     Validate, convert, upload one temp file to ImgChest.
     Returns (direct_link, None) on success, or (None, error_message).
@@ -341,32 +382,23 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
                 os.remove(temp_path)
             return None, f"{display_filename}: {val_err}", None
 
-        filename_lower = display_filename.lower()
-        if not filename_lower.endswith(".png") and not filename_lower.endswith(".gif"):
-            print(f"[UPLOAD] converting {display_filename} to PNG", flush=True)
-            converted_path, convert_error = convert_to_png(temp_path)
-            if converted_path:
-                final_path = converted_path
-                conversion_created_new_file = True
-                print(f"[UPLOAD] conversion OK, using {final_path}", flush=True)
+        # Animated GIFs pass through: re-encoding them costs the animation, which
+        # is usually the reason the image was chosen. Everything else is
+        # normalised, decided by the file's own bytes rather than its name.
+        if detect_format(temp_path) == "GIF" and is_animated(temp_path):
+            print(f"[UPLOAD] {display_filename} is an animated GIF, keeping as-is", flush=True)
+        else:
+            prepared_path, convert_error = prepare_for_upload(temp_path)
+            if prepared_path:
+                conversion_created_new_file = prepared_path != temp_path
+                final_path = prepared_path
+                print(f"[UPLOAD] prepared {final_path}", flush=True)
             else:
-                err_msg = (
-                    f"{display_filename}: {convert_error}"
-                    if convert_error
-                    else f"{display_filename}: Failed to convert to PNG"
-                )
-                print(
-                    f"[UPLOAD] conversion FAILED for {display_filename}: {convert_error}",
-                    flush=True,
-                )
+                err_msg = f"{display_filename}: {convert_error or 'Could not process image'}"
+                print(f"[UPLOAD] preparation FAILED for {display_filename}", flush=True)
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 return None, err_msg, None
-        else:
-            print(
-                f"[UPLOAD] skipping conversion (already {filename_lower[-4:]}), using as-is",
-                flush=True,
-            )
 
         final_size = os.path.getsize(final_path)
         if final_size > MAX_FILE_SIZE:
@@ -390,7 +422,7 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
 
         try:
             print(f"[UPLOAD] uploading to ImgChest: {final_path}", flush=True)
-            result = upload_to_imgchest(final_path)
+            result = upload_to_imgchest(final_path, upload_name=upload_name)
             if result:
                 post_link, direct_link = result
                 print(f"[UPLOAD] SUCCESS: {display_filename}", flush=True)
@@ -1047,7 +1079,9 @@ def add_character():
             temp_path = os.path.join(".", "temp_add_" + safe_fn)
             file.save(temp_path)
             try:
-                result = upload_to_imgchest(temp_path)
+                result = upload_to_imgchest(
+                    temp_path, upload_name=imgchest_filename(name, kind="main")
+                )
                 if result:
                     _, image_url = result
             except ImgChestError as e:
@@ -1116,6 +1150,9 @@ def add_custom_image():
         uploaded_dimensions = {}
         errors = []
         processed = 0
+        # Numbering continues from what the character already has, so the name on
+        # ImgChest reflects where the image landed in the gallery.
+        next_index = db.count_custom_images(char_name) + 1
 
         for file in files:
             fn = file.filename
@@ -1130,8 +1167,11 @@ def add_custom_image():
             temp_path = os.path.join(".", "temp_custom_" + safe_fn)
             file.save(temp_path)
 
-            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(temp_path, fn)
+            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
+                temp_path, fn, upload_name=imgchest_filename(char_name, next_index)
+            )
             if direct_link:
+                next_index += 1
                 uploaded_links.append(direct_link)
                 if dimensions:
                     uploaded_dimensions[direct_link] = dimensions
@@ -1194,6 +1234,7 @@ def import_custom_images_from_urls():
         uploaded_links = []
         uploaded_dimensions = {}
         errors = []
+        next_index = db.count_custom_images(char_name) + 1
         for idx, url in enumerate(urls):
             print(f"[IMPORT] fetching {idx + 1}/{len(urls)}: {url[:120]}...", flush=True)
             try:
@@ -1205,9 +1246,10 @@ def import_custom_images_from_urls():
                 errors.append(f"{url}: {str(e)}")
                 continue
             direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
-                temp_path, display_filename
+                temp_path, display_filename, upload_name=imgchest_filename(char_name, next_index)
             )
             if direct_link:
+                next_index += 1
                 uploaded_links.append(direct_link)
                 if dimensions:
                     uploaded_dimensions[direct_link] = dimensions
@@ -1578,7 +1620,9 @@ def set_main_image():
         return jsonify({"error": val_err}), 400
 
     try:
-        result = upload_to_imgchest(temp_path)
+        result = upload_to_imgchest(
+            temp_path, upload_name=imgchest_filename(char_name, kind="main")
+        )
         if not result:
             return jsonify({"error": "Failed to upload to ImgChest"}), 500
 
@@ -1616,7 +1660,9 @@ def _upload_remote_image_to_imgchest(image_url):
         ok, val_err = validate_image_file(temp_path)
         if not ok:
             raise ValueError(val_err or "Invalid image from Mudae")
-        result = upload_to_imgchest(temp_path)
+        result = upload_to_imgchest(
+            temp_path, upload_name=imgchest_filename(character_name, kind="main-mudae")
+        )
         if not result:
             raise ImgChestError("Failed to upload Mudae image to ImgChest")
         _, direct_link = result
