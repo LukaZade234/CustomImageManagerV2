@@ -60,7 +60,13 @@ def _size_clause_mb(file_size_mb, limit_mb=30.0):
     )
 
 
-def upload_to_imgchest(file_path):
+def upload_to_imgchest(file_path, upload_name=None):
+    """Upload one image. `upload_name` is what it will be called on ImgChest.
+
+    Both the post title and the image's own filename are set from it. Without
+    that, ImgChest records the temp path the app happened to use, which is how
+    an account ends up full of `temp_custom_web_import_a1b2c3d4.png`.
+    """
     if API_KEY == "YOUR_API_KEY_HERE" or not API_KEY:
         _log("ERROR: API_KEY not set")
         raise ImgChestError(
@@ -76,8 +82,9 @@ def upload_to_imgchest(file_path):
 
     url = "https://api.imgchest.com/v1/post"
     headers = {"Authorization": f"Bearer {API_KEY}"}
+    display_name = upload_name or os.path.basename(file_path)
     payload = {
-        "title": os.path.basename(file_path),
+        "title": display_name,
         "privacy": "hidden",
         "nsfw": "false",
     }
@@ -86,7 +93,7 @@ def upload_to_imgchest(file_path):
     for attempt in range(_IMGCHEST_MAX_ATTEMPTS):
         try:
             with open(file_path, "rb") as image_file:
-                files = {"images[]": image_file}
+                files = {"images[]": (display_name, image_file)}
                 _log(
                     f"sending POST to api.imgchest.com (attempt {attempt + 1}/{_IMGCHEST_MAX_ATTEMPTS})..."
                 )

@@ -10,6 +10,7 @@ import ipaddress
 
 import pytest
 
+import remote_images
 import upload_imgchest as app_module
 
 
@@ -31,7 +32,7 @@ class TestAddressClassification:
         ],
     )
     def test_obvious_internal_addresses_are_blocked(self, address):
-        assert app_module._ip_is_blocked(ipaddress.ip_address(address))
+        assert remote_images._ip_is_blocked(ipaddress.ip_address(address))
 
     @pytest.mark.parametrize(
         ("address", "why"),
@@ -46,11 +47,11 @@ class TestAddressClassification:
     )
     def test_the_ranges_the_stdlib_does_not_flag(self, address, why):
         """Each of these passed the original guard."""
-        assert app_module._ip_is_blocked(ipaddress.ip_address(address)), why
+        assert remote_images._ip_is_blocked(ipaddress.ip_address(address)), why
 
     @pytest.mark.parametrize("address", ["8.8.8.8", "1.1.1.1", "2606:4700::1111"])
     def test_real_public_addresses_are_allowed(self, address):
-        assert not app_module._ip_is_blocked(ipaddress.ip_address(address))
+        assert not remote_images._ip_is_blocked(ipaddress.ip_address(address))
 
 
 class TestUrlValidation:
@@ -72,10 +73,10 @@ class TestUrlValidation:
         ],
     )
     def test_refused(self, url):
-        assert app_module._safe_import_image_url(url) is False
+        assert remote_images._safe_import_image_url(url) is False
 
     def test_a_normal_https_image_url_is_allowed(self):
-        assert app_module._safe_import_image_url("https://cdn.imgchest.com/files/abc.png") is True
+        assert remote_images._safe_import_image_url("https://cdn.imgchest.com/files/abc.png") is True
 
 
 @pytest.fixture
@@ -86,7 +87,7 @@ def resolving(monkeypatch):
     rejects an unresolvable hostname first, so every case would pass for the
     wrong reason.
     """
-    real = app_module.socket.getaddrinfo
+    real = remote_images.socket.getaddrinfo
 
     def fake(host, *args, **kwargs):
         try:
@@ -97,7 +98,7 @@ def resolving(monkeypatch):
             return real(host, *args, **kwargs)
         return [(0, 0, 0, "", (host, 0))]
 
-    monkeypatch.setattr(app_module.socket, "getaddrinfo", fake)
+    monkeypatch.setattr(remote_images.socket, "getaddrinfo", fake)
 
 
 class _Redirect:
@@ -139,9 +140,9 @@ class TestRedirectHops:
                 return _Redirect("http://169.254.169.254/latest/meta-data/")
             return _Ok()
 
-        monkeypatch.setattr(app_module.requests, "get", fake_get)
+        monkeypatch.setattr(remote_images.requests, "get", fake_get)
         with pytest.raises(ValueError, match="not allowed"):
-            app_module._get_with_validated_redirects("https://start.example/a.png", timeout=1)
+            remote_images._get_with_validated_redirects("https://start.example/a.png", timeout=1)
 
         assert requested == ["https://start.example/a.png"], (
             "the private hop must never be requested"
@@ -153,29 +154,29 @@ class TestRedirectHops:
                 return _Redirect("https://cdn.example/b.png")
             return _Ok()
 
-        monkeypatch.setattr(app_module.requests, "get", fake_get)
-        response = app_module._get_with_validated_redirects(
+        monkeypatch.setattr(remote_images.requests, "get", fake_get)
+        response = remote_images._get_with_validated_redirects(
             "https://start.example/a.png", timeout=1
         )
         assert response.status_code == 200
 
     def test_a_redirect_loop_terminates(self, monkeypatch, resolving):
         monkeypatch.setattr(
-            app_module.requests,
+            remote_images.requests,
             "get",
             lambda url, **_kwargs: _Redirect("https://cdn.example/loop.png"),
         )
         with pytest.raises(ValueError, match="Too many redirects"):
-            app_module._get_with_validated_redirects("https://cdn.example/loop.png", timeout=1)
+            remote_images._get_with_validated_redirects("https://cdn.example/loop.png", timeout=1)
 
     def test_a_redirect_with_no_location_is_an_error(self, monkeypatch, resolving):
         class _Headerless(_Redirect):
             def __init__(self):
                 self.headers = {}
 
-        monkeypatch.setattr(app_module.requests, "get", lambda url, **_kw: _Headerless())
+        monkeypatch.setattr(remote_images.requests, "get", lambda url, **_kw: _Headerless())
         with pytest.raises(ValueError, match="Redirect without a target"):
-            app_module._get_with_validated_redirects("https://cdn.example/a.png", timeout=1)
+            remote_images._get_with_validated_redirects("https://cdn.example/a.png", timeout=1)
 
     def test_a_relative_redirect_is_resolved_against_the_current_url(self, monkeypatch, resolving):
         seen = []
@@ -184,8 +185,8 @@ class TestRedirectHops:
             seen.append(url)
             return _Redirect("/next.png") if len(seen) == 1 else _Ok()
 
-        monkeypatch.setattr(app_module.requests, "get", fake_get)
-        app_module._get_with_validated_redirects("https://cdn.example/a/b.png", timeout=1)
+        monkeypatch.setattr(remote_images.requests, "get", fake_get)
+        remote_images._get_with_validated_redirects("https://cdn.example/a/b.png", timeout=1)
         assert seen[1] == "https://cdn.example/next.png"
 
 
@@ -201,7 +202,7 @@ class TestProxyEndpoint:
         """A ValueError escaping as a 500 would leak that the guard even ran."""
         monkeypatch.setattr(app_module.mudae_discord, "configured", lambda: True)
         monkeypatch.setattr(
-            app_module.requests,
+            remote_images.requests,
             "get",
             lambda url, **_kw: _Redirect("http://10.0.0.1/x.png"),
         )

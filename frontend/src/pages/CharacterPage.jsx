@@ -2,12 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
+import { CharacterHeader } from '../components/CharacterHeader'
+import CustomImageGallery from '../components/CustomImageGallery'
+import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
-import { Button, Card, ConfirmDialog, IconButton } from '../components/ui'
-import { apiUrl } from '../config'
+import { Card, ConfirmDialog } from '../components/ui'
+import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
+import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -19,99 +23,8 @@ import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
 } from '../utils/downloadCustomImages'
-import {
-  dataTransferHasWebImageDrag,
-  dedupeImageUrls,
-  extractImageUrlsFromDataTransfer,
-} from '../utils/dragImageUrls'
-import { FILLERS, ratioFor, ratioOf } from '../utils/galleryRatios'
-
-/** Must match server MAX_FILE_SIZE in upload_imgchest.py (30 MiB) */
-const MAX_CUSTOM_IMAGE_BYTES = 30 * 1024 * 1024
-
-/** Mobile reorder: HTML5 DnD does not work with touch — long-press then drag */
-const REORDER_LONG_PRESS_MS = 450
-const REORDER_TOUCH_SLOP_PX = 14
-
-const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|ico)$/i
-
-/** MIME image/* or empty type with image extension (OS drag often omits MIME on Linux). */
-function isImageFileLike(file) {
-  if (!file) return false
-  if (file.type && file.type.startsWith('image/')) return true
-  if (typeof file.name === 'string' && IMAGE_EXT_RE.test(file.name)) return true
-  return false
-}
-
-function dataTransferIsFileDrag(dt) {
-  if (!dt) return false
-  try {
-    const { types, items } = dt
-    // DOMStringList (Firefox / older WebKit): has .contains, not .includes — check contains first
-    if (types) {
-      if (typeof types.contains === 'function' && types.contains('Files')) return true
-      if (typeof types.includes === 'function' && types.includes('Files')) return true
-      const typeArr = Array.from(types)
-      if (typeArr.includes('Files')) return true
-      if (typeArr.includes('application/x-moz-file')) return true
-    }
-    if (items && items.length) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file') return true
-      }
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-function adjustDropTarget(toIndex, pickedSet, len) {
-  if (len <= 0) return 0
-  let t = toIndex
-  if (t < 0) t = 0
-  if (t >= len) t = len - 1
-  if (!pickedSet.has(t)) return t
-  for (let i = t + 1; i < len; i++) if (!pickedSet.has(i)) return i
-  for (let i = t - 1; i >= 0; i--) if (!pickedSet.has(i)) return i
-  return 0
-}
-
-/** Move one contiguous group of indices to a drop target index (same visual order as `customs`). */
-function moveGroupInArray(arr, fromIndices, toIndex) {
-  const sorted = [...fromIndices].sort((a, b) => a - b)
-  const pickedSet = new Set(sorted)
-  const picked = sorted.map((i) => arr[i])
-  let t = toIndex
-  if (pickedSet.has(t)) {
-    t = adjustDropTarget(t, pickedSet, arr.length)
-  }
-  if (t < 0) t = 0
-  const without = arr.filter((_, i) => !pickedSet.has(i))
-  let insertBefore = 0
-  for (let i = 0; i < t && i < arr.length; i++) {
-    if (!pickedSet.has(i)) insertBefore++
-  }
-  return [...without.slice(0, insertBefore), ...picked, ...without.slice(insertBefore)]
-}
-
-function ordersEqual(a, b) {
-  if (a.length !== b.length) return false
-  return a.every((u, i) => u === b[i])
-}
-
-/** Some browsers list the same file more than once in a single drop. */
-function dedupeFilesByIdentity(fileList) {
-  const seen = new Set()
-  const out = []
-  for (const f of fileList) {
-    const key = `${f.name}\0${f.size}\0${f.lastModified}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(f)
-  }
-  return out
-}
+import { ratioOf } from '../utils/galleryRatios'
+import { isImageFileLike } from '../utils/imageFiles'
 
 export default function CharacterPage() {
   const { name } = useParams()
@@ -150,11 +63,17 @@ export default function CharacterPage() {
   const [loading, setLoading] = useState(false)
   const [mudaeMainBusy, setMudaeMainBusy] = useState(false)
   const [mudaeConfigured, setMudaeConfigured] = useState(false)
-  const [aiMode, setAiMode] = useState(false)
+  /**
+   * The gallery is in exactly one mode at a time. Four independent booleans made
+   * eleven of the sixteen combinations nonsense and needed twelve hand-written
+   * "turn the others off" lines to stay consistent; one value cannot be wrong.
+   */
+  const [mode, setMode] = useState('browse')
+  const aiMode = mode === 'ai'
+  const deleteMode = mode === 'remove'
+  const downloadMode = mode === 'download'
+  const reorderMode = mode === 'reorder'
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
-  const [deleteMode, setDeleteMode] = useState(false)
-  const [downloadMode, setDownloadMode] = useState(false)
-  const [reorderMode, setReorderMode] = useState(false)
   const [selectedUrls, setSelectedUrls] = useState([])
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
@@ -165,31 +84,13 @@ export default function CharacterPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalIndex, setModalIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
-  const [customDragOver, setCustomDragOver] = useState(false)
-  const [customUploadProgress, setCustomUploadProgress] = useState(null)
+
   /** Full multi-line upload error for dismissible dialog (replaces window.alert). */
-  const [uploadErrorDialog, setUploadErrorDialog] = useState(null)
-  const customUploadLockRef = useRef(false)
+
   const mainInputRef = useRef(null)
   const customInputRef = useRef(null)
-  const dragItemRef = useRef(null)
-  const dragOverRef = useRef(null)
-  const dragIndicesRef = useRef(null)
-  /** Snapshot of custom image URLs when reorder session started (Cancel restores this order) */
+  /** Snapshot of the order when reorder mode opened, so Cancel can restore it. */
   const reorderSessionBaselineRef = useRef(null)
-  /** Drop target & dragged indices for reorder UI (refs alone don't re-render) */
-  const [reorderDropTargetIndex, setReorderDropTargetIndex] = useState(null)
-  const [reorderDragIndices, setReorderDragIndices] = useState(null)
-  /** Last pointer Y during reorder drag — drives continuous edge auto-scroll */
-  const reorderEdgePointerYRef = useRef(null)
-  /** Touch long-press before drag: { timerId, index, startX, startY } */
-  const reorderTouchPendingRef = useRef(null)
-  /** Ignore one synthetic click after a touch-based reorder (avoids toggling selection) */
-  const ignoreNextReorderItemClickRef = useRef(false)
-  /** Stable cleanup for window-level touch listeners */
-  const reorderTouchCleanupRef = useRef(null)
-  /** Cancels in-flight long-press (window listeners + timer) */
-  const reorderTouchCancelPendingRef = useRef(null)
 
   useEffect(() => {
     if (char) {
@@ -211,117 +112,32 @@ export default function CharacterPage() {
     loadCustomImagesForCharacter(name)
   }, [name, loadCustomImagesForCharacter])
 
-  useEffect(() => {
-    if (!reorderMode) {
-      if (typeof reorderTouchCleanupRef.current === 'function') {
-        reorderTouchCleanupRef.current()
-        reorderTouchCleanupRef.current = null
-      }
-      if (typeof reorderTouchCancelPendingRef.current === 'function') {
-        reorderTouchCancelPendingRef.current()
-        reorderTouchCancelPendingRef.current = null
-      }
-      const pending = reorderTouchPendingRef.current
-      if (pending?.timerId) clearTimeout(pending.timerId)
-      reorderTouchPendingRef.current = null
-      document.body.classList.remove('reorder-touch-dragging')
-      dragItemRef.current = null
-      dragOverRef.current = null
-      dragIndicesRef.current = null
-      setReorderDropTargetIndex(null)
-      setReorderDragIndices(null)
-    }
-  }, [reorderMode])
-
-  /**
-   * Continuous edge scroll while reorder-dragging: dragover only fires when the pointer moves,
-   * so we run a rAF loop and read the last known Y — scrolling keeps going while the pointer
-   * stays in the top/bottom bands.
-   */
-  useEffect(() => {
-    if (!reorderDragIndices) return
-    const edge = 100
-    const maxStep = 28
-    const minStep = 5
-    let rafId = 0
-
-    const onPointerMove = (e) => {
-      if (typeof e.clientY === 'number') reorderEdgePointerYRef.current = e.clientY
-    }
-
-    const tick = () => {
-      const y = reorderEdgePointerYRef.current
-      if (y != null) {
-        const h = window.innerHeight
-        if (y < edge) {
-          const d = edge - y
-          const step = Math.round(Math.min(maxStep, Math.max(minStep, 4 + d * 0.22)))
-          window.scrollBy(0, -step)
-        } else if (y > h - edge) {
-          const d = y - (h - edge)
-          const step = Math.round(Math.min(maxStep, Math.max(minStep, 4 + d * 0.22)))
-          window.scrollBy(0, step)
-        }
-      }
-      rafId = requestAnimationFrame(tick)
-    }
-
-    reorderEdgePointerYRef.current = null
-    document.addEventListener('dragover', onPointerMove, { passive: true })
-    document.addEventListener('drag', onPointerMove, { passive: true })
-    const onTouchMoveEdge = (e) => {
-      const t = e.touches && e.touches[0]
-      if (t) reorderEdgePointerYRef.current = t.clientY
-    }
-    document.addEventListener('touchmove', onTouchMoveEdge, { passive: true })
-    rafId = requestAnimationFrame(tick)
-
-    return () => {
-      cancelAnimationFrame(rafId)
-      document.removeEventListener('dragover', onPointerMove)
-      document.removeEventListener('drag', onPointerMove)
-      document.removeEventListener('touchmove', onTouchMoveEdge)
-      reorderEdgePointerYRef.current = null
-    }
-  }, [reorderDragIndices])
-
-  useEffect(() => {
-    return () => {
-      if (typeof reorderTouchCleanupRef.current === 'function') reorderTouchCleanupRef.current()
-      if (typeof reorderTouchCancelPendingRef.current === 'function')
-        reorderTouchCancelPendingRef.current()
-      const p = reorderTouchPendingRef.current
-      if (p?.timerId) clearTimeout(p.timerId)
-      reorderTouchPendingRef.current = null
-    }
-  }, [])
-
   const resetModes = useCallback(() => {
-    setAiMode(false)
-    setDeleteMode(false)
-    setDownloadMode(false)
-    setReorderMode(false)
+    setMode('browse')
     setSelectedUrls([])
     setAiLimitDialog(null)
     reorderSessionBaselineRef.current = null
   }, [])
 
+  /** Leave whatever mode is current and enter `next`, clearing its state. */
+  const enterMode = useCallback(
+    (next) => {
+      resetModes()
+      setMode(next)
+    },
+    [resetModes],
+  )
+
   const enterDownloadMode = useCallback(() => {
-    setAiMode(false)
-    setDeleteMode(false)
-    setReorderMode(false)
     reorderSessionBaselineRef.current = null
     setSelectedUrls([])
-    setDownloadMode(true)
+    setMode('download')
   }, [])
 
   const enterReorderMode = useCallback(() => {
-    setAiMode(false)
-    setDeleteMode(false)
-    setDownloadMode(false)
     setSelectedUrls([])
     reorderSessionBaselineRef.current = [...customs]
-    setReorderMode(true)
+    setMode('reorder')
   }, [customs])
 
   const cancelReorder = useCallback(async () => {
@@ -332,10 +148,8 @@ export default function CharacterPage() {
         await loadCustomImagesForCharacter(name)
       }
       reorderSessionBaselineRef.current = null
-      setReorderMode(false)
+      setMode('browse')
       setSelectedUrls([])
-      setReorderDropTargetIndex(null)
-      setReorderDragIndices(null)
       addToast('Order reverted to before you started reordering.', 'info')
     } catch (e) {
       addToast(e.message || 'Could not revert order', 'error')
@@ -344,10 +158,8 @@ export default function CharacterPage() {
 
   const doneReorder = useCallback(() => {
     reorderSessionBaselineRef.current = null
-    setReorderMode(false)
+    setMode('browse')
     setSelectedUrls([])
-    setReorderDropTargetIndex(null)
-    setReorderDragIndices(null)
   }, [])
 
   const getIndicesToMove = useCallback(
@@ -363,15 +175,19 @@ export default function CharacterPage() {
     [customs, selectedUrls],
   )
 
-  const beginReorderDrag = useCallback(
-    (index) => {
-      const indices = getIndicesToMove(index)
-      dragIndicesRef.current = indices
-      dragItemRef.current = index
-      setReorderDragIndices(indices)
-    },
-    [getIndicesToMove],
-  )
+  const upload = useCustomImageUpload({
+    characterName: name,
+    onUploaded: appendCustomImageUrls,
+    addToast,
+    fileInputRef: customInputRef,
+  })
+
+  const reorder = useGalleryReorder({
+    items: customs,
+    enabled: reorderMode,
+    indicesFor: getIndicesToMove,
+    onReorder: (next) => applyReorder(next),
+  })
 
   const applyReorder = useCallback(
     (newOrder) => {
@@ -472,178 +288,6 @@ export default function CharacterPage() {
     } finally {
       setMudaeMainBusy(false)
     }
-  }
-
-  const runCustomUpload = async (fileList) => {
-    const list = dedupeFilesByIdentity(Array.from(fileList)).filter((f) => isImageFileLike(f))
-    if (!list.length) {
-      addToast('No image files to upload', 'error')
-      return
-    }
-    if (customUploadLockRef.current) {
-      addToast('An upload is already in progress', 'info')
-      return
-    }
-    customUploadLockRef.current = true
-    const total = list.length
-    setCustomUploadProgress({ phase: 'starting', current: 0, total })
-    addToast(`Starting upload of ${total} image${total !== 1 ? 's' : ''}…`, 'info')
-
-    const errors = []
-    try {
-      for (let i = 0; i < list.length; i++) {
-        const file = list[i]
-        setCustomUploadProgress({ phase: 'uploading', current: i + 1, total, fileName: file.name })
-        if (file.size > MAX_CUSTOM_IMAGE_BYTES) {
-          const msg = `File too large (max ${MAX_CUSTOM_IMAGE_BYTES / (1024 * 1024)}MB)`
-          addToast(`Skipped ${i + 1}/${total} — ${file.name}: ${msg}`, 'error')
-          errors.push({ name: file.name, message: msg })
-          continue
-        }
-        try {
-          const fd = new FormData()
-          fd.append('character_name', name)
-          fd.append('files', file)
-          const res = await apiClient.addCustomImage(fd)
-          if (Array.isArray(res.links) && res.links.length > 0) {
-            await appendCustomImageUrls(name, res.links)
-          }
-          // Server can return 200 with `errors` when a batch had partial failures (e.g. multi-file request)
-          if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
-            res._partialErrors.forEach((msg) => {
-              addToast(`Skipped: ${msg}`, 'error')
-              errors.push({ name: file.name, message: msg })
-            })
-          }
-        } catch (err) {
-          const msg = err.message || 'Upload failed'
-          addToast(`Failed ${i + 1}/${total} (${file.name}): ${msg}`, 'error')
-          errors.push({ name: file.name, message: msg })
-        }
-      }
-
-      const ok = total - errors.length
-      if (ok === total) {
-        addToast(`${ok} image${ok !== 1 ? 's' : ''} uploaded successfully.`, 'success')
-      } else if (ok > 0) {
-        addToast(
-          `${ok} of ${total} image${ok !== 1 ? 's' : ''} uploaded. ${errors.length} failed — open the error panel to read and copy details.`,
-          'error',
-        )
-      } else {
-        addToast(`No images uploaded — open the error panel for full details.`, 'error')
-      }
-      if (errors.length > 0) {
-        const detail = [
-          `Some images were skipped or failed (${errors.length} of ${total}).`,
-          '',
-          'Per file:',
-          '',
-          ...errors.map((e) => (e.name ? `${e.name}\n  ${e.message}` : e.message)),
-          '',
-          'Tip: uploads to ImgChest are retried on the server; the browser also retries brief connection errors. New URLs are merged into the gallery without reloading the full library. If you see a network error, try again.',
-        ].join('\n')
-        setUploadErrorDialog(detail)
-      }
-    } catch (err) {
-      addToast(`Upload stopped: ${err.message || 'Unknown error'}`, 'error')
-    } finally {
-      customUploadLockRef.current = false
-      setCustomUploadProgress(null)
-    }
-  }
-
-  const handleAddCustomImage = async (e) => {
-    const files = e.target.files
-    if (!files?.length) return
-    await runCustomUpload(files)
-    if (customInputRef.current) customInputRef.current.value = ''
-  }
-
-  const runImportFromUrls = async (urls) => {
-    const deduped = dedupeImageUrls(urls)
-    if (!deduped.length) return
-    if (customUploadLockRef.current) {
-      addToast('An upload is already in progress', 'info')
-      return
-    }
-    // Web drag often yields duplicate URLs for the same image; max 1 import per web drop only.
-    const list = deduped.slice(0, 1)
-    customUploadLockRef.current = true
-    setCustomUploadProgress({ phase: 'uploading', current: 1, total: 1 })
-    addToast(
-      deduped.length > 1
-        ? 'Importing one image from the web (extra URLs ignored)…'
-        : 'Importing image from the web…',
-      'info',
-    )
-    try {
-      const res = await apiClient.importCustomImagesFromUrls(name, list)
-      if (Array.isArray(res.links) && res.links.length > 0) {
-        await appendCustomImageUrls(name, res.links)
-      }
-      if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
-        res._partialErrors.forEach((msg) => addToast(`Skipped: ${msg}`, 'error'))
-      }
-      const n = (res && res.links && res.links.length) || 0
-      if (n >= 1) {
-        addToast('Image imported from the web.', 'success')
-      } else {
-        addToast('Could not import from that URL.', 'error')
-      }
-    } catch (err) {
-      addToast(err.message || 'Import failed', 'error')
-    } finally {
-      customUploadLockRef.current = false
-      setCustomUploadProgress(null)
-    }
-  }
-
-  const handleCustomDrop = async (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setCustomDragOver(false)
-
-    const urls = extractImageUrlsFromDataTransfer(e.dataTransfer)
-    const raw = e.dataTransfer.files
-    const files = Array.from(raw || []).filter((f) => isImageFileLike(f))
-
-    if (reorderMode && reorderDragIndices) {
-      if (urls.length === 0 && files.length === 0) return
-    }
-
-    if (customUploadLockRef.current) {
-      addToast('An upload is already in progress', 'info')
-      return
-    }
-
-    if (files.length) {
-      await runCustomUpload(files)
-      return
-    }
-    if (urls.length) {
-      await runImportFromUrls(urls)
-      return
-    }
-    if (raw && raw.length > 0) {
-      addToast('Drop image files only (PNG, JPEG, WebP, …)', 'info')
-    }
-  }
-
-  /** OS file drags often omit `Files` in types until drop; `dropEffect: none` blocks the drop event — only use move for in-gallery reorder. */
-  const handleCustomSectionDragOver = (e) => {
-    e.preventDefault()
-    const fileDrag = dataTransferIsFileDrag(e.dataTransfer)
-    const webDrag = dataTransferHasWebImageDrag(e.dataTransfer)
-    const reorderInternal = reorderMode && reorderDragIndices && !fileDrag && !webDrag
-    e.dataTransfer.dropEffect = reorderInternal ? 'move' : 'copy'
-    setCustomDragOver(true)
-  }
-
-  const handleCustomSectionDragLeave = (e) => {
-    const next = e.relatedTarget
-    if (next && e.currentTarget.contains(next)) return
-    setCustomDragOver(false)
   }
 
   const recordTakes = (urls, kind) => {
@@ -777,7 +421,7 @@ export default function CharacterPage() {
   }
 
   const toggleSelect = (url) => {
-    if (aiMode || deleteMode || downloadMode || reorderMode) {
+    if (mode !== 'browse') {
       setSelectedUrls((prev) =>
         prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
       )
@@ -819,165 +463,19 @@ export default function CharacterPage() {
     resetModes()
   }
 
-  const onDragStart = (e, index) => {
-    if (!reorderMode) return
-    beginReorderDrag(index)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', String(index))
-  }
-
-  const clearReorderTouchWindowListeners = () => {
-    if (typeof reorderTouchCleanupRef.current === 'function') {
-      reorderTouchCleanupRef.current()
-      reorderTouchCleanupRef.current = null
-    }
-  }
-
-  const resolveReorderSlotIndex = (clientX, clientY) => {
-    const el = document.elementFromPoint(clientX, clientY)
-    const slot = el && el.closest && el.closest('[data-reorder-slot]')
-    if (!slot) return null
-    const raw = slot.getAttribute('data-reorder-slot')
-    const i = raw != null ? Number.parseInt(raw, 10) : NaN
-    return Number.isFinite(i) ? i : null
-  }
-
-  const onDragOver = (e, index) => {
-    const fileDrag = dataTransferIsFileDrag(e.dataTransfer)
-    const webDrag = dataTransferHasWebImageDrag(e.dataTransfer)
-    const reorderInternal = reorderMode && reorderDragIndices && !fileDrag && !webDrag
-    if (reorderInternal) {
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      dragOverRef.current = index
-      setReorderDropTargetIndex(index)
-      return
-    }
+  /**
+   * Reordering no longer travels over HTML5 drag-and-drop, so a drag reaching
+   * the gallery can only have come from outside — a file, or an image dragged
+   * in from a web page. No inspection of dataTransfer is needed to tell them
+   * apart any more.
+   */
+  const onGalleryDragOver = (e) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }
 
-  const onDragEnd = () => {
-    const to = dragOverRef.current
-    const from = dragItemRef.current
-    const indices = dragIndicesRef.current
-    dragItemRef.current = null
-    dragOverRef.current = null
-    dragIndicesRef.current = null
-    setReorderDropTargetIndex(null)
-    setReorderDragIndices(null)
-    if (from == null || to == null || !indices?.length) return
-    const next = moveGroupInArray(customs, indices, to)
-    if (ordersEqual(next, customs)) return
-    applyReorder(next)
-  }
-
-  /** Long-press on a tile, then drag with finger (touch — native HTML5 DnD does not work). */
-  const onReorderItemTouchStart = (e, index) => {
-    if (!reorderMode || e.touches.length !== 1) return
-    clearReorderTouchWindowListeners()
-    if (typeof reorderTouchCancelPendingRef.current === 'function') {
-      reorderTouchCancelPendingRef.current()
-      reorderTouchCancelPendingRef.current = null
-    }
-    const orphan = reorderTouchPendingRef.current
-    if (orphan?.timerId) clearTimeout(orphan.timerId)
-    reorderTouchPendingRef.current = null
-    const t = e.touches[0]
-    const startX = t.clientX
-    const startY = t.clientY
-
-    const cancelPending = () => {
-      reorderTouchCancelPendingRef.current = null
-      const pend = reorderTouchPendingRef.current
-      if (pend?.timerId) clearTimeout(pend.timerId)
-      reorderTouchPendingRef.current = null
-      window.removeEventListener('touchmove', onMoveBeforeLongPress)
-      window.removeEventListener('touchend', cancelPending)
-      window.removeEventListener('touchcancel', cancelPending)
-    }
-    reorderTouchCancelPendingRef.current = cancelPending
-
-    function onMoveBeforeLongPress(ev) {
-      if (ev.touches.length !== 1) {
-        cancelPending()
-        return
-      }
-      const tt = ev.touches[0]
-      const dx = tt.clientX - startX
-      const dy = tt.clientY - startY
-      if (dx * dx + dy * dy > REORDER_TOUCH_SLOP_PX * REORDER_TOUCH_SLOP_PX) cancelPending()
-    }
-
-    const timerId = setTimeout(() => {
-      reorderTouchCancelPendingRef.current = null
-      reorderTouchPendingRef.current = null
-      window.removeEventListener('touchmove', onMoveBeforeLongPress)
-      window.removeEventListener('touchend', cancelPending)
-      window.removeEventListener('touchcancel', cancelPending)
-      beginReorderDrag(index)
-      ignoreNextReorderItemClickRef.current = true
-      reorderEdgePointerYRef.current = startY
-      dragOverRef.current = index
-      setReorderDropTargetIndex(index)
-
-      const onDragTouchMove = (ev) => {
-        if (ev.touches.length !== 1) return
-        ev.preventDefault()
-        const tt = ev.touches[0]
-        reorderEdgePointerYRef.current = tt.clientY
-        const slotIdx = resolveReorderSlotIndex(tt.clientX, tt.clientY)
-        if (slotIdx != null) {
-          dragOverRef.current = slotIdx
-          setReorderDropTargetIndex(slotIdx)
-        }
-      }
-
-      const onDragTouchEnd = () => {
-        document.body.classList.remove('reorder-touch-dragging')
-        window.removeEventListener('touchmove', onDragTouchMove)
-        window.removeEventListener('touchend', onDragTouchEnd)
-        window.removeEventListener('touchcancel', onDragTouchEnd)
-        reorderTouchCleanupRef.current = null
-        onDragEnd()
-      }
-
-      document.body.classList.add('reorder-touch-dragging')
-      window.addEventListener('touchmove', onDragTouchMove, { passive: false })
-      window.addEventListener('touchend', onDragTouchEnd)
-      window.addEventListener('touchcancel', onDragTouchEnd)
-      reorderTouchCleanupRef.current = () => {
-        document.body.classList.remove('reorder-touch-dragging')
-        window.removeEventListener('touchmove', onDragTouchMove)
-        window.removeEventListener('touchend', onDragTouchEnd)
-        window.removeEventListener('touchcancel', onDragTouchEnd)
-      }
-    }, REORDER_LONG_PRESS_MS)
-
-    reorderTouchPendingRef.current = { timerId, index, startX, startY }
-    window.addEventListener('touchmove', onMoveBeforeLongPress, { passive: true })
-    window.addEventListener('touchend', cancelPending)
-    window.addEventListener('touchcancel', cancelPending)
-  }
-
-  const onGalleryDragLeave = (e) => {
-    if (!reorderMode || !reorderDragIndices) return
-    const next = e.relatedTarget
-    if (next && e.currentTarget.contains(next)) return
-    setReorderDropTargetIndex(null)
-    dragOverRef.current = null
-  }
-
-  const onGalleryDragOver = (e) => {
-    const fileDrag = dataTransferIsFileDrag(e.dataTransfer)
-    const webDrag = dataTransferHasWebImageDrag(e.dataTransfer)
-    const reorderInternal = reorderMode && reorderDragIndices && !fileDrag && !webDrag
-    e.preventDefault()
-    e.dataTransfer.dropEffect = reorderInternal ? 'move' : 'copy'
-  }
-
   const openModal = (index) => {
-    if (aiMode || deleteMode || downloadMode || reorderMode) return
+    if (mode !== 'browse') return
     setModalIndex(index)
     setModalOpen(true)
   }
@@ -987,433 +485,72 @@ export default function CharacterPage() {
 
   return (
     <Card as="article" padding="lg" className="character-page">
-      <div className="character-top-section">
-        <div className="char-info-section">
-          {!editMode ? (
-            <div id="charDisplayMode">
-              <h3 id="charNameDisplay" className="display-title">
-                {char.name}
-              </h3>
-              <p id="charSeriesDisplay" className="text-body">
-                {char.series || '—'}
-              </p>
-              <p id="charRankDisplay" className="text-meta">
-                Rank: {char.rank || '—'}
-              </p>
-              <div className="char-page-actions">
-                <Button
-                  variant="secondary"
-                  onClick={() => setEditMode(true)}
-                  title="Edit name, series, rank, and main image"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  Edit Character
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    resetModes()
-                    setAiMode(true)
-                  }}
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                  Get $ai Command
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div id="charEditMode">
-              <div className="edit-form-container">
-                <div className="edit-group full-width">
-                  <label htmlFor="editCharName">Name</label>
-                  <input
-                    id="editCharName"
-                    type="text"
-                    className="modern-input"
-                    placeholder="Character Name"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                  />
-                </div>
-                <div className="edit-group full-width">
-                  <label htmlFor="editCharSeries">Series</label>
-                  <input
-                    id="editCharSeries"
-                    type="text"
-                    className="modern-input"
-                    placeholder="Series Name"
-                    value={editSeries}
-                    onChange={(e) => setEditSeries(e.target.value)}
-                    autoComplete="off"
-                  />
-                </div>
-                <div className="edit-group full-width">
-                  <label htmlFor="editCharRank">Rank</label>
-                  <input
-                    id="editCharRank"
-                    type="number"
-                    className="modern-input"
-                    placeholder="#"
-                    value={editRank}
-                    onChange={(e) => setEditRank(e.target.value)}
-                  />
-                </div>
-                <div className="edit-actions">
-                  <Button variant="primary" onClick={handleSaveEdit} disabled={loading}>
-                    Save Changes
-                  </Button>
-                  <Button variant="secondary" onClick={() => setEditMode(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="char-image-section">
-          <div
-            className={`image-wrapper ${editMode ? 'edit-mode' : ''} ${dragOver ? 'drag-over-main' : ''}`}
-            onClick={() => editMode && mainInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              editMode && setDragOver(true)
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={editMode ? handleMainImageDrop : undefined}
-            role={editMode ? 'button' : undefined}
-            tabIndex={editMode ? 0 : undefined}
-            onKeyDown={(e) => editMode && e.key === 'Enter' && mainInputRef.current?.click()}
-          >
-            <input
-              ref={mainInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleMainImageChange}
-            />
-            {mainImage ? (
-              <img
-                id="charImageDisplay"
-                src={getImageUrl(mainImage)}
-                alt={char.name}
-                className="char-main-image-full"
-              />
-            ) : (
-              <div className="char-main-placeholder">No image</div>
-            )}
-            {editMode && (
-              <div className="image-overlay">
-                <span>Click or Drop to Change</span>
-              </div>
-            )}
-          </div>
-          {mudaeConfigured && (
-            <div className="char-mudae-actions">
-              <Button
-                variant="secondary"
-                disabled={mudaeMainBusy || loading}
-                onClick={handleMudaeRefreshMain}
-                title="Run $im via Mudae and set the card image as main"
-              >
-                {mudaeMainBusy ? 'Updating from Mudae…' : 'Update main from Mudae'}
-              </Button>
-            </div>
-          )}
-          <IconButton
-            className={`save-button ${isSaved ? 'saved' : ''}`}
-            onClick={handleToggleSave}
-            label={isSaved ? 'Remove from saved' : 'Save this character'}
-            aria-pressed={isSaved}
-          >
-            <svg
-              aria-hidden="true"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
-          </IconButton>
-        </div>
-      </div>
+      <CharacterHeader
+        char={char}
+        mainImage={mainImage}
+        mainInputRef={mainInputRef}
+        loading={loading}
+        dragOver={dragOver}
+        onDragOverChange={setDragOver}
+        onMainImageChange={handleMainImageChange}
+        onMainImageDrop={handleMainImageDrop}
+        isSaved={isSaved}
+        onToggleSave={handleToggleSave}
+        onGetAiCommand={() => enterMode('ai')}
+        edit={{
+          active: editMode,
+          name: editName,
+          series: editSeries,
+          rank: editRank,
+          setName: setEditName,
+          setSeries: setEditSeries,
+          setRank: setEditRank,
+          start: () => setEditMode(true),
+          cancel: () => setEditMode(false),
+          save: handleSaveEdit,
+        }}
+        mudae={{
+          configured: mudaeConfigured,
+          busy: mudaeMainBusy,
+          onRefreshMain: handleMudaeRefreshMain,
+        }}
+      />
 
       <div
-        className={`custom-images-section ${customDragOver ? 'drag-over' : ''}`}
-        onDragOver={handleCustomSectionDragOver}
-        onDragLeave={handleCustomSectionDragLeave}
-        onDrop={handleCustomDrop}
+        className={`custom-images-section ${upload.dragOver ? 'drag-over' : ''}`}
+        onDragOver={upload.onDragOver}
+        onDragLeave={upload.onDragLeave}
+        onDrop={upload.onDrop}
       >
         <div className="custom-images-header-row">
           <h3 className="section-heading custom-images-heading">Custom Images</h3>
           <div className="char-custom-toolbar">
-            <div className="char-custom-toolbar-actions" id="char-custom-toolbar-actions">
-              {aiMode && (
-                <>
-                  <Button variant="success" size="sm" onClick={generateAiCommand}>
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    Copy Command ({selectedUrls.length || customs.length})
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={selectAllImages}>
-                    Select All
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={resetModes}>
-                    Cancel
-                  </Button>
-                </>
-              )}
-              {deleteMode && (
-                <>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={handleRemoveSelected}
-                    disabled={mineSelected.length === 0}
-                    title={
-                      mineSelected.length === 0
-                        ? 'You can only remove images you added'
-                        : 'Remove your own images'
-                    }
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                    Remove mine ({mineSelected.length})
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleHideSelected}
-                    disabled={othersSelected.length === 0}
-                    title={
-                      othersSelected.length === 0
-                        ? "Select someone else's image to hide it"
-                        : 'Hide these for you only. Nobody else is affected.'
-                    }
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                    Hide theirs ({othersSelected.length})
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={resetModes}>
-                    Cancel
-                  </Button>
-                </>
-              )}
-              {downloadMode && (
-                <>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleDownloadSelected}
-                    disabled={selectedUrls.length === 0}
-                    title={
-                      selectedUrls.length === 0
-                        ? 'Select images first'
-                        : 'Choose a folder and save files there'
-                    }
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Download ({selectedUrls.length})
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={selectAllImages}>
-                    Select All
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={resetModes}>
-                    Cancel
-                  </Button>
-                </>
-              )}
-              {reorderMode && !aiMode && !deleteMode && !downloadMode && (
-                <>
-                  <Button variant="secondary" size="sm" onClick={() => setSelectedUrls([])}>
-                    Clear selection
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={cancelReorder}>
-                    Cancel
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={doneReorder}>
-                    Done
-                  </Button>
-                </>
-              )}
-              {!aiMode && !deleteMode && !downloadMode && !reorderMode && hiddenCount > 0 && (
-                <Button
-                  size="sm"
-                  onClick={() => setShowHidden((v) => !v)}
-                  title="Images you have hidden are only hidden for you"
-                >
-                  {showHidden ? 'Hide them again' : `Show ${hiddenCount} hidden`}
-                </Button>
-              )}
-              {!aiMode && !deleteMode && !downloadMode && !reorderMode && showHidden && (
-                <Button size="sm" onClick={handleUnhideAll}>
-                  Unhide all ({hiddenCount})
-                </Button>
-              )}
-              {!aiMode && !deleteMode && !downloadMode && !reorderMode && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openRemovedDrawer}
-                  title="Nothing is deleted permanently — see what was removed and put it back"
-                >
-                  Removed
-                </Button>
-              )}
-              {!aiMode && !deleteMode && !downloadMode && !reorderMode && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      resetModes()
-                      setDeleteMode(true)
-                    }}
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                    Remove or hide
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={enterDownloadMode}
-                    title="Download selected custom images to a folder"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Download
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={enterReorderMode}>
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline points="5 9 2 12 5 15" />
-                      <polyline points="9 5 12 2 15 5" />
-                      <polyline points="19 9 22 12 19 15" />
-                      <polyline points="9 19 12 22 15 19" />
-                      <line x1="2" y1="12" x2="22" y2="12" />
-                      <line x1="12" y1="2" x2="12" y2="22" />
-                    </svg>
-                    Reorder
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!!customUploadProgress}
-                    onClick={() => customInputRef.current?.click()}
-                    title="Add Custom Image"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Add Image
-                  </Button>
-                </>
-              )}
-            </div>
+            <GalleryToolbar
+              mode={mode}
+              selectedUrls={selectedUrls}
+              totalCount={customs.length}
+              mineSelected={mineSelected}
+              othersSelected={othersSelected}
+              hiddenCount={hiddenCount}
+              showHidden={showHidden}
+              uploadBusy={!!upload.progress}
+              onEnterRemove={() => enterMode('remove')}
+              onEnterDownload={enterDownloadMode}
+              onEnterReorder={enterReorderMode}
+              onExitMode={resetModes}
+              onCancelReorder={cancelReorder}
+              onDoneReorder={doneReorder}
+              onSelectAll={selectAllImages}
+              onClearSelection={() => setSelectedUrls([])}
+              onGenerateAiCommand={generateAiCommand}
+              onRemoveSelected={handleRemoveSelected}
+              onHideSelected={handleHideSelected}
+              onDownloadSelected={handleDownloadSelected}
+              onUnhideAll={handleUnhideAll}
+              onToggleShowHidden={() => setShowHidden((v) => !v)}
+              onOpenRemovedDrawer={openRemovedDrawer}
+              onAddImage={() => customInputRef.current?.click()}
+            />
           </div>
         </div>
         {reorderMode && (
@@ -1441,111 +578,34 @@ export default function CharacterPage() {
           accept="image/*"
           multiple
           style={{ display: 'none' }}
-          onChange={handleAddCustomImage}
-          disabled={!!customUploadProgress}
+          onChange={upload.onFileInputChange}
+          disabled={!!upload.progress}
         />
         <p className="gallery-drop-hint">
           Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add
           Image&quot;
         </p>
-        {customUploadProgress && (
+        {upload.progress && (
           <div className="custom-upload-progress" role="status" aria-live="polite">
             <span className="custom-upload-progress-spinner" aria-hidden />
             <span className="custom-upload-progress-text">
-              {customUploadProgress.phase === 'starting'
-                ? `Preparing ${customUploadProgress.total} image${customUploadProgress.total !== 1 ? 's' : ''}…`
-                : `Uploading ${customUploadProgress.current}/${customUploadProgress.total}${customUploadProgress.fileName ? ` — ${customUploadProgress.fileName}` : ''}`}
+              {upload.progress.phase === 'starting'
+                ? `Preparing ${upload.progress.total} image${upload.progress.total !== 1 ? 's' : ''}…`
+                : `Uploading ${upload.progress.current}/${upload.progress.total}${upload.progress.fileName ? ` — ${upload.progress.fileName}` : ''}`}
             </span>
           </div>
         )}
-        <div
-          className={`custom-images-gallery ${reorderDragIndices ? 'reorder-drag-active' : ''}`}
+        <CustomImageGallery
+          rows={rows}
+          ratios={ratios}
+          modes={{ ai: aiMode, remove: deleteMode, download: downloadMode, reorder: reorderMode }}
+          selectedUrls={selectedUrls}
+          reorder={reorder}
+          onToggleSelect={toggleSelect}
+          onOpenImage={openModal}
+          onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
-          onDragLeave={onGalleryDragLeave}
-        >
-          {rows.map((row, idx) => {
-            const url = row.url
-            const isDropTarget = reorderMode && reorderDropTargetIndex === idx
-            const isDragSource = reorderMode && reorderDragIndices?.includes(idx)
-            const attribution = row.is_mine
-              ? 'Added by you'
-              : row.owner
-                ? `Added by ${row.owner}`
-                : 'Added before ownership was tracked'
-            return (
-              <div
-                key={url}
-                data-reorder-slot={idx}
-                // The measured shape drives the row maths, so it has to reach
-                // CSS somehow; a custom property keeps the rules themselves in
-                // the stylesheet.
-                style={{ '--ratio': ratioFor(row, ratios[row.id]) }}
-                className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''} ${row.is_mine ? 'is-mine' : ''} ${row.hidden ? 'is-hidden' : ''}`}
-                title={attribution}
-                onClick={() => {
-                  if (ignoreNextReorderItemClickRef.current) {
-                    ignoreNextReorderItemClickRef.current = false
-                    return
-                  }
-                  if (aiMode || deleteMode || downloadMode || reorderMode) toggleSelect(url)
-                }}
-                onTouchStart={(e) => reorderMode && onReorderItemTouchStart(e, idx)}
-                onDragStart={(e) => onDragStart(e, idx)}
-                onDragOver={(e) => onDragOver(e, idx)}
-                onDragEnd={onDragEnd}
-                draggable={reorderMode}
-                role={reorderMode ? 'button' : undefined}
-                tabIndex={reorderMode ? 0 : undefined}
-              >
-                <img
-                  /*
-                    The grid renders a small WebP; `url` stays the canonical
-                    ImgChest PNG and is what the lightbox, the download and every
-                    $ai command use, because Mudae accepts nothing else. Falls
-                    back to the original for GIFs, which are not thumbnailed.
-                  */
-                  src={row.thumb ? apiUrl(row.thumb) : getImageUrl(url)}
-                  alt=""
-                  draggable={false}
-                  className="custom-image-full"
-                  /* A character can hold hundreds of images at ~1.9 MB each, so
-                     fetching them all on load is untenable on a slow connection.
-                     The row is already the right shape from the stored
-                     dimensions, so nothing moves when one arrives. */
-                  loading="lazy"
-                  decoding="async"
-                  width={row.width || undefined}
-                  height={row.height || undefined}
-                  onLoad={(e) => noteRatio(row.id, e.currentTarget)}
-                  onClick={() =>
-                    !aiMode && !deleteMode && !downloadMode && !reorderMode && openModal(idx)
-                  }
-                />
-                {deleteMode && (
-                  <span className={`gallery-owner-tag ${row.is_mine ? 'is-mine' : ''}`}>
-                    {row.is_mine ? 'Yours' : row.owner || 'No owner'}
-                  </span>
-                )}
-                {row.hidden && <span className="gallery-owner-tag is-hidden">Hidden</span>}
-                {isDropTarget && (
-                  <span className="reorder-drop-label" aria-hidden>
-                    Drop here
-                  </span>
-                )}
-              </div>
-            )
-          })}
-          {/*
-            Absorb the leftover space on the last row. Without these, flex-grow
-            stretches a single trailing image across the full width, which reads
-            as a bug rather than a layout. Zero height and no reorder slot, so
-            they are inert to both layout and hit-testing.
-          */}
-          {rows.length > 0 &&
-            FILLERS.map((id) => (
-              <span key={`filler-${id}`} className="gallery-filler" aria-hidden="true" />
-            ))}
-        </div>
+        />
       </div>
 
       {modalOpen && (
@@ -1591,11 +651,11 @@ export default function CharacterPage() {
           onClose={() => setRemovedDrawer(null)}
         />
       )}
-      {uploadErrorDialog && (
+      {upload.errorReport && (
         <UploadErrorDialog
           title="Upload issue"
-          body={uploadErrorDialog}
-          onClose={() => setUploadErrorDialog(null)}
+          body={upload.errorReport}
+          onClose={upload.dismissErrorReport}
         />
       )}
       {aiLimitDialog && (

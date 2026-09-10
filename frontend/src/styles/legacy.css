@@ -986,8 +986,15 @@ body.reorder-touch-dragging {
   border: 3px dashed var(--accent);
   opacity: 0.8;
 }
+/* In edit mode the portrait is a real <button>, so its chrome has to go. */
 .image-wrapper.edit-mode {
   cursor: pointer;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
 }
 .image-overlay {
   display: none;
@@ -1009,6 +1016,16 @@ body.reorder-touch-dragging {
 .image-wrapper.drag-over-main {
   border-color: var(--success);
   transform: scale(1.02);
+}
+
+/* The character header's edit form, on the shared Field/Input primitives. The
+   older .edit-group markup below is still used by AddPage and is spaced by its
+   own margins, so the gap lives here rather than on .edit-form-container. */
+.char-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
 }
 
 /* Edit Form */

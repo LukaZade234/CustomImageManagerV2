@@ -1,16 +1,10 @@
 import io
-import ipaddress
 import json
 import os
-import subprocess
 import queue
-import re
-import socket
+import subprocess
 import sys
 import threading
-import uuid
-from functools import wraps
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 
@@ -21,7 +15,6 @@ if sys.platform.startswith("win"):
 
 from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
 
 try:
     from dotenv import load_dotenv
@@ -34,284 +27,35 @@ except ImportError:
 import db
 import discord_auth
 import identity
-import thumbnails
 import mudae_discord
-from image_utils import convert_to_png, read_image_dimensions, validate_image_file
+import thumbnails
+from image_utils import (
+    detect_format,
+    is_animated,
+    prepare_for_upload,
+    read_image_dimensions,
+    validate_image_file,
+)
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from mudae_discord import MudaeAmbiguousSeries, MudaeCancelled, MudaeError
-
-
-def _safe_stored_filename(original_filename: str) -> str:
-    """Basename for temp files on disk — strips path segments and unsafe chars."""
-    base = secure_filename(original_filename or "") or ""
-    if not base:
-        base = f"upload_{uuid.uuid4().hex[:12]}"
-    return base
-
-
-# Max file size (30MB) - reject larger files to avoid memory issues
-MAX_FILE_SIZE = 30 * 1024 * 1024
-# Drag-from-web: max image URLs per request
-MAX_IMPORT_URLS = 20
-
-# Allowed image extensions
-ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
-
-# Character name validation
-MAX_CHAR_NAME_LENGTH = 200
-MAX_SERIES_LENGTH = 300
-MAX_RANK_LENGTH = 50
-
-# Match frontend dragImageUrls.js — strip when deduping web import batches
-_IMPORT_URL_TRACKING_PARAMS = frozenset(
-    {
-        "utm_source",
-        "utm_medium",
-        "utm_campaign",
-        "utm_content",
-        "utm_term",
-        "fbclid",
-        "gclid",
-        "_ga",
-        "mc_eid",
-        "igshid",
-        "ref",
-        "ref_src",
-        "spm",
-        "spm_id",
-    }
+from ratelimit import rate_limited
+from remote_images import (
+    MAX_CHAR_NAME_LENGTH,
+    MAX_FILE_SIZE,
+    MAX_IMPORT_URLS,
+    MAX_RANK_LENGTH,
+    MAX_SERIES_LENGTH,
+    _allowed_image_proxy_url,
+    _dedupe_import_urls_preserve_order,
+    _fetch_image_from_url_for_import,
+    _get_with_validated_redirects,
+    _safe_import_image_url,
+    _safe_stored_filename,
+    imgchest_filename,
 )
 
 
-def _canonical_url_key_for_dedup(url):
-    """Fragment + tracking params removed for stable equality (same image, different query strings)."""
-    try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
-            return (url or "").strip()
-        netloc = (p.netloc or "").lower()
-        pairs = [
-            (k, v)
-            for k, v in parse_qsl(p.query, keep_blank_values=True)
-            if k.lower() not in _IMPORT_URL_TRACKING_PARAMS
-        ]
-        pairs.sort(key=lambda x: (x[0].lower(), x[1]))
-        query = urlencode(pairs)
-        return urlunparse((p.scheme, netloc, p.path, p.params, query, ""))
-    except Exception:
-        return (url or "").split("#")[0].strip()
-
-
-def _dedupe_import_urls_preserve_order(urls):
-    seen = set()
-    out = []
-    for u in urls:
-        if not u:
-            continue
-        key = _canonical_url_key_for_dedup(u)
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        out.append(u)
-    return out
-
-
-def _allowed_image_proxy_url(url):
-    """Only ImgChest hosts — same URLs we store from upload_to_imgchest (avoids CORS + SSRF)."""
-    try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
-            return False
-        h = (p.hostname or "").lower()
-        return h == "imgchest.com" or h.endswith(".imgchest.com")
-    except Exception:
-        return False
-
-
-# Ranges the stdlib does not flag but that must not be reachable from the origin.
-# `ipaddress` has no predicate for either.
-_EXTRA_BLOCKED_NETWORKS = (
-    # RFC 6598 carrier-grade NAT. Cloud providers use it for internal networks,
-    # so it is a live SSRF target, not a theoretical one.
-    ipaddress.ip_network("100.64.0.0/10"),
-    # RFC 2544 benchmarking range.
-    ipaddress.ip_network("198.18.0.0/15"),
-)
-
-# Enough to reach any legitimate CDN; far short of a redirect loop.
-_MAX_IMPORT_REDIRECTS = 5
-
-
-def _ip_is_blocked(ip):
-    """True for anything that is not a public, routable internet address."""
-    if ip.is_private or ip.is_loopback or ip.is_link_local:
-        return True
-    if ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-        return True
-    # IPv6 site-local (fec0::/10). Deprecated, still routable on some networks,
-    # and carries none of the flags above.
-    if getattr(ip, "is_site_local", False):
-        return True
-    # An IPv4-mapped IPv6 address has to be judged as the IPv4 address it
-    # carries, or ::ffff:10.0.0.1 walks straight through.
-    mapped = getattr(ip, "ipv4_mapped", None)
-    if mapped is not None and _ip_is_blocked(mapped):
-        return True
-    return any(net.version == ip.version and ip in net for net in _EXTRA_BLOCKED_NETWORKS)
-
-
-def _host_resolves_only_to_public_ips(hostname):
-    """Block SSRF: reject if any resolved address is loopback, private, link-local, etc.
-
-    Residual risk, documented rather than fixed: this resolves the name, and then
-    `requests` resolves it again when it connects. A hostile DNS server can
-    answer public here and private there. Closing that needs connecting to a
-    pinned address with the Host header set by hand, which is a larger change
-    than it looks; the redirect handling below closes the cheaper variant of the
-    same trick.
-    """
-    try:
-        hostname = (hostname or "").lower().rstrip(".")
-        if not hostname or hostname == "localhost":
-            return False
-        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-        if not infos:
-            return False
-        for res in infos:
-            if _ip_is_blocked(ipaddress.ip_address(res[4][0])):
-                return False
-    except Exception:
-        return False
-    return True
-
-
-def _safe_import_image_url(url):
-    """
-    Allow https/http image URLs from the public internet for drag-from-web import.
-    Stricter than ImgChest-only proxy: still blocks obvious SSRF targets.
-    """
-    try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
-            return False
-        if p.username or p.password:
-            return False
-        h = (p.hostname or "").lower()
-        if not h:
-            return False
-        if h in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
-            return False
-        if h.endswith(".local") or h.endswith(".localhost"):
-            return False
-        if h.startswith("169.254."):  # link-local literal in hostname (unusual)
-            return False
-        if not _host_resolves_only_to_public_ips(h):
-            return False
-        return True
-    except Exception:
-        return False
-
-
-def _request_headers_for_image_import(url):
-    """
-    Headers for fetching remote images. Pixiv CDN (pximg.net) returns 403 without a pixiv Referer.
-    """
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9,ja;q=0.8",
-    }
-    try:
-        host = (urlparse(url).hostname or "").lower()
-        if host.endswith("pximg.net") or host.endswith("pixiv.net") or host.endswith("pixiv.me"):
-            # Per-artwork Referer when path includes Pixiv illustration id (e.g. .../119107915_p0.jpg)
-            m = re.search(r"/(\d{6,})_p\d+", url)
-            if m:
-                headers["Referer"] = f"https://www.pixiv.net/artworks/{m.group(1)}"
-            else:
-                headers["Referer"] = "https://www.pixiv.net/"
-    except Exception:
-        pass
-    return headers
-
-
-def _guess_ext_from_response(content_type, final_url):
-    ct = (content_type or "").lower()
-    if "png" in ct:
-        return ".png"
-    if "jpeg" in ct or "jpg" in ct:
-        return ".jpg"
-    if "gif" in ct:
-        return ".gif"
-    if "webp" in ct:
-        return ".webp"
-    if "bmp" in ct:
-        return ".bmp"
-    path = urlparse(final_url).path.lower()
-    for ext in ALLOWED_IMAGE_EXTENSIONS:
-        if path.endswith(ext):
-            return ext
-    return ".png"
-
-
-def _get_with_validated_redirects(url, **kwargs):
-    """GET a URL, validating **every** hop rather than only the last one.
-
-    `allow_redirects=True` follows the chain itself and hands back the final
-    URL, so a chain of public -> 192.168.1.1 -> public passed validation while
-    the request to the private host had already been made. Stepping the chain by
-    hand is the only way to check each target before it is fetched.
-
-    Returns the final response; the caller still owns closing it.
-    """
-    current = url
-    for _ in range(_MAX_IMPORT_REDIRECTS + 1):
-        if not _safe_import_image_url(current):
-            raise ValueError("URL not allowed or blocked (private hosts are not permitted)")
-        response = requests.get(
-            current, headers=_request_headers_for_image_import(current), **kwargs
-        )
-        if not response.is_redirect and not response.is_permanent_redirect:
-            return response
-        location = response.headers.get("Location")
-        response.close()
-        if not location:
-            raise ValueError("Redirect without a target")
-        current = urljoin(current, location)
-    raise ValueError("Too many redirects")
-
-
-def _fetch_image_from_url_for_import(url):
-    """
-    Download remote image to a temp file. Validates URL before and after redirects.
-    Returns (temp_path, display_filename) or raises ValueError.
-    """
-    r = _get_with_validated_redirects(url, timeout=60, allow_redirects=False, stream=True)
-    if r.status_code != 200:
-        raise ValueError(f"Image server returned HTTP {r.status_code}")
-    total = 0
-    chunks = []
-    for chunk in r.iter_content(chunk_size=65536):
-        if chunk:
-            total += len(chunk)
-            if total > MAX_FILE_SIZE + 2 * 1024 * 1024:
-                raise ValueError("Image too large")
-            chunks.append(chunk)
-    raw = b"".join(chunks)
-    if not raw:
-        raise ValueError("Empty response")
-    ext = _guess_ext_from_response(r.headers.get("Content-Type", ""), r.url)
-    safe = f"web_import_{uuid.uuid4().hex[:12]}{ext}"
-    temp_path = os.path.join(".", "temp_custom_" + safe)
-    with open(temp_path, "wb") as f:
-        f.write(raw)
-    return temp_path, safe
-
-
-def _run_single_custom_upload_from_temp(temp_path, display_filename):
+def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name=None):
     """
     Validate, convert, upload one temp file to ImgChest.
     Returns (direct_link, None) on success, or (None, error_message).
@@ -341,32 +85,23 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
                 os.remove(temp_path)
             return None, f"{display_filename}: {val_err}", None
 
-        filename_lower = display_filename.lower()
-        if not filename_lower.endswith(".png") and not filename_lower.endswith(".gif"):
-            print(f"[UPLOAD] converting {display_filename} to PNG", flush=True)
-            converted_path, convert_error = convert_to_png(temp_path)
-            if converted_path:
-                final_path = converted_path
-                conversion_created_new_file = True
-                print(f"[UPLOAD] conversion OK, using {final_path}", flush=True)
+        # Animated GIFs pass through: re-encoding them costs the animation, which
+        # is usually the reason the image was chosen. Everything else is
+        # normalised, decided by the file's own bytes rather than its name.
+        if detect_format(temp_path) == "GIF" and is_animated(temp_path):
+            print(f"[UPLOAD] {display_filename} is an animated GIF, keeping as-is", flush=True)
+        else:
+            prepared_path, convert_error = prepare_for_upload(temp_path)
+            if prepared_path:
+                conversion_created_new_file = prepared_path != temp_path
+                final_path = prepared_path
+                print(f"[UPLOAD] prepared {final_path}", flush=True)
             else:
-                err_msg = (
-                    f"{display_filename}: {convert_error}"
-                    if convert_error
-                    else f"{display_filename}: Failed to convert to PNG"
-                )
-                print(
-                    f"[UPLOAD] conversion FAILED for {display_filename}: {convert_error}",
-                    flush=True,
-                )
+                err_msg = f"{display_filename}: {convert_error or 'Could not process image'}"
+                print(f"[UPLOAD] preparation FAILED for {display_filename}", flush=True)
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 return None, err_msg, None
-        else:
-            print(
-                f"[UPLOAD] skipping conversion (already {filename_lower[-4:]}), using as-is",
-                flush=True,
-            )
 
         final_size = os.path.getsize(final_path)
         if final_size > MAX_FILE_SIZE:
@@ -390,7 +125,7 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
 
         try:
             print(f"[UPLOAD] uploading to ImgChest: {final_path}", flush=True)
-            result = upload_to_imgchest(final_path)
+            result = upload_to_imgchest(final_path, upload_name=upload_name)
             if result:
                 post_link, direct_link = result
                 print(f"[UPLOAD] SUCCESS: {display_filename}", flush=True)
@@ -536,90 +271,6 @@ def _deployed_revision() -> str:
 
 _DEPLOYED_REVISION = _deployed_revision()
 
-
-# --- Rate limiting ------------------------------------------------------
-#
-# There was none at all before this. The limit that actually matters is on
-# uploads: every one is an ImgChest API call against a shared key, so an
-# unbounded client can get that key throttled or blocked and take the app's
-# whole reason for existing with it. The rest are bounded because an endpoint
-# with no ceiling is a liability, not because abuse is expected.
-#
-# Each action carries one or more (limit, window seconds) pairs. Two windows let
-# a burst be allowed while a sustained rate is not: 30 uploads in a minute is a
-# person pasting a batch, 2000 in an hour is not a person.
-
-_RATE_LIMIT_MULTIPLIER_FOR_STAFF = 10
-
-
-def _limits_from_env(name: str, default: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Override with e.g. RATE_LIMIT_UPLOAD="30/60,300/3600"."""
-    raw = os.environ.get(f"RATE_LIMIT_{name.upper()}", "").strip()
-    if not raw:
-        return default
-    try:
-        return [
-            (int(part.split("/")[0]), int(part.split("/")[1]))
-            for part in raw.split(",")
-            if part.strip()
-        ] or default
-    except (ValueError, IndexError):
-        print(f"[RATELIMIT] Ignoring malformed RATE_LIMIT_{name.upper()}={raw!r}", flush=True)
-        return default
-
-
-RATE_LIMITS = {
-    "upload": _limits_from_env("upload", [(30, 60), (300, 3600)]),
-    "import_urls": _limits_from_env("import_urls", [(10, 60), (100, 3600)]),
-    "add_character": _limits_from_env("add_character", [(10, 60), (60, 3600)]),
-    "edit_character": _limits_from_env("edit_character", [(30, 60), (200, 3600)]),
-    "remove": _limits_from_env("remove", [(30, 60), (200, 3600)]),
-    "restore": _limits_from_env("restore", [(30, 60), (200, 3600)]),
-    # Hiding is harmless to everyone else, so this is generous -- it exists only
-    # to stop an endpoint being an unbounded write loop.
-    "hide": _limits_from_env("hide", [(120, 60), (1000, 3600)]),
-    # Reports can remove other people's work, so an implausible rate should cool
-    # down. This is the "auto-cooldown" the roadmap asks for: at two distinct
-    # reporters per removal, 20 an hour is far more than honest use needs.
-    "report": _limits_from_env("report", [(5, 60), (20, 3600)]),
-    # Each Mudae call burns one of Discord's ~1000 daily identify calls.
-    "mudae": _limits_from_env("mudae", [(10, 60), (60, 3600)]),
-    # Sign-in is cheap for us but hits Discord's API, and a loop here would look
-    # like an attack from their side.
-    "auth": _limits_from_env("auth", [(10, 60), (40, 3600)]),
-}
-
-
-def rate_limited(action):
-    """Reject the caller with 429 once they exceed `RATE_LIMITS[action]`."""
-
-    def decorator(view):
-        @wraps(view)
-        def wrapper(*args, **kwargs):
-            me = identity.current_identity()
-            # Moderators and the owner do the bulk curation work, so a limit set
-            # for a visitor would block exactly the person maintaining the site.
-            scale = _RATE_LIMIT_MULTIPLIER_FOR_STAFF if me.is_moderator else 1
-            for limit, per_seconds in RATE_LIMITS[action]:
-                allowed, retry_after = db.check_rate_limit(
-                    me.id, action, limit=limit * scale, per_seconds=per_seconds
-                )
-                if not allowed:
-                    print(f"[RATELIMIT] {action} blocked for {me.handle}", flush=True)
-                    response = jsonify(
-                        {
-                            "error": "You are doing that too quickly. Wait a moment and try again.",
-                            "retry_after": retry_after,
-                        }
-                    )
-                    response.status_code = 429
-                    response.headers["Retry-After"] = str(retry_after)
-                    return response
-            return view(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
 
 
 @app.route("/api/health", methods=["GET"])
@@ -1047,7 +698,9 @@ def add_character():
             temp_path = os.path.join(".", "temp_add_" + safe_fn)
             file.save(temp_path)
             try:
-                result = upload_to_imgchest(temp_path)
+                result = upload_to_imgchest(
+                    temp_path, upload_name=imgchest_filename(name, kind="main")
+                )
                 if result:
                     _, image_url = result
             except ImgChestError as e:
@@ -1116,6 +769,10 @@ def add_custom_image():
         uploaded_dimensions = {}
         errors = []
         processed = 0
+        # Numbering continues from every image this character has ever had, not
+        # just the ones still showing, so a removal cannot free a number for
+        # reuse. See db.count_custom_images_ever.
+        next_index = db.count_custom_images_ever(char_name) + 1
 
         for file in files:
             fn = file.filename
@@ -1130,8 +787,11 @@ def add_custom_image():
             temp_path = os.path.join(".", "temp_custom_" + safe_fn)
             file.save(temp_path)
 
-            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(temp_path, fn)
+            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
+                temp_path, fn, upload_name=imgchest_filename(char_name, next_index)
+            )
             if direct_link:
+                next_index += 1
                 uploaded_links.append(direct_link)
                 if dimensions:
                     uploaded_dimensions[direct_link] = dimensions
@@ -1194,6 +854,7 @@ def import_custom_images_from_urls():
         uploaded_links = []
         uploaded_dimensions = {}
         errors = []
+        next_index = db.count_custom_images_ever(char_name) + 1
         for idx, url in enumerate(urls):
             print(f"[IMPORT] fetching {idx + 1}/{len(urls)}: {url[:120]}...", flush=True)
             try:
@@ -1205,9 +866,10 @@ def import_custom_images_from_urls():
                 errors.append(f"{url}: {str(e)}")
                 continue
             direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
-                temp_path, display_filename
+                temp_path, display_filename, upload_name=imgchest_filename(char_name, next_index)
             )
             if direct_link:
+                next_index += 1
                 uploaded_links.append(direct_link)
                 if dimensions:
                     uploaded_dimensions[direct_link] = dimensions
@@ -1578,7 +1240,9 @@ def set_main_image():
         return jsonify({"error": val_err}), 400
 
     try:
-        result = upload_to_imgchest(temp_path)
+        result = upload_to_imgchest(
+            temp_path, upload_name=imgchest_filename(char_name, kind="main")
+        )
         if not result:
             return jsonify({"error": "Failed to upload to ImgChest"}), 500
 
@@ -1607,8 +1271,13 @@ def set_main_image():
             os.remove(temp_path)
 
 
-def _upload_remote_image_to_imgchest(image_url):
-    """Download a remote image URL and upload to ImgChest. Returns direct_link."""
+def _upload_remote_image_to_imgchest(image_url, character_name):
+    """Download a remote image URL and upload to ImgChest. Returns direct_link.
+
+    `character_name` only names the file on ImgChest, but it has to be passed in
+    rather than inferred: this is called both while adding a character that does
+    not exist yet and while refreshing an existing one's portrait.
+    """
     if not image_url:
         raise ValueError("No image URL from Mudae")
     temp_path, _ = _fetch_image_from_url_for_import(image_url)
@@ -1616,7 +1285,9 @@ def _upload_remote_image_to_imgchest(image_url):
         ok, val_err = validate_image_file(temp_path)
         if not ok:
             raise ValueError(val_err or "Invalid image from Mudae")
-        result = upload_to_imgchest(temp_path)
+        result = upload_to_imgchest(
+            temp_path, upload_name=imgchest_filename(character_name, kind="main-mudae")
+        )
         if not result:
             raise ImgChestError("Failed to upload Mudae image to ImgChest")
         _, direct_link = result
@@ -1645,7 +1316,7 @@ def _persist_mudae_character(info, *, overwrite_main=False):
     rank = (info.rank or "").strip()[:MAX_RANK_LENGTH]
     image_url = ""
     if info.image_url:
-        image_url = _upload_remote_image_to_imgchest(info.image_url)
+        image_url = _upload_remote_image_to_imgchest(info.image_url, name)
 
     existing = [c for c in (db.get_characters() or []) if c.get("name") == name]
     if existing:
@@ -1990,7 +1661,7 @@ def mudae_refresh_main_image():
         if not info.image_url:
             return jsonify({"error": "Mudae reply had no image"}), 502
 
-        image_url = _upload_remote_image_to_imgchest(info.image_url)
+        image_url = _upload_remote_image_to_imgchest(info.image_url, char_name)
         if not db.set_main_image(char_name, image_url):
             return jsonify({"error": "Character not found"}), 404
         db.update_last_modified(char_name)

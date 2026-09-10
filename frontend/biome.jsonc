@@ -20,6 +20,14 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "correctness": {
+        // Not on by default, and it should be. A reference to a variable that
+        // was deleted during a refactor builds cleanly, passes every test that
+        // does not exercise that exact line, and throws in the browser — which
+        // is precisely what happened when reorder moved to pointer events and
+        // two file-drop handlers were left pointing at a removed piece of state.
+        "noUndeclaredVariables": "error"
+      },
       "style": {
         // Still noisy on the un-migrated half of legacy.css. Worth turning
         // back on once that file is gone.

@@ -195,24 +195,35 @@ disappearing — indistinguishable from someone deleting them, but unrelated.
 
 ## 5. Backend
 
-3,660 lines of Python.
+6,361 lines of Python.
 
 | File | Lines | Role |
 |---|---|---|
-| `mudae_discord.py` | 1535 | Discord self-bot automation and Mudae embed parsing |
-| `upload_imgchest.py` | 1386 | **The entire Flask app** — all routes, all helpers |
-| `db.py` | 257 | PostgreSQL KV layer |
-| `imgchest_utils.py` | 180 | ImgChest upload client with retry/backoff |
-| `image_utils.py` | 119 | Pillow validation, PNG conversion, resizing |
-| `github_utils.py` | 30 | **Unused legacy.** No references |
-| `app.py` | 4 | WSGI shim |
-| `scripts/` | 148 | Two one-time migration scripts |
+| `upload_imgchest.py` | 1717 | The Flask app — routes, app setup, the upload pipeline |
+| `mudae_discord.py` | 1552 | Discord self-bot automation and Mudae embed parsing |
+| `db.py` | 1061 | SQLite/Postgres data layer |
+| `remote_images.py` | 330 | SSRF guards, remote fetch, ImgChest naming |
+| `identity.py` | 235 | Cookie pseudonyms and the Discord binding |
+| `image_utils.py` | 206 | Pillow validation, format detection, WebP conversion |
+| `imgchest_utils.py` | 198 | ImgChest upload client with retry/backoff |
+| `discord_auth.py` | 169 | OAuth2 flow (`identify` scope only) |
+| `ratelimit.py` | 100 | Per-identity fixed-window limits |
+| `thumbnails.py` | 96 | On-demand WebP thumbnails |
+| `gunicorn.conf.py` | 85 | Production server config |
+| `app.py` | 10 | WSGI shim |
+| `scripts/` | 601 | Migration, backfill and snapshot scripts |
 
 ### 5.1 `upload_imgchest.py`
 
-Everything lives here: Flask app construction, CORS, compression, a `before_request` guard, an
-error handler, ~30 route handlers, SSRF-protection helpers, the upload pipeline, and the Mudae
-endpoints. No blueprints, no separation.
+Flask app construction, CORS, a `before_request` guard, an error handler, ~40 route handlers, the
+upload pipeline, and the Mudae endpoints. The SSRF guards and remote-fetch helpers now live in
+`remote_images.py` and the rate-limit policy in `ratelimit.py`, but the routes themselves are still
+one module — splitting them into blueprints is the remaining half of Phase 10.
+
+Note for tests: a route calls an imported helper as a name in **this** module's namespace, so
+`monkeypatch.setattr("upload_imgchest._get_with_validated_redirects", ...)` patches what a route
+uses, while patching `remote_images` patches what the helper itself calls. Both are correct for
+different targets, and picking the wrong one fails silently.
 
 App setup (`upload_imgchest.py:377`):
 ```python

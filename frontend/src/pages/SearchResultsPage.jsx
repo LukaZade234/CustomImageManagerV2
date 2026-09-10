@@ -23,7 +23,7 @@ export default function SearchResultsPage() {
       return field.toLowerCase().includes(q)
     })
     const sorted = [...filtered].sort((a, b) => {
-      if (sort === 'rank') return (parseInt(a.rank) || 9999) - (parseInt(b.rank) || 9999)
+      if (sort === 'rank') return (parseInt(a.rank, 10) || 9999) - (parseInt(b.rank, 10) || 9999)
       if (sort === 'name') return (a.name || '').localeCompare(b.name || '')
       if (sort === 'series') return (a.series || '').localeCompare(b.series || '')
       return 0

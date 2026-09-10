@@ -503,3 +503,24 @@
     gap: var(--space-1);
   }
 }
+
+/* Reorder uses pointer events, so the browser must not treat a press on an item
+   as the start of a double-tap zoom. Scrolling stays available: the long press
+   that begins a drag requires the finger to be still, and a scroll cancels it. */
+.gallery-item-wrapper.reorder-mode {
+  touch-action: manipulation;
+}
+
+/* Suppress the native long-press image callout while reordering.
+ *
+ * iOS shows a Save/Copy sheet and Android a context menu partway through the
+ * press that begins a drag, which makes reordering on a phone a race against
+ * the browser. Both are scoped to reorder mode: long-pressing an image to save
+ * it is a perfectly reasonable thing to want the rest of the time.
+ */
+.gallery-item-wrapper.reorder-mode,
+.gallery-item-wrapper.reorder-mode .custom-image-full {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

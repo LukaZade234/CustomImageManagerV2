@@ -385,6 +385,27 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ---
 
+### Upload format
+
+- [x] **Store uploads as WebP under a `.png` name.** Verified against a real Mudae card: `$ai`
+      refuses a URL that does not end in `.png`, but renders whatever bytes arrive. WebP q90 is
+      **121 KB against 958 KB and 39ms to encode against 76ms** — smaller *and* faster, so there is
+      no trade-off between the two. It also protects resolution: the shrink loop existed because a
+      PNG often would not fit ImgChest's 30 MB limit, and at an eighth of the size it now almost
+      never runs.
+- [x] **Decide format by magic bytes, not by filename.** The old fast path skipped conversion for
+      anything named `.png`, which is how WebP files came to be stored under `.png` names and how
+      858 images (10%) got past the 2048px cap — the largest is **11,036px**. Skipping conversion
+      also skipped EXIF stripping, so a phone photo would have published its GPS coordinates on a
+      public library.
+- [x] **Name uploads meaningfully on ImgChest.** They arrived as
+      `temp_custom_web_import_a1b2c3d4.png`. Now `lucy-013-20260910.png`: character, position in
+      that character's gallery, and date. Main images are `lucy-main-...`.
+- [ ] **Consider re-encoding the existing library.** Not viable as things stand — re-uploading
+      mints new ImgChest URLs and breaks every `$ai` command anyone has already saved.
+
+---
+
 ## Phase 8 — Mudae hardening
 
 - [ ] **Move Discord work to a single dedicated process or queue.** The guarding `threading.Lock`
@@ -445,9 +466,12 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ## Phase 10 — Structure and code quality
 
-- [ ] **Split `upload_imgchest.py`** (1386 lines, the entire app) into blueprints: `images`,
-      `characters`, `mudae`, `auth`.
-- [ ] **Split `CharacterPage.jsx`** (1178 lines) and `AddPage.jsx` (617 lines).
+- [ ] **Split `upload_imgchest.py`** into blueprints: `images`, `characters`, `mudae`, `auth`.
+      _Partly done:_ `remote_images.py` (SSRF guards, remote fetch, ImgChest naming) and
+      `ratelimit.py` (limit policy and the decorator) are out; the routes are not yet.
+- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671. The four mutually exclusive
+      mode booleans became one `mode` value, and `GalleryToolbar` and `CharacterHeader` moved out
+      with tests of their own. `AddPage.jsx` (617 lines) is still to do.
 - [ ] **Structured logging** replacing `print(..., flush=True)` throughout, with identity attached
       to mutation logs — the beginnings of a real audit trail.
 - [ ] **A health check that touches the database.** The current one returns a static dict and
