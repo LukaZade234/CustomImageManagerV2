@@ -27,7 +27,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
-from PIL import Image
+from PIL import Image, ImageFile
+
+# A ranged read hands Pillow a deliberately incomplete file. Without this, PNGs
+# whose header carries a large ancillary chunk — an embedded colour profile, say
+# — raise "Truncated File Read" instead of reporting the size that is sitting
+# right there in the IHDR.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -35,10 +41,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 import db  # noqa: E402
 
-# Enough for a PNG/JPEG/GIF header in every case observed; a handful of
-# progressive JPEGs need the second attempt.
-FIRST_CHUNK = 32 * 1024
-SECOND_CHUNK = 256 * 1024
+# A PNG or GIF header fits in the first chunk. The larger steps are for files
+# that need more: a PNG with a big colour profile ahead of the image data, and
+# WebP, whose decoder will not work from a partial RIFF container at all. The
+# last step is a full download, capped so one enormous file cannot stall a run.
+CHUNKS = (32 * 1024, 256 * 1024, 8 * 1024 * 1024, 48 * 1024 * 1024)
 TIMEOUT = 20
 USER_AGENT = "imgmanager-backfill/1.0"
 
@@ -63,8 +70,8 @@ def _measure(url: str, byte_count: int) -> tuple[int, int] | None:
 
 
 def measure(url: str) -> tuple[int, int] | None:
-    """Dimensions from the image header, or None if it cannot be determined."""
-    for byte_count in (FIRST_CHUNK, SECOND_CHUNK):
+    """Dimensions from the image, reading as little of it as will do."""
+    for byte_count in CHUNKS:
         try:
             size = _measure(url, byte_count)
         except requests.RequestException:
@@ -82,10 +89,14 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"database: {db.database_path()}")
-    measured = failed = 0
+    measured = 0
+    # Ids, not a count: an image that cannot be read must be skipped by later
+    # batches, and counting attempts rather than images made the final total
+    # look far worse than it was.
+    unreadable: set[int] = set()
 
     while True:
-        rows = db.images_missing_dimensions(limit=args.batch)
+        rows = db.images_missing_dimensions(limit=args.batch, exclude_ids=unreadable)
         if not rows:
             break
 
@@ -97,7 +108,7 @@ def main() -> int:
             if size:
                 found[row["id"]] = size
             else:
-                failed += 1
+                unreadable.add(row["id"])
                 print(f"  could not measure: {row['url'][:100]}")
 
         measured += len(found)
@@ -106,16 +117,13 @@ def main() -> int:
             break
 
         db.set_image_dimensions(found)
-        print(f"recorded {len(found)} of {len(rows)}  (total {measured}, unreadable {failed})")
+        print(
+            f"recorded {len(found)} of {len(rows)}"
+            f"  (measured {measured}, unreadable {len(unreadable)})"
+        )
 
-        if not found:
-            # Every row in this batch failed; another pass would fetch the same
-            # rows forever, since nothing was written.
-            print("no progress in this batch, stopping")
-            break
-
-    print(f"\ndone. measured {measured}, unreadable {failed}")
-    if failed:
+    print(f"\ndone. measured {measured}, unreadable {len(unreadable)}")
+    if unreadable:
         print("Unreadable rows keep NULL dimensions; the gallery measures those in the browser.")
     return 0
 

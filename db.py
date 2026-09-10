@@ -555,13 +555,29 @@ def get_image_url(image_id: int) -> str | None:
     return row["url"] if row else None
 
 
-def images_missing_dimensions(limit: int = 500) -> list[dict]:
-    """Rows the backfill still has to measure."""
+def images_missing_dimensions(limit: int = 500, exclude_ids: Iterable[int] = ()) -> list[dict]:
+    """Rows the backfill still has to measure.
+
+    `exclude_ids` skips rows already tried and failed in this run. Without it a
+    permanently unreadable image is returned by every batch forever — it never
+    gets a width, so it always matches the filter — and the caller refetches it
+    once per batch for the length of the run.
+    """
+    skip = list(dict.fromkeys(exclude_ids))
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT id, url FROM custom_images WHERE width IS NULL OR height IS NULL LIMIT ?",
-        (limit,),
-    ).fetchall()
+    if skip:
+        placeholders = ",".join("?" for _ in skip)
+        rows = conn.execute(
+            "SELECT id, url FROM custom_images"
+            f" WHERE (width IS NULL OR height IS NULL) AND id NOT IN ({placeholders})"
+            " LIMIT ?",
+            (*skip, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, url FROM custom_images WHERE width IS NULL OR height IS NULL LIMIT ?",
+            (limit,),
+        ).fetchall()
     return [{"id": r["id"], "url": r["url"]} for r in rows]
 
 
