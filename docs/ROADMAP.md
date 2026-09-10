@@ -541,17 +541,19 @@ each gallery item must show, so building this now means building it twice:
       browser where not, which also removed the reflow cascade on image-heavy characters.
 - [ ] **Home page information architecture.** Two stat cards and a feature bullet list, shown to
       people already using the tool.
-- [ ] **Retire `legacy.css`** — 1803 lines, down from 2874. It now contains no colour literals, no
-      ID selectors and no `!important`, but it is still un-migrated markup.
+- [x] **Retire `legacy.css`** _(done)_ — gone, from 2,874 lines originally. Its 239 rules moved
+      into `layout.css` (the frame), a new `components.css` (toasts, dialogs, the autocomplete,
+      skeletons, empty states) and `pages.css`, in their original relative order so the cascade did
+      not change. Verified rule-by-rule: the built stylesheet came out 30 bytes smaller, all of it
+      the one `#toast-container .toast` rule folded into `.toast`.
 - [x] **The remaining Biome findings** _(done)_ — `biome check src` is clean. Most were real: the
       gallery's two overlapping mouse-only handlers became one button per image, the series
       autocomplete had `role="option"` on items no keyboard could select and now implements the
       ARIA combobox pattern, the toast was a `role="button"` containing a button, and search
       results became links so middle-click works. The four remaining suppressions are file drop
       zones and backdrop dismissal, each with no keyboard equivalent to withhold.
-- [ ] _(superseded)_ The original note read: almost all `noStaticElementInteractions` and
-      `useKeyWithClickEvents` on div-as-button patterns in CharacterPage.
-- [ ] **Re-enable `noDescendingSpecificity`** once `legacy.css` is gone.
+- [x] **Re-enable `noDescendingSpecificity`** _(done)_ — on, and clean. Six real orderings were
+      fixed by moving base rules above the modifiers that had been written before them.
 
 Impeccable (`impeccable.style`, a design skill pack for AI coding agents) was evaluated and
 deliberately **skipped for now**. Its leverage is highest when there is a system to align to;

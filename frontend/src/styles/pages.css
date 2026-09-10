@@ -2,7 +2,971 @@
  * Styles written against the design system, for markup that has already been
  * migrated off legacy.css. New page-level rules belong here, not there.
  */
-
+/* ---- Page rules migrated out of legacy.css ------------------------------
+ * Kept in their original order relative to one another; the system-written
+ * sections below them still come last and so still win on ties.
+ */
+/* Profile / Character Page */
+.character-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.character-top-section {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 40px;
+  width: 100%;
+  margin-bottom: 40px;
+  min-width: 0;
+}
+.char-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  min-width: 0;
+}
+.char-image-section {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-end;
+  position: relative;
+  max-width: 50%;
+  min-width: 0;
+}
+.char-image-section img {
+  max-width: 100%;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+.char-main-image-full {
+  max-width: 280px;
+  max-height: 280px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+.char-main-placeholder {
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 1;
+  max-height: min(280px, 45vh);
+  margin: 0 auto;
+  background: var(--surface-hover);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  box-sizing: border-box;
+}
+.char-page-actions {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+}
+.char-page-actions .ui-btn {
+  width: 100%;
+  justify-content: center;
+  box-sizing: border-box;
+}
+@media (min-width: 480px) {
+  .char-page-actions .ui-btn {
+    width: auto;
+    align-self: flex-start;
+  }
+}
+.character-page .char-info-section .display-title {
+  margin-bottom: 0.75rem;
+}
+.character-page .char-info-section p.text-body,
+.character-page .char-info-section p.text-meta {
+  margin: 10px 0;
+}
+.custom-images-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.custom-images-heading {
+  margin-bottom: 0;
+}
+/* Character custom images toolbar: base = column; wide = row of wrapped actions */
+.char-custom-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.char-custom-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+@media (min-width: 769px) {
+  .char-custom-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+  }
+}
+.save-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background-color: var(--accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.3s,
+    transform 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.save-button:hover {
+  background-color: var(--accent-hover);
+  transform: scale(1.05);
+}
+.save-button.saved {
+  background-color: var(--success);
+  cursor: default;
+}
+/* Saved Page Styles */
+.saved-characters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+.saved-character-card {
+  display: block;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+.saved-character-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.saved-card-image-wrap {
+  position: relative;
+  width: 100%;
+  margin: 0 auto 10px;
+}
+.saved-character-card img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  background: var(--surface-hover);
+}
+.saved-card-image-wrap .no-image-placeholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--surface-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.saved-card-unsave-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background-color: var(--success);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.3s,
+    transform 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.saved-card-unsave-btn:hover {
+  background-color: var(--success);
+  transform: scale(1.05);
+}
+.saved-character-card h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+.empty-saved {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+}
+/* Add Character Page */
+.add-char-form {
+  max-width: 400px;
+  text-align: left;
+}
+/* Gallery Edit Styles */
+/* Each gallery item is a real <button> (see CustomImageGallery), so the browser
+   chrome has to be cleared before the layout rules below mean anything. */
+.gallery-item-wrapper {
+  position: relative;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.gallery-item-wrapper.draggable {
+  cursor: grab;
+}
+.gallery-item-wrapper.draggable:active {
+  cursor: grabbing;
+}
+.gallery-item-wrapper.dragging {
+  opacity: 0.5;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+}
+.gallery-item-wrapper.draggable .delete-btn {
+  display: none;
+}
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+/* Search Results Page (Google-style) */
+.search-results-count {
+  margin-bottom: 1.25rem;
+}
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+/* Search Result Styles */
+.search-result-item {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  text-decoration: none;
+  color: inherit;
+}
+.search-result-item:hover {
+  background-color: var(--surface-sunken);
+}
+.search-result-item:last-child {
+  border-bottom: none;
+}
+.search-result-img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background-color: var(--surface-hover);
+}
+.search-result-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.search-result-info h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+}
+.search-result-info p {
+  margin: 2px 0;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+/* Custom Images Section — full width of character card (not content-sized) */
+/* Also the drop target for files dragged onto the page, hence the dashed
+   border that only becomes visible in .drag-over. */
+.custom-images-section {
+  width: 100%;
+  max-width: 100%;
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  align-self: stretch;
+  border: 2px dashed transparent;
+  border-top-color: var(--border);
+  border-radius: var(--radius-lg);
+  transition:
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+.custom-images-section.drag-over {
+  border-color: var(--accent);
+  background-color: var(--accent-subtle);
+}
+.custom-upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 16px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--accent-subtle) 0%, var(--accent-subtle) 100%);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 0.95em;
+  font-weight: 500;
+}
+.custom-upload-progress-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: custom-upload-spin 0.7s linear infinite;
+}
+@keyframes custom-upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.custom-upload-progress-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.preview-thumb {
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  max-height: 500px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--surface-sunken);
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+/* Customs Page */
+.customs-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.customs-sort-field {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-left: auto;
+}
+@media (min-width: 480px) {
+  .customs-sort-field {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
+.customs-sort-label {
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.customs-sort-select {
+  width: auto;
+  min-width: 160px;
+  min-height: var(--nav-control-min-h);
+  border-radius: var(--nav-control-radius);
+}
+.customs-count-line {
+  margin-bottom: 1.25rem;
+}
+.customs-list .search-result-item {
+  align-items: stretch;
+  padding: 25px;
+}
+.customs-list .search-result-img {
+  width: 160px;
+  height: auto;
+  min-height: 100%;
+  object-fit: cover;
+}
+.customs-item-with-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  text-decoration: none;
+  color: inherit;
+}
+.customs-item-with-preview:hover {
+  background-color: var(--surface-sunken);
+}
+.customs-item-with-preview:last-child {
+  border-bottom: none;
+}
+.customs-item-top {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+}
+.customs-preview-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.customs-preview-thumb {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.customs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.customs-pagination .ui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.customs-page-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.pagination-info {
+  color: var(--text-muted);
+  font-size: 0.95em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 8px;
+}
+.pagination-page-indicator {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 8px 4px;
+  border-radius: 6px;
+}
+.pagination-page-indicator:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.customs-page-jump-input {
+  width: 3.25rem;
+  min-height: 36px;
+  padding: 4px 8px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1em;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+/* Delete Mode */
+.gallery-item-wrapper.selected img {
+  border: 3px solid var(--danger);
+  opacity: 0.8;
+}
+.gallery-item-wrapper.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-on-accent);
+  font-size: 40px;
+  font-weight: bold;
+  background: var(--danger);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.gallery-item-wrapper.delete-mode {
+  cursor: pointer;
+}
+.reorder-mode-hint-details {
+  margin: 0 0 16px;
+  padding: 0;
+  font-size: 0.9em;
+  color: var(--text-muted);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+.reorder-mode-hint-summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.reorder-mode-hint-summary::-webkit-details-marker {
+  display: none;
+}
+.reorder-mode-hint-summary::after {
+  content: " ▼";
+  font-size: 0.75em;
+  opacity: 0.7;
+}
+.reorder-mode-hint-details[open] .reorder-mode-hint-summary::after {
+  content: " ▲";
+}
+.reorder-mode-hint-body {
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--border);
+}
+.reorder-mode-hint-body p {
+  margin: 0 0 8px;
+}
+.reorder-mode-hint-body p:last-child {
+  margin-bottom: 0;
+}
+/* Reorder drag: drop target + dragged items */
+.custom-images-gallery.reorder-drag-active
+.gallery-item-wrapper.reorder-drag-source:not(.reorder-drop-target) {
+  opacity: 0.48;
+  filter: grayscale(0.25);
+  transition: opacity 0.15s ease;
+}
+.custom-images-gallery .gallery-item-wrapper.reorder-drop-target {
+  position: relative;
+  z-index: 3;
+}
+.custom-images-gallery .gallery-item-wrapper.reorder-drop-target::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: -6px;
+  bottom: -6px;
+  width: 6px;
+  background: linear-gradient(
+    180deg,
+    var(--accent) 0%,
+    var(--accent) 50%,
+    var(--accent-hover) 100%
+  );
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
+  z-index: 2;
+  pointer-events: none;
+  animation: reorder-drop-pulse 0.85s ease-in-out infinite;
+}
+@keyframes reorder-drop-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+.reorder-drop-label {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  z-index: 4;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+/* Reorder Mode */
+.gallery-item-wrapper.reorder-mode {
+  cursor: grab;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+body.reorder-touch-dragging {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+.gallery-item-wrapper.reorder-mode:active {
+  cursor: grabbing;
+}
+.gallery-item-wrapper.reorder-mode.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-on-accent);
+  font-size: 24px;
+  font-weight: bold;
+  background: var(--accent);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* AI Command Mode */
+.gallery-item-wrapper.ai-mode {
+  cursor: pointer;
+}
+.image-wrapper.edit-mode img {
+  border: 3px dashed var(--accent);
+  opacity: 0.8;
+}
+.gallery-item-wrapper.ai-mode:hover img {
+  opacity: 0.9;
+  border-color: var(--success);
+}
+.gallery-item-wrapper.ai-mode.selected img {
+  border: 3px solid var(--success);
+  opacity: 0.8;
+}
+.gallery-item-wrapper.ai-mode.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-on-accent);
+  font-size: 24px;
+  font-weight: bold;
+  background: var(--success);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* Download selection mode */
+.gallery-item-wrapper.download-mode {
+  cursor: pointer;
+}
+.gallery-item-wrapper.download-mode:hover img {
+  opacity: 0.9;
+  border-color: var(--accent);
+}
+.gallery-item-wrapper.download-mode.selected img {
+  border: 3px solid var(--accent);
+  opacity: 0.85;
+}
+.gallery-item-wrapper.download-mode.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-on-accent);
+  font-size: 24px;
+  font-weight: bold;
+  background: var(--accent);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* Main Image Edit Mode */
+.image-wrapper {
+  position: relative;
+  width: fit-content;
+  display: inline-block;
+  max-width: 100%;
+}
+.char-image-section .image-wrapper {
+  max-width: min(280px, 100%);
+}
+/* In edit mode the portrait is a real <button>, so its chrome has to go. */
+.image-wrapper.edit-mode {
+  cursor: pointer;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+.image-overlay {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--scrim);
+  color: var(--text-on-accent);
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-weight: bold;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.image-wrapper.edit-mode .image-overlay {
+  display: block;
+}
+.image-wrapper.drag-over-main {
+  border-color: var(--success);
+  transform: scale(1.02);
+}
+.gallery-item-wrapper.reorder-mode.selected img {
+  border: 3px solid var(--accent);
+  opacity: 0.9;
+}
+.selected-text {
+  font-size: 0.9em;
+  color: var(--text-muted);
+  flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Home page — same shell as Saved / Customs */
+.features-box {
+  text-align: left;
+  max-width: 700px;
+  margin: 2rem auto 0;
+  background: var(--surface-sunken);
+  padding: 1.5rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.features-box-title {
+  margin-top: 0;
+  padding-bottom: 0.625rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.features-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+.features-list li {
+  margin-bottom: 0.5rem;
+}
+/* Stats Dashboard */
+.stats-dashboard {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-width: 200px;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stat-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.stat-icon.image-icon {
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.stat-icon.char-icon {
+  background-color: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+.stat-value {
+  font-size: 1.8em;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+.stat-label {
+  font-size: var(--type-meta);
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.loading-error {
+  color: var(--danger);
+}
+/* Home loading skeleton */
+.page-loading-shell {
+  min-height: 280px;
+}
+.page-loading-lead {
+  margin: 0 0 1.5rem;
+  text-align: center;
+  font-size: var(--type-body-lg);
+  color: var(--text-muted);
+}
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.search-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.search-skeleton-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.search-skeleton-row:last-child {
+  border-bottom: none;
+}
+.search-skeleton-thumb {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.search-skeleton-text {
+  flex: 1;
+  min-width: 0;
+}
 /* ---- Add page: the Mudae authoring panel --------------------------------
  * These classes replaced 42 inline style objects, four of which hardcoded hex
  * colours that had no dark-mode counterpart.
@@ -11,56 +975,46 @@
   max-width: 640px;
   margin: 0 0 var(--space-8);
 }
-
 .mudae-panel > .section-heading {
   margin-top: 0;
 }
-
 .mudae-setup-hint {
   max-width: 640px;
   margin-bottom: var(--space-5);
   color: var(--text-muted);
 }
-
 .mudae-note {
   margin: 0 0 var(--space-4);
   font-size: var(--type-meta);
   color: var(--text-muted);
 }
-
 .mudae-row {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-
 .mudae-row .modern-input,
 .mudae-row .ui-input {
   flex: 1 1 200px;
 }
-
 .mudae-candidates {
   margin-top: var(--space-3);
 }
-
 .mudae-candidates__label {
   margin-bottom: var(--space-1);
   font-weight: var(--weight-semibold);
 }
-
 .mudae-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-
 .mudae-preview {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
   margin-top: var(--space-4);
 }
-
 .mudae-preview__img {
   width: 96px;
   height: 128px;
@@ -69,101 +1023,81 @@
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
 }
-
 .mudae-preview__meta {
   color: var(--text-muted);
 }
-
 .mudae-preview__hint {
   margin-bottom: 0;
   font-size: var(--type-micro);
   color: var(--text-subtle);
 }
-
 .mudae-divider {
   margin: var(--space-6) 0;
   border: 0;
   border-top: 1px solid var(--border);
 }
-
 .mudae-progress {
   margin-top: var(--space-4);
   font-size: var(--type-meta);
 }
-
 .mudae-progress__label {
   margin-bottom: var(--space-2);
 }
-
 .mudae-result {
   margin-top: var(--space-3);
   font-size: var(--type-meta);
 }
-
 .mudae-result details {
   margin-top: var(--space-2);
 }
-
 .mudae-result summary {
   cursor: pointer;
 }
-
 .mudae-item--ok {
   color: var(--success);
 }
-
 .mudae-item--warn {
   color: var(--warning);
 }
-
 .form-error {
   margin-top: var(--space-4);
   color: var(--danger);
 }
-
 .file-upload-hint {
   color: var(--text-muted);
   font-size: var(--type-meta);
 }
-
 .mudae-scroll-list {
   margin: var(--space-1) 0 0;
   padding-left: var(--space-5);
   max-height: 160px;
   overflow-y: auto;
 }
-
 .add-char-panel {
   max-width: 500px;
   margin: 0;
 }
-
 .add-char-panel > .section-heading {
   margin-top: 0;
 }
-
 .add-char-form {
   max-width: 100%;
 }
-
 .file-upload-box .file-upload-icon {
   display: block;
   margin-bottom: var(--space-2);
   color: var(--text-subtle);
 }
-
 .add-char-actions {
   justify-content: flex-start;
   margin-top: var(--space-6);
 }
-
 .char-mudae-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
-
 /* Drop target for files and for images dragged in from other sites. */
 .gallery-drop-hint {
   margin: var(--space-3) 0;
@@ -174,24 +1108,19 @@
   font-size: var(--type-meta);
   text-align: center;
 }
-
 .search-skeleton-note {
   margin-bottom: var(--space-4);
   text-align: left;
 }
-
 .skeleton-line--title {
   margin-bottom: var(--space-2);
 }
-
 .skeleton-line--body {
   width: 40%;
 }
-
 .error-boundary__message {
   margin-bottom: var(--space-4);
 }
-
 /* ---- Search field --------------------------------------------------------
  * Shared by the navbar and the customs page. The Name/Series switch overlays
  * the right of the input, so the field reserves room for it.
@@ -202,20 +1131,17 @@
   min-width: 0;
   --search-toggle-width: 150px;
 }
-
 .search-field .ui-input {
   height: var(--nav-control-min-h);
   padding-right: var(--search-toggle-width);
   border-radius: var(--radius-pill);
 }
-
 .search-field .ui-segmented {
   position: absolute;
   top: 50%;
   right: var(--space-1);
   transform: translateY(-50%);
 }
-
 /* Below this the switch would crowd the text, so it drops beneath the field. */
 @media (max-width: 480px) {
   .search-field {
@@ -234,22 +1160,18 @@
     transform: none;
   }
 }
-
 /* ---- Identity and moderation -------------------------------------------- */
-
 .navbar-handle {
   flex-shrink: 0;
   padding: 0 var(--space-2);
   color: var(--text-subtle);
   white-space: nowrap;
 }
-
 @media (max-width: 1200px) {
   .navbar-handle {
     display: none;
   }
 }
-
 /* Ownership is only surfaced where it changes what you can do. */
 .gallery-owner-tag {
   position: absolute;
@@ -265,24 +1187,33 @@
   line-height: 1.4;
   pointer-events: none;
 }
-
 .gallery-owner-tag.is-mine {
   background: var(--accent);
   color: var(--accent-fg);
 }
-
 .gallery-owner-tag.is-hidden {
   top: var(--space-1);
   bottom: auto;
 }
-
+.custom-images-gallery .custom-image-full {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The wrapper already carries the image's own ratio, so this only guards
+     against sub-pixel rounding leaving a hairline gap. */
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-sunken);
+  cursor: pointer;
+  transition: opacity var(--duration) var(--ease);
+}
 /* A hidden image only appears at all when you ask to see hidden ones, so it is
    dimmed to make clear it is not in the normal gallery. */
 .gallery-item-wrapper.is-hidden .custom-image-full {
   opacity: 0.45;
   filter: grayscale(0.4);
 }
-
 .image-modal-report {
   position: absolute;
   right: var(--space-4);
@@ -296,15 +1227,12 @@
   font-size: var(--type-meta);
   cursor: pointer;
 }
-
 .image-modal-report:hover {
   background: rgb(0 0 0 / 0.75);
 }
-
 .report-dialog__lead {
   margin: 0 0 var(--space-4);
 }
-
 .report-dialog__reasons {
   display: flex;
   flex-direction: column;
@@ -313,7 +1241,6 @@
   padding: 0;
   border: 0;
 }
-
 .report-dialog__reason {
   display: flex;
   align-items: flex-start;
@@ -323,30 +1250,25 @@
   border-radius: var(--radius-md);
   cursor: pointer;
 }
-
 .report-dialog__reason.is-selected {
   border-color: var(--accent);
   background: var(--accent-subtle);
 }
-
 .report-dialog__reason > span {
   display: flex;
   flex-direction: column;
   gap: 2px;
   color: var(--text);
 }
-
 .report-dialog__hint {
   font-size: var(--type-micro);
   color: var(--text-muted);
 }
-
 .report-dialog__note {
   margin: var(--space-4) 0 0;
   font-size: var(--type-micro);
   color: var(--text-subtle);
 }
-
 .removed-drawer__list {
   display: flex;
   flex-direction: column;
@@ -355,7 +1277,6 @@
   padding: 0;
   list-style: none;
 }
-
 .removed-drawer__item {
   display: flex;
   align-items: center;
@@ -364,7 +1285,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
-
 .removed-drawer__thumb {
   width: 64px;
   height: 64px;
@@ -373,14 +1293,11 @@
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
 }
-
 .removed-drawer__meta {
   flex: 1;
   min-width: 0;
 }
-
 /* Customs list ------------------------------------------------------------ */
-
 .customs-skeleton-row {
   display: flex;
   flex-direction: column;
@@ -389,14 +1306,12 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
-
 /* The previous page stays readable while the next one loads, rather than the
    list blanking on every keystroke or page change. */
 .is-refetching {
   opacity: 0.55;
   transition: opacity var(--duration) var(--ease);
 }
-
 /* Sign-in is optional, so it stays quiet: the handle is the affordance and the
    button sits with the other nav controls rather than demanding attention. */
 .navbar-handle {
@@ -404,16 +1319,13 @@
   border: 0;
   font: inherit;
 }
-
 .navbar-handle--signed-in {
   cursor: pointer;
   border-radius: var(--radius-sm);
 }
-
 .navbar-handle--signed-in:hover {
   color: var(--text);
 }
-
 .navbar-role {
   margin-left: var(--space-1);
   padding: 0 var(--space-1);
@@ -423,18 +1335,15 @@
   font-size: var(--type-micro);
   text-transform: capitalize;
 }
-
 .navbar-signin {
   flex-shrink: 0;
   text-decoration: none;
 }
-
 @media (max-width: 1200px) {
   .navbar-signin span {
     display: none;
   }
 }
-
 /* ---- Character gallery: justified rows -----------------------------------
  * Every image is shown whole. Each row is scaled so it fills the width exactly,
  * which is the only layout that stays tidy across the mix of tall character art,
@@ -456,7 +1365,6 @@
   width: 100%;
   max-width: 100%;
 }
-
 .custom-images-gallery .gallery-item-wrapper {
   position: relative;
   display: block;
@@ -467,21 +1375,6 @@
   aspect-ratio: var(--ratio, 0.667);
   line-height: 0;
 }
-
-.custom-images-gallery .custom-image-full {
-  display: block;
-  width: 100%;
-  height: 100%;
-  /* The wrapper already carries the image's own ratio, so this only guards
-     against sub-pixel rounding leaving a hairline gap. */
-  object-fit: cover;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background-color: var(--surface-sunken);
-  cursor: pointer;
-  transition: opacity var(--duration) var(--ease);
-}
-
 /* Zero-height, no reorder slot: inert to layout and to hit-testing.
  *
  * flex-basis must be 0. Giving these a real basis makes them compete for space
@@ -495,7 +1388,6 @@
   height: 0;
   pointer-events: none;
 }
-
 @media (max-width: 768px) {
   .custom-images-gallery {
     --gallery-row-height: 150px;
@@ -503,14 +1395,12 @@
     gap: var(--space-1);
   }
 }
-
 /* Reorder uses pointer events, so the browser must not treat a press on an item
    as the start of a double-tap zoom. Scrolling stays available: the long press
    that begins a drag requires the finger to be still, and a scroll cancels it. */
 .gallery-item-wrapper.reorder-mode {
   touch-action: manipulation;
 }
-
 /* Suppress the native long-press image callout while reordering.
  *
  * iOS shows a Save/Copy sheet and Android a context menu partway through the
@@ -523,4 +1413,10 @@
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+}
+.custom-images-gallery .gallery-item-wrapper.reorder-drop-target .custom-image-full {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
 }
