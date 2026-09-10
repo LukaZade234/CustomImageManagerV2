@@ -8,7 +8,7 @@ export const DISCORD_LIMIT_NITRO = 4000
  */
 function dollarToken(u) {
   const s = String(u ?? '')
-  return s.startsWith('$') ? s : '$' + s
+  return s.startsWith('$') ? s : `$${s}`
 }
 
 /**

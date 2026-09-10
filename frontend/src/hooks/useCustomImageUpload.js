@@ -135,7 +135,7 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
       if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
         res._partialErrors.forEach((msg) => addToast(`Skipped: ${msg}`, 'error'))
       }
-      const n = (res && res.links && res.links.length) || 0
+      const n = res?.links?.length || 0
       if (n >= 1) {
         addToast('Image imported from the web.', 'success')
       } else {

@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
+import CustomImageGallery from '../components/CustomImageGallery'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, IconButton } from '../components/ui'
-import { apiUrl } from '../config'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
@@ -21,18 +21,8 @@ import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
 } from '../utils/downloadCustomImages'
-import {
-  dataTransferHasWebImageDrag,
-  dedupeImageUrls,
-  extractImageUrlsFromDataTransfer,
-} from '../utils/dragImageUrls'
-import { FILLERS, ratioFor, ratioOf } from '../utils/galleryRatios'
-import {
-  dataTransferIsFileDrag,
-  dedupeFilesByIdentity,
-  isImageFileLike,
-  MAX_CUSTOM_IMAGE_BYTES,
-} from '../utils/imageFiles'
+import { ratioOf } from '../utils/galleryRatios'
+import { isImageFileLike } from '../utils/imageFiles'
 
 export default function CharacterPage() {
   const { name } = useParams()
@@ -958,88 +948,17 @@ export default function CharacterPage() {
             </span>
           </div>
         )}
-        <div
-          className={`custom-images-gallery ${reorder.isDragging ? 'reorder-drag-active' : ''}`}
+        <CustomImageGallery
+          rows={rows}
+          ratios={ratios}
+          modes={{ ai: aiMode, remove: deleteMode, download: downloadMode, reorder: reorderMode }}
+          selectedUrls={selectedUrls}
+          reorder={reorder}
+          onToggleSelect={toggleSelect}
+          onOpenImage={openModal}
+          onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
-        >
-          {rows.map((row, idx) => {
-            const url = row.url
-            const isDropTarget = reorderMode && reorder.dropTargetIndex === idx
-            const isDragSource = reorderMode && reorder.dragIndices?.includes(idx)
-            const attribution = row.is_mine
-              ? 'Added by you'
-              : row.owner
-                ? `Added by ${row.owner}`
-                : 'Added before ownership was tracked'
-            return (
-              <div
-                key={url}
-                data-reorder-slot={idx}
-                // The measured shape drives the row maths, so it has to reach
-                // CSS somehow; a custom property keeps the rules themselves in
-                // the stylesheet.
-                style={{ '--ratio': ratioFor(row, ratios[row.id]) }}
-                className={`gallery-item-wrapper ${aiMode ? 'ai-mode' : ''} ${deleteMode ? 'delete-mode' : ''} ${downloadMode ? 'download-mode' : ''} ${reorderMode ? 'reorder-mode' : ''} ${selectedUrls.includes(url) ? 'selected' : ''} ${isDropTarget ? 'reorder-drop-target' : ''} ${isDragSource ? 'reorder-drag-source' : ''} ${row.is_mine ? 'is-mine' : ''} ${row.hidden ? 'is-hidden' : ''}`}
-                title={attribution}
-                onClick={() => {
-                  // A drag ends with a synthetic click on whatever the pointer
-                  // was over; that must not toggle a selection.
-                  if (reorder.consumeClickAfterDrag()) return
-                  if (aiMode || deleteMode || downloadMode || reorderMode) toggleSelect(url)
-                }}
-                {...reorder.itemProps(idx)}
-                role={reorderMode ? 'button' : undefined}
-                tabIndex={reorderMode ? 0 : undefined}
-              >
-                <img
-                  /*
-                    The grid renders a small WebP; `url` stays the canonical
-                    ImgChest PNG and is what the lightbox, the download and every
-                    $ai command use, because Mudae accepts nothing else. Falls
-                    back to the original for GIFs, which are not thumbnailed.
-                  */
-                  src={row.thumb ? apiUrl(row.thumb) : getImageUrl(url)}
-                  alt=""
-                  draggable={false}
-                  className="custom-image-full"
-                  /* A character can hold hundreds of images at ~1.9 MB each, so
-                     fetching them all on load is untenable on a slow connection.
-                     The row is already the right shape from the stored
-                     dimensions, so nothing moves when one arrives. */
-                  loading="lazy"
-                  decoding="async"
-                  width={row.width || undefined}
-                  height={row.height || undefined}
-                  onLoad={(e) => noteRatio(row.id, e.currentTarget)}
-                  onClick={() =>
-                    !aiMode && !deleteMode && !downloadMode && !reorderMode && openModal(idx)
-                  }
-                />
-                {deleteMode && (
-                  <span className={`gallery-owner-tag ${row.is_mine ? 'is-mine' : ''}`}>
-                    {row.is_mine ? 'Yours' : row.owner || 'No owner'}
-                  </span>
-                )}
-                {row.hidden && <span className="gallery-owner-tag is-hidden">Hidden</span>}
-                {isDropTarget && (
-                  <span className="reorder-drop-label" aria-hidden>
-                    Drop here
-                  </span>
-                )}
-              </div>
-            )
-          })}
-          {/*
-            Absorb the leftover space on the last row. Without these, flex-grow
-            stretches a single trailing image across the full width, which reads
-            as a bug rather than a layout. Zero height and no reorder slot, so
-            they are inert to both layout and hit-testing.
-          */}
-          {rows.length > 0 &&
-            FILLERS.map((id) => (
-              <span key={`filler-${id}`} className="gallery-filler" aria-hidden="true" />
-            ))}
-        </div>
+        />
       </div>
 
       {modalOpen && (

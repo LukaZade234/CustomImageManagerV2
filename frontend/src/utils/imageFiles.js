@@ -13,7 +13,7 @@ const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|ico)$/i
 /** MIME image/* or an image extension — an OS drag often omits MIME on Linux. */
 export function isImageFileLike(file) {
   if (!file) return false
-  if (file.type && file.type.startsWith('image/')) return true
+  if (file.type?.startsWith('image/')) return true
   if (typeof file.name === 'string' && IMAGE_EXT_RE.test(file.name)) return true
   return false
 }
@@ -32,7 +32,7 @@ export function dataTransferIsFileDrag(dt) {
       if (typeArr.includes('Files')) return true
       if (typeArr.includes('application/x-moz-file')) return true
     }
-    if (items && items.length) {
+    if (items?.length) {
       for (let i = 0; i < items.length; i++) {
         if (items[i].kind === 'file') return true
       }
