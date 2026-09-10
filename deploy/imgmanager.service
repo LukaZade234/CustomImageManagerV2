@@ -27,7 +27,7 @@ Environment=CORS_ORIGINS=https://<YOUR_PAGES_DOMAIN>
 # visitor silently becomes a new person.
 EnvironmentFile=/etc/imgmanager/secrets.env
 
-ExecStart=/usr/local/bin/litestream replicate -config /etc/litestream.yml -exec \
+ExecStart=/usr/bin/litestream replicate -config /etc/litestream.yml -exec \
     "/opt/imgmanager/.venv/bin/gunicorn -c /opt/imgmanager/gunicorn.conf.py app:app"
 
 Restart=always

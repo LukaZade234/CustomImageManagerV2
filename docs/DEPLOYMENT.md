@@ -104,8 +104,19 @@ sudo -u imgmanager git clone <your-repo> /opt/imgmanager
 cd /opt/imgmanager && sudo -u imgmanager uv sync --locked --no-dev
 ```
 
-Install Litestream, then copy `deploy/litestream.yml` to `/etc/litestream.yml` and
-fill in the R2 credentials and **backup** bucket.
+Install Litestream from its `.deb`, which puts the binary at `/usr/bin/litestream` —
+the path `deploy/imgmanager.service` expects. A tarball install lands in
+`/usr/local/bin` instead and the unit will fail to start:
+
+```bash
+curl -L -o /tmp/litestream.deb \
+  https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.deb
+sudo dpkg -i /tmp/litestream.deb
+litestream version    # confirm before continuing
+```
+
+Then copy `deploy/litestream.yml` to `/etc/litestream.yml` and fill in the R2
+credentials and **backup** bucket.
 
 Secrets go in `/etc/imgmanager/secrets.env` (mode `600`, owned by `imgmanager`):
 
@@ -346,7 +357,29 @@ cloud is what makes an apex CNAME legal, via flattening). Leave the `api` and
 
 ## Restoring from backup
 
-Test this *before* you need it. An untested backup is not a backup.
+### Verifying the backup (no downtime)
+
+An untested backup is not a backup, and after the cut-over this box holds the only
+copy. So verifying has to be something you will actually do — which means it must
+not require taking the site down:
+
+```bash
+sudo /opt/imgmanager/scripts/verify_litestream_restore.sh
+```
+
+It restores from R2 into a scratch directory and compares that against the live
+database, which it only ever opens read-only. It checks `integrity_check`,
+`foreign_key_check`, the schema, the row count of every table, and a content hash
+of `characters` and `custom_images` — because counts alone would pass against a
+file holding the right number of wrong rows. It fingerprints the live file before
+and after and fails if it changed, so "did that touch production" is answered by
+the script rather than taken on trust. Exit status is 0 only on a full match.
+
+Run it before the cut-over, and after any change to the Litestream config.
+
+### Actually restoring (the machine is gone, or the data is wrong)
+
+This one *does* stop the app, because it replaces the live file:
 
 ```bash
 sudo systemctl stop imgmanager
@@ -354,7 +387,13 @@ sudo -u imgmanager litestream restore -config /etc/litestream.yml \
      -o /var/lib/imgmanager/restored.db /var/lib/imgmanager/imgmanager.db
 sqlite3 /var/lib/imgmanager/restored.db "SELECT COUNT(*) FROM custom_images;"
 # looks right? swap it in and start again
+sudo -u imgmanager mv /var/lib/imgmanager/restored.db /var/lib/imgmanager/imgmanager.db
+sudo systemctl start imgmanager
 ```
+
+Note that `-o` is the *output* path and the final argument is the database whose
+replica to read — they are not interchangeable, and getting them the wrong way
+round overwrites the live database with itself.
 
 ## Environment variables
 
