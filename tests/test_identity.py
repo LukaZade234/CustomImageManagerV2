@@ -114,7 +114,14 @@ class TestRequestLifecycle:
     def test_me_does_not_leak_the_identity_id(self, client):
         """The cookie is HttpOnly; echoing the id back in JSON would undo that."""
         body = client.get("/api/me").get_json()
-        assert set(body) == {"handle", "role", "is_moderator", "is_owner", "signed_in"}
+        assert set(body) == {
+            "handle",
+            "role",
+            "is_moderator",
+            "is_owner",
+            "signed_in",
+            "discord_available",
+        }
 
     def test_new_visitor_defaults_to_the_user_role(self, client):
         body = client.get("/api/me").get_json()

@@ -19,8 +19,7 @@ if sys.platform.startswith("win"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-from flask import Flask, Response, abort, jsonify, request, send_from_directory
-from flask_compress import Compress
+from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -33,9 +32,11 @@ except ImportError:
 
 # Import utility functions
 import db
+import discord_auth
 import identity
+import thumbnails
 import mudae_discord
-from image_utils import convert_to_png, validate_image_file
+from image_utils import convert_to_png, read_image_dimensions, validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from mudae_discord import MudaeAmbiguousSeries, MudaeCancelled, MudaeError
 
@@ -328,15 +329,17 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             limit_mb = MAX_FILE_SIZE / (1024 * 1024)
-            return None, (
-                f"{display_filename}: File is {file_size_mb:.2f} MB; maximum allowed is {limit_mb:.0f} MB."
+            return (
+                None,
+                f"{display_filename}: File is {file_size_mb:.2f} MB; maximum allowed is {limit_mb:.0f} MB.",
+                None,
             )
 
         ok, val_err = validate_image_file(temp_path)
         if not ok:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-            return None, f"{display_filename}: {val_err}"
+            return None, f"{display_filename}: {val_err}", None
 
         filename_lower = display_filename.lower()
         if not filename_lower.endswith(".png") and not filename_lower.endswith(".gif"):
@@ -358,7 +361,7 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
                 )
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-                return None, err_msg
+                return None, err_msg, None
         else:
             print(
                 f"[UPLOAD] skipping conversion (already {filename_lower[-4:]}), using as-is",
@@ -373,10 +376,17 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
                 f"[UPLOAD] REJECT: {display_filename} exceeds limit after processing ({final_size} bytes)",
                 flush=True,
             )
-            return None, (
+            return (
+                None,
                 f"{display_filename}: After processing the file is {final_mb:.2f} MB, which exceeds "
-                f"ImgChest's limit of {limit_mb:.0f} MB."
+                f"ImgChest's limit of {limit_mb:.0f} MB.",
+                None,
             )
+
+        # Measured here because the file is already on disk; the alternative is
+        # every browser rediscovering it by downloading the image, which is what
+        # made the gallery reflow as it loaded.
+        dimensions = read_image_dimensions(final_path)
 
         try:
             print(f"[UPLOAD] uploading to ImgChest: {final_path}", flush=True)
@@ -384,18 +394,19 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename):
             if result:
                 post_link, direct_link = result
                 print(f"[UPLOAD] SUCCESS: {display_filename}", flush=True)
-                return direct_link, None
+                return direct_link, None, dimensions
             print(f"[UPLOAD] FAILED (ImgChest): {display_filename}", flush=True)
             return (
                 None,
                 f"{display_filename}: Image host did not return a link (unexpected). Try again.",
+                None,
             )
         except ImgChestError as e:
             print(f"[UPLOAD] ImgChest error: {e}", flush=True)
-            return None, str(e)
+            return None, str(e), None
         except Exception as e:
             print(f"[UPLOAD] EXCEPTION: {display_filename}: {type(e).__name__}: {e}", flush=True)
-            return None, f"Error uploading {display_filename}: {str(e)}"
+            return None, f"Error uploading {display_filename}: {str(e)}", None
     finally:
         if os.path.exists(temp_path):
             try:
@@ -466,7 +477,6 @@ if _origins == "*":
 cors_origins = [o.strip() for o in _origins.split(",") if o.strip()]
 if cors_origins:
     CORS(app, origins=cors_origins, supports_credentials=True)
-Compress(app)
 
 # Every request resolves a caller; a visitor without a cookie is issued one on
 # the way out. Registered here rather than per-blueprint so no route can
@@ -574,6 +584,9 @@ RATE_LIMITS = {
     "report": _limits_from_env("report", [(5, 60), (20, 3600)]),
     # Each Mudae call burns one of Discord's ~1000 daily identify calls.
     "mudae": _limits_from_env("mudae", [(10, 60), (60, 3600)]),
+    # Sign-in is cheap for us but hits Discord's API, and a loop here would look
+    # like an attack from their side.
+    "auth": _limits_from_env("auth", [(10, 60), (40, 3600)]),
 }
 
 
@@ -613,6 +626,50 @@ def rate_limited(action):
 def health():
     """Lightweight liveness for load balancers and probes (no heavy work)."""
     return jsonify({"status": "ok", "service": "imgmanager", "revision": _DEPLOYED_REVISION})
+
+
+@app.route("/thumbs/<int:image_id>.webp", methods=["GET"])
+def serve_thumbnail(image_id):
+    """A small WebP of one image, generated on first request and cached.
+
+    Keyed by row id, so this can only be asked for images already in the
+    database; there is no way to hand it a URL of your choosing.
+
+    Any failure redirects to the original on ImgChest rather than erroring. A
+    thumbnail is an optimisation, and a missing one should cost bandwidth, not a
+    broken image.
+    """
+    path = thumbnails.cache_path(image_id)
+    if path.is_file():
+        return _thumbnail_response(path)
+
+    source = db.get_image_url(image_id)
+    if not source:
+        abort(404)
+    if not thumbnails.is_thumbnailable(source):
+        return redirect(source)
+
+    try:
+        response = _get_with_validated_redirects(source, timeout=30, allow_redirects=False)
+        if response.status_code != 200:
+            raise ValueError(f"source returned {response.status_code}")
+        thumbnails.store(image_id, thumbnails.render(response.content))
+    except Exception as e:
+        print(
+            f"[THUMB] {image_id} failed, serving the original: {type(e).__name__}: {e}", flush=True
+        )
+        return redirect(source)
+
+    return _thumbnail_response(path)
+
+
+def _thumbnail_response(path):
+    response = send_from_directory(path.parent.resolve(), path.name, mimetype="image/webp")
+    # Derived from an immutable source keyed by a row id that never changes its
+    # URL, so this can be cached hard. Cloudflare then serves it from the edge
+    # and the origin sees each thumbnail once, globally.
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @app.route("/api/stats", methods=["GET"])
@@ -665,6 +722,76 @@ def list_customs():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/auth/discord/start", methods=["GET"])
+@rate_limited("auth")
+def discord_auth_start():
+    """Send the browser to Discord's consent screen.
+
+    `next` is carried through the signed state so you come back to the page you
+    started on, and is restricted to a path on our own frontend -- accepting a
+    full URL here is how an OAuth callback becomes an open redirect.
+    """
+    if not discord_auth.configured():
+        return jsonify({"error": "Discord sign-in is not configured"}), 503
+    next_path = discord_auth.safe_next_path(request.args.get("next"))
+    state = discord_auth.sign_state(app.config["SECRET_KEY"], next_path)
+    return redirect(discord_auth.authorize_url(state))
+
+
+@app.route("/api/auth/discord/callback", methods=["GET"])
+@rate_limited("auth")
+def discord_auth_callback():
+    """Where Discord sends the browser back.
+
+    Errors redirect to the frontend with a query flag rather than rendering JSON:
+    the person here is in a browser mid-flow, and a raw error body is a dead end.
+    """
+    if not discord_auth.configured():
+        return jsonify({"error": "Discord sign-in is not configured"}), 503
+
+    base = discord_auth.frontend_base()
+    next_path = discord_auth.verify_state(app.config["SECRET_KEY"], request.args.get("state"))
+    if next_path is None:
+        # Forged, tampered or simply left open too long.
+        return redirect(f"{base}/?signin=expired")
+    if request.args.get("error"):
+        # The user pressed Cancel on the consent screen.
+        return redirect(f"{base}{next_path}?signin=cancelled")
+
+    code = request.args.get("code")
+    if not code:
+        return redirect(f"{base}{next_path}?signin=failed")
+
+    try:
+        profile = discord_auth.fetch_user(discord_auth.exchange_code(code))
+    except (ValueError, requests.RequestException) as e:
+        print(f"[AUTH] Discord sign-in failed: {e}", flush=True)
+        return redirect(f"{base}{next_path}?signin=failed")
+
+    result = db.bind_discord_identity(
+        identity.current_identity().id,
+        profile["id"],
+        display_name=profile["name"],
+        owner_discord_id=discord_auth.owner_discord_id(),
+    )
+    # The caller may now be a different identity than the one they arrived with,
+    # so the cookie has to be reissued rather than left pointing at the old one.
+    identity.adopt(result["identity_id"])
+    print(f"[AUTH] signed in as {result['role']} (merged={result['merged']})", flush=True)
+    return redirect(f"{base}{next_path}?signin=ok")
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def logout():
+    """Forget the current identity in this browser.
+
+    Deliberately not a delete: the identity and everything it owns stays, and
+    signing in again reaches it. This only hands out a fresh anonymous cookie.
+    """
+    identity.adopt(identity.new_identity_id())
+    return jsonify({"success": True})
+
+
 @app.route("/api/me", methods=["GET"])
 def get_me():
     """Who the caller is, as far as the server is concerned.
@@ -683,6 +810,7 @@ def get_me():
             "is_moderator": me.is_moderator,
             "is_owner": me.is_owner,
             "signed_in": me.discord_id is not None,
+            "discord_available": discord_auth.configured(),
         }
     )
 
@@ -731,21 +859,6 @@ def get_image(filename):
 @app.route("/character_images/<path:filename>")
 def get_character_image(filename):
     return send_from_directory("character_images", filename)
-
-
-# Serve custom_images from PostgreSQL (JSON response; URL kept for API compatibility)
-# Superseded by /api/stats and /api/customs. Nothing in the SPA calls this any
-# more; it is kept only in case something outside the app does. Around 475 KB
-# uncompressed, so it should go once that is confirmed.
-@app.route("/custom_images.json")
-def serve_custom_images_json():
-    try:
-        return jsonify(db.get_custom_images())
-    except db.DatabaseConfigurationError:
-        raise
-    except Exception as e:
-        print(f"Error serving custom_images: {e}")
-    return jsonify({})
 
 
 @app.route("/api/download-image-proxy", methods=["POST"])
@@ -1000,6 +1113,7 @@ def add_custom_image():
         )
 
         uploaded_links = []
+        uploaded_dimensions = {}
         errors = []
         processed = 0
 
@@ -1016,9 +1130,11 @@ def add_custom_image():
             temp_path = os.path.join(".", "temp_custom_" + safe_fn)
             file.save(temp_path)
 
-            direct_link, one_err = _run_single_custom_upload_from_temp(temp_path, fn)
+            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(temp_path, fn)
             if direct_link:
                 uploaded_links.append(direct_link)
+                if dimensions:
+                    uploaded_dimensions[direct_link] = dimensions
                 print(f"[UPLOAD] file {processed}/{file_count} SUCCESS: {fn}", flush=True)
             else:
                 errors.append(one_err or "Unknown error")
@@ -1032,7 +1148,12 @@ def add_custom_image():
             main_error = errors[0] if errors else "No files were successfully uploaded"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.add_custom_images(char_name, uploaded_links, added_by=identity.current_identity().id)
+        db.add_custom_images(
+            char_name,
+            uploaded_links,
+            added_by=identity.current_identity().id,
+            dimensions=uploaded_dimensions,
+        )
         db.update_last_modified(char_name)
         print(
             f"[UPLOAD] updating custom_images for {char_name}, added {len(uploaded_links)} link(s)",
@@ -1071,6 +1192,7 @@ def import_custom_images_from_urls():
             return jsonify({"error": "No valid URLs"}), 400
 
         uploaded_links = []
+        uploaded_dimensions = {}
         errors = []
         for idx, url in enumerate(urls):
             print(f"[IMPORT] fetching {idx + 1}/{len(urls)}: {url[:120]}...", flush=True)
@@ -1082,9 +1204,13 @@ def import_custom_images_from_urls():
             except Exception as e:
                 errors.append(f"{url}: {str(e)}")
                 continue
-            direct_link, one_err = _run_single_custom_upload_from_temp(temp_path, display_filename)
+            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
+                temp_path, display_filename
+            )
             if direct_link:
                 uploaded_links.append(direct_link)
+                if dimensions:
+                    uploaded_dimensions[direct_link] = dimensions
             else:
                 errors.append(one_err or "Unknown error")
 
@@ -1096,7 +1222,12 @@ def import_custom_images_from_urls():
             main_error = errors[0] if errors else "No images were imported"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.add_custom_images(char_name, uploaded_links, added_by=identity.current_identity().id)
+        db.add_custom_images(
+            char_name,
+            uploaded_links,
+            added_by=identity.current_identity().id,
+            dimensions=uploaded_dimensions,
+        )
         db.update_last_modified(char_name)
         print(
             f"[IMPORT] updating custom_images for {char_name}, added {len(uploaded_links)} link(s)",

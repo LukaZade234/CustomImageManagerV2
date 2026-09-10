@@ -108,6 +108,7 @@ Secrets go in `/etc/imgmanager/secrets.env` (mode `600`, owned by `imgmanager`):
 ```env
 SECRET_KEY=<long random string, see below>
 IMGCHEST_API_KEY=<from imgchest.com>
+THUMB_DIR=/var/lib/imgmanager/thumbs
 DISCORD_USER_TOKEN=<optional, see Mudae below>
 DISCORD_CHANNEL_ID=<optional>
 ```
@@ -358,10 +359,15 @@ sqlite3 /var/lib/imgmanager/restored.db "SELECT COUNT(*) FROM custom_images;"
 | `SECRET_KEY` | origin | **yes** | Signs identity cookies. Stable forever. |
 | `IMGCHEST_API_KEY` | origin | yes | Uploads |
 | `DATABASE_PATH` | origin | yes | `/var/lib/imgmanager/imgmanager.db` |
+| `THUMB_DIR` | origin | **yes** | `/var/lib/imgmanager/thumbs`. The default is relative to `WorkingDirectory`, which would put generated files inside the git checkout |
 | `CORS_ORIGINS` | origin | yes | Exact Pages origin. `*` is refused. |
 | `PORT` | origin | no | Default 8080 |
 | `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` | origin | no | See `gunicorn.conf.py` |
-| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import |
+| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**) |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | origin | no | Sign-in (an **OAuth app**, unrelated to the above) |
+| `DISCORD_REDIRECT_URI` | origin | with sign-in | Must match Discord exactly. Not derived: behind the Tunnel the app sees `localhost:8080` |
+| `OWNER_DISCORD_ID` | origin | no | Grants the owner role at login |
+| `FRONTEND_URL` | origin | no | Where to send the browser after sign-in. Defaults to the first `CORS_ORIGINS` entry |
 | `VITE_API_BASE_URL` | Pages | yes | Build-time |
 | `VITE_IMAGE_BASE_URL` | Pages | yes | Build-time |
 

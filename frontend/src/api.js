@@ -71,7 +71,6 @@ export const apiClient = {
       body: JSON.stringify(data),
     }),
   removeSaved: (name) => api(`/api/saved/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  getCustomImages: () => api('/custom_images.json'),
   getCustomImagesForChar: (name) => api(`/api/custom-image/${encodeURIComponent(name)}`),
   addCustomImage: async (formData) => {
     const url = `${API_BASE}/api/custom-image`
@@ -163,6 +162,7 @@ export const apiClient = {
       body: JSON.stringify({ image_ids: imageIds, kind }),
     }).catch(() => null),
   getMe: () => api('/api/me'),
+  logout: () => api('/api/auth/logout', { method: 'POST' }),
   importCustomImagesFromUrls: (characterName, urls) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',

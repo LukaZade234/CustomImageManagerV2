@@ -601,59 +601,7 @@
   transition: transform 0.2s;
   cursor: pointer;
 }
-/* Character page custom gallery — fixed row height, width follows aspect (like desktop) */
-.custom-images-gallery {
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-start;
-  box-sizing: border-box;
-}
-.custom-images-gallery .gallery-item-wrapper {
-  display: inline-flex;
-  position: relative;
-  align-items: flex-start;
-  align-self: flex-start;
-  line-height: 0;
-  width: auto;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-.custom-images-gallery .custom-image-full {
-  display: block;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background-color: var(--surface-sunken);
-  transition: transform 0.2s;
-  cursor: pointer;
-  box-sizing: border-box;
-  object-fit: contain;
-  height: 200px;
-  width: auto;
-  max-width: min(680px, 100%);
-}
-@media (min-width: 769px) {
-  .custom-images-gallery .custom-image-full:hover {
-    transform: scale(1.02);
-  }
-}
-@media (max-width: 768px) {
-  .custom-images-gallery {
-    gap: 10px;
-  }
-  .custom-images-gallery .custom-image-full {
-    height: 168px;
-    max-width: 100%;
-  }
-  .custom-images-gallery .custom-image-full:hover {
-    transform: none;
-  }
-}
-.gallery-item-wrapper {
-  display: inline-flex;
-} /* Customs Page */
+/* Customs Page */
 .customs-controls {
   display: flex;
   flex-wrap: wrap;

@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { signInUrl } from '../config'
 import { useStore } from '../store/useStore'
 import SearchBar from './SearchBar'
 import { Button, IconButton } from './ui'
@@ -14,6 +15,9 @@ export default function Navbar() {
   const theme = useStore((s) => s.theme)
   const cycleTheme = useStore((s) => s.cycleTheme)
   const me = useStore((s) => s.me)
+  const signOut = useStore((s) => s.signOut)
+  const location = useLocation()
+  const here = `${location.pathname}${location.search}`
 
   return (
     <nav className="navbar">
@@ -84,13 +88,42 @@ export default function Navbar() {
             </svg>
             <span>Saved</span>
           </Button>
-          {me?.handle && (
-            <span
-              className="navbar-handle text-meta"
-              title={`You appear to others as "${me.handle}". No sign-in required; this follows your browser.`}
+          {me?.handle &&
+            (me.signed_in ? (
+              <button
+                type="button"
+                className="navbar-handle navbar-handle--signed-in text-meta"
+                onClick={signOut}
+                title={`Signed in as ${me.handle}. Click to sign out of this browser — your uploads stay yours.`}
+              >
+                {me.handle}
+                {me.is_moderator && <span className="navbar-role">{me.role}</span>}
+              </button>
+            ) : (
+              <span
+                className="navbar-handle text-meta"
+                title={`You appear to others as "${me.handle}". No sign-in needed; this follows your browser.`}
+              >
+                {me.handle}
+              </span>
+            ))}
+          {me?.discord_available && !me.signed_in && (
+            <a
+              className="ui-btn ui-btn--secondary ui-btn--md btn-nav navbar-signin"
+              href={signInUrl(here)}
+              title="Optional. Keeps your uploads yours if you clear cookies or switch browser."
             >
-              {me.handle}
-            </span>
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M19.5 5.4A17 17 0 0 0 15.3 4l-.3.5a15.7 15.7 0 0 1 3.7 1.3 12.4 12.4 0 0 0-9.5 0A15.7 15.7 0 0 1 13 4.5L12.7 4A17 17 0 0 0 8.5 5.4C5.8 9.3 5.1 13.1 5.4 16.8A17 17 0 0 0 10.6 20l.9-1.3a11 11 0 0 1-1.7-.8l.4-.3a12 12 0 0 0 9.6 0l.4.3a11 11 0 0 1-1.7.8l.9 1.3a17 17 0 0 0 5.2-3.2c.4-4.3-.7-8-2.6-11.4ZM10.3 14.6c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1Zm5.4 0c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1Z" />
+              </svg>
+              <span>Sign in</span>
+            </a>
           )}
           <IconButton className="theme-toggle-btn" label={THEME_LABELS[theme]} onClick={cycleTheme}>
             {theme === 'dark' ? (

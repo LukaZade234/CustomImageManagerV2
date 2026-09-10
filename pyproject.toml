@@ -9,8 +9,6 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "flask>=3.1,<4",
     "flask-cors>=6.0,<7",
-    # flask-compress is removed once Cloudflare fronts the origin (it does Brotli).
-    "flask-compress>=1.24,<2",
     "gunicorn>=23,<27",
     "requests>=2.32,<3",
     "Pillow>=11,<12",

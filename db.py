@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import identity
+import thumbnails
 
 _REPO_ROOT = Path(__file__).resolve().parent
 _MIGRATIONS_DIR = _REPO_ROOT / "migrations"
@@ -262,25 +263,6 @@ def get_last_updated() -> dict:
 # --- Custom images ------------------------------------------------------
 
 
-def get_custom_images() -> dict:
-    """{name: [url, ...]} for every character with active images.
-
-    Same shape v1 served at /custom_images.json. Phase 9 replaces this endpoint
-    with per-character fetches plus a stats endpoint.
-    """
-    conn = get_connection()
-    out: dict[str, list[str]] = {}
-    rows = conn.execute(
-        "SELECT c.name AS name, i.url AS url"
-        "  FROM custom_images i JOIN characters c ON c.id = i.character_id"
-        " WHERE i.state = 'active'"
-        " ORDER BY c.name, i.position, i.id"
-    )
-    for row in rows:
-        out.setdefault(row["name"], []).append(row["url"])
-    return out
-
-
 # Whitelisted, never interpolated from user input. Each entry is an ORDER BY
 # fragment; a caller passes the key, not the SQL.
 _CUSTOMS_SORTS = {
@@ -415,6 +397,7 @@ def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[
     conn = get_connection()
     rows = conn.execute(
         "SELECT i.id AS id, i.url AS url, i.added_by AS added_by,"
+        "       i.width AS width, i.height AS height,"
         "       owner.handle AS owner_handle,"
         "       (hidden.image_id IS NOT NULL) AS is_hidden"
         "  FROM custom_images i"
@@ -430,6 +413,14 @@ def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[
         {
             "id": r["id"],
             "url": r["url"],
+            # NULL until the backfill has seen this image. The gallery falls back
+            # to measuring on load, which is what it did before these existed.
+            "width": r["width"],
+            "height": r["height"],
+            # What the grid renders. The `url` above stays canonical: it is what
+            # every $ai command, download and lightbox uses, because Mudae
+            # accepts nothing else.
+            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
             # NULL for images migrated from v1: nobody owns them, so nobody can
             # remove them except a moderator or the report threshold.
             "owner": r["owner_handle"],
@@ -445,10 +436,19 @@ def get_custom_images_for(char_name: str) -> list[str]:
     return [row["url"] for row in get_custom_image_rows(char_name)]
 
 
-def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None = None) -> int:
+def add_custom_images(
+    char_name: str,
+    urls: Iterable[str],
+    added_by: str | None = None,
+    dimensions: dict[str, tuple[int, int]] | None = None,
+) -> int:
     """Append images, skipping any URL already present. Returns how many landed.
 
     Two people adding at once no longer contend: these are separate INSERTs.
+
+    `dimensions` maps url -> (width, height). Supplying it is what keeps the
+    gallery from reflowing as images arrive; it is optional because the import
+    paths do not always have the file to hand.
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
@@ -462,11 +462,14 @@ def add_custom_images(char_name: str, urls: Iterable[str], added_by: str | None 
         ).fetchone()
         position = int(row["p"]) + 1
         added = 0
+        sizes = dimensions or {}
         for url in urls:
+            width, height = sizes.get(url, (None, None))
             cur = conn.execute(
-                "INSERT INTO custom_images (character_id, url, position, added_by, added_at)"
-                " VALUES (?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
-                (char_id, url, position, added_by, _now()),
+                "INSERT INTO custom_images"
+                " (character_id, url, position, added_by, added_at, width, height)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
+                (char_id, url, position, added_by, _now(), width, height),
             )
             if cur.rowcount:
                 position += 1
@@ -542,6 +545,38 @@ def remove_custom_images(
         return result
 
 
+def get_image_url(image_id: int) -> str | None:
+    """The source URL for one image row, whatever its state.
+
+    Removed images keep their thumbnails working, which the Removed drawer needs.
+    """
+    conn = get_connection()
+    row = conn.execute("SELECT url FROM custom_images WHERE id = ?", (image_id,)).fetchone()
+    return row["url"] if row else None
+
+
+def images_missing_dimensions(limit: int = 500) -> list[dict]:
+    """Rows the backfill still has to measure."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, url FROM custom_images WHERE width IS NULL OR height IS NULL LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [{"id": r["id"], "url": r["url"]} for r in rows]
+
+
+def set_image_dimensions(sizes: dict[int, tuple[int, int]]) -> int:
+    """Record measured dimensions. Returns how many rows were updated."""
+    if not sizes:
+        return 0
+    with transaction() as conn:
+        cur = conn.executemany(
+            "UPDATE custom_images SET width = ?, height = ? WHERE id = ?",
+            [(w, h, image_id) for image_id, (w, h) in sizes.items()],
+        )
+        return cur.rowcount
+
+
 def get_removed_for(char_name: str) -> list[dict]:
     """The Removed drawer: everything soft-deleted for this character."""
     conn = get_connection()
@@ -560,6 +595,7 @@ def get_removed_for(char_name: str) -> list[dict]:
         {
             "id": r["id"],
             "url": r["url"],
+            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
             "removed_by": r["removed_by_handle"],
             "removed_at": r["removed_at"],
             "reason": r["removed_reason"],
@@ -865,6 +901,98 @@ def get_identity(identity_id: str) -> dict | None:
         (identity_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def _merge_identity(conn: sqlite3.Connection, source: str, target: str) -> dict:
+    """Move everything owned by `source` onto `target`, then delete `source`.
+
+    Used when someone signs in on a browser holding a fresh anonymous identity
+    and Discord says they are an account bound to an older one. Without this,
+    uploading and then signing in would silently orphan what you just added --
+    exactly the frustration this phase exists to remove.
+
+    UPDATE OR IGNORE on the three tables with composite primary keys: you may
+    already have hidden or reported the same image from the other browser, and
+    the collision means the target already has the row. Whatever the update
+    skips is deleted afterwards rather than left pointing at a dead identity.
+    """
+    moved = {}
+    for table, column in (("custom_images", "added_by"), ("custom_images", "removed_by")):
+        cur = conn.execute(f"UPDATE {table} SET {column} = ? WHERE {column} = ?", (target, source))
+        moved[column] = cur.rowcount
+
+    for table in ("saved", "user_hidden", "image_reports"):
+        cur = conn.execute(
+            f"UPDATE OR IGNORE {table} SET identity_id = ? WHERE identity_id = ?",
+            (target, source),
+        )
+        moved[table] = cur.rowcount
+        conn.execute(f"DELETE FROM {table} WHERE identity_id = ?", (source,))
+
+    cur = conn.execute(
+        "UPDATE image_takes SET identity_id = ? WHERE identity_id = ?", (target, source)
+    )
+    moved["image_takes"] = cur.rowcount
+
+    # Not carried over. These are ephemeral counters that the sweep would drop
+    # anyway, and merging two identities' buckets would punish the account for
+    # the anonymous session's usage.
+    conn.execute("DELETE FROM rate_limit_hits WHERE identity_id = ?", (source,))
+    conn.execute("DELETE FROM identities WHERE id = ?", (source,))
+    return moved
+
+
+def bind_discord_identity(
+    current_id: str, discord_id: str, *, display_name: str = "", owner_discord_id: str = ""
+) -> dict:
+    """Attach a Discord account to an identity, adopting an existing one if there is one.
+
+    Returns {'identity_id', 'merged', 'role'} -- `identity_id` is who the caller
+    is from now on, which may not be who they were a moment ago.
+    """
+    with transaction() as conn:
+        _ensure_identity(conn, current_id)
+        existing = conn.execute(
+            "SELECT id FROM identities WHERE discord_id = ?", (discord_id,)
+        ).fetchone()
+
+        merged = False
+        if existing is None:
+            target = current_id
+            conn.execute(
+                "UPDATE identities SET discord_id = ? WHERE id = ?", (discord_id, current_id)
+            )
+        else:
+            target = existing["id"]
+            if target != current_id:
+                _merge_identity(conn, current_id, target)
+                merged = True
+
+        if display_name:
+            conn.execute("UPDATE identities SET handle = ? WHERE id = ?", (display_name, target))
+
+        # The owner is bootstrapped by matching an environment variable at login,
+        # so there is no admin password anywhere and no chicken-and-egg problem.
+        # Only ever promotes: signing in must not demote an existing moderator.
+        if owner_discord_id and discord_id == owner_discord_id:
+            conn.execute(
+                "UPDATE identities SET role = 'owner' WHERE id = ? AND role != 'owner'",
+                (target,),
+            )
+
+        role = conn.execute("SELECT role FROM identities WHERE id = ?", (target,)).fetchone()[
+            "role"
+        ]
+        return {"identity_id": target, "merged": merged, "role": role}
+
+
+def set_role(identity_id: str, role: str) -> bool:
+    """Promote or demote. Owner-only at the route level."""
+    if role not in ("user", "moderator", "owner"):
+        raise ValueError(f"Unknown role: {role!r}")
+    with transaction() as conn:
+        cur = conn.execute("UPDATE identities SET role = ? WHERE id = ?", (role, identity_id))
+        return bool(cur.rowcount)
 
 
 def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:
