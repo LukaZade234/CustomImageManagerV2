@@ -8,6 +8,7 @@ import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, IconButton } from '../components/ui'
 import { apiUrl } from '../config'
+import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
 import {
@@ -85,11 +86,9 @@ export default function CharacterPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalIndex, setModalIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
-  const [customDragOver, setCustomDragOver] = useState(false)
-  const [customUploadProgress, setCustomUploadProgress] = useState(null)
+
   /** Full multi-line upload error for dismissible dialog (replaces window.alert). */
-  const [uploadErrorDialog, setUploadErrorDialog] = useState(null)
-  const customUploadLockRef = useRef(false)
+
   const mainInputRef = useRef(null)
   const customInputRef = useRef(null)
   /** Snapshot of the order when reorder mode opened, so Cancel can restore it. */
@@ -177,6 +176,13 @@ export default function CharacterPage() {
     },
     [customs, selectedUrls],
   )
+
+  const upload = useCustomImageUpload({
+    characterName: name,
+    onUploaded: appendCustomImageUrls,
+    addToast,
+    fileInputRef: customInputRef,
+  })
 
   const reorder = useGalleryReorder({
     items: customs,
@@ -284,176 +290,6 @@ export default function CharacterPage() {
     } finally {
       setMudaeMainBusy(false)
     }
-  }
-
-  const runCustomUpload = async (fileList) => {
-    const list = dedupeFilesByIdentity(Array.from(fileList)).filter((f) => isImageFileLike(f))
-    if (!list.length) {
-      addToast('No image files to upload', 'error')
-      return
-    }
-    if (customUploadLockRef.current) {
-      addToast('An upload is already in progress', 'info')
-      return
-    }
-    customUploadLockRef.current = true
-    const total = list.length
-    setCustomUploadProgress({ phase: 'starting', current: 0, total })
-    addToast(`Starting upload of ${total} image${total !== 1 ? 's' : ''}…`, 'info')
-
-    const errors = []
-    try {
-      for (let i = 0; i < list.length; i++) {
-        const file = list[i]
-        setCustomUploadProgress({ phase: 'uploading', current: i + 1, total, fileName: file.name })
-        if (file.size > MAX_CUSTOM_IMAGE_BYTES) {
-          const msg = `File too large (max ${MAX_CUSTOM_IMAGE_BYTES / (1024 * 1024)}MB)`
-          addToast(`Skipped ${i + 1}/${total} — ${file.name}: ${msg}`, 'error')
-          errors.push({ name: file.name, message: msg })
-          continue
-        }
-        try {
-          const fd = new FormData()
-          fd.append('character_name', name)
-          fd.append('files', file)
-          const res = await apiClient.addCustomImage(fd)
-          if (Array.isArray(res.links) && res.links.length > 0) {
-            await appendCustomImageUrls(name, res.links)
-          }
-          // Server can return 200 with `errors` when a batch had partial failures (e.g. multi-file request)
-          if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
-            res._partialErrors.forEach((msg) => {
-              addToast(`Skipped: ${msg}`, 'error')
-              errors.push({ name: file.name, message: msg })
-            })
-          }
-        } catch (err) {
-          const msg = err.message || 'Upload failed'
-          addToast(`Failed ${i + 1}/${total} (${file.name}): ${msg}`, 'error')
-          errors.push({ name: file.name, message: msg })
-        }
-      }
-
-      const ok = total - errors.length
-      if (ok === total) {
-        addToast(`${ok} image${ok !== 1 ? 's' : ''} uploaded successfully.`, 'success')
-      } else if (ok > 0) {
-        addToast(
-          `${ok} of ${total} image${ok !== 1 ? 's' : ''} uploaded. ${errors.length} failed — open the error panel to read and copy details.`,
-          'error',
-        )
-      } else {
-        addToast(`No images uploaded — open the error panel for full details.`, 'error')
-      }
-      if (errors.length > 0) {
-        const detail = [
-          `Some images were skipped or failed (${errors.length} of ${total}).`,
-          '',
-          'Per file:',
-          '',
-          ...errors.map((e) => (e.name ? `${e.name}\n  ${e.message}` : e.message)),
-          '',
-          'Tip: uploads to ImgChest are retried on the server; the browser also retries brief connection errors. New URLs are merged into the gallery without reloading the full library. If you see a network error, try again.',
-        ].join('\n')
-        setUploadErrorDialog(detail)
-      }
-    } catch (err) {
-      addToast(`Upload stopped: ${err.message || 'Unknown error'}`, 'error')
-    } finally {
-      customUploadLockRef.current = false
-      setCustomUploadProgress(null)
-    }
-  }
-
-  const handleAddCustomImage = async (e) => {
-    const files = e.target.files
-    if (!files?.length) return
-    await runCustomUpload(files)
-    if (customInputRef.current) customInputRef.current.value = ''
-  }
-
-  const runImportFromUrls = async (urls) => {
-    const deduped = dedupeImageUrls(urls)
-    if (!deduped.length) return
-    if (customUploadLockRef.current) {
-      addToast('An upload is already in progress', 'info')
-      return
-    }
-    // Web drag often yields duplicate URLs for the same image; max 1 import per web drop only.
-    const list = deduped.slice(0, 1)
-    customUploadLockRef.current = true
-    setCustomUploadProgress({ phase: 'uploading', current: 1, total: 1 })
-    addToast(
-      deduped.length > 1
-        ? 'Importing one image from the web (extra URLs ignored)…'
-        : 'Importing image from the web…',
-      'info',
-    )
-    try {
-      const res = await apiClient.importCustomImagesFromUrls(name, list)
-      if (Array.isArray(res.links) && res.links.length > 0) {
-        await appendCustomImageUrls(name, res.links)
-      }
-      if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
-        res._partialErrors.forEach((msg) => addToast(`Skipped: ${msg}`, 'error'))
-      }
-      const n = (res && res.links && res.links.length) || 0
-      if (n >= 1) {
-        addToast('Image imported from the web.', 'success')
-      } else {
-        addToast('Could not import from that URL.', 'error')
-      }
-    } catch (err) {
-      addToast(err.message || 'Import failed', 'error')
-    } finally {
-      customUploadLockRef.current = false
-      setCustomUploadProgress(null)
-    }
-  }
-
-  const handleCustomDrop = async (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setCustomDragOver(false)
-
-    const urls = extractImageUrlsFromDataTransfer(e.dataTransfer)
-    const raw = e.dataTransfer.files
-    const files = Array.from(raw || []).filter((f) => isImageFileLike(f))
-
-    if (customUploadLockRef.current) {
-      addToast('An upload is already in progress', 'info')
-      return
-    }
-
-    if (files.length) {
-      await runCustomUpload(files)
-      return
-    }
-    if (urls.length) {
-      await runImportFromUrls(urls)
-      return
-    }
-    if (raw && raw.length > 0) {
-      addToast('Drop image files only (PNG, JPEG, WebP, …)', 'info')
-    }
-  }
-
-  /**
-   * An OS file drag often omits `Files` from `types` until the drop itself, and
-   * `dropEffect: none` cancels the drop event outright — so this always accepts.
-   * Since reorder moved to pointer events, a drag arriving here can only have
-   * come from outside, and there is nothing left to distinguish.
-   */
-  const handleCustomSectionDragOver = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-    setCustomDragOver(true)
-  }
-
-  const handleCustomSectionDragLeave = (e) => {
-    const next = e.relatedTarget
-    if (next && e.currentTarget.contains(next)) return
-    setCustomDragOver(false)
   }
 
   const recordTakes = (urls, kind) => {
@@ -827,10 +663,10 @@ export default function CharacterPage() {
       </div>
 
       <div
-        className={`custom-images-section ${customDragOver ? 'drag-over' : ''}`}
-        onDragOver={handleCustomSectionDragOver}
-        onDragLeave={handleCustomSectionDragLeave}
-        onDrop={handleCustomDrop}
+        className={`custom-images-section ${upload.dragOver ? 'drag-over' : ''}`}
+        onDragOver={upload.onDragOver}
+        onDragLeave={upload.onDragLeave}
+        onDrop={upload.onDrop}
       >
         <div className="custom-images-header-row">
           <h3 className="section-heading custom-images-heading">Custom Images</h3>
@@ -1057,7 +893,7 @@ export default function CharacterPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={!!customUploadProgress}
+                    disabled={!!upload.progress}
                     onClick={() => customInputRef.current?.click()}
                     title="Add Custom Image"
                   >
@@ -1105,20 +941,20 @@ export default function CharacterPage() {
           accept="image/*"
           multiple
           style={{ display: 'none' }}
-          onChange={handleAddCustomImage}
-          disabled={!!customUploadProgress}
+          onChange={upload.onFileInputChange}
+          disabled={!!upload.progress}
         />
         <p className="gallery-drop-hint">
           Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add
           Image&quot;
         </p>
-        {customUploadProgress && (
+        {upload.progress && (
           <div className="custom-upload-progress" role="status" aria-live="polite">
             <span className="custom-upload-progress-spinner" aria-hidden />
             <span className="custom-upload-progress-text">
-              {customUploadProgress.phase === 'starting'
-                ? `Preparing ${customUploadProgress.total} image${customUploadProgress.total !== 1 ? 's' : ''}…`
-                : `Uploading ${customUploadProgress.current}/${customUploadProgress.total}${customUploadProgress.fileName ? ` — ${customUploadProgress.fileName}` : ''}`}
+              {upload.progress.phase === 'starting'
+                ? `Preparing ${upload.progress.total} image${upload.progress.total !== 1 ? 's' : ''}…`
+                : `Uploading ${upload.progress.current}/${upload.progress.total}${upload.progress.fileName ? ` — ${upload.progress.fileName}` : ''}`}
             </span>
           </div>
         )}
@@ -1249,11 +1085,11 @@ export default function CharacterPage() {
           onClose={() => setRemovedDrawer(null)}
         />
       )}
-      {uploadErrorDialog && (
+      {upload.errorReport && (
         <UploadErrorDialog
           title="Upload issue"
-          body={uploadErrorDialog}
-          onClose={() => setUploadErrorDialog(null)}
+          body={upload.errorReport}
+          onClose={upload.dismissErrorReport}
         />
       )}
       {aiLimitDialog && (
