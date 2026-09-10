@@ -420,10 +420,6 @@ export default function CharacterPage() {
     const raw = e.dataTransfer.files
     const files = Array.from(raw || []).filter((f) => isImageFileLike(f))
 
-    if (reorderMode && reorderDragIndices) {
-      if (urls.length === 0 && files.length === 0) return
-    }
-
     if (customUploadLockRef.current) {
       addToast('An upload is already in progress', 'info')
       return
@@ -442,13 +438,15 @@ export default function CharacterPage() {
     }
   }
 
-  /** OS file drags often omit `Files` in types until drop; `dropEffect: none` blocks the drop event — only use move for in-gallery reorder. */
+  /**
+   * An OS file drag often omits `Files` from `types` until the drop itself, and
+   * `dropEffect: none` cancels the drop event outright — so this always accepts.
+   * Since reorder moved to pointer events, a drag arriving here can only have
+   * come from outside, and there is nothing left to distinguish.
+   */
   const handleCustomSectionDragOver = (e) => {
     e.preventDefault()
-    const fileDrag = dataTransferIsFileDrag(e.dataTransfer)
-    const webDrag = dataTransferHasWebImageDrag(e.dataTransfer)
-    const reorderInternal = reorderMode && reorderDragIndices && !fileDrag && !webDrag
-    e.dataTransfer.dropEffect = reorderInternal ? 'move' : 'copy'
+    e.dataTransfer.dropEffect = 'copy'
     setCustomDragOver(true)
   }
 

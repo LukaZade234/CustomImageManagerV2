@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '../store/useStore'
 import { DISCORD_LIMIT_NITRO, DISCORD_LIMIT_REGULAR } from '../utils/aiCommandDiscord'
