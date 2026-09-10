@@ -290,9 +290,13 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
 
 ### Outstanding
 
-- [ ] **Verify a Litestream restore before cut-over.** `litestream restore` to a scratch file and
-      confirm `SELECT COUNT(*) FROM custom_images` returns 8547. An untested backup is not a
-      backup, and after cut-over this box holds the only copy.
+- [x] **Verify a Litestream restore before cut-over.** _(done, 2026-09-10)_ Restored from R2 into
+      a scratch file on the origin: `integrity_check` ok, `foreign_key_check` clean, schema
+      identical, all 11 tables matching (characters 1705, custom_images 8547), and a content hash
+      over both tables identical to live. The live database was fingerprinted before and after and
+      did not change. Repeatable without downtime via
+      `scripts/verify_litestream_restore.sh` — re-run before the cut-over itself, since the data
+      keeps moving.
 - [ ] **Decide the cut-over.** Both sites are live now and **their data has forked** — anything
       added on v1 from this point does not appear on v2, and because the migration is insert-only,
       anything *deleted* on v1 is not removed from v2 either. The procedure, the rollback boundary
