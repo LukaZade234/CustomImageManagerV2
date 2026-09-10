@@ -387,13 +387,25 @@ def list_characters_with_customs(
     }
 
 
-def count_custom_images(char_name: str) -> int:
-    """Active images for a character. Used to number new uploads."""
+def count_custom_images_ever(char_name: str) -> int:
+    """How many images this character has *ever* had, removed ones included.
+
+    Used to number uploads on ImgChest, and it deliberately ignores state.
+    Counting only active images makes the number go down when one is removed, so
+    the next upload reuses it — three uploads with a removal between each all
+    came out as `lucy-118`. Nothing is ever hard-deleted, so counting every row
+    gives a number that only ever climbs.
+
+    The cost is that it drifts from the gallery position once images have been
+    removed. That is the right way round: an ImgChest name is fixed at upload
+    time and can never be corrected, so it should be a stable identifier rather
+    than a position that was only briefly true.
+    """
     conn = get_connection()
     row = conn.execute(
         "SELECT COUNT(*) AS n FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
-        " WHERE c.name = ? AND i.state = 'active'",
+        " WHERE c.name = ?",
         (char_name,),
     ).fetchone()
     return int(row["n"])

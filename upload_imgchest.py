@@ -77,9 +77,11 @@ def imgchest_filename(character_name: str, index: int | None = None, kind: str =
     name now carries what you would sort or search by: which character it belongs
     to, its position in that character's gallery, and when it was added.
 
-    The index is a snapshot — removing or reordering images later does not rename
-    anything on ImgChest — so treat it as "roughly where this came in", not a
-    key.
+    The index counts every image the character has ever had, so it never repeats
+    even after removals. It is therefore "the nth image ever added to Lucy"
+    rather than "the nth in the gallery right now" — the two diverge once
+    anything is removed, and since an ImgChest name is fixed at upload time and
+    can never be corrected, the stable one is the useful one.
     """
     parts = [_slug(character_name)]
     if kind:
@@ -1150,9 +1152,10 @@ def add_custom_image():
         uploaded_dimensions = {}
         errors = []
         processed = 0
-        # Numbering continues from what the character already has, so the name on
-        # ImgChest reflects where the image landed in the gallery.
-        next_index = db.count_custom_images(char_name) + 1
+        # Numbering continues from every image this character has ever had, not
+        # just the ones still showing, so a removal cannot free a number for
+        # reuse. See db.count_custom_images_ever.
+        next_index = db.count_custom_images_ever(char_name) + 1
 
         for file in files:
             fn = file.filename
@@ -1234,7 +1237,7 @@ def import_custom_images_from_urls():
         uploaded_links = []
         uploaded_dimensions = {}
         errors = []
-        next_index = db.count_custom_images(char_name) + 1
+        next_index = db.count_custom_images_ever(char_name) + 1
         for idx, url in enumerate(urls):
             print(f"[IMPORT] fetching {idx + 1}/{len(urls)}: {url[:120]}...", flush=True)
             try:

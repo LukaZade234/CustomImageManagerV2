@@ -128,3 +128,38 @@ class TestNaming:
         """Mudae rejects a URL that does not end in .png, whatever the bytes are."""
         for args in [("Lucy", 1), ("Lucy", None, "main"), ("", 999)]:
             assert imgchest_filename(*args).endswith(".png")
+
+
+class TestIndexNeverRepeats:
+    """An ImgChest name is fixed at upload time and can never be corrected, so a
+    number that gets reused is worse than useless."""
+
+    def test_removing_an_image_does_not_free_its_number(self, clean_db, identity_id):
+        clean_db.ensure_identity(identity_id)
+        clean_db.add_custom_images("Lucy", ["https://cdn/1.png"], added_by=identity_id)
+        assert clean_db.count_custom_images_ever("Lucy") == 1
+
+        clean_db.remove_custom_images("Lucy", ["https://cdn/1.png"], identity_id)
+        assert clean_db.count_custom_images_ever("Lucy") == 1, (
+            "the next upload would otherwise reuse index 1"
+        )
+
+        clean_db.add_custom_images("Lucy", ["https://cdn/2.png"], added_by=identity_id)
+        assert clean_db.count_custom_images_ever("Lucy") == 2
+
+    def test_it_climbs_across_an_upload_remove_upload_cycle(self, clean_db, identity_id):
+        """Exactly the sequence that produced three files called lucy-118."""
+        clean_db.ensure_identity(identity_id)
+        seen = []
+        for n in range(3):
+            url = f"https://cdn/{n}.png"
+            seen.append(clean_db.count_custom_images_ever("Lucy") + 1)
+            clean_db.add_custom_images("Lucy", [url], added_by=identity_id)
+            clean_db.remove_custom_images("Lucy", [url], identity_id)
+        assert seen == [1, 2, 3]
+
+    def test_reordering_does_not_disturb_it(self, clean_db):
+        urls = [f"https://cdn/{n}.png" for n in range(3)]
+        clean_db.add_custom_images("Lucy", urls)
+        clean_db.reorder_custom_images("Lucy", list(reversed(urls)))
+        assert clean_db.count_custom_images_ever("Lucy") == 3
