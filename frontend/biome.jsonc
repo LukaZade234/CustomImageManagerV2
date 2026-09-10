@@ -29,9 +29,10 @@
         "noUndeclaredVariables": "error"
       },
       "style": {
-        // Still noisy on the un-migrated half of legacy.css. Worth turning
-        // back on once that file is gone.
-        "noDescendingSpecificity": "off"
+        // On since legacy.css was retired. It catches a base rule written after
+        // a modifier that already constrains the same element, which reads as a
+        // rule that mysteriously does not apply.
+        "noDescendingSpecificity": "error"
       },
       "complexity": {
         // Was off because dark mode was implemented as !important overrides.

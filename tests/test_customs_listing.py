@@ -25,23 +25,38 @@ class TestStats:
     def test_counts_images_and_characters(self, client, clean_db):
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 3), "Emilia": ("Re:Zero", "2", 2)})
         body = client.get("/api/stats").get_json()
-        assert body == {"custom_images": 5, "characters_with_customs": 2}
+        assert body["custom_images"] == 5
+        assert body["characters_with_customs"] == 2
 
     def test_an_empty_library_reports_zero(self, client, clean_db):
-        assert client.get("/api/stats").get_json() == {
-            "custom_images": 0,
-            "characters_with_customs": 0,
-        }
+        body = client.get("/api/stats").get_json()
+        assert body["custom_images"] == 0
+        assert body["characters_with_customs"] == 0
 
     def test_removed_images_do_not_count(self, client, clean_db, identity_id):
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 2)}, owner=identity_id)
         clean_db.remove_custom_images("Rem", ["https://cdn/Rem-0.png"], identity_id)
         assert client.get("/api/stats").get_json()["custom_images"] == 1
 
-    def test_the_payload_is_tiny(self, client, clean_db):
-        """The whole point: two integers, not the library."""
-        _seed(clean_db, {f"Char{i}": ("S", "1", 5) for i in range(50)})
-        assert len(client.get("/api/stats").data) < 200
+    def test_the_payload_does_not_grow_with_the_library(self, client, clean_db):
+        """The whole point: a fixed summary, not the library.
+
+        The page carries highlights now as well as the two totals, so this is no
+        longer "a couple of hundred bytes". What still has to hold is that the
+        size is bounded by the number of items shown rather than by how much is
+        in the database -- the original bug was downloading every image URL for
+        every character, about 475 KB, to display two integers.
+        """
+        # Enough to fill every capped list, so the first measurement is already
+        # at the ceiling rather than still growing into it.
+        _seed(clean_db, {f"Char{i:03d}": ("S", "1", 5) for i in range(40)})
+        small = len(client.get("/api/stats").data)
+
+        _seed(clean_db, {f"More{i:03d}": ("S", "1", 5) for i in range(200)})
+        large = len(client.get("/api/stats").data)
+
+        assert large - small < 200, f"payload grew {large - small} bytes for 6x the library"
+        assert large < 8000
 
 
 class TestListing:
@@ -159,3 +174,83 @@ class TestPayloadSize:
         assert item["count"] == 300
         assert len(item["previews"]) == 3
         assert len(json.dumps(item)) < 600
+
+
+class TestHomeHighlights:
+    """The landing page's content, which /api/stats returns alongside the totals.
+
+    What is absent matters as much as what is present. There is no visitor count
+    because an identity row is created per cookie, and no most-visited section
+    because nothing records page views yet -- `image_takes` counts copy and
+    download actions, which measure something else entirely.
+    """
+
+    def test_best_covered_characters_are_ranked_by_image_count(self, client, clean_db):
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 5), "Emilia": ("Re:Zero", "2", 2)})
+        best = client.get("/api/stats").get_json()["best_covered"]
+        assert [(c["name"], c["images"]) for c in best] == [("Rem", 5), ("Emilia", 2)]
+
+    def test_series_are_ranked_and_count_their_characters(self, client, clean_db):
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 3), "Emilia": ("Re:Zero", "2", 2)})
+        _seed(clean_db, {"Lucy": ("Edgerunners", "1", 4)})
+        body = client.get("/api/stats").get_json()
+        assert body["top_series"][0] == {"series": "Re:Zero", "images": 5, "characters": 2}
+        assert body["series_count"] == 2
+
+    def test_a_character_with_no_series_is_not_a_series(self, client, clean_db):
+        _seed(clean_db, {"Nobody": ("", "1", 2)})
+        body = client.get("/api/stats").get_json()
+        assert body["series_count"] == 0
+        assert body["top_series"] == []
+
+    def test_recent_images_are_newest_first_and_carry_a_thumbnail(self, client, clean_db):
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 3)})
+        recent = client.get("/api/stats").get_json()["recent"]
+        assert recent[0]["character"] == "Rem"
+        assert recent[0]["thumb"] == f"/thumbs/{recent[0]['id']}.webp"
+        assert [r["id"] for r in recent] == sorted((r["id"] for r in recent), reverse=True)
+
+    def test_recent_shows_each_character_once(self, client, clean_db):
+        """Images arrive in batches, so the raw newest-first list is one face
+        repeated across the whole strip, which reads as a bug."""
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 6), "Emilia": ("Re:Zero", "2", 4)})
+        recent = client.get("/api/stats").get_json()["recent"]
+        names = [r["character"] for r in recent]
+        assert sorted(names) == ["Emilia", "Rem"], names
+
+    def test_removed_images_are_excluded_everywhere(self, client, clean_db, identity_id):
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 3)}, owner=identity_id)
+        clean_db.remove_custom_images("Rem", ["https://cdn/Rem-0.png"], identity_id)
+        body = client.get("/api/stats").get_json()
+        assert body["best_covered"][0]["images"] == 2
+        assert body["top_series"][0]["images"] == 2
+        # One entry per character, and it must not be the removed image.
+        assert len(body["recent"]) == 1
+        assert body["recent"][0]["url"] != "https://cdn/Rem-0.png"
+
+    def test_only_discord_users_appear_as_contributors(self, client, clean_db, identity_id):
+        """Anonymity has to be real, not merely unlabelled.
+
+        A cookie pseudonym never chose to be named, so it is never ranked. Only
+        someone who signed in with Discord can appear here.
+        """
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 3)}, owner=identity_id)
+        assert client.get("/api/stats").get_json()["contributors"] == []
+
+        clean_db.bind_discord_identity(identity_id, "discord-123", display_name="Someone")
+        contributors = client.get("/api/stats").get_json()["contributors"]
+        assert [(c["handle"], c["images"]) for c in contributors] == [("Someone", 3)]
+
+    def test_images_with_no_owner_are_nobody_s(self, client, clean_db):
+        """8,547 of the library predates ownership and must not inflate anyone."""
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 4)}, owner=None)
+        assert client.get("/api/stats").get_json()["contributors"] == []
+
+    def test_the_totals_survive_a_broken_highlights_query(self, client, clean_db, monkeypatch):
+        """A landing page showing two numbers beats one showing an error."""
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 2)})
+        monkeypatch.setattr(clean_db, "get_home_highlights", lambda *a, **kw: 1 / 0)
+        body = client.get("/api/stats").get_json()
+        assert body["custom_images"] == 2
+        assert body["best_covered"] == []
+        assert body["series_count"] == 0

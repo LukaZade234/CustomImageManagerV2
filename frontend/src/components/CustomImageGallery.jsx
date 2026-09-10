@@ -16,6 +16,18 @@ function attributionFor(row) {
   return row.owner ? `Added by ${row.owner}` : 'Added before ownership was tracked'
 }
 
+/**
+ * What the item's control is called, which depends on what activating it does.
+ *
+ * The images are interchangeable to a screen reader — they have no titles and
+ * `alt` is empty because the picture *is* the content — so the position and the
+ * attribution are the only things that distinguish one from another.
+ */
+function labelFor(row, index, selecting) {
+  const what = `Image ${index + 1}, ${attributionFor(row).toLowerCase()}`
+  return selecting ? `Select ${what}` : `Open ${what}`
+}
+
 export default function CustomImageGallery({
   rows,
   ratios,
@@ -31,6 +43,10 @@ export default function CustomImageGallery({
   const selecting = ai || remove || download || reordering
 
   return (
+    // A drop target for files dragged in from outside the page, which has no
+    // keyboard equivalent to expose. The accessible route to the same outcome is
+    // the toolbar's "Add Image" button, which opens a file picker.
+    // biome-ignore lint/a11y/noStaticElementInteractions: file drop zone, see above
     <div
       className={`custom-images-gallery ${reorder.isDragging ? 'reorder-drag-active' : ''}`}
       onDragOver={onDragOver}
@@ -54,21 +70,31 @@ export default function CustomImageGallery({
           .join(' ')
 
         return (
-          <div
+          /*
+            One real <button> per image, rather than a click handler on the
+            wrapper for selecting and a second one on the <img> for opening.
+            Those were two overlapping mouse-only targets that no keyboard could
+            reach, and the mode already decides which of the two a click means —
+            so it is one control whose action depends on the mode, and saying so
+            gets Enter, Space, focus and a name for free.
+          */
+          <button
+            type="button"
             key={row.url}
             data-reorder-slot={index}
             style={{ '--ratio': ratioFor(row, ratios[row.id]) }}
             className={classes}
             title={attributionFor(row)}
+            aria-label={labelFor(row, index, selecting)}
+            aria-pressed={selecting ? selectedUrls.includes(row.url) : undefined}
             onClick={() => {
               // A drag ends with a synthetic click on whatever the pointer was
               // over; that must not toggle a selection.
               if (reorder.consumeClickAfterDrag()) return
               if (selecting) onToggleSelect(row.url)
+              else onOpenImage(index)
             }}
             {...reorder.itemProps(index)}
-            role={reordering ? 'button' : undefined}
-            tabIndex={reordering ? 0 : undefined}
           >
             <img
               /*
@@ -90,7 +116,6 @@ export default function CustomImageGallery({
               width={row.width || undefined}
               height={row.height || undefined}
               onLoad={(e) => onImageLoad(row.id, e.currentTarget)}
-              onClick={() => !selecting && onOpenImage(index)}
             />
             {remove && (
               <span className={`gallery-owner-tag ${row.is_mine ? 'is-mine' : ''}`}>
@@ -103,7 +128,7 @@ export default function CustomImageGallery({
                 Drop here
               </span>
             )}
-          </div>
+          </button>
         )
       })}
       {/*

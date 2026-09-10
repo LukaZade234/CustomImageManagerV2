@@ -325,6 +325,102 @@ def get_custom_image_stats() -> dict:
     return {"custom_images": row["images"], "characters_with_customs": row["characters"]}
 
 
+def get_home_highlights(limit: int = 8) -> dict:
+    """Everything the landing page shows besides the two totals.
+
+    One function and one round trip, because these are four small queries that
+    are always wanted together and never separately.
+
+    What is *not* here is as considered as what is. There is no visitor count:
+    an identity row is created per cookie, so the honest numbers are "1" (signed
+    in with Discord) or "4" (including pseudonyms, one of them literally named
+    Legacy), and neither is worth printing. There is no most-visited section
+    either, because nothing records page views yet -- `image_takes` counts copy
+    and download actions, which measure something else.
+
+    `contributors` counts only people who signed in with Discord. That keeps
+    anonymity genuinely anonymous rather than merely unlabelled, and it means
+    the list can never expose someone who did not choose to be named. It is a
+    short list today: 8,547 of the 8,560 images predate ownership tracking, so
+    the caller is expected to hide the section until it has something to say.
+    """
+    conn = get_connection()
+
+    best_covered = [
+        {"name": r["name"], "series": r["series"], "images": r["n"], "image": r["main_image_url"]}
+        for r in conn.execute(
+            "SELECT c.name, c.series, c.main_image_url, COUNT(ci.id) AS n"
+            "  FROM characters c"
+            "  JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
+            "  GROUP BY c.id ORDER BY n DESC, c.name LIMIT ?",
+            (limit,),
+        )
+    ]
+
+    top_series = [
+        {"series": r["series"], "images": r["n"], "characters": r["chars"]}
+        for r in conn.execute(
+            "SELECT c.series, COUNT(ci.id) AS n, COUNT(DISTINCT c.id) AS chars"
+            "  FROM characters c"
+            "  JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
+            "  WHERE c.series IS NOT NULL AND c.series != ''"
+            "  GROUP BY c.series ORDER BY n DESC, c.series LIMIT ?",
+            (limit,),
+        )
+    ]
+
+    # Newest first, but only one image per character. Images arrive in batches --
+    # someone uploads twelve pictures of one character at a time -- so the raw
+    # newest-first list is the same face repeated across the whole strip, which
+    # reads as a bug. One per character also gives every tile its own
+    # destination instead of five tiles going to the same page.
+    recent = [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            "width": r["width"],
+            "height": r["height"],
+            "character": r["name"],
+            "added_at": r["added_at"],
+        }
+        for r in conn.execute(
+            "SELECT id, url, width, height, added_at, name FROM ("
+            "  SELECT ci.id, ci.url, ci.width, ci.height, ci.added_at, c.name,"
+            "         ROW_NUMBER() OVER ("
+            "           PARTITION BY ci.character_id"
+            "           ORDER BY ci.added_at DESC, ci.id DESC"
+            "         ) AS rn"
+            "    FROM custom_images ci JOIN characters c ON c.id = ci.character_id"
+            "   WHERE ci.state = 'active'"
+            ") WHERE rn = 1 ORDER BY added_at DESC, id DESC LIMIT ?",
+            (limit * 3,),
+        )
+    ]
+
+    contributors = [
+        {"handle": r["handle"], "images": r["n"]}
+        for r in conn.execute(
+            "SELECT i.handle, COUNT(ci.id) AS n"
+            "  FROM identities i"
+            "  JOIN custom_images ci ON ci.added_by = i.id AND ci.state = 'active'"
+            " WHERE i.discord_id IS NOT NULL"
+            " GROUP BY i.id ORDER BY n DESC, i.handle LIMIT ?",
+            (limit,),
+        )
+    ]
+
+    return {
+        "best_covered": best_covered,
+        "top_series": top_series,
+        "recent": recent,
+        "contributors": contributors,
+        "series_count": conn.execute(
+            "SELECT COUNT(DISTINCT series) AS n FROM characters"
+            " WHERE series IS NOT NULL AND series != ''"
+        ).fetchone()["n"],
+    }
+
+
 def list_characters_with_customs(
     *,
     query: str = "",

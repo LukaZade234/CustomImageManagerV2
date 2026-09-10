@@ -9,7 +9,6 @@ Two rules, both learned the hard way from what is already in the library:
   URL that does not end in .png, but it renders whatever bytes arrive.
 """
 
-
 import pytest
 from PIL import Image
 

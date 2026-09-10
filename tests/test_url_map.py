@@ -22,6 +22,7 @@ import upload_imgchest
 def _repo_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
 EXPECTED_ROUTES = {
     ("/", "GET"),
     ("/add", "GET"),
@@ -122,9 +123,7 @@ class TestPathsSurviveTheModuleLayout:
             f"SPA_DIR's parent does not exist: {spa.SPA_DIR}"
         )
         assert os.path.basename(os.path.dirname(spa.SPA_DIR)) == "frontend"
-        assert spa.SPA_DIR.startswith(_repo_root()), (
-            f"SPA_DIR escaped the repo: {spa.SPA_DIR}"
-        )
+        assert spa.SPA_DIR.startswith(_repo_root()), f"SPA_DIR escaped the repo: {spa.SPA_DIR}"
 
     def test_static_images_resolve_from_the_app_root(self):
         """send_from_directory takes these relative to the app's root_path."""

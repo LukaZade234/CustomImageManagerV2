@@ -593,16 +593,15 @@ export default function AddPage() {
             />
           </div>
           <div className="edit-group full-width">
-            <label>Main Photo (Optional)</label>
-            <div
-              className="file-upload-box"
-              onClick={() => document.getElementById('addCharImage')?.click()}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) =>
-                e.key === 'Enter' && document.getElementById('addCharImage')?.click()
-              }
-            >
+            <label htmlFor="addCharImage">Main Photo (Optional)</label>
+            {/*
+              A <label> for the file input rather than a div pretending to be a
+              button. Clicking a label activates its control, so the picker opens
+              with no JavaScript at all, and the input below is hidden with
+              .sr-only rather than display:none -- which keeps it in the tab
+              order, so the keyboard gets the same thing the mouse does.
+            */}
+            <label className="file-upload-box" htmlFor="addCharImage">
               <svg
                 aria-hidden="true"
                 width="24"
@@ -624,10 +623,10 @@ export default function AddPage() {
                 id="addCharImage"
                 type="file"
                 accept="image/*"
-                style={{ display: 'none' }}
+                className="sr-only"
                 onChange={(e) => setImageFile(e.target.files?.[0] || null)}
               />
-            </div>
+            </label>
           </div>
           <div className="edit-actions add-char-actions">
             <Button variant="primary" type="submit" disabled={loading}>

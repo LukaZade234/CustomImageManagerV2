@@ -19,13 +19,11 @@ export default function Modal({
   const { dialogRef, onKeyDown, onBackdropClick } = useDialog({ onClose })
 
   return createPortal(
-    <div
-      className="ui-modal-backdrop"
-      // biome-ignore lint/a11y/noStaticElementInteractions: the backdrop is a
-      // convenience dismissal; Escape and the close button are the real controls.
-      onClick={onBackdropClick}
-      role="presentation"
-    >
+    // Dismissing by clicking the backdrop is mouse convenience layered on top of
+    // the real controls: the dialog traps focus, Escape closes it, and it has a
+    // visible close button. Nothing here is denied to a keyboard user.
+    // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal, see above
+    <div className="ui-modal-backdrop" role="presentation" onClick={onBackdropClick}>
       <div
         ref={dialogRef}
         className={cx('ui-modal', `ui-modal--${size}`, className)}

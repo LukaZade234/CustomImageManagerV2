@@ -72,7 +72,12 @@ export default function ImageModal({ images, currentIndex, onClose, onPrev, onNe
           &#10094;
         </button>
       )}
-      <img src={src} alt="" tabIndex={-1} onClick={(e) => e.stopPropagation()} />
+      {/*
+        No click handler: useDialog's onBackdropClick already closes only when
+        the click landed on the backdrop itself (e.target === e.currentTarget),
+        so the stopPropagation that used to sit here could never have mattered.
+      */}
+      <img src={src} alt="" tabIndex={-1} />
       {currentIndex < images.length - 1 && (
         <button
           type="button"

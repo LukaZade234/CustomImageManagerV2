@@ -3,17 +3,22 @@
  *   tokens  -> defines every custom property
  *   base    -> element defaults and shared typography, reads tokens only
  *   layout  -> the page frame
- *   ui      -> the primitives, i.e. the default appearance of a control
- *   legacy  -> the pre-token stylesheet, being migrated away page by page
- *   pages   -> page rules already written against the system
+ *   ui         -> the primitives, i.e. the default appearance of a control
+ *   components -> shared things built from the primitives: toasts, dialogs,
+ *                 the autocomplete, skeletons, empty states
+ *   pages      -> rules belonging to one page
  *
- * ui comes before legacy and pages because a call site must be able to adjust
- * a primitive -- position a save button, pill-shape a search field. Putting it
- * last inverted that and silently broke both search layouts.
+ * ui comes before components and pages because a call site must be able to
+ * adjust a primitive -- position a save button, pill-shape a search field.
+ * Putting it last inverted that and silently broke both search layouts.
+ *
+ * legacy.css used to sit between ui and pages. It is gone: its rules were moved
+ * into layout, components and pages without reordering them, so the cascade is
+ * unchanged.
  */
 @import "./tokens.css";
 @import "./base.css";
 @import "./layout.css";
 @import "./ui.css";
-@import "./legacy.css";
+@import "./components.css";
 @import "./pages.css";

@@ -43,6 +43,7 @@ except ImportError:
 import db
 import identity
 import logs
+import thumbnails
 from imgchest_utils import upload_to_imgchest
 from routes.auth import auth_bp
 from routes.characters import characters_bp
@@ -190,20 +191,39 @@ def health():
 
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
-    """The two numbers on the landing page.
+    """Everything the landing page renders, in one request.
 
     Replaces the home page's full-map fetch: it used to download every image URL
     for every character -- around 475 KB uncompressed -- and count them in the
     browser to display two integers.
+
+    The highlights are best-effort and separately guarded. If that query fails
+    the totals still render, because a landing page showing two numbers is a
+    great deal better than one showing an error.
     """
+    totals = {"custom_images": 0, "characters_with_customs": 0}
     try:
-        return jsonify(db.get_custom_image_stats())
+        totals = db.get_custom_image_stats()
     except Exception:
         log.exception("stats.read_failed")
-        return jsonify({"custom_images": 0, "characters_with_customs": 0})
 
+    highlights = {
+        "best_covered": [],
+        "top_series": [],
+        "recent": [],
+        "contributors": [],
+        "series_count": 0,
+    }
+    try:
+        highlights = db.get_home_highlights()
+        highlights["recent"] = [
+            {**row, "thumb": thumbnails.thumb_url(row["id"], row["url"])}
+            for row in highlights["recent"]
+        ]
+    except Exception:
+        log.exception("stats.highlights_failed")
 
-
+    return jsonify({**totals, **highlights})
 
 
 @app.route("/api/last-updated", methods=["GET"])

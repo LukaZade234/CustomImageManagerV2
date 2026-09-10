@@ -116,10 +116,18 @@ primitives, loaded in this order by `frontend/src/styles/index.css`:
 |---|---|
 | `tokens.css` | Every custom property. Colour, spacing, radius, elevation, type, motion, layers. |
 | `base.css` | Reset, element defaults, shared typography classes, the focus ring, `@font-face`. |
-| `layout.css` | The page frame. |
-| `legacy.css` | The pre-token stylesheet, being migrated away. **Nothing new goes here.** |
-| `pages.css` | Page rules already written against the system. New page CSS goes here. |
-| `ui.css` | The primitives. Loaded last so a primitive wins over a leftover legacy rule. |
+| `layout.css` | The page frame, including the navbar and the search cluster in it. |
+| `ui.css` | The primitives: the default appearance of a button, input, card, modal. |
+| `components.css` | Shared things built from the primitives — toasts, dialogs, the autocomplete, skeletons, empty states. |
+| `pages.css` | Rules belonging to one page. New page CSS goes here. |
+
+`ui.css` loads before `components.css` and `pages.css` so a call site can adjust
+a primitive — position a save button, pill-shape a search field. Putting it last
+inverted that and silently broke both search layouts.
+
+`legacy.css` is gone. Its 239 rules moved into `layout`, `components` and
+`pages` without being reordered, so the cascade is unchanged; the built
+stylesheet came out 30 bytes smaller, all of it one merged toast rule.
 
 Four rules, all of which the codebase previously broke:
 

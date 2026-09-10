@@ -1,5 +1,6 @@
 /*
- * Shared UI primitives. Loaded after legacy.css so a primitive always wins over
+ * Shared UI primitives. Loaded before components.css and pages.css so a call
+ * site can adjust a primitive, rather than
  * a leftover page rule while the migration is in progress.
  *
  * Nothing in here may contain a colour literal, a raw spacing value, or a

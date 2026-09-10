@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getImageUrl } from '../api'
 import { Card } from '../components/ui'
 import { useStore } from '../store/useStore'
@@ -13,7 +13,6 @@ export default function SearchResultsPage() {
   const sort = useStore((s) => s.searchSort)
   const characters = useStore((s) => s.characters)
   const loading = useStore((s) => s.loading)
-  const navigate = useNavigate()
 
   const matches = useMemo(() => {
     if (!searchQuery.trim()) return []
@@ -30,10 +29,6 @@ export default function SearchResultsPage() {
     })
     return sorted
   }, [searchQuery, mode, sort, characters])
-
-  const handleSelect = (char) => {
-    navigate(`/character/${encodeURIComponent(char.name)}`)
-  }
 
   if (loading && characters.length === 0) {
     return (
@@ -65,13 +60,18 @@ export default function SearchResultsPage() {
       </p>
       <div className="search-results-list">
         {matches.map((c) => (
-          <div
+          /*
+            A link, not a div with role="button". Clicking a result navigates, so
+            saying so is what makes middle-click, "open in new tab" and "copy link
+            address" work -- none of which the click handler offered -- and it is
+            also the only version a keyboard can reach. A <button> would not do:
+            its content model is phrasing content, and these results contain a
+            heading.
+          */
+          <Link
             key={c.name}
             className="search-result-item"
-            onClick={() => handleSelect(c)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSelect(c)}
-            role="button"
-            tabIndex={0}
+            to={`/character/${encodeURIComponent(c.name)}`}
           >
             <img src={getImageUrl(c.image)} alt="" className="search-result-img" />
             <div className="search-result-info">
@@ -79,7 +79,7 @@ export default function SearchResultsPage() {
               {c.series && <p>{c.series}</p>}
               {c.rank && <p>Rank: {c.rank}</p>}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </Card>

@@ -73,11 +73,12 @@ export default function CustomsPage() {
     setPage((p) => Math.min(p, totalPages))
   }, [totalPages])
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: totalPages is the
-  // trigger, not an input. The click-to-jump input has to close when the result
-  // set changes underneath it — a page number typed against the old total is
-  // meaningless. Biome removes the dependency because the body does not read it,
-  // which turns this into a mount-only effect and leaves the input open.
+  // totalPages is the trigger, not an input. The click-to-jump input has to close
+  // when the result set changes underneath it — a page number typed against the
+  // old total is meaningless. Biome wants the dependency gone because the body
+  // does not read it, which would turn this into a mount-only effect and leave
+  // the input open.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger, not an input
   useEffect(() => {
     setPageJumpEditing(false)
   }, [totalPages])
