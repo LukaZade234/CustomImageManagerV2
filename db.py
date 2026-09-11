@@ -881,14 +881,18 @@ def get_identity_settings(identity_id: str) -> dict:
     """The two display preferences, defaulted for an identity that has no row yet."""
     conn = get_connection()
     row = conn.execute(
-        "SELECT hide_from_leaderboard, hide_attribution FROM identities WHERE id = ?",
+        "SELECT hide_from_leaderboard, hide_attribution, show_nsfw"
+        "  FROM identities WHERE id = ?",
         (identity_id,),
     ).fetchone()
     if row is None:
-        return {"hide_from_leaderboard": False, "hide_attribution": False}
+        return {"hide_from_leaderboard": False, "hide_attribution": False, "show_nsfw": False}
     return {
         "hide_from_leaderboard": bool(row["hide_from_leaderboard"]),
         "hide_attribution": bool(row["hide_attribution"]),
+        # Recorded but not yet read: no image carries a rating, so there is
+        # nothing to filter. Stored now so the preference predates the filter.
+        "show_nsfw": bool(row["show_nsfw"]),
     }
 
 
@@ -899,7 +903,7 @@ def update_identity_settings(identity_id: str, **settings) -> dict:
     same lazy creation every other write path uses -- a preference is a perfectly
     good reason to start existing.
     """
-    allowed = ("hide_from_leaderboard", "hide_attribution")
+    allowed = ("hide_from_leaderboard", "hide_attribution", "show_nsfw")
     changes = {k: int(bool(v)) for k, v in settings.items() if k in allowed and v is not None}
     if not changes:
         return get_identity_settings(identity_id)

@@ -20,10 +20,14 @@ def _seed(db, char="Rem", count=2, owner=None):
 
 
 class TestSettings:
-    def test_both_default_to_off(self, client, clean_db):
+    def test_they_all_default_to_off(self, client, clean_db):
         assert client.get("/api/me").get_json()["settings"] == {
             "hide_from_leaderboard": False,
             "hide_attribution": False,
+            # Recorded but not yet read: nothing carries a rating to filter on.
+            # Defaulting to off means the filter, when it arrives, is not
+            # switched on for people who never asked for it.
+            "show_nsfw": False,
         }
 
     def test_each_toggles_independently(self, client, clean_db):
@@ -36,12 +40,14 @@ class TestSettings:
         assert r.get_json()["settings"] == {
             "hide_from_leaderboard": False,
             "hide_attribution": True,
+            "show_nsfw": False,
         }
 
         r = client.patch("/api/me/settings", json={"hide_from_leaderboard": True})
         assert r.get_json()["settings"] == {
             "hide_from_leaderboard": True,
             "hide_attribution": True,
+            "show_nsfw": False,
         }
 
     def test_an_omitted_field_is_left_alone(self, client, clean_db):
@@ -54,6 +60,12 @@ class TestSettings:
         me = client.get("/api/me").get_json()
         assert me["role"] == "user"
         assert me["settings"]["hide_attribution"] is True
+
+    def test_the_nsfw_preference_is_stored_though_nothing_reads_it(self, client, clean_db):
+        """Future-proofing: the choice predates the filter, so people are not all
+        defaulted on the day it ships."""
+        client.patch("/api/me/settings", json={"show_nsfw": True})
+        assert client.get("/api/me").get_json()["settings"]["show_nsfw"] is True
 
     def test_the_preference_survives_a_reload(self, client, clean_db):
         client.patch("/api/me/settings", json={"hide_attribution": True})

@@ -159,89 +159,6 @@
   background-color: var(--success);
   cursor: default;
 }
-/* Saved Page Styles */
-.saved-characters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: var(--space-4);
-  margin-top: var(--space-5);
-}
-.saved-character-card {
-  display: block;
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-sunken);
-  color: inherit;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    border-color var(--duration) var(--ease),
-    background-color var(--duration) var(--ease);
-}
-.saved-character-card:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
-}
-.saved-card-image-wrap {
-  position: relative;
-  width: 100%;
-  margin: 0 auto 10px;
-}
-.saved-character-card img {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  border-radius: 8px;
-  display: block;
-  background: var(--surface-hover);
-}
-.saved-card-image-wrap .no-image-placeholder {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background: var(--surface-hover);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  color: var(--text-muted);
-}
-.saved-card-unsave-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background-color: var(--success);
-  color: var(--text-on-accent);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background 0.3s,
-    transform 0.2s;
-  box-shadow: var(--shadow-sm);
-}
-.saved-card-unsave-btn:hover {
-  background-color: var(--success);
-  transform: scale(1.05);
-}
-.saved-character-card h4 {
-  margin: 0;
-  color: var(--text);
-  font-size: 0.9em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
-}
 .empty-saved {
   text-align: center;
   padding: 40px;
@@ -1420,18 +1337,15 @@ body.reorder-touch-dragging {
   border-radius: 10px;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
 }
-
 /* ---- Home page -----------------------------------------------------------
  * Everything here is drawn from the library. The page used to be two stat cards
  * above a bullet list explaining the site to people already using it.
  */
-
 .home {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
-
 .home-section__head {
   display: flex;
   align-items: baseline;
@@ -1454,7 +1368,6 @@ body.reorder-touch-dragging {
 .home-note {
   margin: calc(var(--space-2) * -1) 0 var(--space-4);
 }
-
 /* Just added: a horizontal strip, because the newest images are the most direct
    evidence that the site is alive. Scrolls rather than wraps so it stays one
    line on any width. */
@@ -1522,7 +1435,6 @@ body.reorder-touch-dragging {
     --recent-height: 180px;
   }
 }
-
 /* Ranked lists: best-covered characters, and contributors. */
 .home-ranked {
   display: grid;
@@ -1600,7 +1512,6 @@ a.home-ranked__item:hover {
   color: var(--text-muted);
   font-size: var(--type-meta);
 }
-
 /* Series: the most under-used way into the library, so it gets real estate. */
 /* A fixed column count rather than auto-fill: with eight entries, auto-fill
    packed five into the first row and left two empty cells trailing the second.
@@ -1650,13 +1561,11 @@ a.home-ranked__item:hover {
   font-size: var(--type-micro);
   color: var(--text-muted);
 }
-
 /* ---- Profile -------------------------------------------------------------
  * Your account, your preferences, and the two lists nothing else can reach:
  * hidden and removed images were previously only findable from the character
  * page holding them.
  */
-
 .profile {
   display: flex;
   flex-direction: column;
@@ -1689,7 +1598,6 @@ a.home-ranked__item:hover {
   margin: var(--space-3) 0 0;
   color: var(--text-subtle);
 }
-
 /* Theme: a radio group, because the state is one of three and a cycling button
    could not show which. It replaced the navbar's cycle toggle. */
 .profile-themes {
@@ -1713,16 +1621,20 @@ a.home-ranked__item:hover {
   border-color: var(--border-strong);
   background: var(--surface-hover);
 }
+/* --accent on --accent-subtle, which is what every other tinted state uses
+   (.ui-btn[aria-pressed], .ui-badge--accent). --accent-fg is the foreground for
+   the *solid* accent fill -- white in light mode -- so putting it on the pale
+   tint made the selected label unreadable against its own background. */
 .profile-theme:has(input:checked) {
   border-color: var(--accent);
   background: var(--accent-subtle);
-  color: var(--accent-fg);
+  color: var(--accent);
+  font-weight: var(--weight-medium);
 }
 .profile-theme:has(input:focus-visible) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-
 .profile-toggle {
   display: flex;
   align-items: flex-start;
@@ -1750,55 +1662,6 @@ a.home-ranked__item:hover {
   font-size: var(--type-meta);
   color: var(--text-muted);
 }
-
-.profile-images {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-@media (max-width: 720px) {
-  .profile-images {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.profile-images__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-sunken);
-}
-.profile-images__thumb {
-  display: block;
-  width: 56px;
-  height: 56px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  background: var(--surface-hover);
-}
-.profile-images__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.profile-images__name {
-  color: inherit;
-  text-decoration: none;
-  font-weight: var(--weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.profile-images__name:hover {
-  text-decoration: underline;
-}
-
 /* The navbar's profile button: the handle stays readable next to the icon so
    signing in still reads as an upgrade rather than a hidden glyph. */
 .navbar-profile__name {
@@ -1810,5 +1673,191 @@ a.home-ranked__item:hover {
 @media (max-width: 1200px) {
   .navbar-profile__name {
     display: none;
+  }
+}
+/* ---- Profile tabs --------------------------------------------------------
+ * Real routes rather than local state, so a tab is linkable and answers the
+ * back button. The bar scrolls on narrow screens instead of wrapping, which
+ * keeps the five labels in one predictable row.
+ */
+.profile-header {
+  padding-bottom: var(--space-5);
+}
+.profile-tabs {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.profile-tabs::-webkit-scrollbar {
+  display: none;
+}
+.profile-tab {
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: var(--type-body);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+.profile-tab:hover {
+  color: var(--text);
+}
+.profile-tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+/* Search and sort above each list. */
+.profile-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.profile-controls__search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.profile-controls .ui-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 170px;
+}
+.profile-controls__count {
+  flex-shrink: 0;
+  color: var(--text-subtle);
+}
+
+/* ---- Profile card grid ---------------------------------------------------
+ * Justified rows, the same arrangement the character gallery uses: each card's
+ * flex-basis and flex-grow are both proportional to its image's shape, so a row
+ * ends flush at one height and nothing is cropped or stretched. The card
+ * follows the image, rather than the image being squeezed into the card.
+ *
+ * Saved and history come out as a tidy uniform grid on their own, because every
+ * character portrait is the same 9:14. Hidden and removed come out genuinely
+ * ragged, because custom images are whatever shape they were drawn in.
+ */
+.profile-grid {
+  --card-height: 210px;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 100%;
+}
+.profile-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  /* Basis sets the starting width, grow shares out what is left over. Both
+     track the shape, which is what makes a row line up.
+     
+     content-box, and the padding lives here rather than on the link inside, so
+     that the basis describes the *image* width. Under border-box the inset was
+     inside the basis, so a row grew by a constant that each card then divided by
+     its own ratio -- leaving a wide card a few pixels shorter than a narrow one
+     beside it, which is the uneven gap this was meant to fix. */
+  box-sizing: content-box;
+  flex: var(--ratio, 0.643) 1 calc(var(--ratio, 0.643) * var(--card-height));
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  transition:
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+}
+.profile-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+/* Zero-basis, zero-height: absorbs the space flex-grow would otherwise use to
+   stretch a lone trailing card across the whole row, without occupying any. */
+.profile-grid__filler {
+  box-sizing: content-box;
+  flex: var(--ratio, 0.643) 1 0;
+  min-width: calc(var(--card-height) * 0.4);
+  height: 0;
+}
+
+.profile-card__link {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  gap: var(--space-2);
+  color: inherit;
+  text-decoration: none;
+}
+/* The box carries the image's own ratio, exactly as the gallery wrapper does,
+   so there is no spare room inside it to letterbox into. `contain` against a
+   box of a different shape was what produced the uneven side gaps; `cover`
+   against a box of the *same* shape only guards sub-pixel rounding. */
+.profile-card__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--ratio, 0.643);
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+}
+.profile-card__image--empty {
+  aspect-ratio: var(--ratio, 0.643);
+}
+.profile-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.profile-card__title,
+.profile-card__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-card__title {
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+}
+.profile-card__meta {
+  font-size: var(--type-micro);
+  color: var(--text-muted);
+}
+
+/* Floated over the image so it costs no layout, and so a row of cards stays a
+   row of pictures rather than a row of buttons. */
+.profile-card__action {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 1;
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease);
+}
+.profile-card:hover .profile-card__action,
+.profile-card__action:focus-visible {
+  opacity: 1;
+}
+/* Touch has no hover, so the control has to be there from the start. */
+@media (hover: none) {
+  .profile-card__action {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-grid {
+    --card-height: 150px;
   }
 }

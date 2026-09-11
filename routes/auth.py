@@ -139,6 +139,7 @@ def update_my_settings():
         me.id,
         hide_from_leaderboard=data.get("hide_from_leaderboard"),
         hide_attribution=data.get("hide_attribution"),
+        show_nsfw=data.get("show_nsfw"),
     )
     log.info("settings.updated", **settings)
     return jsonify({"success": True, "settings": settings})

@@ -134,6 +134,11 @@
   --duration: 180ms;
 
   /* ---- Layout ------------------------------------------------------ */
+  /* Every one of the 1,000 stored character portraits is 225x350. Main images
+     are cropped to it wherever they are listed, so one arriving from ImgChest
+     at some other shape cannot make a grid ragged. */
+  --main-image-ratio: 0.643;
+
   --container-max: 1400px;
   --control-min-h: 44px;
   /* Navbar pill metrics, still referenced by the legacy sheet. */

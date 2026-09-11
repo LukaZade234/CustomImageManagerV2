@@ -61,7 +61,7 @@ export default function Navbar() {
             </svg>
             <span>Customs</span>
           </Button>
-          <Button as={Link} to="/saved" variant="ghost" className="btn-nav">
+          <Button as={Link} to="/profile/saved" variant="ghost" className="btn-nav">
             <svg
               width="16"
               height="16"
