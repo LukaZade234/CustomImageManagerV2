@@ -138,9 +138,13 @@
   width: 36px;
   height: 36px;
   padding: 0;
-  background-color: var(--accent);
-  color: var(--text-on-accent);
-  border: none;
+  /* Neutral until it means something. A solid accent fill in the default,
+     unsaved state put a second solid fill on a page that already has one
+     primary action, and spent the palette's loudest colour on a state nothing
+     had happened in. */
+  background-color: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
   border-radius: 50%;
   cursor: pointer;
   display: flex;
@@ -152,12 +156,18 @@
   box-shadow: var(--shadow-sm);
 }
 .save-button:hover {
-  background-color: var(--accent-hover);
+  background-color: var(--surface-hover);
+  color: var(--text);
   transform: scale(1.05);
 }
 .save-button.saved {
   background-color: var(--success);
-  cursor: default;
+  border-color: var(--success);
+  color: var(--text-on-accent);
+}
+.save-button.saved:hover {
+  background-color: var(--success);
+  color: var(--text-on-accent);
 }
 .empty-saved {
   text-align: center;

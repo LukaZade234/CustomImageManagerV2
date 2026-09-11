@@ -273,8 +273,11 @@ height.
 Character portraits are a fixed 9:14 (`--main-image-ratio: 0.643`). Every one of the
 1,000 stored portraits is exactly 225×350, so anything a different shape arrived from
 elsewhere and is cropped to match rather than allowed to make a grid ragged. Custom
-images are never cropped — they are whatever shape they were drawn in, and the layout
-adapts to them instead.
+images are whatever shape they were drawn in, and the layout adapts to them rather than
+the other way round. The single exception is a degenerate shape: ratios are clamped to
+0.4–2.5, because a 10:1 banner flattens its entire row to a sliver and a 1:10 strip makes
+one absurdly tall. Those two extremes pay a small crop so that every other image in the
+row keeps its proportions.
 
 ### Named Rules
 
