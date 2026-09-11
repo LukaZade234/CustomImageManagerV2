@@ -390,6 +390,21 @@ the flat document.
 - **Profile control:** A single button carrying the visitor's handle. Signing in and out,
   the theme, and every preference live behind it rather than in the bar.
 
+### Action bar
+
+- **Style:** Fixed to the bottom of the viewport while a gallery mode is open, surface
+  background, hairline top border, the overlay shadow. Three tiers inside it: the count
+  is plain text, the selection helpers are ghosts, and only the verbs read as buttons —
+  one solid accent, the destructive one in danger.
+- **Why the bottom:** the controls of an open mode are the only way out of it, and a
+  character can hold 256 images. Anything anchored to the heading row is a full scroll
+  away from whatever you just selected. A sticky rule cannot fix this: a sticky element
+  travels only as far as its own parent, and that parent is one row tall.
+- **Rule:** nothing inside it that can hold focus may disappear under the caret. A
+  control whose meaning flips changes its own label rather than being replaced, and stays
+  enabled at both ends, because a button that disables itself when clicked drops focus as
+  surely as one that unmounts.
+
 ### Segmented control
 
 - **Style:** A pill-shaped well in `--surface-sunken` with a 1px border and 2px inner
@@ -412,6 +427,11 @@ There are three modes and not five. Browse opens an image; select picks images; 
 moves them. The four old modes — command, remove, hide, download — were one interaction
 with the verb chosen before the selection existed, so the toolbar had to offer every verb
 up front and then grey out the ones that turned out not to apply.
+
+The `$ai` command has its own door in the character header, and it opens the selection
+with every image already chosen rather than copying them. A button that copies everything
+the instant it is pressed leaves no way to mean "all of them except those three", which
+is the thing people actually want from a command.
 
 ## Do's and Don'ts
 

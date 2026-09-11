@@ -67,7 +67,7 @@ describe('CharacterHeader', () => {
     await userEvent.click(screen.getByRole('button', { name: /Edit Character/i }))
     expect(props.edit.start).toHaveBeenCalledTimes(1)
 
-    await userEvent.click(screen.getByRole('button', { name: /Copy \$ai command/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^\$ai command$/i }))
     expect(props.onGetAiCommand).toHaveBeenCalledTimes(1)
   })
 

@@ -111,7 +111,9 @@ describe('ownership split', () => {
     // becoming usable. A verb that cannot act is now absent, not greyed out.
     expect(removeButton()).not.toBeInTheDocument()
     expect(hideButton()).not.toBeInTheDocument()
-    expect(screen.getByText('0 of 2 selected')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '0 of 2 selected',
+    )
   })
 
   it('counts a mixed selection under both actions', async () => {
@@ -122,7 +124,9 @@ describe('ownership split', () => {
     await user.click(screen.getByTitle('Added by Jade Lynx'))
     expect(removeButton()).toHaveAccessibleName('Remove (1)')
     expect(hideButton()).toHaveAccessibleName('Hide (1)')
-    expect(screen.getByText('2 of 2 selected')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '2 of 2 selected',
+    )
   })
 
   it('will not let you remove an image that is not yours', async () => {
@@ -141,7 +145,9 @@ describe('ownership split', () => {
     await user.click(screen.getByRole('button', { name: /select mine \(1\)/i }))
 
     // Exactly the one image you added, and so exactly the verb that fits it.
-    expect(screen.getByText('1 of 2 selected')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '1 of 2 selected',
+    )
     expect(removeButton()).toHaveAccessibleName('Remove (1)')
     expect(hideButton()).not.toBeInTheDocument()
   })
@@ -200,5 +206,43 @@ describe('attribution', () => {
     ]
     renderPage()
     expect(await screen.findByTitle('Added before ownership was tracked')).toBeInTheDocument()
+  })
+})
+
+describe('the $ai door', () => {
+  /**
+   * The header button used to copy a command for every image the instant it was
+   * clicked. There was no way to mean "all of them except those three" — and a
+   * command is exactly the thing people want to trim — while the place you
+   * could say that was a Select button by the gallery whose name said nothing
+   * about $ai.
+   */
+  it('opens the selection with everything already chosen', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+
+    const bar = screen.getByRole('region', { name: /selection actions/i })
+    expect(bar).toHaveTextContent('2 of 2 selected')
+    expect(within(bar).getByRole('button', { name: /Copy \$ai command/i })).toBeInTheDocument()
+  })
+
+  it('lets you take images out before copying, which is the whole point', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByTitle('Added by Jade Lynx'))
+
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '1 of 2 selected',
+    )
+  })
+
+  it('says nothing about $ai in a gallery that has no images', async () => {
+    served.rows = []
+    renderPage()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^\$ai command$/i })).toBeDisabled(),
+    )
   })
 })

@@ -72,11 +72,15 @@ export function CharacterHeader({
                 Edit Character
               </Button>
               {/*
-                One click, one command. This used to open a selection mode in
-                which a *second* button, named something else, produced the
-                command — so the button called "Get $ai Command" was the one
-                thing on the page that did not get you a command. Picking a
-                subset still exists, under Select, where the images are.
+                The door to the command, and the only one — which is the point.
+                It used to copy every image the moment it was clicked, so there
+                was no way to mean "all of them except those three", and the
+                place you could say that was a Select button down by the gallery
+                whose name gave no hint that $ai lived under it.
+
+                It opens the selection with everything already chosen instead.
+                Copying the lot is one more click; taking a few out is visible
+                rather than hidden behind a button named after something else.
               */}
               <Button
                 variant="secondary"
@@ -85,7 +89,7 @@ export function CharacterHeader({
                 title={
                   customCount === 0
                     ? 'Add a custom image first'
-                    : `Copy the $ai command for all ${customCount} custom images`
+                    : `Choose which of the ${customCount} images go in the command, then copy it`
                 }
               >
                 <svg
@@ -100,7 +104,7 @@ export function CharacterHeader({
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
-                Copy $ai command
+                $ai command
               </Button>
             </div>
           </div>

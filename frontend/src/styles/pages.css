@@ -1810,20 +1810,95 @@ a.home-ranked__item:hover {
   white-space: nowrap;
 }
 
-/* While a mode is active the toolbar follows you down a long gallery: its
-   controls are the only way out of the mode, and on a 256-image character they
-   were a full scroll away. Browse is the reading state and scrolls away as
-   normal. */
-.char-custom-toolbar.is-active {
-  position: sticky;
-  top: var(--sticky-nav-height);
+/* The bar that carries an open mode's controls, fixed to the bottom of the
+   viewport.
+
+   This was a sticky toolbar in the heading row, which could not work: a sticky
+   element travels only as far as its own parent, and that parent is one row
+   tall, so it scrolled away with the heading. On a 256-image character that put
+   every action a full scroll from whatever you had just selected.
+
+   Fixed to the viewport instead. The heading row also had no room — it could
+   only wrap the controls onto more lines — which is what made a full selection
+   read as a wall of buttons. */
+.gallery-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: var(--z-nav);
-  padding: var(--space-2) 0;
+  padding: var(--space-3) var(--space-4);
+  padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-overlay);
 }
-@media (max-width: 960px) {
-  .char-custom-toolbar.is-active {
-    top: var(--sticky-nav-height-mobile);
+.gallery-action-bar__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.gallery-action-bar__count {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gallery-action-bar__count strong {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+.gallery-action-bar__helpers,
+.gallery-action-bar__verbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The verbs take the space, so they end up against the close button rather than
+   trailing off after the helpers. */
+.gallery-action-bar__verbs {
+  margin-left: auto;
+}
+.gallery-action-bar__close {
+  flex-shrink: 0;
+}
+/* Below the phone boundary the bar becomes two rows: what is selected on top,
+   what you can do with it underneath, where a thumb can reach it. */
+@media (max-width: 768px) {
+  .gallery-action-bar__inner {
+    gap: var(--space-2);
   }
+  .gallery-action-bar__count {
+    order: 1;
+  }
+  .gallery-action-bar__helpers {
+    order: 2;
+  }
+  .gallery-action-bar__close {
+    order: 3;
+    margin-left: auto;
+  }
+  .gallery-action-bar__verbs {
+    order: 4;
+    width: 100%;
+    margin-left: 0;
+  }
+  .gallery-action-bar__verbs .ui-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  /* Two rows of bar need more room kept for them at the end of the document. */
+  .character-page.has-action-bar {
+    padding-bottom: 140px;
+  }
+}
+/* Room for the bar at the end of the document, so the last row of images is
+   never parked underneath it. */
+.character-page.has-action-bar {
+  padding-bottom: 96px;
 }

@@ -5,6 +5,7 @@ import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import { CharacterHeader } from '../components/CharacterHeader'
 import CharacterLoadingState from '../components/CharacterLoadingState'
 import CustomImageGallery from '../components/CustomImageGallery'
+import { GallerySelectionBar } from '../components/GallerySelectionBar'
 import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
@@ -150,12 +151,23 @@ export default function CharacterPage() {
    *
    * There were four of these — one per verb — and choosing between them meant
    * deciding what you were going to do before you had picked anything to do it
-   * to. Now the images come first and the toolbar offers whatever fits them.
+   * to. Now the images come first and the bar offers whatever fits them.
+   *
+   * `preselect` is what the $ai door hands over. A button that copies a command
+   * for every image the moment it is clicked gives you no way to mean "all but
+   * those three", and a command is exactly the thing people want to trim. So it
+   * opens the selection with everything already chosen: copying all of them is
+   * one more click, and the fact that you can take some out is on screen rather
+   * than hidden behind a Select button that says nothing about $ai.
    */
-  const enterSelectMode = useCallback(() => {
-    resetModes()
-    setMode('select')
-  }, [resetModes])
+  const enterSelectMode = useCallback(
+    (preselect = []) => {
+      resetModes()
+      setSelectedUrls(preselect)
+      setMode('select')
+    },
+    [resetModes],
+  )
 
   const enterReorderMode = useCallback(() => {
     setSelectedUrls([])
@@ -609,7 +621,11 @@ export default function CharacterPage() {
   const galleryModalImages = customs.map((u) => getImageUrl(u) || u).filter(Boolean)
 
   return (
-    <Card as="article" padding="lg" className="character-page">
+    <Card
+      as="article"
+      padding="lg"
+      className={`character-page${mode === 'browse' ? '' : ' has-action-bar'}`}
+    >
       <CharacterHeader
         char={char}
         mainImage={mainImage}
@@ -621,7 +637,7 @@ export default function CharacterPage() {
         onMainImageDrop={handleMainImageDrop}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
-        onGetAiCommand={() => generateAiCommand(customs)}
+        onGetAiCommand={() => enterSelectMode([...customs])}
         customCount={customs.length}
         edit={{
           active: editMode,
@@ -673,35 +689,25 @@ export default function CharacterPage() {
               </span>
             )}
           </h3>
-          <div className={`char-custom-toolbar${mode === 'browse' ? '' : ' is-active'}`}>
-            <GalleryToolbar
-              mode={mode}
-              selectedUrls={selectedUrls}
-              totalCount={customs.length}
-              mineCount={mineCount}
-              mineSelected={mineSelected}
-              othersSelected={othersSelected}
-              hiddenCount={hiddenCount}
-              showHidden={showHidden}
-              uploadBusy={!!upload.progress}
-              onEnterSelect={enterSelectMode}
-              onEnterReorder={enterReorderMode}
-              onExitMode={resetModes}
-              onCancelReorder={cancelReorder}
-              onDoneReorder={doneReorder}
-              onSelectAll={selectAllImages}
-              onSelectMine={selectMineImages}
-              onClearSelection={() => setSelectedUrls([])}
-              onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
-              onRemoveSelected={handleRemoveSelected}
-              onHideSelected={handleHideSelected}
-              onDownloadSelected={handleDownloadSelected}
-              onUnhideAll={handleUnhideAll}
-              onToggleShowHidden={() => setShowHidden((v) => !v)}
-              onOpenRemovedDrawer={openRemovedDrawer}
-              onAddImage={openCustomFilePicker}
-            />
-          </div>
+          {/* Browse only. Everything an open mode needs is in the bar fixed to
+              the bottom of the viewport, within reach of wherever you have
+              scrolled to. */}
+          {mode === 'browse' && (
+            <div className="char-custom-toolbar">
+              <GalleryToolbar
+                totalCount={customs.length}
+                hiddenCount={hiddenCount}
+                showHidden={showHidden}
+                uploadBusy={!!upload.progress}
+                onEnterSelect={() => enterSelectMode()}
+                onEnterReorder={enterReorderMode}
+                onUnhideAll={handleUnhideAll}
+                onToggleShowHidden={() => setShowHidden((v) => !v)}
+                onOpenRemovedDrawer={openRemovedDrawer}
+                onAddImage={openCustomFilePicker}
+              />
+            </div>
+          )}
         </div>
         {reorderMode && (
           <details className="reorder-mode-hint-details">
@@ -803,6 +809,27 @@ export default function CharacterPage() {
           }
         />
       </div>
+
+      {mode !== 'browse' && (
+        <GallerySelectionBar
+          mode={mode}
+          selectedCount={selectedUrls.length}
+          totalCount={customs.length}
+          mineCount={mineCount}
+          mineSelectedCount={mineSelected.length}
+          othersSelectedCount={othersSelected.length}
+          onSelectAll={selectAllImages}
+          onSelectMine={selectMineImages}
+          onClearSelection={() => setSelectedUrls([])}
+          onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
+          onDownloadSelected={handleDownloadSelected}
+          onRemoveSelected={handleRemoveSelected}
+          onHideSelected={handleHideSelected}
+          onExitMode={resetModes}
+          onCancelReorder={cancelReorder}
+          onDoneReorder={doneReorder}
+        />
+      )}
 
       {modalOpen && (
         <ImageModal
