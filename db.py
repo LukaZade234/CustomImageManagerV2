@@ -1048,16 +1048,30 @@ def restore_custom_images(char_name: str, urls: Iterable[str]) -> int:
 
 
 def hide_images(identity_id: str, image_ids: Iterable[int]) -> int:
+    """Hide images from this viewer only. Returns how many were newly hidden.
+
+    Ids that do not exist are ignored rather than rejected. The insert selects
+    from `custom_images`, so an unknown id simply matches nothing -- where
+    inserting it directly raised a foreign-key error that escaped as a 500, which
+    a client could trigger with any stale id from a page left open while somebody
+    else removed the image.
+
+    Filtering in the statement rather than checking first also keeps it race
+    free: an image removed between a check and the insert would put the error
+    back.
+    """
     wanted = list(dict.fromkeys(image_ids))
     if not wanted:
         return 0
     with transaction() as conn:
         _ensure_identity(conn, identity_id)
         now = _now()
-        cur = conn.executemany(
-            "INSERT INTO user_hidden (identity_id, image_id, hidden_at) VALUES (?, ?, ?)"
+        placeholders = ",".join("?" * len(wanted))
+        cur = conn.execute(
+            "INSERT INTO user_hidden (identity_id, image_id, hidden_at)"
+            f" SELECT ?, id, ? FROM custom_images WHERE id IN ({placeholders})"  # noqa: S608
             " ON CONFLICT (identity_id, image_id) DO NOTHING",
-            [(identity_id, image_id, now) for image_id in wanted],
+            (identity_id, now, *wanted),
         )
         return cur.rowcount
 

@@ -539,8 +539,11 @@ each gallery item must show, so building this now means building it twice:
       `flex-grow` are both proportional to its aspect ratio, so a row ends flush at one height
       with nothing cropped. Dimensions come from the database where known and are measured in the
       browser where not, which also removed the reflow cascade on image-heavy characters.
-- [ ] **Home page information architecture.** Two stat cards and a feature bullet list, shown to
-      people already using the tool.
+- [x] **Home page information architecture.** _(done)_ The feature bullet list is gone. The page is
+      now three totals plus four sections drawn from the library itself: just-added artwork, most
+      visited this week, most popular characters, most popular series. Every section hides itself
+      when it has nothing to show. A contributor ranking exists and appears once more than one
+      signed-in person has uploaded.
 - [x] **Retire `legacy.css`** _(done)_ — gone, from 2,874 lines originally. Its 239 rules moved
       into `layout.css` (the frame), a new `components.css` (toasts, dialogs, the autocomplete,
       skeletons, empty states) and `pages.css`, in their original relative order so the cascade did
@@ -561,19 +564,44 @@ there was none. Worth revisiting for `critique` / `audit` / `polish` against wha
 
 ---
 
+## Phase 12 — Identity, content and the profile _(done)_
+
+Not planned as a phase; it grew out of "the home page should look like a real site".
+
+- [x] **Character view tracking.** One row per person per character per hour, so a refresh cannot
+      inflate it, and popularity ranked by distinct people rather than by hits. Swept after 90
+      days. This is what made both "most visited" and a history tab possible — `image_takes`
+      counts copy and download actions, which measure something else.
+- [x] **A profile area** at `/profile`, five tabs: settings, saved, history, hidden, removed. Saved
+      moved out of its own page; `/saved` redirects. Hidden and removed images were previously
+      reachable only from the character page holding them, so anyone who did not recall which
+      character that was had no way back to them.
+- [x] **Display preferences.** `hide_attribution` and `hide_from_leaderboard`, separately, because
+      somebody may be happy to be ranked while not wanting individual images traced to them. Both
+      applied at render time — ownership is always stored, or an uploader could not remove their
+      own images — which is what makes them retroactive and reversible. `show_nsfw` is recorded
+      against a filter that does not exist yet.
+- [x] **Uploads work on the server.** They wrote scratch files next to the code, which is
+      read-only under `ProtectSystem=strict`, so every upload on the v2 origin failed with
+      `[Errno 30]`. `tempfiles.py` uses the temp directory, which `PrivateTmp=true` makes private
+      to the service. Two uploads of the same filename no longer collide either.
+
+---
+
 ## Testing detail (harness set up in Phase 1)
 
 The harness goes up in Phase 1. These are the rules worth covering, in the order they become
 relevant — the concurrency test is written first, before Phase 2:
 
-- [ ] Removing another identity's image is refused; removing your own succeeds and sets
+- [x] Removing another identity's image is refused; removing your own succeeds and sets
       `state='removed'`.
-- [ ] Hiding an image changes nothing for a second identity.
-- [ ] The second *distinct* report removes; a second report from the *same* identity does not.
-- [ ] Duplicate URL and duplicate content hash are both rejected on add.
-- [ ] **Concurrent adds to one character both persist** — this fails on the current architecture
-      and is the regression test for the Phase 2 data-layer rewrite. Write it in Phase 1.
-- [ ] Moderator and owner can remove others' images; a plain user cannot.
+- [x] Hiding an image changes nothing for a second identity.
+- [x] The second *distinct* report removes; a second report from the *same* identity does not.
+- [x] Duplicate URL and duplicate content hash are both rejected on add.
+- [x] **Concurrent adds to one character both persist** — the regression test for the Phase 2
+      data-layer rewrite, and it passes: `tests/test_db_concurrency.py` covers two concurrent
+      adds, many concurrent adds, and writes across tables not deadlocking.
+- [x] Moderator and owner can remove others' images; a plain user cannot.
 
 ---
 
