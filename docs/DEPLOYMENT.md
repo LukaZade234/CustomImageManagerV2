@@ -402,8 +402,10 @@ round overwrites the live database with itself.
 | `SECRET_KEY` | origin | **yes** | Signs identity cookies. Stable forever. |
 | `IMGCHEST_API_KEY` | origin | yes | Uploads |
 | `DATABASE_PATH` | origin | yes | `/var/lib/imgmanager/imgmanager.db` |
-| `THUMB_DIR` | origin | **yes** | `/var/lib/imgmanager/thumbs`. The default is relative to `WorkingDirectory`, which would put generated files inside the git checkout |
+| `THUMB_DIR` | origin | **yes** | `/var/lib/imgmanager/thumbs`. The default is relative to `WorkingDirectory`, which is read-only under `ProtectSystem=strict` — unset, thumbnail writes fail the way uploads did |
 | `CORS_ORIGINS` | origin | yes | Exact Pages origin. `*` is refused. |
+| `UPLOAD_TMP_DIR` | origin | no | Where in-flight uploads are written. Defaults to the temp directory, which `PrivateTmp=true` makes private to the service. Set it only to move the churn onto a particular volume |
+| `LOG_LEVEL` | origin | no | Default `INFO`. `DEBUG` adds the per-file upload steps |
 | `PORT` | origin | no | Default 8080 |
 | `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` | origin | no | See `gunicorn.conf.py` |
 | `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**) |

@@ -272,3 +272,41 @@ class TestOwnershipInTheReadPath:
             "hidden",
         }
         assert identity_id not in json.dumps(row)
+
+
+class TestHidingUnknownImages:
+    """An id that no longer exists must not be a server error.
+
+    Hiding used to insert the id straight into `user_hidden`, so an unknown one
+    tripped a foreign-key constraint that escaped as a 500. Any stale id would do
+    it -- a page left open while somebody else removed the image is enough.
+    """
+
+    def test_an_unknown_id_is_ignored_not_rejected(self, client, clean_db):
+        response = client.post("/api/hide-images", json={"image_ids": [999999]})
+        assert response.status_code == 200
+        assert response.get_json()["hidden"] == 0
+
+    def test_a_mixed_request_hides_what_it_can(self, client, clean_db, identity_id):
+        clean_db.add_character("Rem", "Re:Zero", "1", "")
+        clean_db.add_custom_images("Rem", ["https://cdn/a.png"], added_by=identity_id)
+        real = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+
+        response = client.post("/api/hide-images", json={"image_ids": [real, 999999]})
+        assert response.get_json()["hidden"] == 1
+        assert [h["id"] for h in client.get("/api/me/hidden").get_json()] == [real]
+
+    def test_an_image_removed_underneath_you_is_still_not_an_error(
+        self, client, clean_db, identity_id
+    ):
+        """The race the in-statement filter exists for."""
+        clean_db.add_character("Rem", "Re:Zero", "1", "")
+        clean_db.add_custom_images("Rem", ["https://cdn/a.png"], added_by=identity_id)
+        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+
+        with clean_db.transaction() as conn:
+            conn.execute("DELETE FROM custom_images WHERE id = ?", (image_id,))
+
+        response = client.post("/api/hide-images", json={"image_ids": [image_id]})
+        assert response.status_code == 200
+        assert response.get_json()["hidden"] == 0

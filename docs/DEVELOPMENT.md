@@ -204,6 +204,15 @@ removes only rows the caller owns unless they are a moderator, and returns
 `{removed, denied, missing}` rather than a bare success — a mixed selection is the
 normal case and the UI has to be able to explain a partial refusal.
 
+**Privacy settings hide a name; they never drop the link.** `hide_attribution` and
+`hide_from_leaderboard` are applied when rendering — `db.get_custom_image_rows`
+decides what owner to report, and the contributor query filters on the flag.
+Ownership itself is always stored, because removal is ownership-scoped: an
+uploader who could not be identified could not manage their own uploads, and the
+image would join the 8,547 permanently-unowned ones migrated from v1. Storing it
+regardless is also what makes both switches retroactive and reversible. You can
+always see your own name, and so can staff, who need it to moderate.
+
 `SECRET_KEY` signs the cookies. It has no default: a deployed configuration (one with
 `CORS_ORIGINS` set) refuses to start without it, and local development gets a random
 per-process key with a warning. If it ever changes in production, every visitor
@@ -271,6 +280,27 @@ Three conventions, and only the first is arbitrary:
 
 Reading them in production: `journalctl -u imgmanager -f`, and
 `journalctl -u imgmanager | grep 'actor="Some Name"'` for one person's trail.
+
+## Writing files
+
+**Never write next to the code.** The unit sets `ProtectSystem=strict` with
+`ReadWritePaths=/var/lib/imgmanager`, so the working directory `/opt/imgmanager`
+is read-only in production. Uploads used to land in `./temp_custom_<name>`, which
+works from a checkout and failed on the server for every upload ever attempted
+there — the tests did not catch it because they, too, run somewhere writable.
+
+Use `tempfiles.reserve(prefix, original_filename)` for anything short-lived and
+`tempfiles.discard(path)` in a `finally`. It writes to the temp directory, which
+`PrivateTmp=true` makes private to the service and empties on restart, and it
+gives every file a unique name — the old scheme named the file after the upload,
+so two people adding `image.png` at once overwrote each other.
+
+Anything durable belongs under `DATABASE_PATH` or `THUMB_DIR`. Both currently
+*default* to directories inside the code tree, which production overrides; if you
+add a third such path, give it the same treatment and set it in `secrets.env`.
+
+`tests/test_tempfiles.py` makes the working directory read-only and uploads
+anyway, which is the shape any test of this needs.
 
 ## Writing to the database
 

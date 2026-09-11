@@ -146,26 +146,50 @@ installed although the project contains no TypeScript.
 
 ## 4. Database
 
-### Schema — the entire thing
+SQLite, one file, replicated to R2 by Litestream. Ten tables, created by the
+migrations in `migrations/` and applied on first connect.
 
-`db.py:104` creates one table and there are no others:
+The v1 shape was a single Postgres `kv_store` table holding four whole JSON
+documents, in which a custom image was a bare URL string in a list — no id, no
+timestamp, no uploader, nowhere to attach anything. Everything below exists
+because that had to stop being true.
 
-```sql
-CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value JSONB NOT NULL)
-```
-
-Four rows, each holding one whole JSON document read and written atomically:
-
-| Key | Shape | Accessors |
+| Table | Rows (prod) | What it holds |
 |---|---|---|
-| `custom_images` | `{"Char Name": ["https://cdn.imgchest.com/...", ...]}` | `db.py:141` / `db.py:151` |
-| `characters` | `[{name, series, rank, main_image_url}]` | `db.py:236` / `db.py:247` |
-| `saved_characters` | `[{...character objects...}]` (bookmarks) | `db.py:161` / `db.py:171` |
-| `last_updated` | `{"Char Name": 1712345678.9}` | `db.py:181` / `db.py:192` |
+| `custom_images` | 8,560 | The library. Id, url, content hash, position, owner, state, dimensions |
+| `characters` | 1,705 | Name, series, rank, main image, timestamps |
+| `image_takes` | 271 | `copy_command` / `download` events, per image |
+| `rate_limit_hits` | — | Fixed-window counters, swept after a day |
+| `character_views` | — | One row per person per character per hour |
+| `identities` | 7 | Cookie pseudonyms, optional Discord binding, role, display preferences |
+| `saved` | — | Bookmarks, per identity |
+| `user_hidden` | — | Per-viewer hidden images |
+| `image_reports` | — | Two distinct reporters remove an image |
+| `schema_migrations` | 6 | Which migrations have run |
 
-**A custom image is a bare URL string in a list.** No id, no timestamp, no uploader, no metadata.
-Ordering is array position. There is nowhere to attach anything to an image without changing the
-value type.
+Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
+`idx_custom_images_hash` (duplicate detection by content, not URL),
+`idx_character_views_identity` and `idx_character_views_recent` (history, and
+the popularity window).
+
+### State, not deletion
+
+`custom_images.state` is `active` or `removed`; nothing is ever deleted. That
+follows from constraint 2.3 — the image is still live on ImgChest regardless —
+and it is what makes removal cheap to undo and the Removed tab possible.
+
+### Identity and ownership
+
+Every visitor gets a row in `identities` lazily, on their first write. The id
+lives in an HttpOnly cookie and is never returned by the API; clients get a
+handle and a per-image `is_mine`. Signing in with Discord binds an existing
+pseudonym to an account, merging the two identities.
+
+`hide_attribution` and `hide_from_leaderboard` are *display* preferences applied
+when rendering. Ownership is always recorded, because removal is
+ownership-scoped: an uploader who could not be identified could not manage their
+own uploads. That is also what makes both switches retroactive and reversible.
+`show_nsfw` is recorded but not yet read — nothing carries a rating.
 
 ### Connection handling
 
@@ -262,39 +286,101 @@ Notable helpers:
 
 ### 5.2 Full endpoint table
 
-**No endpoint has any authentication or authorization.**
+Generated from the app's URL map; `tests/test_url_map.py` pins it, so a route
+that silently stops registering is a test failure rather than a 404 somebody
+finds later.
 
-| Method | Path | Line | Purpose |
-|---|---|---|---|
-| GET | `/api/health` | — | Reads the DB; 503 if unreachable. Reports revision and character count |
-| GET | `/api/last-updated` | 415 | `{char: timestamp}` |
-| GET | `/`, `/saved`, `/add`, `/customs`, `/character/<name>` | 432–436 | SPA shell, `Cache-Control: no-cache` |
-| GET | `/images/<filename>` | 451 | Serves `character_images/` off local disk |
-| GET | `/character_images/<path>` | 456 | Same |
-| GET | `/custom_images.json` | 462 | **Dumps every image URL for every character** |
-| POST | `/api/download-image-proxy` | 473 | Server-side fetch for browser downloads |
-| GET | `/assets/<path>` | 506 | Hashed SPA assets, `max_age=31536000` |
-| GET | `/characters`, `/api/characters` | 515 | Character list |
-| POST | `/upload` | 532 | Bare ImgChest upload; does not persist |
-| GET | `/api/saved` | 592 | Bookmarks |
-| POST | `/api/saved` | 592 | Add bookmark |
-| POST | `/api/add-character` | 627 | Create a character |
-| DELETE | `/api/saved/<name>` | 689 | Remove bookmark |
-| POST | `/api/custom-image` | 703 | **Add images** (multipart) |
-| POST | `/api/import-custom-images-from-urls` | 785 | Add by URL, max 20, SSRF-guarded |
-| GET | `/api/custom-image/<char_name>` | 852 | One character's URL list |
-| POST | `/api/reorder-custom-images` | 862 | Replaces the whole array |
-| POST | `/api/delete-custom-image` | 885 | **Delete one** — `list.remove(url)` |
-| POST | `/api/delete-custom-images` | 908 | **Delete many** — list-comprehension filter |
-| POST | `/api/edit-character` | 936 | Rename; cascades across three KV keys |
-| POST | `/api/set-main-image` | 1000 | Upload and set `main_image_url` |
-| GET | `/api/mudae/status` | 1124 | `{configured: bool}` |
-| GET | `/api/mudae/proxy-image` | 1129 | Proxy a Mudae CDN image |
-| POST | `/api/mudae/lookup-character` | 1169 | `$im` lookup; `add:true` persists |
-| POST | `/api/mudae/lookup-series` | 1218 | `$ima` series resolution |
-| POST | `/api/mudae/add-series` | 1244 | Bulk import; SSE when `?stream=1` |
-| POST | `/api/mudae/cancel-series` | 1326 | Cancels an in-flight bulk import |
-| POST | `/api/mudae/refresh-main-image` | 1424 | Re-pull main image from Mudae |
+Authentication is per-route and mostly absent by design — the app is usable
+without an account. What is enforced is *ownership*: removal is scoped to the
+uploader unless the caller is a moderator, and the write endpoints are rate
+limited per identity (`ratelimit.py`).
+
+**`auth`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/auth/discord/callback` | Where Discord sends the browser back. |
+| GET | `/api/auth/discord/start` | Send the browser to Discord's consent screen. |
+| POST | `/api/auth/logout` | Forget the current identity in this browser. |
+| GET | `/api/me` | Who the caller is, as far as the server is concerned. |
+| GET | `/api/me/contributions` | — |
+| GET | `/api/me/hidden` | Everything this visitor has hidden, across every character. |
+| GET | `/api/me/history` | Characters this visitor has looked at, most recent first. |
+| GET | `/api/me/removed` | Everything this visitor removed, across every character. All restorable. |
+| PATCH | `/api/me/settings` | Change a display preference. |
+
+**`characters`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/add-character` | Add a new character. |
+| GET | `/api/characters` | — |
+| POST | `/api/characters/<path:name>/view` | Note that the caller looked at this character. |
+| POST | `/api/edit-character` | — |
+| GET | `/api/saved` | — |
+| POST | `/api/saved` | — |
+| DELETE | `/api/saved/<path:name>` | — |
+| POST | `/api/set-main-image` | — |
+| GET | `/characters` | — |
+| POST | `/upload` | — |
+
+**`customs`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/custom-image` | — |
+| GET | `/api/custom-image/<path:char_name>` | Active images for one character, annotated for the caller. |
+| GET | `/api/customs` | One page of the browse-customs list, searched and sorted server-side. |
+| POST | `/api/delete-custom-image` | Remove a single image. 403 when it is not the caller's to remove. |
+| POST | `/api/delete-custom-images` | Remove the caller's own images from a selection. |
+| POST | `/api/hide-images` | Hide images for the caller only. |
+| POST | `/api/import-custom-images-from-urls` | Fetch image URLs server-side (drag-from-web: Pinterest, etc.) and add as custom images. |
+| GET | `/api/removed/<path:char_name>` | The Removed drawer. Nothing is ever hard-deleted, so this is never empty |
+| POST | `/api/reorder-custom-images` | — |
+| POST | `/api/report-image` | Report an image for an objective problem. |
+| POST | `/api/restore-images` | Put removed images back. |
+| POST | `/api/takes` | Log that images were downloaded or copied into an $ai command. |
+| POST | `/api/unhide-images` | — |
+
+**`media`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/download-image-proxy` | Fetch a remote image server-side so the browser can save it (avoids CORS on ImgChest URLs). |
+| GET | `/character_images/<path:filename>` | — |
+| GET | `/images/<filename>` | — |
+| GET | `/thumbs/<int:image_id>.webp` | A small WebP of one image, generated on first request and cached. |
+
+**`mudae`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/mudae/add-series` | Bulk-add characters from a series via $ima then $im each. |
+| POST | `/api/mudae/cancel-series` | Request stop of an in-progress bulk series import (checked between characters). |
+| POST | `/api/mudae/lookup-character` | Lookup a character via Mudae $im. |
+| POST | `/api/mudae/lookup-series` | Resolve a series name via Mudae $ima. |
+| GET | `/api/mudae/proxy-image` | Proxy a remote character image for browser preview (Discord CDN often blocks hotlinking). |
+| POST | `/api/mudae/refresh-main-image` | Fetch character card image from Mudae $im and set as main image. |
+| GET | `/api/mudae/status` | — |
+
+**`spa`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/` | — |
+| GET | `/add` | — |
+| GET | `/assets/<path:filename>` | — |
+| GET | `/character/<path:name>` | — |
+| GET | `/customs` | — |
+| GET | `/saved` | — |
+
+**`upload_imgchest`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | Is this deployment actually serving? 200 if yes, 503 if not. |
+| GET | `/api/last-updated` | — |
+| GET | `/api/stats` | Everything the landing page renders, in one request. |
 
 ### 5.3 Image upload pipeline
 
@@ -353,48 +439,53 @@ notes this. The account can be banned, which would take out all Mudae features.
 
 ## 6. Frontend
 
-React 18 + react-router-dom 6 + zustand + Vite 5. 4,035 lines.
+React 18 + react-router-dom 6 + zustand + Vite. 6,663 lines across 60-odd files,
+none of them over 700.
 
-| File | Lines | Notes |
+| Area | Lines | Notes |
 |---|---|---|
-| `pages/CharacterPage.jsx` | 1178 | Add / reorder / delete / select / download / `$ai`; the bulk of the app |
-| `pages/AddPage.jsx` | 617 | Add character + Mudae series import |
-| `pages/CustomsPage.jsx` | 295 | Browse all customs |
-| `components/AiCommandLimitDialog.jsx` | 203 | `$ai` command length limits |
-| `api.js` | 244 | Hand-rolled API client |
-| `store/useStore.js` | 181 | One flat zustand store |
-| `utils/dragImageUrls.js` | 165 | Drag-and-drop from other browser tabs |
-| `components/ImageModal.jsx` | 146 | Lightbox |
-| others | — | `HomePage` 68, `SavedPage` 62, `SearchResultsPage` 89, `Navbar` 71, `Toast` 74, etc. |
+| `pages/CharacterPage.jsx` | 684 | The gallery and its five modes. Was 1,611 |
+| `pages/AddPage.jsx` | 645 | Add character + Mudae series import. Not yet split |
+| `api.js` | 356 | Hand-rolled API client |
+| `pages/CustomsPage.jsx` | 320 | Browse all customs, filtered server-side |
+| `pages/HomePage.jsx` | 302 | Totals, just-added, most-visited, popular characters and series |
+| `components/GalleryToolbar.jsx` | 281 | The gallery's mode bar, lifted out of CharacterPage |
+| `hooks/useGalleryReorder.js` | 266 | Pointer-events drag-to-reorder, mouse and touch |
+| `pages/profile/` | ~700 | Five tabs: settings, saved, history, hidden, removed |
+| `components/ui/` | ~370 | The primitives |
 
-**State:** a single flat zustand store — `characters`, `savedCharacters`, `customImages` (the
-entire map), `lastUpdated`, `darkMode`, `toasts`. No react-query/SWR, no normalized cache. Retry
-and backoff are hand-written in both `useStore.js:61` and `api.js:59`.
+**Pages.** `/`, `/customs`, `/search`, `/add`, `/character/:name`, and `/profile`
+with five nested tab routes. `/saved` redirects into the profile, where the list
+now lives.
 
-**Only browser-persisted state is the theme choice** — `localStorage['darkMode']` at the time this
-document was written, since replaced by `localStorage['theme']` with a three-state value
-(`system` / `light` / `dark`) and a migration from the old boolean. See `DEVELOPMENT.md`.
+**State:** one flat zustand store — characters, saved, the current character's
+customs, `me`, theme, toasts. No react-query yet (Phase 9). Retry and backoff are
+hand-written in `useStore.js` and `api.js`.
 
-**API client:** a plain object of functions in `api.js:51`, using a generic `api()` helper for
-JSON plus bespoke `fetch` calls for multipart and SSE. `mudaeAddSeriesStream` (`api.js:169`)
-hand-parses the SSE byte stream. All calls send `credentials: 'same-origin'`, but nothing is sent
-because nothing is stored.
+**Styling:** a token layer plus primitives, loaded in order by
+`styles/index.css`: tokens → base → layout → ui → components → pages. `ui` must
+load before `components` and `pages` so a call site can adjust a primitive;
+getting that order wrong has silently broken the search bar twice. `legacy.css`
+is gone. See `DEVELOPMENT.md`.
 
-**Serving:** Flask serves the SPA shell for the five client routes with `Cache-Control: no-cache`
-(`upload_imgchest.py:432`) and hashed assets from `/assets/` with a one-year max-age (`:459`).
+**Identity in the UI.** The navbar carries one profile button showing your
+handle. Sign-in, sign-out, theme and the privacy switches all live on
+`/profile`. Ownership is shown per image only where it changes what you can do.
 
-### The obvious performance problem
+### Payload discipline
 
-`GET /custom_images.json` returns **every image URL for every character**. `HomePage` fetches the
-whole thing (`useStore.js:61`) purely to compute two summary numbers
-(`HomePage.jsx:16`):
+The home page used to fetch `GET /custom_images.json` — every image URL for
+every character, around 475 KB — in order to display two integers. It is now one
+`/api/stats` call returning a fixed summary, and `tests/test_customs_listing.py`
+asserts the payload does not grow with the library.
 
-```js
-const totalImages = Object.values(customImages).reduce((sum, arr) => sum + (arr?.length || 0), 0)
-const charsWithCustoms = Object.keys(customImages).filter((k) => (customImages[k]?.length || 0) > 0).length
-```
+The same rule now applies throughout: the customs list is searched, sorted and
+paginated on the server; a character's gallery renders 600px WebP thumbnails
+rather than the 1.9 MB PNGs ImgChest holds; and the profile's lists are the only
+ones filtered in the browser, because they are bounded by what one person has
+done rather than by the size of the library.
 
-This grows without bound as the library grows and is paid on every home-page visit.
+One character page went from **488 MB** to **548 KB** across those changes.
 
 ---
 
@@ -435,45 +526,49 @@ backslash paths from a pre-React era and has **zero references** anywhere in the
 
 ## 9. What does not exist
 
-- **Authentication** — no sessions, cookies, API keys, or `Authorization` parsing on any route
-- **Authorization** — no ownership, roles, or permissions of any kind
-- **Rate limiting** — nothing on the HTTP API. The only throttles are a client-side upload mutex
-  in `CharacterPage.jsx`, the per-process Mudae lock, and ImgChest retry backoff
-- **Audit log** — only `print()` to stdout with `[UPLOAD]` / `[IMPORT]` / `[MUDAE]` prefixes, none
-  of which record an actor. `db.update_last_modified` is the only persisted trace of a mutation:
-  a timestamp with no who and no what
-- **Soft delete or trash** — server-side deletes are immediate and destructive. The only undo is
-  client-side and optimistic (`CharacterPage.jsx:635`): it snapshots the array, and an 8-second
-  toast calls `reorderCustomImages` to write the old array back. It works only because the files
-  are still on ImgChest, only within that tab's lifetime, and it **silently clobbers concurrent
-  edits by other visitors**
-- **Moderation** — none. `nsfw: "false"` is hardcoded in the ImgChest payload
-  (`imgchest_utils.py:82`) and that is the entire extent of it
-- **Tests** — zero. No pytest, vitest, or jest anywhere
-- **Migrations** — `CREATE TABLE IF NOT EXISTS` at startup; no versioning
-- **Structured logging** — `print(..., flush=True)` throughout
+Most of what this section used to list — authentication, ownership, rate
+limiting, soft delete, tests, migrations, structured logging — now exists. What
+genuinely does not:
+
+- **Any content rating.** `nsfw: "false"` is still hardcoded in the ImgChest
+  payload (`imgchest_utils.py`), no image carries a rating, and nothing filters
+  on one. The per-person `show_nsfw` preference is recorded against that day
+  arriving, and reads as such in the UI.
+- **A moderation queue.** Reports remove an image at two distinct reporters and
+  that is the whole mechanism; there is no review screen and no appeal.
+- **Server-side sessions.** Identity is a signed cookie and nothing else.
+- **react-query or any normalised cache** (Phase 9). Retry and backoff are
+  hand-written in two places.
+- **A second origin.** One box serves everything; Cloudflare caches in front of
+  it, and Litestream is the only redundancy.
 
 ---
 
 ## 10. Known bugs and risks
 
+Still open:
+
 | Issue | Location | Impact |
 |---|---|---|
-| Concurrent writes lose data | `db.py` — no transactions, whole-blob RMW | Images silently vanish; looks like griefing |
-| Anyone can delete anything | `upload_imgchest.py:885`, `:826` | The griefing problem that motivated this rework |
-| No delete confirmation | `CharacterPage.jsx:635` | Accidental bulk deletion |
-| `CORS: *` by default | `upload_imgchest.py:380` | Any webpage can drive a visitor's browser into mutating endpoints |
-| No rate limiting | Everywhere | A trivial script can empty the library |
-| Mudae lock is per-process | `mudae_discord.py:131` + 2 workers | Concurrent Discord connections |
-| Only 2 concurrent requests site-wide | `--workers 2`, sync class | Two slow requests make the site appear down |
-| SSE imports over 120s are SIGKILLed | `--timeout 120` + sync worker | Large series imports stop dead mid-stream |
-| Four-way Python version mismatch | `.python-version` / venv / Dockerfile / pyright | Dev on 3.14, deploy on 3.11 |
-| No lockfile, 8/10 deps unbounded | `requirements.txt` | Builds are not reproducible |
-| 5 npm vulnerabilities (2 high) | `esbuild`, `nanoid`, `react-router` | Fixed by the pending major upgrades |
-| Discord identify quota burn | `mudae_discord.py:1348` | Connect/disconnect per request, ~1000/day cap |
-| Discord self-bot ToS | `mudae_discord.py` | Account ban would remove all Mudae features |
-| ~~`SECRET_KEY` unused~~ | — | Fixed in Phase 6: required in production, no hardcoded default. |
-| Full-map fetch on Home | `HomePage.jsx:16` | Unbounded payload growth |
-| Undo clobbers concurrent edits | `CharacterPage.jsx:635` | Restores a stale array wholesale |
-| Dead code | `character_mapping.js`, `github_utils.py` | 260 KB and confusion |
-| Two conflicting deploy paths | `Dockerfile` vs `.do/app.yaml` | Unclear which is authoritative |
+| Mudae lock is per-process | `mudae_discord.py` + 2 workers | Two concurrent lookups can connect at once and capture each other's replies |
+| Discord identify quota burn | `mudae_discord.py` | Connect/disconnect per request against a ~1000/day cap |
+| Discord self-bot ToS | `mudae_discord.py` | An account ban would remove every Mudae feature |
+| `THUMB_DIR` / `DATABASE_PATH` default inside the code tree | `thumbnails.py`, `db.py` | Production sets both; unset, they would fail the way uploads did under `ProtectSystem=strict` |
+| SSE imports over the worker timeout | `gunicorn.conf.py` | A very large series import can still be cut off mid-stream |
+| The two databases have forked | v1 Neon vs v2 SQLite | See `CUTOVER.md`; the migration is insert-only and re-running gives the union |
+
+Fixed since this document was first written, kept here because the shape of each
+is worth remembering:
+
+| Was | Fixed by |
+|---|---|
+| Concurrent writes lost data (whole-blob read-modify-write) | Real rows and transactions |
+| Anyone could delete anything | Ownership-scoped removal, soft delete, reports |
+| No rate limiting anywhere | `ratelimit.py`, per identity, per action |
+| `CORS: *` by default | Explicit origins; wildcards refused at startup |
+| No tests at all | 316 backend, 249 frontend |
+| `print()` with no actor | `logs.py`; identity attaches automatically inside a request |
+| Health check could not fail | Reads the database; 503 when it cannot |
+| Full-map fetch on the home page | `/api/stats`, with a test that it stays bounded |
+| Uploads wrote next to the code | `tempfiles.py`; the server's filesystem is read-only |
+| Hiding an unknown image id returned 500 | The insert selects from `custom_images`, so it is a no-op |
