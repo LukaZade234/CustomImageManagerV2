@@ -53,13 +53,53 @@
   width: var(--nav-control-min-h);
   padding: 0;
 }
-/* Folded, the sort control is its arrow and nothing else. */
-.navbar-sort-toggle {
+/* Collapsed, the search cluster is one round magnifier, and the sort steps out
+   of the bar entirely: on a 390px screen the open menu leaves about 30px, and a
+   30px text field is not a field — it is an overflow waiting to happen. */
+.search-bar-cluster--collapsed {
+  justify-content: flex-end;
+  width: auto;
+}
+.search-collapsed {
   flex: 0 0 auto;
   width: var(--nav-control-min-h);
   min-height: var(--nav-control-min-h);
   padding: 0;
   border-radius: var(--radius-pill);
+}
+/* Folded, the sort control is its arrow and nothing else: a round button with
+   the real <select> lying invisibly across it, so a tap opens the platform's
+   own list and the platform closes it again. */
+.navbar-sort-compact {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--nav-control-min-h);
+  height: var(--nav-control-min-h);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+}
+.navbar-sort-compact__select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  appearance: none;
+  cursor: pointer;
+}
+/* The ring belongs on the thing you can see, since the control itself is
+   invisible by design. */
+.navbar-sort-compact:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 /* Nav controls sit at the taller touch height even though the base button is
    34px, because they are the most-tapped targets on mobile. */
@@ -152,6 +192,20 @@
     min-width: 0;
     max-width: none;
     margin: 0;
+  }
+  /* One line, always: the field gives up width, it does not send the sort
+     control to a row of its own. */
+  .search-bar-cluster {
+    flex-wrap: nowrap;
+  }
+  /* Wide enough to still be a field. Below this it collapses to its icon
+     instead of being squeezed into something nobody can type in. */
+  .search-field {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+  .navbar-center:has(.search-bar-cluster--collapsed) {
+    flex: 0 0 auto;
   }
   .stats-dashboard {
     gap: 12px;

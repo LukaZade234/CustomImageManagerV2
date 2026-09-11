@@ -64,35 +64,17 @@ export default function Navbar() {
               one. */}
           {!compact && <span className="navbar-brand__name">ImgManager</span>}
         </Link>
-        {compact && (
-          <button
-            type="button"
-            className="ui-btn ui-btn--ghost ui-btn--md btn-nav navbar-menu-toggle"
-            aria-expanded={menuOpen}
-            aria-controls="navbar-links"
-            aria-label={menuOpen ? 'Hide menu' : 'Show menu'}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <svg
-              aria-hidden="true"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-        )}
-        {/* Reaching for the search field is a statement that you are done with
-            the menu, and the menu is standing in its way. */}
-        <div className="navbar-center search-container" onFocusCapture={() => setMenuOpen(false)}>
-          <SearchBar compact={compact} />
+        {/* No focus handler here any more. There was one, to close the menu
+            when someone reached for the search field — but the field collapses
+            to its magnifier exactly when the menu is open, so the only thing
+            the handler could catch was focus landing on that magnifier, which
+            it then unmounted before its own click handler could run. */}
+        <div className="navbar-center search-container">
+          <SearchBar
+            compact={compact}
+            collapsed={compact && menuOpen}
+            onExpand={() => setMenuOpen(false)}
+          />
         </div>
         {linksVisible && (
           <div className="navbar-right" id="navbar-links">
@@ -176,6 +158,33 @@ export default function Navbar() {
               {me?.is_moderator && <span className="navbar-role">{me.role}</span>}
             </Link>
           </div>
+        )}
+        {/* Last, because the links it unfolds appear to its left and because a
+            thumb reaches the end of the bar more easily than the middle. */}
+        {compact && (
+          <button
+            type="button"
+            className="ui-btn ui-btn--ghost ui-btn--md btn-nav navbar-menu-toggle"
+            aria-expanded={menuOpen}
+            aria-controls="navbar-links"
+            aria-label={menuOpen ? 'Hide menu' : 'Show menu'}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <svg
+              aria-hidden="true"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
         )}
       </div>
     </nav>

@@ -187,25 +187,49 @@ describe('folding on a narrow viewport', () => {
     )
   })
 
-  it('gets out of the way when you reach for the search field', async () => {
+  it('folds the sort select down to its arrow, still a real select', () => {
+    renderNarrow()
+    // The arrow is a round button with the select lying invisibly over it, so
+    // one tap reaches the platform's own list. An earlier version expanded on
+    // click and could be left open — nothing guarantees a change event or a
+    // blur when the picker is dismissed — which is how a 160px control ended up
+    // stuck across the bar.
+    expect(document.querySelector('.navbar-sort-compact')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Sort results/i })).toBeInTheDocument()
+  })
+
+  it('collapses the search field to its icon while the menu has the width', async () => {
+    const user = userEvent.setup()
+    renderNarrow()
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+
+    // Four links, a home button and a menu button leave about 30px of a 390px
+    // bar. A 30px text field is not a field, and the Name/Series pill inside it
+    // is positioned rather than flexible, so it hangs out of the end.
+    await user.click(screen.getByRole('button', { name: /Show menu/i }))
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Series' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Search$/i })).toBeInTheDocument()
+  })
+
+  it('gives the field back, focused, when the magnifier is tapped', async () => {
     const user = userEvent.setup()
     renderNarrow()
     await user.click(screen.getByRole('button', { name: /Show menu/i }))
-    expect(screen.getByRole('link', { name: /Customs/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Search$/i }))
 
-    // The menu is standing in the search field's space, and focusing the field
-    // says plainly that you are done with it.
-    await user.click(screen.getByRole('searchbox'))
+    const field = screen.getByRole('searchbox')
+    expect(field).toBeInTheDocument()
+    // Only this tap moves focus. The menu also closes on navigation, and
+    // raising the keyboard every time someone follows a link is its own bug.
+    expect(document.activeElement).toBe(field)
     expect(screen.queryByRole('link', { name: /Customs/i })).not.toBeInTheDocument()
   })
 
-  it('folds the sort select down to its arrow until it is asked for', async () => {
-    const user = userEvent.setup()
+  it('puts the menu button at the end of the bar', () => {
     renderNarrow()
-
-    expect(screen.queryByRole('combobox', { name: /Sort results/i })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Sort: Rank \(High-Low\)/i }))
-    expect(screen.getByRole('combobox', { name: /Sort results/i })).toBeInTheDocument()
+    const controls = Array.from(document.querySelectorAll('.navbar-inner > *'))
+    expect(controls.at(-1)).toHaveClass('navbar-menu-toggle')
   })
 
   it('leaves the wide layout alone', () => {

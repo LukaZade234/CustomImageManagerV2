@@ -15,9 +15,12 @@ export function searchPath(query, mode) {
 
 /**
  * @param {object} props
- * @param {boolean} [props.compact]  fold the sort control down to its arrow
+ * @param {boolean} [props.compact]    fold the sort control down to its arrow
+ * @param {boolean} [props.collapsed]  something else has the width: show the
+ *                                     magnifier alone
+ * @param {() => void} [props.onExpand] asked for the field back
  */
-export default function SearchBar({ compact = false }) {
+export default function SearchBar({ compact = false, collapsed = false, onExpand }) {
   const searchQuery = useStore((s) => s.searchQuery)
   const setSearchQuery = useStore((s) => s.setSearchQuery)
   const mode = useStore((s) => s.searchMode)
@@ -26,30 +29,22 @@ export default function SearchBar({ compact = false }) {
   const setSort = useStore((s) => s.setSearchSort)
 
   /**
-   * The sort control, folded.
+   * Collapsed, the whole cluster is one magnifier.
    *
-   * At 160px wide it was the widest thing in a navbar that had no width to
-   * spare, and it spends its life showing an answer you already chose. Folded
-   * it is an arrow; opening it expands the real <select> and asks the platform
-   * for its own picker, so choosing is still one tap and the list is still the
-   * one the phone draws rather than one imitated in a div.
+   * On a 390px screen the open menu, the home link and the sort control leave
+   * about 30px, and a 30px text field is not a text field — it is an overflow
+   * waiting to happen. Tapping the magnifier gives the width back, and only
+   * that tap moves focus: the menu also closes on navigation, and popping the
+   * keyboard up every time someone follows a link would be its own bug.
    */
-  const [sortOpen, setSortOpen] = useState(false)
-  const sortRef = useRef(null)
-  const sortFolded = compact && !sortOpen
+  const inputRef = useRef(null)
+  const [wantFocus, setWantFocus] = useState(false)
 
   useEffect(() => {
-    if (!sortOpen) return
-    const select = sortRef.current
-    if (!select) return
-    try {
-      // Chrome and Safari can open the native picker directly. Where they
-      // cannot, the expanded select is now on screen and one tap away.
-      select.showPicker?.()
-    } catch {
-      select.focus()
-    }
-  }, [sortOpen])
+    if (collapsed || !wantFocus) return
+    setWantFocus(false)
+    inputRef.current?.focus()
+  }, [collapsed, wantFocus])
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -80,10 +75,41 @@ export default function SearchBar({ compact = false }) {
     navigate(searchPath(query, nextMode), { replace: onSearchRoute })
   }
 
+  if (collapsed) {
+    return (
+      <div className="search-bar-cluster search-bar-cluster--collapsed">
+        <button
+          type="button"
+          className="ui-btn ui-btn--secondary ui-btn--md search-collapsed"
+          aria-label="Search"
+          onClick={() => {
+            setWantFocus(true)
+            onExpand?.()
+          }}
+        >
+          <svg
+            aria-hidden="true"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="search-bar-cluster">
       <div className="search-field">
         <Input
+          ref={inputRef}
           type="search"
           value={searchQuery}
           onChange={(e) => {
@@ -94,6 +120,10 @@ export default function SearchBar({ compact = false }) {
           aria-label={mode === 'name' ? 'Search by character name' : 'Search by series'}
           autoComplete="off"
         />
+        {/* Positioned inside the field, so it needs the field to have a width.
+            An absolutely positioned pill does not shrink with its container —
+            it hangs out of the end of the bar — which is why the field
+            collapses to its icon rather than being squeezed. */}
         <SegmentedControl
           name="search-mode"
           label="Search by"
@@ -113,13 +143,17 @@ export default function SearchBar({ compact = false }) {
         arrow-key navigation and no Escape. A native select does all of that,
         and gets the platform's own picker on mobile.
       */}
-      {sortFolded ? (
-        <button
-          type="button"
-          className="ui-btn ui-btn--secondary ui-btn--md navbar-sort-toggle"
-          aria-label={`Sort: ${SORT_OPTIONS.find((o) => o.value === sort)?.label}. Change.`}
-          onClick={() => setSortOpen(true)}
-        >
+      {compact ? (
+        /*
+          Folded to its arrow, with the real <select> lying invisibly over it.
+          An expand-then-choose version of this got stuck open — nothing
+          guarantees a change event or a blur when someone dismisses the
+          platform's picker — and a control that can be left in the wrong state
+          is worse than one that never changes state at all. Tapping the arrow
+          is tapping the select, so the phone draws its own list and folds it
+          away itself.
+        */
+        <span className="navbar-sort-compact">
           <svg
             aria-hidden="true"
             width="18"
@@ -132,17 +166,24 @@ export default function SearchBar({ compact = false }) {
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
-        </button>
+          <Select
+            className="navbar-sort-compact__select"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            aria-label="Sort results"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </span>
       ) : (
         <Select
-          ref={sortRef}
           className="navbar-sort-select"
           value={sort}
-          onChange={(e) => {
-            setSort(e.target.value)
-            setSortOpen(false)
-          }}
-          onBlur={() => setSortOpen(false)}
+          onChange={(e) => setSort(e.target.value)}
           aria-label="Sort results"
         >
           {SORT_OPTIONS.map((o) => (
