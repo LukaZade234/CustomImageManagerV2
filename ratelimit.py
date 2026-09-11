@@ -65,6 +65,10 @@ RATE_LIMITS = {
     # Sign-in is cheap for us but hits Discord's API, and a loop here would look
     # like an attack from their side.
     "auth": _limits_from_env("auth", [(10, 60), (40, 3600)]),
+    # Flipping a switch is cheap, but an endpoint with no ceiling is a liability.
+    "settings": _limits_from_env("settings", [(30, 60), (200, 3600)]),
+    # Recording a page view is one small upsert, and browsing quickly is normal.
+    "view": _limits_from_env("view", [(120, 60), (1000, 3600)]),
 }
 
 

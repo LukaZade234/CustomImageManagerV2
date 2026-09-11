@@ -26,6 +26,7 @@ const FULL = {
     { name: 'Lucy', series: 'Cyberpunk: Edgerunners', images: 117, image: '' },
   ],
   top_series: [{ series: 'Genshin Impact', images: 808, characters: 31 }],
+  most_viewed: [{ name: 'Sandrone', series: 'Genshin Impact', viewers: 14, image: 's.png' }],
   contributors: [
     { handle: 'Someone', images: 40 },
     { handle: 'Another', images: 12 },
@@ -93,12 +94,25 @@ describe('HomePage', () => {
     expect(screen.queryByText(/Top contributors/i)).not.toBeInTheDocument()
   })
 
+  it('explains that the visit ranking counts people, not visits', () => {
+    show(FULL)
+    expect(screen.getByText(/different people looked/i)).toBeInTheDocument()
+  })
+
+  it('hides most-visited until the view log has something in it', () => {
+    show({ ...FULL, most_viewed: [] })
+    expect(screen.queryByText(/Most visited this week/i)).not.toBeInTheDocument()
+  })
+
   it('hides every section that has nothing in it', () => {
     show({ custom_images: 0, characters_with_customs: 0, series_count: 0 })
+    // These must be the headings the page actually renders: a name that no
+    // longer exists would make every assertion here pass for nothing.
     for (const heading of [
       /Just added/i,
-      /Best covered/i,
-      /Browse by series/i,
+      /Most visited this week/i,
+      /Most popular characters/i,
+      /Most popular series/i,
       /Top contributors/i,
     ])
       expect(screen.queryByText(heading)).not.toBeInTheDocument()

@@ -16,6 +16,7 @@ import os
 from flask import Blueprint, jsonify, request
 
 import db
+import identity
 import logs
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
@@ -25,6 +26,27 @@ from validation import MAX_RANK_LENGTH, MAX_SERIES_LENGTH, validate_character_na
 
 log = logs.get(__name__)
 characters_bp = Blueprint("characters", __name__)
+
+
+@characters_bp.route("/api/characters/<path:name>/view", methods=["POST"])
+@rate_limited("view")
+def record_view(name):
+    """Note that the caller looked at this character.
+
+    A POST rather than a side effect of loading the character, because a GET
+    that quietly writes gets fired by prefetching, link previews and anything
+    else that speculatively fetches -- none of which is a person looking at a
+    page. The client asks explicitly, once, when the page is actually shown.
+
+    Recording is best-effort: a failure here must never be what breaks a page
+    the visitor is already looking at.
+    """
+    try:
+        known = db.record_character_view(name, identity.current_identity().id)
+    except Exception:
+        log.exception("views.record_failed", character=name)
+        return jsonify({"success": False}), 200
+    return jsonify({"success": bool(known)}), (200 if known else 404)
 
 
 @characters_bp.route("/characters")

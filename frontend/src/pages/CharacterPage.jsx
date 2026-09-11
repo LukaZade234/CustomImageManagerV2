@@ -112,6 +112,12 @@ export default function CharacterPage() {
     loadCustomImagesForCharacter(name)
   }, [name, loadCustomImagesForCharacter])
 
+  // Counted at most once per person per character per hour on the server, so
+  // this firing again on a remount costs nothing.
+  useEffect(() => {
+    apiClient.recordView(name)
+  }, [name])
+
   const resetModes = useCallback(() => {
     setMode('browse')
     setSelectedUrls([])

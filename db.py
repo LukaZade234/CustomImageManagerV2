@@ -24,7 +24,7 @@ import threading
 import time
 from collections.abc import Iterable
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import identity
@@ -403,7 +403,7 @@ def get_home_highlights(limit: int = 8) -> dict:
             "SELECT i.handle, COUNT(ci.id) AS n"
             "  FROM identities i"
             "  JOIN custom_images ci ON ci.added_by = i.id AND ci.state = 'active'"
-            " WHERE i.discord_id IS NOT NULL"
+            " WHERE i.discord_id IS NOT NULL AND i.hide_from_leaderboard = 0"
             " GROUP BY i.id ORDER BY n DESC, i.handle LIMIT ?",
             (limit,),
         )
@@ -414,6 +414,7 @@ def get_home_highlights(limit: int = 8) -> dict:
         "top_series": top_series,
         "recent": recent,
         "contributors": contributors,
+        "most_viewed": get_most_viewed(limit=limit),
         "series_count": conn.execute(
             "SELECT COUNT(DISTINCT series) AS n FROM characters"
             " WHERE series IS NOT NULL AND series != ''"
@@ -536,18 +537,42 @@ def count_custom_images_ever(char_name: str) -> int:
     return int(row["n"])
 
 
-def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[dict]:
+def _visible_owner(row, viewer_id: str | None, viewer_is_staff: bool) -> str | None:
+    """The owner handle this viewer is allowed to see, or None."""
+    if not row["owner_handle"]:
+        return None
+    if not row["owner_hides"]:
+        return row["owner_handle"]
+    # You can always see your own name, and staff can always see everyone's.
+    if viewer_is_staff or (viewer_id and row["added_by"] == viewer_id):
+        return row["owner_handle"]
+    return None
+
+
+def get_custom_image_rows(
+    char_name: str, viewer_id: str | None = None, *, viewer_is_staff: bool = False
+) -> list[dict]:
     """Active images for a character, with ownership and this viewer's hidden set.
 
     Note what is *not* returned: `added_by` itself. Clients get the owner's
     handle and a boolean for "yours", never the raw id -- the id is the thing the
     identity cookie protects, and ownership can only be decided here anyway.
+
+    An owner who set `hide_attribution` is reported as unowned to everyone except
+    themselves and staff. Ownership is still recorded -- it has to be, or they
+    could not remove their own images -- so this is a rendering decision, which
+    is what makes the setting retroactive and reversible.
+
+    `viewer_is_staff` exists because moderators need ownership to moderate at
+    all. The profile page states that plainly rather than leaving it to be
+    discovered.
     """
     conn = get_connection()
     rows = conn.execute(
         "SELECT i.id AS id, i.url AS url, i.added_by AS added_by,"
         "       i.width AS width, i.height AS height,"
         "       owner.handle AS owner_handle,"
+        "       COALESCE(owner.hide_attribution, 0) AS owner_hides,"
         "       (hidden.image_id IS NOT NULL) AS is_hidden"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
@@ -570,9 +595,10 @@ def get_custom_image_rows(char_name: str, viewer_id: str | None = None) -> list[
             # every $ai command, download and lightbox uses, because Mudae
             # accepts nothing else.
             "thumb": thumbnails.thumb_url(r["id"], r["url"]),
-            # NULL for images migrated from v1: nobody owns them, so nobody can
-            # remove them except a moderator or the report threshold.
-            "owner": r["owner_handle"],
+            # NULL for images migrated from v1 (nobody owns them, so nobody can
+            # remove them except a moderator or the report threshold), and NULL
+            # for an owner who asked not to be named.
+            "owner": _visible_owner(r, viewer_id, viewer_is_staff),
             "is_mine": bool(viewer_id) and r["added_by"] == viewer_id,
             "hidden": bool(r["is_hidden"]),
         }
@@ -740,6 +766,226 @@ def set_image_dimensions(sizes: dict[int, tuple[int, int]]) -> int:
             [(w, h, image_id) for image_id, (w, h) in sizes.items()],
         )
         return cur.rowcount
+
+
+_VIEW_RETENTION_DAYS = 90
+_last_view_sweep = 0.0
+
+
+def _sweep_old_views(conn: sqlite3.Connection) -> None:
+    """Drop view rows past the retention window, at most once an hour.
+
+    Same shape as the rate-limit sweep: piggybacked on a write that was already
+    happening, so there is no scheduler to run and nothing to forget to start.
+    """
+    global _last_view_sweep
+    now = time.time()
+    if now - _last_view_sweep < 3600:
+        return
+    _last_view_sweep = now
+    cutoff = (datetime.now(UTC) - timedelta(days=_VIEW_RETENTION_DAYS)).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ"
+    )
+    conn.execute("DELETE FROM character_views WHERE viewed_at < ?", (cutoff,))
+
+
+def record_character_view(char_name: str, identity_id: str) -> bool:
+    """Note that someone looked at a character. True if the character exists.
+
+    At most one row per person per character per hour: a refresh collides with
+    the primary key and updates the timestamp rather than adding a row, so
+    history stays accurate while the popularity count cannot be inflated by
+    sitting on F5.
+    """
+    now = _now()
+    with transaction() as conn:
+        _sweep_old_views(conn)
+        row = conn.execute("SELECT id FROM characters WHERE name = ?", (char_name,)).fetchone()
+        if row is None:
+            return False
+        conn.execute(
+            "INSERT INTO character_views (character_id, identity_id, bucket, viewed_at)"
+            " VALUES (?, ?, ?, ?)"
+            " ON CONFLICT (identity_id, character_id, bucket)"
+            " DO UPDATE SET viewed_at = excluded.viewed_at",
+            (row["id"], identity_id, now[:13], now),
+        )
+    return True
+
+
+def get_view_history(identity_id: str, limit: int = 100) -> list[dict]:
+    """Characters this visitor has looked at, most recent first, once each."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT c.name, c.series, c.main_image_url, MAX(v.viewed_at) AS last_viewed,"
+        "       COUNT(*) AS visits,"
+        "       (SELECT COUNT(*) FROM custom_images ci"
+        "         WHERE ci.character_id = c.id AND ci.state = 'active') AS images"
+        "  FROM character_views v"
+        "  JOIN characters c ON c.id = v.character_id"
+        " WHERE v.identity_id = ?"
+        " GROUP BY c.id"
+        " ORDER BY last_viewed DESC"
+        " LIMIT ?",
+        (identity_id, limit),
+    )
+    return [
+        {
+            "name": r["name"],
+            "series": r["series"],
+            "image": r["main_image_url"],
+            "images": r["images"],
+            "last_viewed": r["last_viewed"],
+            "visits": r["visits"],
+        }
+        for r in rows
+    ]
+
+
+def get_most_viewed(days: int = 7, limit: int = 8) -> list[dict]:
+    """The most visited characters in the last `days`.
+
+    Ranked by how many distinct people looked, not by how many views there were.
+    Unique visitors is the honest number here: it cannot be moved by one
+    enthusiast, and with one row per person-hour the two would otherwise differ
+    only for repeat visitors.
+    """
+    conn = get_connection()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    rows = conn.execute(
+        "SELECT c.name, c.series, c.main_image_url,"
+        "       COUNT(DISTINCT v.identity_id) AS viewers,"
+        "       (SELECT COUNT(*) FROM custom_images ci"
+        "         WHERE ci.character_id = c.id AND ci.state = 'active') AS images"
+        "  FROM character_views v"
+        "  JOIN characters c ON c.id = v.character_id"
+        " WHERE v.viewed_at >= ?"
+        " GROUP BY c.id"
+        " ORDER BY viewers DESC, c.name"
+        " LIMIT ?",
+        (cutoff, limit),
+    )
+    return [
+        {
+            "name": r["name"],
+            "series": r["series"],
+            "image": r["main_image_url"],
+            "images": r["images"],
+            "viewers": r["viewers"],
+        }
+        for r in rows
+    ]
+
+
+def get_identity_settings(identity_id: str) -> dict:
+    """The two display preferences, defaulted for an identity that has no row yet."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT hide_from_leaderboard, hide_attribution, show_nsfw"
+        "  FROM identities WHERE id = ?",
+        (identity_id,),
+    ).fetchone()
+    if row is None:
+        return {"hide_from_leaderboard": False, "hide_attribution": False, "show_nsfw": False}
+    return {
+        "hide_from_leaderboard": bool(row["hide_from_leaderboard"]),
+        "hide_attribution": bool(row["hide_attribution"]),
+        # Recorded but not yet read: no image carries a rating, so there is
+        # nothing to filter. Stored now so the preference predates the filter.
+        "show_nsfw": bool(row["show_nsfw"]),
+    }
+
+
+def update_identity_settings(identity_id: str, **settings) -> dict:
+    """Set either display preference. Returns the settings as they now stand.
+
+    Creates the identity row if this is the visitor's first act, which is the
+    same lazy creation every other write path uses -- a preference is a perfectly
+    good reason to start existing.
+    """
+    allowed = ("hide_from_leaderboard", "hide_attribution", "show_nsfw")
+    changes = {k: int(bool(v)) for k, v in settings.items() if k in allowed and v is not None}
+    if not changes:
+        return get_identity_settings(identity_id)
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        assignments = ", ".join(f"{k} = ?" for k in changes)
+        conn.execute(
+            f"UPDATE identities SET {assignments} WHERE id = ?",  # noqa: S608 - keys are whitelisted
+            (*changes.values(), identity_id),
+        )
+    return get_identity_settings(identity_id)
+
+
+def get_hidden_for_identity(identity_id: str) -> list[dict]:
+    """Everything this visitor has hidden, across every character.
+
+    Hiding is otherwise reachable only from the character page that holds the
+    image, so someone who hid something and does not recall where has no way to
+    find it again. This is that way.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.id, i.url, i.width, i.height, c.name AS character, h.hidden_at"
+        "  FROM user_hidden h"
+        "  JOIN custom_images i ON i.id = h.image_id"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE h.identity_id = ? AND i.state = 'active'"
+        " ORDER BY h.hidden_at DESC, i.id DESC",
+        (identity_id,),
+    )
+    return [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+            "width": r["width"],
+            "height": r["height"],
+            "character": r["character"],
+            "hidden_at": r["hidden_at"],
+        }
+        for r in rows
+    ]
+
+
+def get_removed_by_identity(identity_id: str) -> list[dict]:
+    """Everything this visitor removed, across every character, still restorable.
+
+    Nothing is ever deleted from ImgChest, so a removed image is still live at
+    its URL and restoring it is free. The per-character drawer already relies on
+    that; this is the same list without needing to remember the character.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.id, i.url, i.width, i.height, i.removed_at, i.removed_reason,"
+        "       c.name AS character"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE i.removed_by = ? AND i.state = 'removed'"
+        " ORDER BY i.removed_at DESC, i.id DESC",
+        (identity_id,),
+    )
+    return [
+        {
+            "id": r["id"],
+            "url": r["url"],
+            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+            "width": r["width"],
+            "height": r["height"],
+            "character": r["character"],
+            "removed_at": r["removed_at"],
+            "removed_reason": r["removed_reason"],
+        }
+        for r in rows
+    ]
+
+
+def count_images_added_by(identity_id: str) -> int:
+    conn = get_connection()
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM custom_images WHERE added_by = ? AND state = 'active'",
+        (identity_id,),
+    ).fetchone()["n"]
 
 
 def get_removed_for(char_name: str) -> list[dict]:

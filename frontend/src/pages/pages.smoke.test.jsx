@@ -21,7 +21,7 @@ import AddPage from './AddPage'
 import CharacterPage from './CharacterPage'
 import CustomsPage from './CustomsPage'
 import HomePage from './HomePage'
-import SavedPage from './SavedPage'
+import SavedTab from './profile/SavedTab'
 import SearchResultsPage from './SearchResultsPage'
 
 const CHARACTERS = [
@@ -53,15 +53,17 @@ describe('page smoke tests', () => {
     expect(screen.getByRole('heading', { level: 1, name: /imgmanager/i })).toBeInTheDocument()
   })
 
-  it('renders the saved page with a saved character', () => {
-    renderAt(<SavedPage />)
-    expect(screen.getByRole('heading', { level: 1, name: /saved characters/i })).toBeInTheDocument()
+  it('renders the saved list with a saved character', () => {
+    // Saved moved out of its own page and into a profile tab, so it is a
+    // section heading now rather than the page title.
+    renderAt(<SavedTab />)
+    expect(screen.getByRole('heading', { level: 2, name: /saved characters/i })).toBeInTheDocument()
     expect(screen.getByText('Ayanami Rei')).toBeInTheDocument()
   })
 
   it('shows an empty state when nothing is saved', () => {
     useStore.setState({ savedCharacters: [] })
-    renderAt(<SavedPage />)
+    renderAt(<SavedTab />)
     expect(screen.getByText(/no saved characters yet/i)).toBeInTheDocument()
   })
 

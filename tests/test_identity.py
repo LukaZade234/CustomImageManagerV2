@@ -111,17 +111,24 @@ class TestRequestLifecycle:
         assert _issued_token(response) is not None
         assert response.get_json()["handle"] != identity.handle_for("someone-elses-id")
 
-    def test_me_does_not_leak_the_identity_id(self, client):
-        """The cookie is HttpOnly; echoing the id back in JSON would undo that."""
-        body = client.get("/api/me").get_json()
-        assert set(body) == {
+    def test_me_does_not_leak_the_identity_id(self, client, identity_id):
+        """The cookie is HttpOnly; echoing the id back in JSON would undo that.
+
+        Asserted two ways on purpose. The exact key set catches a field being
+        added without anyone thinking about it, and the substring check catches
+        the id arriving inside a field that already exists.
+        """
+        response = client.get("/api/me")
+        assert set(response.get_json()) == {
             "handle",
             "role",
             "is_moderator",
             "is_owner",
             "signed_in",
             "discord_available",
+            "settings",
         }
+        assert identity_id not in response.get_data(as_text=True)
 
     def test_new_visitor_defaults_to_the_user_role(self, client):
         body = client.get("/api/me").get_json()

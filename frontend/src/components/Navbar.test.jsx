@@ -1,9 +1,12 @@
 /**
- * The sign-in control.
+ * The navbar's identity control.
  *
- * Sign-in is an upgrade, never a wall — so the thing worth pinning is that the
- * app is fully usable with no account, and that the control simply is not there
- * when Discord is not configured.
+ * Sign-in is an upgrade, never a wall, so what is worth pinning is that the app
+ * is fully usable with no account and that the pseudonym is always visible.
+ *
+ * Signing in and out now live on the profile page — settings needed a home the
+ * moment there was more than one of them — so the navbar's job is reduced to
+ * naming you and offering the way there. ProfilePage.test.jsx covers the rest.
  */
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -55,21 +58,14 @@ describe('signed out', () => {
     expect(screen.getByText('Amber Otter')).toBeInTheDocument()
   })
 
-  it('offers sign-in as a link, because it is a full-page redirect', () => {
+  it('points at the profile, where signing in now lives', () => {
     renderNav()
-    const link = screen.getByRole('link', { name: /sign in/i })
-    expect(link).toHaveAttribute('href', expect.stringContaining('/api/auth/discord/start'))
-  })
-
-  it('carries the current page so you come back to it', () => {
-    renderNav('/character/Rem')
-    const href = screen.getByRole('link', { name: /sign in/i }).getAttribute('href')
-    expect(href).toContain(encodeURIComponent('/character/Rem'))
+    expect(screen.getByRole('link', { name: /Amber Otter/ })).toHaveAttribute('href', '/profile')
   })
 })
 
 describe('when Discord is not configured', () => {
-  it('does not offer sign-in at all', () => {
+  it('still names you, because the pseudonym does not depend on Discord', () => {
     useStore.setState({
       me: {
         handle: 'Amber Otter',
@@ -81,13 +77,12 @@ describe('when Discord is not configured', () => {
       },
     })
     renderNav()
-    expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument()
     expect(screen.getByText('Amber Otter')).toBeInTheDocument()
   })
 })
 
 describe('signed in', () => {
-  it('replaces the sign-in link with a sign-out control', async () => {
+  it('does not sign you out from here any more', async () => {
     const user = userEvent.setup()
     useStore.setState({
       me: {
@@ -100,10 +95,10 @@ describe('signed in', () => {
       },
     })
     renderNav()
-    expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /Luka/ }))
-    expect(logout).toHaveBeenCalled()
+    // Clicking the name goes to the profile; signing out is a decision, and
+    // making it one click from every page is how people do it by accident.
+    await user.click(screen.getByRole('link', { name: /Luka/ }))
+    expect(logout).not.toHaveBeenCalled()
   })
 
   it('shows the role when it is more than an ordinary user', () => {
