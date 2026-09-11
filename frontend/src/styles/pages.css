@@ -122,6 +122,15 @@
   justify-content: flex-end;
   align-items: center;
 }
+/* The running count lives in the toolbar next to the verbs it governs, and not
+   in the heading's live region: every image announces its own pressed state as
+   it is selected, so a running total there would say everything twice. */
+.toolbar-selection-count {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 @media (min-width: 769px) {
   .char-custom-toolbar {
     flex-direction: row;
@@ -452,32 +461,6 @@
   font-weight: 600;
   box-sizing: border-box;
 }
-/* Delete Mode */
-.gallery-item-wrapper.selected img {
-  border: 3px solid var(--danger);
-  opacity: 0.8;
-}
-.gallery-item-wrapper.selected::after {
-  content: "✓";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: var(--text-on-accent);
-  font-size: 40px;
-  font-weight: bold;
-  background: var(--danger);
-  border-radius: 50%;
-  width: 60px;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.gallery-item-wrapper.delete-mode {
-  cursor: pointer;
-}
 .reorder-mode-hint-details {
   margin: 0 0 16px;
   padding: 0;
@@ -586,87 +569,9 @@ body.reorder-touch-dragging {
 .gallery-item-wrapper.reorder-mode:active {
   cursor: grabbing;
 }
-.gallery-item-wrapper.reorder-mode.selected::after {
-  content: "✓";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: var(--text-on-accent);
-  font-size: 24px;
-  font-weight: bold;
-  background: var(--accent);
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-/* AI Command Mode */
-.gallery-item-wrapper.ai-mode {
-  cursor: pointer;
-}
 .image-wrapper.edit-mode img {
   border: 3px dashed var(--accent);
   opacity: 0.8;
-}
-.gallery-item-wrapper.ai-mode:hover img {
-  opacity: 0.9;
-  border-color: var(--success);
-}
-.gallery-item-wrapper.ai-mode.selected img {
-  border: 3px solid var(--success);
-  opacity: 0.8;
-}
-.gallery-item-wrapper.ai-mode.selected::after {
-  content: "✓";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: var(--text-on-accent);
-  font-size: 24px;
-  font-weight: bold;
-  background: var(--success);
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-/* Download selection mode */
-.gallery-item-wrapper.download-mode {
-  cursor: pointer;
-}
-.gallery-item-wrapper.download-mode:hover img {
-  opacity: 0.9;
-  border-color: var(--accent);
-}
-.gallery-item-wrapper.download-mode.selected img {
-  border: 3px solid var(--accent);
-  opacity: 0.85;
-}
-.gallery-item-wrapper.download-mode.selected::after {
-  content: "✓";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: var(--text-on-accent);
-  font-size: 24px;
-  font-weight: bold;
-  background: var(--accent);
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
 }
 /* Main Image Edit Mode */
 .image-wrapper {
@@ -708,10 +613,6 @@ body.reorder-touch-dragging {
 .image-wrapper.drag-over-main {
   border-color: var(--success);
   transform: scale(1.02);
-}
-.gallery-item-wrapper.reorder-mode.selected img {
-  border: 3px solid var(--accent);
-  opacity: 0.9;
 }
 .selected-text {
   font-size: var(--type-meta);
@@ -1113,6 +1014,40 @@ body.reorder-touch-dragging {
   cursor: pointer;
   transition: opacity var(--duration) var(--ease);
 }
+/* Selection indicator — one, for one selection mode.
+
+   There were four near-identical copies of this, one per verb: a 60px solid
+   disc in remove mode and three 40px ones elsewhere, each in the colour of the
+   verb it belonged to, all parked over the middle of the picture. The verb is
+   chosen after the selection now, so the indicator has no verb to name, and the
+   brief gives the artwork the only saturated colour on the page — so it is a
+   corner badge that leaves the image visible. Top right, because the ownership
+   tag sits bottom left and the hidden tag top left. */
+.gallery-item-wrapper.select-mode {
+  cursor: pointer;
+}
+.gallery-item-wrapper.selected .custom-image-full {
+  border: 2px solid var(--accent);
+  opacity: 0.85;
+}
+.gallery-item-wrapper.selected::after {
+  content: "✓";
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--type-micro);
+  font-weight: var(--weight-semibold);
+  pointer-events: none;
+}
 /* A hidden image only appears at all when you ask to see hidden ones, so it is
    dimmed to make clear it is not in the normal gallery. */
 .gallery-item-wrapper.is-hidden .custom-image-full {
@@ -1333,6 +1268,12 @@ body.reorder-touch-dragging {
   outline-offset: 3px;
   border-radius: var(--radius-lg);
   box-shadow: var(--ring);
+}
+/* Last of the rules that touch a gallery image, because :hover carries more
+   specificity than any of them and would otherwise sit above rules it has no
+   quarrel with. */
+.gallery-item-wrapper.select-mode:hover .custom-image-full {
+  border-color: var(--accent);
 }
 /* ---- Home page -----------------------------------------------------------
  * Everything here is drawn from the library. The page used to be two stat cards

@@ -359,8 +359,8 @@ the flat document.
 - **Secondary:** The workhorse. Surface background with a `--border-strong` hairline
   outline, hovering to `--surface-hover`. Most buttons in the app are this.
 - **Ghost:** No border, muted text, background appearing only on hover.
-- **Danger / Success:** Solid status fills, used for destructive confirmation and for the
-  one affirmative action in the `$ai` toolbar.
+- **Danger / Success:** Solid status fills, used for destructive confirmation and for a
+  destructive verb standing among ordinary ones, such as Remove in a selection.
 - **Pressed** (`aria-pressed="true"`): Subtle accent tint, accent border, accent text —
   how an active gallery mode reads.
 - **Loading:** A 12px spinner replaces nothing; it sits alongside the label, and the
@@ -403,9 +403,15 @@ The defining component of the system. Images sit in rows that end flush at a com
 height, each one at its true aspect ratio, with the stored dimensions driving the layout
 so nothing reflows as files arrive. Each item is a single real `<button>` whose meaning
 follows the gallery's current mode — open, or select. Hidden images are dimmed rather
-than removed, ownership is surfaced only in the modes where it changes what you can do,
-and reorder is a pointer-events drag with a long-press on touch, an arrow-key move
-for the keyboard, and one saved order per move rather than a toast per drop.
+than removed, ownership is surfaced on the images you have selected, where it decides
+which verb the toolbar offers, and reorder is a pointer-events drag with a long-press on
+touch, an arrow-key move for the keyboard, and one saved order per move rather than a
+toast per drop.
+
+There are three modes and not five. Browse opens an image; select picks images; reorder
+moves them. The four old modes — command, remove, hide, download — were one interaction
+with the verb chosen before the selection existed, so the toolbar had to offer every verb
+up front and then grey out the ones that turned out not to apply.
 
 ## Do's and Don'ts
 
@@ -438,6 +444,9 @@ for the keyboard, and one saved order per move rather than a toast per drop.
   (`cubic-bezier(0.2, 0, 0.13, 1)`) and two durations (120ms, 180ms).
 - **Don't** introduce a fifth breakpoint.
 - **Don't** put more than one solid accent button on a screen.
+- **Don't** show a control that cannot act. A verb belongs on screen when the selection
+  contains something for it to act on, and absent otherwise — a disabled button with a
+  count of zero is a dead end wearing the clothes of an action.
 - **Don't** write an inline `style` to resize a control. That is what the size variants
   are for, and the inline override is the exact thing the primitives replaced.
 - **Don't** remove focus outlines. One ring, on `:focus-visible`, everywhere.

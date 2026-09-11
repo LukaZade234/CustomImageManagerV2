@@ -22,6 +22,7 @@ export function CharacterHeader({
   isSaved,
   onToggleSave,
   onGetAiCommand,
+  customCount,
   edit,
   mudae,
 }) {
@@ -70,7 +71,23 @@ export function CharacterHeader({
                 </svg>
                 Edit Character
               </Button>
-              <Button variant="secondary" onClick={onGetAiCommand}>
+              {/*
+                One click, one command. This used to open a selection mode in
+                which a *second* button, named something else, produced the
+                command — so the button called "Get $ai Command" was the one
+                thing on the page that did not get you a command. Picking a
+                subset still exists, under Select, where the images are.
+              */}
+              <Button
+                variant="secondary"
+                onClick={onGetAiCommand}
+                disabled={customCount === 0}
+                title={
+                  customCount === 0
+                    ? 'Add a custom image first'
+                    : `Copy the $ai command for all ${customCount} custom images`
+                }
+              >
                 <svg
                   aria-hidden="true"
                   width="16"
@@ -83,7 +100,7 @@ export function CharacterHeader({
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
-                Get $ai Command
+                Copy $ai command
               </Button>
             </div>
           </div>

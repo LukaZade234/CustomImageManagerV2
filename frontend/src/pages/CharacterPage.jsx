@@ -29,9 +29,7 @@ import { isImageFileLike } from '../utils/imageFiles'
 
 /** What the heading says while a mode is active. Browse gets nothing. */
 const MODE_LABELS = {
-  ai: 'selecting for a command',
-  remove: 'selecting to remove or hide',
-  download: 'selecting to download',
+  select: 'selecting images',
   reorder: 'reordering',
 }
 
@@ -81,9 +79,7 @@ export default function CharacterPage() {
    * "turn the others off" lines to stay consistent; one value cannot be wrong.
    */
   const [mode, setMode] = useState('browse')
-  const aiMode = mode === 'ai'
-  const deleteMode = mode === 'remove'
-  const downloadMode = mode === 'download'
+  const selectMode = mode === 'select'
   const reorderMode = mode === 'reorder'
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
   const [selectedUrls, setSelectedUrls] = useState([])
@@ -149,20 +145,17 @@ export default function CharacterPage() {
     reorderSessionRef.current = null
   }, [])
 
-  /** Leave whatever mode is current and enter `next`, clearing its state. */
-  const enterMode = useCallback(
-    (next) => {
-      resetModes()
-      setMode(next)
-    },
-    [resetModes],
-  )
-
-  const enterDownloadMode = useCallback(() => {
-    reorderSessionRef.current = null
-    setSelectedUrls([])
-    setMode('download')
-  }, [])
+  /**
+   * One selection mode, entered before any verb is chosen.
+   *
+   * There were four of these — one per verb — and choosing between them meant
+   * deciding what you were going to do before you had picked anything to do it
+   * to. Now the images come first and the toolbar offers whatever fits them.
+   */
+  const enterSelectMode = useCallback(() => {
+    resetModes()
+    setMode('select')
+  }, [resetModes])
 
   const enterReorderMode = useCallback(() => {
     setSelectedUrls([])
@@ -436,6 +429,8 @@ export default function CharacterPage() {
   // toolbar has to offer both actions. DECISIONS.md section 1.
   const selectedRows = selectedUrls.map((url) => rowByUrl.get(url)).filter(Boolean)
   const mineSelected = selectedRows.filter((row) => row.is_mine)
+  /** Every image here you added, selected or not — what "Select mine" reaches. */
+  const mineCount = rows.filter((row) => row.is_mine).length
   const othersSelected = selectedRows.filter((row) => !row.is_mine)
 
   const removeOwnImages = async () => {
@@ -541,8 +536,29 @@ export default function CharacterPage() {
     setSelectedUrls([...customs])
   }
 
-  const generateAiCommand = () => {
-    const urls = selectedUrls.length ? selectedUrls : customs
+  /**
+   * Select every image you added.
+   *
+   * Removing your own images used to mean entering a mode that tagged all 256
+   * thumbnails with who added them and reading the gallery for the handful that
+   * said "Yours". The set is already known here, so it can simply be handed
+   * over.
+   */
+  const selectMineImages = () => {
+    setSelectedUrls(rows.filter((row) => row.is_mine).map((row) => row.url))
+  }
+
+  /**
+   * Build the $ai command for `urls`.
+   *
+   * Takes them rather than reading the selection, because it serves two callers
+   * that mean different things: the header copies the command for the whole
+   * character in one click, and the toolbar copies one for the images you
+   * picked. It used to read `selectedUrls.length ? selectedUrls : customs`,
+   * which made the same button mean either depending on invisible state.
+   */
+  const generateAiCommand = (urls) => {
+    if (!urls.length) return
     const charName = editMode ? editName : char.name
     recordTakes(urls, 'copy_command')
     const cmd = buildAiCommand(charName, urls)
@@ -605,7 +621,8 @@ export default function CharacterPage() {
         onMainImageDrop={handleMainImageDrop}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
-        onGetAiCommand={() => enterMode('ai')}
+        onGetAiCommand={() => generateAiCommand(customs)}
+        customCount={customs.length}
         edit={{
           active: editMode,
           name: editName,
@@ -661,20 +678,21 @@ export default function CharacterPage() {
               mode={mode}
               selectedUrls={selectedUrls}
               totalCount={customs.length}
+              mineCount={mineCount}
               mineSelected={mineSelected}
               othersSelected={othersSelected}
               hiddenCount={hiddenCount}
               showHidden={showHidden}
               uploadBusy={!!upload.progress}
-              onEnterRemove={() => enterMode('remove')}
-              onEnterDownload={enterDownloadMode}
+              onEnterSelect={enterSelectMode}
               onEnterReorder={enterReorderMode}
               onExitMode={resetModes}
               onCancelReorder={cancelReorder}
               onDoneReorder={doneReorder}
               onSelectAll={selectAllImages}
+              onSelectMine={selectMineImages}
               onClearSelection={() => setSelectedUrls([])}
-              onGenerateAiCommand={generateAiCommand}
+              onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
               onRemoveSelected={handleRemoveSelected}
               onHideSelected={handleHideSelected}
               onDownloadSelected={handleDownloadSelected}
@@ -740,7 +758,7 @@ export default function CharacterPage() {
         <CustomImageGallery
           rows={rows}
           ratios={ratios}
-          modes={{ ai: aiMode, remove: deleteMode, download: downloadMode, reorder: reorderMode }}
+          modes={{ select: selectMode, reorder: reorderMode }}
           selectedUrls={selectedUrls}
           reorder={reorder}
           onToggleSelect={toggleSelect}

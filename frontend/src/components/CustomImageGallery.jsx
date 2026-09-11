@@ -40,8 +40,8 @@ export default function CustomImageGallery({
   onDragOver,
   empty,
 }) {
-  const { ai, remove, download, reorder: reordering } = modes
-  const selecting = ai || remove || download || reordering
+  const { select, reorder: reordering } = modes
+  const selecting = select || reordering
 
   return (
     // A drop target for files dragged in from outside the page, which has no
@@ -58,9 +58,7 @@ export default function CustomImageGallery({
         const isDragSource = reordering && reorder.dragIndices?.includes(index)
         const classes = [
           'gallery-item-wrapper',
-          ai && 'ai-mode',
-          remove && 'delete-mode',
-          download && 'download-mode',
+          select && 'select-mode',
           reordering && 'reorder-mode',
           selectedUrls.includes(row.url) && 'selected',
           isDropTarget && 'reorder-drop-target',
@@ -122,7 +120,14 @@ export default function CustomImageGallery({
               height={row.height || undefined}
               onLoad={(e) => onImageLoad(row.id, e.currentTarget)}
             />
-            {remove && (
+            {/*
+              Ownership shows on the images it is about to decide something for,
+              rather than on all 256 of them. It used to tag every thumbnail
+              throughout remove mode; now the selection's own verbs — Remove for
+              yours, Hide for everyone else's — say the same thing in the
+              toolbar, and the tag is confirmation of what you picked.
+            */}
+            {select && selectedUrls.includes(row.url) && (
               <span className={`gallery-owner-tag ${row.is_mine ? 'is-mine' : ''}`}>
                 {row.is_mine ? 'Yours' : row.owner || 'No owner'}
               </span>

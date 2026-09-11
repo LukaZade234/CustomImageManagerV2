@@ -48,6 +48,7 @@ function setup(overrides = {}) {
     isSaved: false,
     onToggleSave: vi.fn(),
     onGetAiCommand: vi.fn(),
+    customCount: 3,
     ...overrides,
     edit,
     mudae,
@@ -66,7 +67,7 @@ describe('CharacterHeader', () => {
     await userEvent.click(screen.getByRole('button', { name: /Edit Character/i }))
     expect(props.edit.start).toHaveBeenCalledTimes(1)
 
-    await userEvent.click(screen.getByRole('button', { name: /Get \$ai Command/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Copy \$ai command/i }))
     expect(props.onGetAiCommand).toHaveBeenCalledTimes(1)
   })
 
