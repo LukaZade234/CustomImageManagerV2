@@ -7,6 +7,7 @@ import AddPage from './pages/AddPage'
 import CharacterPage from './pages/CharacterPage'
 import CustomsPage from './pages/CustomsPage'
 import HomePage from './pages/HomePage'
+import ProfilePage from './pages/ProfilePage'
 import SavedPage from './pages/SavedPage'
 import SearchResultsPage from './pages/SearchResultsPage'
 import { useStore } from './store/useStore'
@@ -63,6 +64,7 @@ function App() {
             <Route path="/saved" element={<SavedPage />} />
             <Route path="/add" element={<AddPage />} />
             <Route path="/customs" element={<CustomsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/character/:name" element={<CharacterPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

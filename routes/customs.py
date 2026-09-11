@@ -377,7 +377,10 @@ def get_custom_images(char_name):
     try:
         # Targeted query rather than loading every character's images and
         # discarding all but one, which is what the JSON-document layout forced.
-        return jsonify(db.get_custom_image_rows(char_name, identity.current_identity().id))
+        me = identity.current_identity()
+        return jsonify(
+            db.get_custom_image_rows(char_name, me.id, viewer_is_staff=me.is_moderator)
+        )
     except Exception:
         log.exception("customs.read_failed")
     return jsonify([])

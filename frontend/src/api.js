@@ -163,6 +163,24 @@ export const apiClient = {
     }).catch(() => null),
   getMe: () => api('/api/me'),
   logout: () => api('/api/auth/logout', { method: 'POST' }),
+
+  /* The profile page. Ownership is always recorded; these two only change what
+     other people are shown, which is why they can be flipped back. */
+  updateSettings: (settings) =>
+    api('/api/me/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }),
+  getMyHidden: () => api('/api/me/hidden'),
+  getMyHistory: () => api('/api/me/history'),
+  /* Explicit, so it fires when a page is actually shown rather than whenever
+     something speculatively fetches. Failure is ignored: a view that went
+     unrecorded is not worth telling anyone about. */
+  recordView: (name) =>
+    api(`/api/characters/${encodeURIComponent(name)}/view`, { method: 'POST' }).catch(() => null),
+  getMyRemoved: () => api('/api/me/removed'),
+  getMyContributions: () => api('/api/me/contributions'),
   importCustomImagesFromUrls: (characterName, urls) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',

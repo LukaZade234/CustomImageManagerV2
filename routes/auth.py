@@ -117,5 +117,51 @@ def get_me():
             "is_owner": me.is_owner,
             "signed_in": me.discord_id is not None,
             "discord_available": discord_auth.configured(),
+            "settings": db.get_identity_settings(me.id),
         }
     )
+
+
+@auth_bp.route("/api/me/settings", methods=["PATCH"])
+@rate_limited("settings")
+def update_my_settings():
+    """Change a display preference.
+
+    Only the two privacy toggles are writable. Neither touches what is stored --
+    ownership is always recorded, because removal is ownership-scoped and an
+    uploader who could not be identified could not manage their own images. Both
+    are applied when rendering, which is what makes them retroactive and
+    reversible.
+    """
+    data = request.get_json(silent=True) or {}
+    me = identity.current_identity()
+    settings = db.update_identity_settings(
+        me.id,
+        hide_from_leaderboard=data.get("hide_from_leaderboard"),
+        hide_attribution=data.get("hide_attribution"),
+    )
+    log.info("settings.updated", **settings)
+    return jsonify({"success": True, "settings": settings})
+
+
+@auth_bp.route("/api/me/hidden", methods=["GET"])
+def my_hidden_images():
+    """Everything this visitor has hidden, across every character."""
+    return jsonify(db.get_hidden_for_identity(identity.current_identity().id))
+
+
+@auth_bp.route("/api/me/removed", methods=["GET"])
+def my_removed_images():
+    """Everything this visitor removed, across every character. All restorable."""
+    return jsonify(db.get_removed_by_identity(identity.current_identity().id))
+
+
+@auth_bp.route("/api/me/history", methods=["GET"])
+def my_history():
+    """Characters this visitor has looked at, most recent first."""
+    return jsonify(db.get_view_history(identity.current_identity().id))
+
+
+@auth_bp.route("/api/me/contributions", methods=["GET"])
+def my_contributions():
+    return jsonify({"images": db.count_images_added_by(identity.current_identity().id)})
