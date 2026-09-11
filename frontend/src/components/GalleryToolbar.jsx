@@ -188,8 +188,10 @@ export function GalleryToolbar({
           <Button variant="secondary" size="sm" onClick={onClearSelection}>
             Clear selection
           </Button>
+          {/* Not "Cancel": this writes to the server and throws the session's
+              work away, while "Done" is the one that costs nothing. */}
           <Button variant="secondary" size="sm" onClick={onCancelReorder}>
-            Cancel
+            Discard changes
           </Button>
           <Button variant="primary" size="sm" onClick={onDoneReorder}>
             Done

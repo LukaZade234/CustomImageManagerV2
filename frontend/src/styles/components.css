@@ -121,7 +121,6 @@
   }
   .navbar-brand {
     order: 1;
-    font-size: 1.125rem;
   }
   .navbar-brand span {
     margin-left: 8px;
@@ -236,7 +235,6 @@
   min-width: 260px;
   animation: slideIn 0.3s ease-out forwards;
   border: 1px solid var(--border);
-  border-left: 4px solid var(--text-subtle);
   font-size: var(--type-meta);
   line-height: 1.4;
   cursor: pointer;
@@ -268,7 +266,6 @@
   color: var(--accent);
 }
 .toast--success {
-  border-left-color: var(--success);
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--success) 6%, transparent) 0%,
@@ -276,7 +273,6 @@
   );
 }
 .toast--error {
-  border-left-color: var(--danger);
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--danger) 6%, transparent) 0%,
@@ -284,7 +280,6 @@
   );
 }
 .toast--info {
-  border-left-color: var(--accent);
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--accent) 6%, transparent) 0%,
@@ -399,7 +394,7 @@
   padding: 12px 15px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  font-size: 1rem;
+  font-size: var(--type-body);
   transition:
     border-color var(--duration) var(--ease),
     background-color var(--duration) var(--ease),
@@ -442,7 +437,7 @@
   cursor: pointer;
   background-color: var(--surface);
   border-bottom: 1px solid var(--border);
-  font-size: 0.95em;
+  font-size: var(--type-meta);
   color: var(--text);
 }
 .autocomplete-item:last-child {
@@ -460,7 +455,7 @@
   width: 100%;
 }
 .edit-group label {
-  font-size: 0.85em;
+  font-size: var(--type-meta);
   font-weight: 600;
   color: var(--text-muted);
   margin-bottom: 6px;
@@ -632,7 +627,7 @@
 }
 .ai-command-limit-dialog__summary-strip {
   flex-shrink: 0;
-  font-size: 0.875rem;
+  font-size: var(--type-meta);
   line-height: 1.45;
   color: var(--text-muted);
   padding: 0.65rem 0.75rem;
@@ -674,7 +669,7 @@
 }
 .ai-command-limit-dialog__column-title {
   margin: 0 0 0.35rem;
-  font-size: 0.9rem;
+  font-size: var(--type-meta);
   font-weight: 600;
   color: var(--text);
   display: flex;
@@ -683,7 +678,7 @@
   gap: 0.35rem;
 }
 .ai-command-limit-dialog__limit-pill {
-  font-size: 0.75rem;
+  font-size: var(--type-micro);
   font-weight: 500;
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius-pill);
@@ -692,7 +687,7 @@
 }
 .ai-command-limit-dialog__column-meta {
   margin: 0 0 0.5rem;
-  font-size: 0.8rem;
+  font-size: var(--type-micro);
   color: var(--text-muted);
 }
 .ai-command-limit-dialog__column-scroll {

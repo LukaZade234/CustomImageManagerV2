@@ -38,6 +38,7 @@ export default function CustomImageGallery({
   onOpenImage,
   onImageLoad,
   onDragOver,
+  empty,
 }) {
   const { ai, remove, download, reorder: reordering } = modes
   const selecting = ai || remove || download || reordering
@@ -51,6 +52,7 @@ export default function CustomImageGallery({
       className={`custom-images-gallery ${reorder.isDragging ? 'reorder-drag-active' : ''}`}
       onDragOver={onDragOver}
     >
+      {rows.length === 0 && empty}
       {rows.map((row, index) => {
         const isDropTarget = reordering && reorder.dropTargetIndex === index
         const isDragSource = reordering && reorder.dragIndices?.includes(index)

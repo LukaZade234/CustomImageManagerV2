@@ -183,20 +183,6 @@
   text-align: inherit;
   cursor: pointer;
 }
-.gallery-item-wrapper.draggable {
-  cursor: grab;
-}
-.gallery-item-wrapper.draggable:active {
-  cursor: grabbing;
-}
-.gallery-item-wrapper.dragging {
-  opacity: 0.5;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius-lg);
-}
-.gallery-item-wrapper.draggable .delete-btn {
-  display: none;
-}
 @keyframes slideIn {
   from {
     transform: translateX(100%);
@@ -256,7 +242,7 @@
 .search-result-info p {
   margin: 2px 0;
   color: var(--text-muted);
-  font-size: 0.9em;
+  font-size: var(--type-meta);
 }
 /* Custom Images Section — full width of character card (not content-sized) */
 /* Also the drop target for files dragged onto the page, hence the dashed
@@ -284,11 +270,11 @@
   gap: 12px;
   margin: 12px 0 16px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, var(--accent-subtle) 0%, var(--accent-subtle) 100%);
+  background: var(--accent-subtle);
   border: 1px solid var(--accent);
   border-radius: var(--radius-lg);
   color: var(--accent);
-  font-size: 0.95em;
+  font-size: var(--type-meta);
   font-weight: 500;
 }
 .custom-upload-progress-spinner {
@@ -419,17 +405,9 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-.customs-page-btn {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 12px;
-  font-size: 1.15rem;
-  font-weight: 700;
-  line-height: 1;
-}
 .pagination-info {
   color: var(--text-muted);
-  font-size: 0.95em;
+  font-size: var(--type-meta);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -460,7 +438,7 @@
   text-align: center;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  font-size: 1em;
+  font-size: var(--type-body);
   font-weight: 600;
   box-sizing: border-box;
 }
@@ -493,7 +471,7 @@
 .reorder-mode-hint-details {
   margin: 0 0 16px;
   padding: 0;
-  font-size: 0.9em;
+  font-size: var(--type-meta);
   color: var(--text-muted);
   background: var(--accent-subtle);
   border: 1px solid var(--accent);
@@ -574,7 +552,7 @@
   transform: translateX(-50%);
   background: var(--accent);
   color: var(--text-on-accent);
-  font-size: 11px;
+  font-size: var(--type-micro);
   font-weight: 700;
   letter-spacing: 0.02em;
   padding: 4px 12px;
@@ -726,7 +704,7 @@ body.reorder-touch-dragging {
   opacity: 0.9;
 }
 .selected-text {
-  font-size: 0.9em;
+  font-size: var(--type-meta);
   color: var(--text-muted);
   flex-grow: 1;
   overflow: hidden;
@@ -819,7 +797,7 @@ body.reorder-touch-dragging {
   text-align: left;
 }
 .stat-value {
-  font-size: 1.8em;
+  font-size: var(--type-page-title);
   font-weight: 700;
   color: var(--text);
   line-height: 1;
@@ -1281,6 +1259,15 @@ body.reorder-touch-dragging {
   gap: var(--space-2);
   width: 100%;
   max-width: 100%;
+}
+/* The gallery is a row of flex items sized by aspect ratio; an empty state is
+   neither, so it takes the whole width and sits inside the drop target rather
+   than beside it. */
+.custom-images-gallery .gallery-empty {
+  flex: 1 1 100%;
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
 }
 .custom-images-gallery .gallery-item-wrapper {
   position: relative;

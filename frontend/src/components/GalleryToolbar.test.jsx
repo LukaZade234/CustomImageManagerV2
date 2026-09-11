@@ -117,12 +117,15 @@ describe('GalleryToolbar', () => {
     expect(screen.getByRole('button', { name: /Download \(0\)/ })).toBeDisabled()
   })
 
-  it('reorder mode offers cancel and done, not the generic exit', async () => {
+  it('reorder mode offers discard and done, not the generic exit', async () => {
     const handlers = setup({ mode: 'reorder' })
     await clickExpecting(/^Done$/i, handlers, 'onDoneReorder')
 
+    // "Cancel" elsewhere means "leave without doing anything". The reorder
+    // equivalent writes to the server, so it must not borrow that word.
     const fresh = setup({ mode: 'reorder' })
-    await clickExpecting(/^Cancel$/i, fresh, 'onCancelReorder')
+    expect(screen.queryByRole('button', { name: /^Cancel$/i })).not.toBeInTheDocument()
+    await clickExpecting(/^Discard changes$/i, fresh, 'onCancelReorder')
   })
 
   it.each(['ai', 'remove', 'download'])('%s mode exits through Cancel', async (mode) => {

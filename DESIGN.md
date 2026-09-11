@@ -233,6 +233,11 @@ reflow as they change.
   size in the system — this is a dense tool, and most text in it is a label.
 - **Micro** (400, 0.8125rem): Hints, counts, captions under images.
 
+Six sizes, and no seventh. `font-size` on an element whose content is a single drawn
+glyph — the lightbox's `×` and arrows, a disclosure caret, the check inside a selection
+disc — is sizing a shape rather than setting type, the same exemption circles have from
+the radius scale.
+
 ### Named Rules
 
 **The Negative Tracking Rule.** Anything at title size or larger gets negative letter
@@ -396,7 +401,8 @@ height, each one at its true aspect ratio, with the stored dimensions driving th
 so nothing reflows as files arrive. Each item is a single real `<button>` whose meaning
 follows the gallery's current mode — open, or select. Hidden images are dimmed rather
 than removed, ownership is surfaced only in the modes where it changes what you can do,
-and reorder is a pointer-events drag with a long-press on touch.
+and reorder is a pointer-events drag with a long-press on touch, an arrow-key move
+for the keyboard, and one saved order per move rather than a toast per drop.
 
 ## Do's and Don'ts
 

@@ -45,6 +45,7 @@ export default function CharacterPage() {
   const characterImages = useStore((s) => s.characterImages)
   const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
   const appendCustomImageUrls = useStore((s) => s.appendCustomImageUrls)
+  const setCustomImageOrder = useStore((s) => s.setCustomImageOrder)
   const loadCharacters = useStore((s) => s.loadCharacters)
   const loadSaved = useStore((s) => s.loadSaved)
   const renameCustomCharacterData = useStore((s) => s.renameCustomCharacterData)
@@ -100,8 +101,20 @@ export default function CharacterPage() {
 
   const mainInputRef = useRef(null)
   const customInputRef = useRef(null)
-  /** Snapshot of the order when reorder mode opened, so Cancel can restore it. */
-  const reorderSessionBaselineRef = useRef(null)
+  /**
+   * Everything one reorder session needs in order to finish or undo itself:
+   * `baseline` is the order it opened on, `dirty` whether anything moved,
+   * `failed` whether a save came back an error, and `save` the chain those
+   * saves run on.
+   *
+   * Chained rather than parallel: each drop POSTs the whole order, and two of
+   * those in flight at once can arrive in either order, which would leave the
+   * server holding an order the person did not finish with — and the gallery,
+   * which now updates locally, would disagree with it silently until the next
+   * reload. Null whenever reorder mode is closed.
+   */
+  const reorderSessionRef = useRef(null)
+  const [confirmDiscardOrder, setConfirmDiscardOrder] = useState(false)
 
   useEffect(() => {
     if (char) {
@@ -133,7 +146,7 @@ export default function CharacterPage() {
     setMode('browse')
     setSelectedUrls([])
     setAiLimitDialog(null)
-    reorderSessionBaselineRef.current = null
+    reorderSessionRef.current = null
   }, [])
 
   /** Leave whatever mode is current and enter `next`, clearing its state. */
@@ -146,38 +159,89 @@ export default function CharacterPage() {
   )
 
   const enterDownloadMode = useCallback(() => {
-    reorderSessionBaselineRef.current = null
+    reorderSessionRef.current = null
     setSelectedUrls([])
     setMode('download')
   }, [])
 
   const enterReorderMode = useCallback(() => {
     setSelectedUrls([])
-    reorderSessionBaselineRef.current = [...customs]
+    reorderSessionRef.current = {
+      baseline: [...customs],
+      dirty: false,
+      failed: false,
+      save: Promise.resolve(),
+    }
     setMode('reorder')
   }, [customs])
 
-  const cancelReorder = useCallback(async () => {
-    const baseline = reorderSessionBaselineRef.current
-    try {
-      if (baseline) {
-        await apiClient.reorderCustomImages(name, baseline)
-        await loadCustomImagesForCharacter(name)
-      }
-      reorderSessionBaselineRef.current = null
-      setMode('browse')
-      setSelectedUrls([])
-      addToast('Order reverted to before you started reordering.', 'info')
-    } catch (e) {
-      addToast(e.message || 'Could not revert order', 'error')
-    }
-  }, [name, loadCustomImagesForCharacter, addToast])
+  /** The file picker behind both "Add image" buttons — toolbar and empty state. */
+  const openCustomFilePicker = useCallback(() => customInputRef.current?.click(), [])
 
-  const doneReorder = useCallback(() => {
-    reorderSessionBaselineRef.current = null
+  const exitReorderMode = useCallback(() => {
+    reorderSessionRef.current = null
+    setConfirmDiscardOrder(false)
     setMode('browse')
     setSelectedUrls([])
   }, [])
+
+  /**
+   * Put the order back the way it was when the session opened.
+   *
+   * The baseline is a snapshot, so writing it back verbatim would re-assert
+   * positions for images that have since been removed and would say nothing
+   * about images added since. Reconciling it against what is actually here
+   * keeps the request describing the gallery in front of the person, rather
+   * than the one they opened twenty minutes ago.
+   */
+  const discardReorder = useCallback(async () => {
+    const session = reorderSessionRef.current
+    exitReorderMode()
+    if (!session?.dirty) return
+    const { baseline } = session
+    try {
+      await session.save
+      const present = new Set(allRows.map((row) => row.url))
+      const inBaseline = new Set(baseline)
+      const order = [
+        ...baseline.filter((url) => present.has(url)),
+        ...allRows.map((row) => row.url).filter((url) => !inBaseline.has(url)),
+      ]
+      await apiClient.reorderCustomImages(name, order)
+      setCustomImageOrder(name, order)
+      addToast('Order reverted to before you started reordering.', 'info')
+    } catch (e) {
+      addToast(e.message || 'Could not revert order', 'error')
+      await loadCustomImagesForCharacter(name)
+    }
+  }, [allRows, exitReorderMode, name, setCustomImageOrder, loadCustomImagesForCharacter, addToast])
+
+  /**
+   * Leaving reorder mode by the Discard button.
+   *
+   * Discarding is a server write that throws away everything the session did,
+   * and it sat one click away with nothing in between. Having moved nothing,
+   * though, there is nothing to confirm and nothing to write, so that case
+   * stays a plain exit.
+   */
+  const cancelReorder = useCallback(() => {
+    if (!reorderSessionRef.current?.dirty) {
+      exitReorderMode()
+      return
+    }
+    setConfirmDiscardOrder(true)
+  }, [exitReorderMode])
+
+  const doneReorder = useCallback(async () => {
+    const session = reorderSessionRef.current
+    exitReorderMode()
+    if (!session?.dirty) return
+    // One confirmation for the whole session. A toast per drop meant a dozen
+    // identical undo-less toasts stacked over the gallery being edited, which
+    // is how people learn to dismiss toasts without reading them.
+    await session.save
+    if (!session.failed) addToast('New order saved', 'success')
+  }, [exitReorderMode, addToast])
 
   const getIndicesToMove = useCallback(
     (startIndex) => {
@@ -208,15 +272,24 @@ export default function CharacterPage() {
 
   const applyReorder = useCallback(
     (newOrder) => {
-      apiClient
-        .reorderCustomImages(name, newOrder)
-        .then(() => {
-          loadCustomImagesForCharacter(name)
-          addToast('Order updated', 'success')
+      // The gallery renders from the store, so writing the order there is what
+      // makes the drop land. It used to wait for a refetch of the whole
+      // character before the image appeared in its new place.
+      setCustomImageOrder(name, newOrder)
+      const session = reorderSessionRef.current
+      if (!session) return
+      session.dirty = true
+      session.save = session.save
+        .then(() => apiClient.reorderCustomImages(name, newOrder))
+        .catch(async (err) => {
+          // Say so once, then show what the server actually holds: the gallery
+          // is now displaying an order that was never saved.
+          if (!session.failed) addToast(err.message || 'Could not save the new order', 'error')
+          session.failed = true
+          await loadCustomImagesForCharacter(name)
         })
-        .catch((err) => addToast(err.message, 'error'))
     },
-    [name, loadCustomImagesForCharacter, addToast],
+    [name, setCustomImageOrder, loadCustomImagesForCharacter, addToast],
   )
 
   // Three states, not two. `char` is absent both while the library is loading
@@ -608,7 +681,7 @@ export default function CharacterPage() {
               onUnhideAll={handleUnhideAll}
               onToggleShowHidden={() => setShowHidden((v) => !v)}
               onOpenRemovedDrawer={openRemovedDrawer}
-              onAddImage={() => customInputRef.current?.click()}
+              onAddImage={openCustomFilePicker}
             />
           </div>
         </div>
@@ -632,6 +705,11 @@ export default function CharacterPage() {
                 <strong>Move several at once:</strong> tap images to select them (or Clear
                 selection), then drag any selected image — or use the arrow keys. The whole group
                 moves together.
+              </p>
+              <p>
+                <strong>Saving:</strong> every move is saved as you make it. Done simply closes
+                reorder mode; <strong>Discard changes</strong> puts the order back the way it was
+                when you opened it.
               </p>
             </div>
           </details>
@@ -669,6 +747,42 @@ export default function CharacterPage() {
           onOpenImage={openModal}
           onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
+          /*
+            An empty gallery used to be a blank strip under the drop hint, which
+            reads as something that failed to load rather than a character
+            nobody has added an image to yet. Hidden images make that worse:
+            hiding the last one emptied the gallery with no sign that the images
+            still exist and are one button away.
+          */
+          empty={
+            hiddenCount > 0 && !showHidden ? (
+              <EmptyState
+                className="gallery-empty"
+                title={
+                  hiddenCount === 1
+                    ? 'The only image here is one you hid'
+                    : `All ${hiddenCount} images here are ones you hid`
+                }
+                description="Hiding is per person, so this is only how the page looks to you."
+                action={
+                  <Button size="sm" onClick={() => setShowHidden(true)}>
+                    Show them
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                className="gallery-empty"
+                title="No custom images yet"
+                description={`Add one and it becomes part of the $ai command for ${name}.`}
+                action={
+                  <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
+                    Add image
+                  </Button>
+                }
+              />
+            )
+          }
         />
       </div>
 
@@ -695,6 +809,21 @@ export default function CharacterPage() {
           variant="danger"
           onConfirm={removeOwnImages}
           onCancel={() => setConfirmRemove(null)}
+        />
+      )}
+      {confirmDiscardOrder && (
+        <ConfirmDialog
+          title="Discard the new order?"
+          body={
+            <>
+              Every move you made in this session goes back to the order you started with. Images
+              added or removed while you were reordering stay where they are.
+            </>
+          }
+          confirmLabel="Discard"
+          variant="danger"
+          onConfirm={discardReorder}
+          onCancel={() => setConfirmDiscardOrder(false)}
         />
       )}
       {reportTarget && (

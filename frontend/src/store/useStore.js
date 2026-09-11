@@ -120,6 +120,33 @@ export const useStore = create((set, get) => ({
     await get().loadCustomImagesForCharacter(characterName)
   },
 
+  /**
+   * Apply a new order to the cached rows, without waiting for the server.
+   *
+   * Reordering used to refetch the whole character after every single drop, so
+   * moving a dozen images meant a dozen round trips and a dozen identical
+   * toasts over the gallery being edited. The gallery renders from this cache,
+   * so writing the order here is what makes a drop land at all; the POST that
+   * follows is only persistence.
+   *
+   * Rows the caller did not mention — hidden ones, or anything uploaded while
+   * the page was open — keep their relative order at the end, which is exactly
+   * what `db.reorder_custom_images` does with the same list. Getting that rule
+   * wrong here would show an order the next reload does not reproduce.
+   */
+  setCustomImageOrder: (characterName, urls) => {
+    if (!characterName || !Array.isArray(urls)) return
+    set((s) => {
+      const rows = s.characterImages[characterName]
+      if (!rows) return {}
+      const byUrl = new Map(rows.map((row) => [row.url, row]))
+      const ordered = urls.map((url) => byUrl.get(url)).filter(Boolean)
+      const placed = new Set(ordered.map((row) => row.url))
+      ordered.push(...rows.filter((row) => !placed.has(row.url)))
+      return { characterImages: { ...s.characterImages, [characterName]: ordered } }
+    })
+  },
+
   /** After a server-side rename, move the character's cached rows to the new key. */
   renameCustomCharacterData: (oldName, newName) => {
     if (!oldName || !newName || oldName === newName) return

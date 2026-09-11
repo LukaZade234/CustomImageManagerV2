@@ -125,4 +125,23 @@ describe('DESIGN.md invariants', () => {
     )
     expect(offScale).toEqual([])
   })
+  it('sets every type size from the six-step scale', () => {
+    // The exceptions are elements whose whole content is one drawn glyph — a
+    // lightbox arrow, a dismiss cross, a disclosure caret, the check inside a
+    // selection disc. `font-size` there is sizing a shape, not setting type,
+    // which is the same exemption a circle has from the radius scale.
+    const glyphs = /toast-dismiss|image-modal-close|image-modal-nav|::after/
+    const offenders = []
+    for (const { file, css } of sheets) {
+      for (const { selector, body } of rules(css)) {
+        for (const [, value] of body.matchAll(/font-size:\s*([^;]+);/g)) {
+          const v = value.trim()
+          if (v.startsWith('var(--type') || v === 'inherit') continue
+          if (glyphs.test(selector)) continue
+          offenders.push(`${file}  ${selector}  ${v}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })

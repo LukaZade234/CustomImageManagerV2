@@ -6,8 +6,8 @@
  * the page, in front of a user. A render is the cheapest thing that catches it,
  * and it also guards the migration onto the shared primitives.
  */
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../api', () => ({
@@ -124,5 +124,47 @@ describe('character page loading states', () => {
     useStore.setState({ characters: CHARACTERS, loading: false })
     renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
     expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/')
+  })
+})
+
+describe('an empty gallery', () => {
+  /**
+   * An empty gallery was a blank strip under the drop hint, which reads as a
+   * load that failed rather than a character nobody has added an image to. The
+   * hidden case is worse: hiding the last image emptied the gallery with no
+   * sign that the images still exist.
+   */
+  /** The other tests here render the page bare; these need the :name param. */
+  function renderCharacter() {
+    return render(
+      <MemoryRouter initialEntries={['/character/Ayanami%20Rei']}>
+        <Routes>
+          <Route path="/character/:name" element={<CharacterPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('says there is nothing here yet, and offers the way to add one', () => {
+    useStore.setState({ characterImages: { 'Ayanami Rei': [] } })
+    renderCharacter()
+
+    expect(screen.getByText(/No custom images yet/i)).toBeInTheDocument()
+    // Its own button, inside the gallery, rather than only the toolbar's — the
+    // point is that the way out sits where the missing images would be.
+    const gallery = within(document.querySelector('.custom-images-gallery'))
+    expect(gallery.getByRole('button', { name: /^Add image$/i })).toBeInTheDocument()
+  })
+
+  it('distinguishes an empty gallery from one you have hidden all of', () => {
+    useStore.setState({
+      characterImages: {
+        'Ayanami Rei': [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }],
+      },
+    })
+    renderCharacter()
+
+    expect(screen.getByText(/The only image here is one you hid/i)).toBeInTheDocument()
+    expect(screen.queryByText(/No custom images yet/i)).not.toBeInTheDocument()
   })
 })
