@@ -19,6 +19,7 @@ from flask import Blueprint, jsonify, request
 import db
 import identity
 import logs
+import tempfiles
 from image_utils import (
     detect_format,
     is_animated,
@@ -33,7 +34,6 @@ from remote_images import (
     MAX_IMPORT_URLS,
     _dedupe_import_urls_preserve_order,
     _fetch_image_from_url_for_import,
-    _safe_stored_filename,
     imgchest_filename,
 )
 from validation import validate_character_name
@@ -237,9 +237,7 @@ def add_custom_image():
                 filename=fn,
             )
 
-            # Save temporarily (sanitized basename)
-            safe_fn = _safe_stored_filename(fn)
-            temp_path = os.path.join(".", "temp_custom_" + safe_fn)
+            temp_path = tempfiles.reserve("custom", fn)
             file.save(temp_path)
 
             direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
