@@ -1,6 +1,11 @@
 import { getImageUrl } from '../api'
 import { apiUrl } from '../config'
+import { useMasonryColumns } from '../hooks/useMasonryColumns'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { FILLERS, ratioFor } from '../utils/galleryRatios'
+
+/** Below this, uniform columns beat uniform rows. See useMasonryColumns. */
+const NARROW = '(max-width: 768px)'
 
 /**
  * The grid of a character's custom images.
@@ -42,6 +47,14 @@ export default function CustomImageGallery({
 }) {
   const { select, reorder: reordering } = modes
   const selecting = select || reordering
+  /*
+    Two layouts, because a phone cannot use the one the desktop wants. Justified
+    rows hold every image in a row to one height and vary the widths, which puts
+    exactly one portrait across a 390px screen. Columns of equal width and
+    unequal height fit four or five.
+  */
+  const masonry = useMediaQuery(NARROW)
+  const columns = useMasonryColumns(masonry)
 
   return (
     // A drop target for files dragged in from outside the page, which has no
@@ -49,13 +62,22 @@ export default function CustomImageGallery({
     // the toolbar's "Add Image" button, which opens a file picker.
     // biome-ignore lint/a11y/noStaticElementInteractions: file drop zone, see above
     <div
-      className={`custom-images-gallery ${reorder.isDragging ? 'reorder-drag-active' : ''}`}
+      ref={columns.ref}
+      className={[
+        'custom-images-gallery',
+        masonry && 'is-masonry',
+        reorder.isDragging && 'reorder-drag-active',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       onDragOver={onDragOver}
     >
       {rows.length === 0 && empty}
       {rows.map((row, index) => {
         const isDropTarget = reordering && reorder.dropTargetIndex === index
         const isDragSource = reordering && reorder.dragIndices?.includes(index)
+        const ratio = ratioFor(row, ratios[row.id])
+        const column = columns.itemProps(ratio)
         const classes = [
           'gallery-item-wrapper',
           select && 'select-mode',
@@ -65,6 +87,7 @@ export default function CustomImageGallery({
           isDragSource && 'reorder-drag-source',
           row.is_mine && 'is-mine',
           row.hidden && 'is-hidden',
+          column.className,
         ]
           .filter(Boolean)
           .join(' ')
@@ -82,7 +105,7 @@ export default function CustomImageGallery({
             type="button"
             key={row.url}
             data-reorder-slot={index}
-            style={{ '--ratio': ratioFor(row, ratios[row.id]) }}
+            style={{ '--ratio': ratio, ...column.style }}
             className={classes}
             title={attributionFor(row)}
             aria-label={labelFor(row, index, selecting)}
@@ -158,7 +181,8 @@ export default function CustomImageGallery({
           </span>
         </>
       )}
-      {rows.length > 0 &&
+      {!masonry &&
+        rows.length > 0 &&
         FILLERS.map((id) => (
           <span key={`filler-${id}`} className="gallery-filler" aria-hidden="true" />
         ))}

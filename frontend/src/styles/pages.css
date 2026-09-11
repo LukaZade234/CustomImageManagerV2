@@ -1217,6 +1217,39 @@ body.reorder-touch-dragging {
   aspect-ratio: var(--ratio, 0.667);
   line-height: 0;
 }
+/* Uniform columns on a phone, where uniform rows stop working.
+
+   Justified rows keep every image in a row at one height and vary the widths,
+   which is right on a wide screen. On a 390px one it means a single portrait
+   fills the width and the screen holds one image — and a gallery you scroll
+   past one image at a time is not a gallery. Two columns of fixed width with
+   varying heights fits four or five, the way every phone photo grid does.
+
+   The row track is 1px with no row gap, so an item can span however many of
+   them its real height needs; the gap between images is the item's own margin,
+   which keeps it exactly even whatever the heights round to. The span itself
+   has to be counted in JS — grid cannot work it out from an aspect ratio. */
+.custom-images-gallery.is-masonry {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1px;
+  column-gap: var(--space-2);
+  row-gap: 0;
+}
+.custom-images-gallery.is-masonry .gallery-item-wrapper {
+  flex: none;
+  width: 100%;
+  margin-bottom: var(--space-2);
+}
+/* An image far wider than it is tall would be a letterbox slice in one column,
+   so it takes both. Grid puts it on the first row where both are free, which is
+   what levels the images above it. */
+.custom-images-gallery.is-masonry .gallery-item-wrapper.is-wide {
+  grid-column: 1 / -1;
+}
+.custom-images-gallery.is-masonry .gallery-empty {
+  grid-column: 1 / -1;
+}
 /* Zero-height, no reorder slot: inert to layout and to hit-testing.
  *
  * flex-basis must be 0. Giving these a real basis makes them compete for space

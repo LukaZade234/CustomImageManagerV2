@@ -119,3 +119,33 @@ describe('CustomImageGallery', () => {
     expect(props.onOpenImage).not.toHaveBeenCalled()
   })
 })
+
+describe('layout', () => {
+  const mql = (matches) => ({
+    matches,
+    media: '',
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })
+
+  it('lays out in justified rows on a wide viewport', () => {
+    setup()
+    const gallery = document.querySelector('.custom-images-gallery')
+    expect(gallery).not.toHaveClass('is-masonry')
+    // The fillers level the last row, which only rows have.
+    expect(document.querySelectorAll('.gallery-filler').length).toBeGreaterThan(0)
+  })
+
+  it('lays out in uniform columns on a narrow one', () => {
+    // One portrait across a 390px screen is a gallery you scroll past one image
+    // at a time. Columns of equal width and unequal height fit four or five.
+    window.matchMedia = vi.fn().mockImplementation(() => mql(true))
+    try {
+      setup()
+      expect(document.querySelector('.custom-images-gallery')).toHaveClass('is-masonry')
+      expect(document.querySelectorAll('.gallery-filler').length).toBe(0)
+    } finally {
+      window.matchMedia = vi.fn().mockImplementation(() => mql(false))
+    }
+  })
+})
