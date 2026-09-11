@@ -18,10 +18,11 @@ from flask import Blueprint, jsonify, request
 import db
 import identity
 import logs
+import tempfiles
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from ratelimit import rate_limited
-from remote_images import MAX_FILE_SIZE, _safe_stored_filename, imgchest_filename
+from remote_images import MAX_FILE_SIZE, imgchest_filename
 from validation import MAX_RANK_LENGTH, MAX_SERIES_LENGTH, validate_character_name
 
 log = logs.get(__name__)
@@ -78,9 +79,7 @@ def upload():
 
     log.info("upload.started", filename=fn)
 
-    # Save temporarily (sanitized basename — no path traversal)
-    safe_fn = _safe_stored_filename(fn)
-    temp_path = os.path.join(".", "temp_upload_" + safe_fn)
+    temp_path = tempfiles.reserve("upload", fn)
     file.save(temp_path)
     file_size = os.path.getsize(temp_path)
     file_size_mb = file_size / (1024 * 1024)
@@ -189,8 +188,7 @@ def add_character():
         file = request.files["image"]
         fn = file.filename
         if fn:
-            safe_fn = _safe_stored_filename(fn)
-            temp_path = os.path.join(".", "temp_add_" + safe_fn)
+            temp_path = tempfiles.reserve("add", fn)
             file.save(temp_path)
             try:
                 result = upload_to_imgchest(
@@ -300,8 +298,7 @@ def set_main_image():
     if not fn:
         return jsonify({"error": "No file selected"}), 400
 
-    safe_fn = _safe_stored_filename(fn)
-    temp_path = os.path.join(".", "temp_main_" + safe_fn)
+    temp_path = tempfiles.reserve("main", fn)
     file.save(temp_path)
 
     main_size = os.path.getsize(temp_path)

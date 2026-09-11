@@ -12,7 +12,6 @@ concern rather than a routing one.
 from __future__ import annotations
 
 import ipaddress
-import os
 import re
 import socket
 import unicodedata
@@ -22,6 +21,8 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from werkzeug.utils import secure_filename
+
+import tempfiles
 
 
 def _safe_stored_filename(original_filename: str) -> str:
@@ -318,7 +319,7 @@ def _fetch_image_from_url_for_import(url):
         raise ValueError("Empty response")
     ext = _guess_ext_from_response(r.headers.get("Content-Type", ""), r.url)
     safe = f"web_import_{uuid.uuid4().hex[:12]}{ext}"
-    temp_path = os.path.join(".", "temp_custom_" + safe)
+    temp_path = tempfiles.reserve("import", safe)
     with open(temp_path, "wb") as f:
         f.write(raw)
     return temp_path, safe
