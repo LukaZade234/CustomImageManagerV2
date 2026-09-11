@@ -150,7 +150,8 @@
   --nav-control-radius: 22px;
   --nav-control-pad-x: var(--space-4);
   --sticky-nav-height: 80px;
-  --sticky-nav-height-mobile: 148px;
+  /* One row since the links fold behind a button; it was three. */
+  --sticky-nav-height-mobile: 64px;
 
   /*
    * ---- Breakpoints --------------------------------------------------

@@ -948,22 +948,15 @@ body.reorder-touch-dragging {
   right: var(--space-1);
   transform: translateY(-50%);
 }
-/* Below this the switch would crowd the text, so it drops beneath the field. */
+/* The switch stays inside the field at every width — dropping it beneath cost a
+   whole row of a phone's first screen. It gets tighter instead: less padding
+   around each option and less room reserved for it. */
 @media (max-width: 480px) {
   .search-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+    --search-toggle-width: 116px;
   }
-
-  .search-field .ui-input {
-    padding-right: var(--space-3);
-  }
-
-  .search-field .ui-segmented {
-    position: static;
-    align-self: flex-start;
-    transform: none;
+  .search-field .ui-segmented__option {
+    padding: 0 var(--space-2);
   }
 }
 /* ---- Identity and moderation -------------------------------------------- */

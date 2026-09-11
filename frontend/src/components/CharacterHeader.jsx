@@ -178,7 +178,10 @@ export function CharacterHeader({
         ) : (
           <div className="image-wrapper">{portrait}</div>
         )}
-        {mudae.configured && (
+        {/* Only while editing. Replacing the portrait is an editing action, and
+            on a phone this button was a third of the space above the gallery,
+            offering something most visitors cannot do anything with. */}
+        {mudae.configured && edit.active && (
           <div className="char-mudae-actions">
             <Button
               variant="secondary"

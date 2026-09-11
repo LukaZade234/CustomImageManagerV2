@@ -131,3 +131,88 @@ describe('signed in', () => {
     expect(screen.queryByText('user')).not.toBeInTheDocument()
   })
 })
+
+describe('folding on a narrow viewport', () => {
+  /**
+   * The bar was three rows deep on a phone: wordmark and four icon buttons,
+   * then the search field, then a 160px sort select. Most of that was chrome
+   * around icons, on the screen with the least room to give.
+   */
+  const mql = (matches) => ({
+    matches,
+    media: '',
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })
+
+  function renderNarrow(route = '/') {
+    window.matchMedia = vi.fn().mockImplementation(() => mql(true))
+    try {
+      return renderNav(route)
+    } finally {
+      window.matchMedia = vi.fn().mockImplementation(() => mql(false))
+    }
+  }
+
+  beforeEach(() => {
+    useStore.setState({
+      me: { handle: 'Amber Otter', role: 'user', is_moderator: false, signed_in: false },
+    })
+  })
+
+  it('keeps the home link and drops the wordmark', () => {
+    renderNarrow()
+    expect(screen.getByRole('link', { name: /ImgManager home/i })).toBeInTheDocument()
+    expect(screen.queryByText('ImgManager')).not.toBeInTheDocument()
+  })
+
+  it('folds the links behind one button, and unfolds them on demand', async () => {
+    const user = userEvent.setup()
+    renderNarrow()
+
+    for (const name of [/Add Character/i, /Customs/i, /Saved/i, /Amber Otter/]) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
+
+    const toggle = screen.getByRole('button', { name: /Show menu/i })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+
+    for (const name of [/Add Character/i, /Customs/i, /Saved/i, /Amber Otter/]) {
+      expect(screen.getByRole('link', { name })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: /Hide menu/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('gets out of the way when you reach for the search field', async () => {
+    const user = userEvent.setup()
+    renderNarrow()
+    await user.click(screen.getByRole('button', { name: /Show menu/i }))
+    expect(screen.getByRole('link', { name: /Customs/i })).toBeInTheDocument()
+
+    // The menu is standing in the search field's space, and focusing the field
+    // says plainly that you are done with it.
+    await user.click(screen.getByRole('searchbox'))
+    expect(screen.queryByRole('link', { name: /Customs/i })).not.toBeInTheDocument()
+  })
+
+  it('folds the sort select down to its arrow until it is asked for', async () => {
+    const user = userEvent.setup()
+    renderNarrow()
+
+    expect(screen.queryByRole('combobox', { name: /Sort results/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Sort: Rank \(High-Low\)/i }))
+    expect(screen.getByRole('combobox', { name: /Sort results/i })).toBeInTheDocument()
+  })
+
+  it('leaves the wide layout alone', () => {
+    renderNav()
+    expect(screen.getByText('ImgManager')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Show menu/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Customs/i })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Sort results/i })).toBeInTheDocument()
+  })
+})

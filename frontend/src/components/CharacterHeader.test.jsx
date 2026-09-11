@@ -125,20 +125,30 @@ describe('CharacterHeader', () => {
   })
 
   it('hides the Mudae refresh when Mudae is not configured', () => {
-    setup()
+    setup({ edit: { active: true } })
     expect(
       screen.queryByRole('button', { name: /Update main from Mudae/i }),
     ).not.toBeInTheDocument()
   })
 
-  it('shows the Mudae refresh when configured', async () => {
-    const props = setup({ mudae: { configured: true } })
+  it('keeps the Mudae refresh out of the way until the character is being edited', () => {
+    // Replacing the portrait is an editing action, and on a phone this button
+    // was a third of the space above the gallery — offered to every visitor,
+    // most of whom have no Mudae session behind it.
+    setup({ mudae: { configured: true } })
+    expect(
+      screen.queryByRole('button', { name: /Update main from Mudae/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the Mudae refresh while editing', async () => {
+    const props = setup({ mudae: { configured: true }, edit: { active: true } })
     await userEvent.click(screen.getByRole('button', { name: /Update main from Mudae/i }))
     expect(props.mudae.onRefreshMain).toHaveBeenCalledTimes(1)
   })
 
   it('disables the Mudae refresh while it is running', () => {
-    setup({ mudae: { configured: true, busy: true } })
+    setup({ mudae: { configured: true, busy: true }, edit: { active: true } })
     expect(screen.getByRole('button', { name: /Updating from Mudae/i })).toBeDisabled()
   })
 

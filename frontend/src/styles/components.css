@@ -45,8 +45,21 @@
   letter-spacing: var(--tracking-title);
   text-decoration: none;
 }
-.navbar-brand span {
+.navbar-brand__name {
   margin-left: var(--space-2);
+}
+.navbar-menu-toggle {
+  flex-shrink: 0;
+  width: var(--nav-control-min-h);
+  padding: 0;
+}
+/* Folded, the sort control is its arrow and nothing else. */
+.navbar-sort-toggle {
+  flex: 0 0 auto;
+  width: var(--nav-control-min-h);
+  min-height: var(--nav-control-min-h);
+  padding: 0;
+  border-radius: var(--radius-pill);
 }
 /* Nav controls sit at the taller touch height even though the base button is
    34px, because they are the most-tapped targets on mobile. */
@@ -113,21 +126,15 @@
   html {
     scroll-padding-top: var(--sticky-nav-height-mobile);
   }
+  /* One line, and the search field takes whatever the rest of it leaves.
+     The bar used to wrap to three rows here — wordmark and four icons, the
+     field, then the sort — which is most of a phone's first screen spent on
+     chrome. */
   .navbar-inner {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: var(--space-2) var(--space-3);
-    padding: var(--space-2) var(--space-3) var(--space-3);
-  }
-  .navbar-brand {
-    order: 1;
-  }
-  .navbar-brand span {
-    margin-left: 8px;
-    max-width: min(42vw, 11rem);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
   }
   .navbar-brand svg {
     width: 22px;
@@ -135,15 +142,13 @@
     flex-shrink: 0;
   }
   .navbar-right {
-    order: 2;
-    margin-left: auto;
     flex-wrap: nowrap;
     gap: 4px;
+    animation: nav-links-in var(--duration) var(--ease);
   }
   .navbar-center {
-    order: 3;
-    width: 100%;
-    flex: 1 1 100%;
+    width: auto;
+    flex: 1 1 auto;
     min-width: 0;
     max-width: none;
     margin: 0;
@@ -171,38 +176,64 @@
   .saved-characters-grid {
     gap: 12px;
   }
-  /* Character page: stack toolbar + full-width controls */
+  /* Character page: the heading takes its own line, the controls stay a row.
+     They were a stack of full-width boxes, each one as wide as the screen for
+     the sake of a two-word label, which turned four buttons into four rows. */
   .custom-images-header-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
+    gap: var(--space-2);
   }
   .custom-images-heading {
     margin-bottom: 0;
   }
   .char-custom-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     width: 100%;
     max-width: 100%;
   }
   .char-custom-toolbar-actions {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
     width: 100%;
-    gap: 8px;
+    gap: var(--space-2);
   }
+  /* Each button is as wide as what it says, and no wider. */
   .char-custom-toolbar-actions .ui-btn {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    flex: 0 0 auto;
     box-sizing: border-box;
+  }
+  /* The gap above the gallery was 40px of margin plus the section's own
+     padding, on the screen with the least of it to spare. */
+  .character-top-section {
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+  }
+  .char-page-actions {
+    margin-top: var(--space-3);
+    gap: var(--space-2);
+  }
+}
+@keyframes nav-links-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-3));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .navbar-right {
+    animation: none;
   }
 }
 @media (max-width: 480px) {
-  .navbar-brand span {
-    max-width: min(34vw, 9rem);
-  }
   .stat-card {
     flex: 1 1 100%;
   }

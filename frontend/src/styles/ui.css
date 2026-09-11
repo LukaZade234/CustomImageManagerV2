@@ -31,6 +31,13 @@
     color var(--duration-fast) var(--ease);
 }
 
+/* An icon is a fixed shape, not a flexible one. Without this a narrow button
+   squeezes the glyph before it wraps or truncates the label, which is how the
+   16px icons on the character page became dots on a phone. */
+.ui-btn svg {
+  flex-shrink: 0;
+}
+
 .ui-btn--sm {
   min-height: 28px;
   padding: 0 var(--space-2);
