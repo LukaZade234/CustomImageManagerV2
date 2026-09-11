@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import { CharacterHeader } from '../components/CharacterHeader'
+import CharacterLoadingState from '../components/CharacterLoadingState'
 import CustomImageGallery from '../components/CustomImageGallery'
 import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
-import { Card, ConfirmDialog } from '../components/ui'
+import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
@@ -26,10 +27,20 @@ import {
 import { ratioOf } from '../utils/galleryRatios'
 import { isImageFileLike } from '../utils/imageFiles'
 
+/** What the heading says while a mode is active. Browse gets nothing. */
+const MODE_LABELS = {
+  ai: 'selecting for a command',
+  remove: 'selecting to remove or hide',
+  download: 'selecting to download',
+  reorder: 'reordering',
+}
+
 export default function CharacterPage() {
   const { name } = useParams()
   const navigate = useNavigate()
   const characters = useStore((s) => s.characters)
+  // Named apart from the edit form's own `loading` below.
+  const libraryLoading = useStore((s) => s.loading)
   const savedCharacters = useStore((s) => s.savedCharacters)
   const characterImages = useStore((s) => s.characterImages)
   const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
@@ -208,7 +219,26 @@ export default function CharacterPage() {
     [name, loadCustomImagesForCharacter, addToast],
   )
 
-  if (!char) return <div className="loading">Character not found</div>
+  // Three states, not two. `char` is absent both while the library is loading
+  // and when the character genuinely does not exist, and conflating them meant
+  // every shared link opened on an error.
+  if (!char && libraryLoading) return <CharacterLoadingState />
+  if (!char) {
+    return (
+      <Card as="section" padding="lg">
+        <h1 className="page-title">Character not found</h1>
+        <EmptyState
+          title={`Nothing here called "${name}"`}
+          description="It may have been renamed, or the link may be wrong."
+          action={
+            <Button as={Link} to="/">
+              Back to search
+            </Button>
+          }
+        />
+      </Card>
+    )
+  }
 
   const handleSaveEdit = async () => {
     setLoading(true)
@@ -536,8 +566,24 @@ export default function CharacterPage() {
         onDrop={upload.onDrop}
       >
         <div className="custom-images-header-row">
-          <h3 className="section-heading custom-images-heading">Custom Images</h3>
-          <div className="char-custom-toolbar">
+          <h3 className="section-heading custom-images-heading">
+            Custom Images
+            {/*
+              The mode travels with the content it governs. It used to be
+              signalled only by which buttons happened to be rendered, in a
+              toolbar that scrolls out of sight on a long gallery -- so on a
+              256-image character the only way to discover you were in remove
+              mode was to click an image and watch it be selected rather than
+              opened. role="status" announces the change rather than leaving a
+              screen reader to find it by re-reading an item's label.
+            */}
+            {MODE_LABELS[mode] && (
+              <span className="custom-images-mode" role="status">
+                {MODE_LABELS[mode]}
+              </span>
+            )}
+          </h3>
+          <div className={`char-custom-toolbar${mode === 'browse' ? '' : ' is-active'}`}>
             <GalleryToolbar
               mode={mode}
               selectedUrls={selectedUrls}
@@ -579,8 +625,13 @@ export default function CharacterPage() {
                 it is picked up, then drag and release where you want it.
               </p>
               <p>
+                <strong>Keyboard:</strong> tab to an image and use the <strong>arrow keys</strong>{' '}
+                to move it. Each move is announced.
+              </p>
+              <p>
                 <strong>Move several at once:</strong> tap images to select them (or Clear
-                selection), then drag any selected image — the whole group moves together.
+                selection), then drag any selected image — or use the arrow keys. The whole group
+                moves together.
               </p>
             </div>
           </details>

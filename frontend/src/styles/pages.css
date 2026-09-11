@@ -43,7 +43,7 @@
 }
 .char-image-section img {
   max-width: 100%;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 .char-main-image-full {
@@ -61,7 +61,7 @@
   max-height: min(280px, 45vh);
   margin: 0 auto;
   background: var(--surface-hover);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,8 +147,8 @@
   align-items: center;
   justify-content: center;
   transition:
-    background 0.3s,
-    transform 0.2s;
+    background-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
   box-shadow: var(--shadow-sm);
 }
 .save-button:hover {
@@ -192,7 +192,7 @@
 .gallery-item-wrapper.dragging {
   opacity: 0.5;
   border: 2px dashed var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .gallery-item-wrapper.draggable .delete-btn {
   display: none;
@@ -223,7 +223,7 @@
   padding: 20px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background-color var(--duration) var(--ease);
   text-decoration: none;
   color: inherit;
 }
@@ -237,7 +237,7 @@
   width: 80px;
   height: 80px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   flex-shrink: 0;
   background-color: var(--surface-hover);
 }
@@ -286,7 +286,7 @@
   padding: 12px 16px;
   background: linear-gradient(135deg, var(--accent-subtle) 0%, var(--accent-subtle) 100%);
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--accent);
   font-size: 0.95em;
   font-weight: 500;
@@ -316,10 +316,10 @@
   height: auto;
   max-height: 500px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background-color: var(--surface-sunken);
-  transition: transform 0.2s;
+  transition: transform var(--duration) var(--ease);
   cursor: pointer;
 }
 /* Customs Page */
@@ -377,7 +377,7 @@
   padding: 20px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background-color var(--duration) var(--ease);
   text-decoration: none;
   color: inherit;
 }
@@ -402,7 +402,7 @@
   width: 80px;
   height: 80px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
 .customs-pagination {
@@ -447,7 +447,7 @@
   text-decoration: underline;
   text-underline-offset: 3px;
   padding: 8px 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 .pagination-page-indicator:hover {
   color: var(--accent);
@@ -459,7 +459,7 @@
   padding: 4px 8px;
   text-align: center;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 1em;
   font-weight: 600;
   box-sizing: border-box;
@@ -497,7 +497,7 @@
   color: var(--text-muted);
   background: var(--accent-subtle);
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   line-height: 1.45;
   overflow: hidden;
 }
@@ -533,7 +533,7 @@
 .gallery-item-wrapper.reorder-drag-source:not(.reorder-drop-target) {
   opacity: 0.48;
   filter: grayscale(0.25);
-  transition: opacity 0.15s ease;
+  transition: opacity var(--duration-fast) var(--ease);
 }
 .custom-images-gallery .gallery-item-wrapper.reorder-drop-target {
   position: relative;
@@ -552,8 +552,8 @@
     var(--accent) 50%,
     var(--accent-hover) 100%
   );
-  border-radius: 4px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--ring);
   z-index: 2;
   pointer-events: none;
   animation: reorder-drop-pulse 0.85s ease-in-out infinite;
@@ -578,7 +578,7 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   padding: 4px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
   z-index: 4;
   pointer-events: none;
@@ -709,7 +709,7 @@ body.reorder-touch-dragging {
   background: var(--scrim);
   color: var(--text-on-accent);
   padding: 10px 20px;
-  border-radius: 5px;
+  border-radius: var(--radius-md);
   font-weight: bold;
   pointer-events: none;
   white-space: nowrap;
@@ -750,7 +750,7 @@ body.reorder-touch-dragging {
   margin: 2rem auto 0;
   background: var(--surface-sunken);
   padding: 1.5rem 1.25rem;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
 }
 .features-box-title {
@@ -778,7 +778,7 @@ body.reorder-touch-dragging {
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 20px;
   display: flex;
   align-items: center;
@@ -786,8 +786,8 @@ body.reorder-touch-dragging {
   min-width: 200px;
   box-shadow: var(--shadow-sm);
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    transform var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
 }
 .stat-card:hover {
   transform: translateY(-2px);
@@ -796,7 +796,7 @@ body.reorder-touch-dragging {
 .stat-icon {
   width: 50px;
   height: 50px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -860,7 +860,7 @@ body.reorder-touch-dragging {
   flex-direction: column;
   gap: 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .search-skeleton-row {
@@ -877,7 +877,7 @@ body.reorder-touch-dragging {
 .search-skeleton-thumb {
   width: 80px;
   height: 80px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   flex-shrink: 0;
 }
 .search-skeleton-text {
@@ -1334,8 +1334,8 @@ body.reorder-touch-dragging {
 .custom-images-gallery .gallery-item-wrapper.reorder-drop-target .custom-image-full {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
-  border-radius: 10px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--ring);
 }
 /* ---- Home page -----------------------------------------------------------
  * Everything here is drawn from the library. The page used to be two stat cards
@@ -1430,7 +1430,7 @@ body.reorder-touch-dragging {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .home-recent {
     --recent-height: 180px;
   }
@@ -1444,12 +1444,12 @@ body.reorder-touch-dragging {
   padding: 0;
   list-style: none;
 }
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
   .home-ranked {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .home-ranked {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1524,7 +1524,7 @@ a.home-ranked__item:hover {
   padding: 0;
   list-style: none;
 }
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .home-series {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1856,8 +1856,36 @@ a.home-ranked__item:hover {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .profile-grid {
     --card-height: 150px;
+  }
+}
+
+/* The mode, said in the heading rather than implied by which buttons exist. */
+.custom-images-mode {
+  margin-left: var(--space-2);
+  color: var(--accent);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-normal);
+  white-space: nowrap;
+}
+
+/* While a mode is active the toolbar follows you down a long gallery: its
+   controls are the only way out of the mode, and on a 256-image character they
+   were a full scroll away. Browse is the reading state and scrolls away as
+   normal. */
+.char-custom-toolbar.is-active {
+  position: sticky;
+  top: var(--sticky-nav-height);
+  z-index: var(--z-nav);
+  padding: var(--space-2) 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 960px) {
+  .char-custom-toolbar.is-active {
+    top: var(--sticky-nav-height-mobile);
   }
 }

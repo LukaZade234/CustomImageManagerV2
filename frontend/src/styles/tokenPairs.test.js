@@ -81,3 +81,48 @@ describe('justified card rows', () => {
     expect(image.body).toMatch(/aspect-ratio:\s*var\(--ratio/)
   })
 })
+
+describe('DESIGN.md invariants', () => {
+  /**
+   * DESIGN.md states these as rules, and for a while they were not true: nine
+   * breakpoint values where it claimed four, nine radii where it claimed four,
+   * a third shadow, and nine transitions on neither documented duration. A
+   * design document whose rules are already false teaches the next person that
+   * the rules are decorative, so they are enforced here rather than asserted
+   * there.
+   */
+  const sheets = readdirSync(DIR)
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => ({ file: f, css: readFileSync(join(DIR, f), 'utf8') }))
+  const all = sheets.map((s) => s.css).join('\n')
+
+  it('uses only the four documented breakpoints', () => {
+    const widths = [...all.matchAll(/@media[^{]*\(\s*(?:max|min)-width:\s*(\d+)px/g)].map((m) =>
+      Number(m[1]),
+    )
+    // 769 is the min-width complement of the 768 phone boundary.
+    const allowed = new Set([480, 768, 769, 960, 1200])
+    expect([...new Set(widths)].filter((w) => !allowed.has(w))).toEqual([])
+  })
+
+  it('expresses every border-radius as a token', () => {
+    const values = [...all.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim())
+    // 50% is a circle, which is a shape rather than a step on the radius scale.
+    const offScale = values.filter((v) => !v.startsWith('var(--') && v !== '50%')
+    expect(offScale).toEqual([])
+  })
+
+  it('keeps the elevation vocabulary to two shadows, a scrim and a ring', () => {
+    const values = [...all.matchAll(/box-shadow:\s*([^;]+);/g)].map((m) => m[1].trim())
+    const allowed = new Set(['var(--shadow-sm)', 'var(--shadow-overlay)', 'var(--ring)', 'none'])
+    expect([...new Set(values)].filter((v) => !allowed.has(v))).toEqual([])
+  })
+
+  it('runs every transition on the documented durations and curve', () => {
+    const declarations = [...all.matchAll(/transition:\s*([^;]+);/g)].map((m) => m[1])
+    const offScale = declarations.filter(
+      (d) => /\d+(\.\d+)?s|\d+ms/.test(d) && !d.includes('var(--duration'),
+    )
+    expect(offScale).toEqual([])
+  })
+})

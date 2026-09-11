@@ -94,3 +94,35 @@ describe('page smoke tests', () => {
     renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
   })
 })
+
+describe('character page loading states', () => {
+  /**
+   * The page used to show "Character not found" whenever its record was absent,
+   * and the record is absent for as long as the library takes to load. Every
+   * refresh, bookmark and link pasted into Discord therefore opened on an error
+   * claiming the character did not exist.
+   */
+  it('shows a skeleton while the library is still loading, not an error', () => {
+    useStore.setState({ characters: [], loading: true })
+    renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
+
+    expect(screen.getByText(/Loading character/i)).toBeInTheDocument()
+    expect(screen.queryByText(/not found/i)).not.toBeInTheDocument()
+  })
+
+  it('only says not-found once the library has actually arrived', () => {
+    useStore.setState({ characters: CHARACTERS, loading: false })
+    renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: /Character not found/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Nothing here called/i)).toBeInTheDocument()
+  })
+
+  it('offers a way back rather than stranding you', () => {
+    useStore.setState({ characters: CHARACTERS, loading: false })
+    renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
+    expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/')
+  })
+})

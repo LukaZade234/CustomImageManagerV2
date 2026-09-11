@@ -58,6 +58,7 @@ function slotIndexAt(clientX, clientY) {
 export function useGalleryReorder({ items, enabled, indicesFor, onReorder }) {
   const [dragIndices, setDragIndices] = useState(null)
   const [dropTargetIndex, setDropTargetIndex] = useState(null)
+  const [announcement, setAnnouncement] = useState('')
 
   // One ref for the whole gesture, rather than one per thing being tracked.
   const gesture = useRef(null)
@@ -237,6 +238,52 @@ export function useGalleryReorder({ items, enabled, indicesFor, onReorder }) {
     return () => cancelAnimationFrame(rafId)
   }, [dragIndices])
 
+  /**
+   * Move an item with the arrow keys.
+   *
+   * Reordering was pointer-only: `itemProps` carried nothing but pointer
+   * handlers, so a keyboard user could add images, remove them and copy a
+   * command, but could not control the order the command actually emits — which
+   * is the product's whole output. The help panel cheerfully told them to drag.
+   *
+   * The same `moveGroupInArray` path the pointer drag uses, so a grouped
+   * selection moves together here too. `moveGroupInArray` inserts *before* the
+   * target index, so moving right has to aim one past the neighbour to land
+   * after it.
+   */
+  const onItemKeyDown = useCallback(
+    (event, index) => {
+      if (!enabled) return
+      const back = event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+      const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      if (!back && !forward) return
+
+      const indices = indicesFor(index)
+      if (!indices.length) return
+      const lowest = Math.min(...indices)
+      const highest = Math.max(...indices)
+      const target = back ? lowest - 1 : highest + 2
+      if (back ? lowest <= 0 : highest >= items.length - 1) return
+
+      event.preventDefault()
+      const next = moveGroupInArray(items, indices, target)
+      if (ordersEqual(next, items)) return
+      onReorder(next)
+
+      // Focus follows the item to its new home, or the arrow keys walk away
+      // from the thing being moved after one press.
+      const landing = back ? lowest - 1 : lowest + 1
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-reorder-slot="${landing}"]`)?.focus?.()
+      })
+      setAnnouncement(
+        `Moved to position ${landing + 1} of ${items.length}` +
+          (indices.length > 1 ? `, with ${indices.length - 1} more` : ''),
+      )
+    },
+    [enabled, indicesFor, items, onReorder],
+  )
+
   /** Spread onto each gallery item. */
   const itemProps = useCallback(
     (index) =>
@@ -251,9 +298,10 @@ export function useGalleryReorder({ items, enabled, indicesFor, onReorder }) {
             // reorder mode that menu is useful, so this is scoped to the mode
             // rather than applied to the gallery generally.
             onContextMenu: (e) => e.preventDefault(),
+            onKeyDown: (e) => onItemKeyDown(e, index),
           }
         : {},
-    [enabled, onPointerDown, onPointerMove, onPointerUp, onPointerCancel],
+    [enabled, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onItemKeyDown],
   )
 
   return {
@@ -262,5 +310,7 @@ export function useGalleryReorder({ items, enabled, indicesFor, onReorder }) {
     isDragging: dragIndices != null,
     itemProps,
     consumeClickAfterDrag,
+    /** For a polite live region: a pointer drag is visible, a key press is not. */
+    announcement,
   }
 }

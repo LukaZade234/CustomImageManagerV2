@@ -95,6 +95,9 @@ export default function CustomImageGallery({
               else onOpenImage(index)
             }}
             {...reorder.itemProps(index)}
+            // Arrow keys move an item in reorder mode; the hook handles the
+            // keydown, this just makes the announcement reachable.
+            aria-describedby={reordering ? 'gallery-reorder-help' : undefined}
           >
             <img
               /*
@@ -137,6 +140,17 @@ export default function CustomImageGallery({
         bug rather than a layout. Zero height and no reorder slot, so they are
         inert to both layout and hit-testing.
       */}
+      {/* Pointer drags are visible; a key press is not, so it is announced. */}
+      {reordering && (
+        <>
+          <span id="gallery-reorder-help" className="sr-only">
+            Press the arrow keys to move this image.
+          </span>
+          <span className="sr-only" role="status">
+            {reorder.announcement}
+          </span>
+        </>
+      )}
       {rows.length > 0 &&
         FILLERS.map((id) => (
           <span key={`filler-${id}`} className="gallery-filler" aria-hidden="true" />

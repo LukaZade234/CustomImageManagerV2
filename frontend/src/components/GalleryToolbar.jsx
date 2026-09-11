@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Button } from './ui'
 
 /**
@@ -35,13 +36,36 @@ export function GalleryToolbar({
   onOpenRemovedDrawer,
   onAddImage,
 }) {
+  const group = useRef(null)
+  const previousMode = useRef(mode)
+
+  /**
+   * Keep focus inside the toolbar across a mode change.
+   *
+   * Entering a mode unmounts the button that was just clicked -- the browse
+   * group only renders while mode === 'browse' -- so the browser drops focus to
+   * <body>. A keyboard user was returned to the top of the document on every
+   * mode change, five times a session, and had to re-traverse the navbar and
+   * the header to get back. Moving focus to the new group's first control keeps
+   * them where they were working.
+   */
+  useEffect(() => {
+    if (previousMode.current === mode) return
+    previousMode.current = mode
+    const first = group.current?.querySelector('button:not(:disabled)')
+    // Only steal focus if the user was already in the toolbar; a mode entered
+    // from the character header should not yank focus down the page.
+    if (first && group.current?.contains(document.activeElement)) first.focus()
+    else if (first && document.activeElement === document.body) first.focus()
+  }, [mode])
+
   const aiMode = mode === 'ai'
   const deleteMode = mode === 'remove'
   const downloadMode = mode === 'download'
   const reorderMode = mode === 'reorder'
 
   return (
-    <div className="char-custom-toolbar-actions">
+    <div className="char-custom-toolbar-actions" ref={group}>
       {aiMode && (
         <>
           <Button variant="success" size="sm" onClick={onGenerateAiCommand}>

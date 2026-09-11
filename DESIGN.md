@@ -273,8 +273,9 @@ adapts to them instead.
 
 ### Named Rules
 
-**The Four Breakpoints Rule.** 480, 768, 960, 1200. A fifth value in a media query is a
-bug, not a refinement.
+**The Four Breakpoints Rule.** 480, 768, 960, 1200 (and 769 as the min-width complement
+of the phone boundary). A fifth value in a media query is a bug, not a refinement — and a
+test fails on one.
 
 ## Elevation & Depth
 
@@ -296,6 +297,11 @@ loses its depth vocabulary.
   only. The thing it says is "this is in front of the page", and nothing else should say
   that.
 - **`--scrim`** (`rgb(16 20 28 / 0.55)`): The backdrop behind a modal.
+- **`--ring`** (`0 0 0 3px` of the focus colour at 30%): Not an elevation. A focus
+  or active ring, drawn with `box-shadow` because an `outline` cannot be tinted —
+  used on the reorder drop target and the segmented control. It is listed here
+  because it is a `box-shadow` value and would otherwise look like a third
+  elevation to anyone counting.
 
 Dark mode deepens all three rather than reusing the light values, because a shadow tuned
 for white ground disappears on near-black.
@@ -304,7 +310,13 @@ for white ground disappears on near-black.
 
 **The Line Not Shadow Rule.** The default separator is a 1px border. Reach for a shadow
 only when the element genuinely floats above the page — and then use one of the two that
-exist rather than inventing a third.
+exist rather than inventing a third. `--ring` is not an exception to this: it is a focus
+affordance that happens to be drawn with `box-shadow`.
+
+These are enforced by `frontend/src/styles/tokenPairs.test.js`, not merely asserted here.
+The rules in this document were false for a while — nine breakpoints against a stated four,
+nine radii against a stated four — and a design document whose rules are already broken
+teaches the next reader that the rules are decorative.
 
 ## Shapes
 
@@ -312,6 +324,10 @@ Four radii and no more: **4px** (`sm`) for small inline things — badges, thumb
 focus rings; **6px** (`md`) as the workhorse for buttons, inputs and selects; **10px**
 (`lg`) for cards and modals; and **999px** (`pill`) for the search field, segmented
 controls and the round icon buttons in the navbar.
+
+Every radius is written as a token, never a literal; a test enforces it. The one shape
+outside the scale is `50%`, used for genuinely circular controls — a circle is a shape
+rather than a step on the scale.
 
 The form language is rectangular and quiet. Corners are softened just enough to read as
 deliberate, never enough to read as friendly. The radius steps up with the size of the
