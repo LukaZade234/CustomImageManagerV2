@@ -171,4 +171,24 @@ describe('DESIGN.md invariants', () => {
     }
     expect(offScale).toEqual([])
   })
+  it('lets the grid row own the space around the header band buttons', () => {
+    // Save sits in column one and Edit/$ai in column two of the same grid row,
+    // so they are level by construction. A vertical margin or padding on either
+    // cell breaks that quietly — it moves one half of the row and nothing else,
+    // which is exactly the bug the grid replaced. The row gap owns this space.
+    const cells = ['.save-button', '.char-page-actions']
+    const vertical = /^(margin|padding)(-top|-bottom)?$/
+    const offenders = []
+    for (const { file, css } of sheets) {
+      for (const { selector, body } of rules(css)) {
+        if (!cells.some((cell) => selector.endsWith(cell))) continue
+        for (const [, prop, value] of body.matchAll(/([a-z-]+)\s*:\s*([^;]+);/g)) {
+          if (!vertical.test(prop)) continue
+          if (/^0( |$)/.test(value.trim())) continue
+          offenders.push(`${file}  ${selector}  ${prop}: ${value.trim()}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })

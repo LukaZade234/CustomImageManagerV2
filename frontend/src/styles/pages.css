@@ -360,9 +360,10 @@
   .save-button svg {
     display: none;
   }
-  .char-page-actions {
-    margin-top: var(--space-3);
-  }
+  /* No margin on the actions here. It was the gap between the identity and its
+     buttons back when they were the tail of a flex column; as a grid cell it
+     only pushes this row's right-hand half below its left-hand half, which is
+     the one thing the grid exists to prevent. The row gap owns that space. */
   .custom-images-section {
     margin-top: var(--space-5);
   }
