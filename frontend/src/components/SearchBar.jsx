@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store/useStore'
+import { SortMenu } from './SortMenu'
 import { Input, SegmentedControl, Select } from './ui'
 
 const SORT_OPTIONS = [
@@ -39,6 +40,16 @@ export default function SearchBar({ compact = false, collapsed = false, onExpand
    */
   const inputRef = useRef(null)
   const [wantFocus, setWantFocus] = useState(false)
+  /**
+   * The sort menu borrows the field's width while it is open.
+   *
+   * There is no room for both at 360px: the expanded control is its label plus
+   * its arrow, and a field squeezed into what is left would be narrower than
+   * the Name/Series switch sitting inside it. So the field steps aside to its
+   * magnifier, the same way it does for the navigation menu, and a choice puts
+   * it straight back.
+   */
+  const [sortOpen, setSortOpen] = useState(false)
 
   useEffect(() => {
     if (collapsed || !wantFocus) return
@@ -75,110 +86,102 @@ export default function SearchBar({ compact = false, collapsed = false, onExpand
     navigate(searchPath(query, nextMode), { replace: onSearchRoute })
   }
 
+  const magnifier = (onClick) => (
+    <button
+      type="button"
+      className="ui-btn ui-btn--secondary ui-btn--md search-collapsed"
+      aria-label="Search"
+      onClick={onClick}
+    >
+      <svg
+        aria-hidden="true"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      >
+        <circle cx="11" cy="11" r="7" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    </button>
+  )
+
+  // The navigation menu takes the whole cluster; the sort menu takes only the
+  // field, since its own control has to stay on screen.
   if (collapsed) {
     return (
       <div className="search-bar-cluster search-bar-cluster--collapsed">
-        <button
-          type="button"
-          className="ui-btn ui-btn--secondary ui-btn--md search-collapsed"
-          aria-label="Search"
-          onClick={() => {
-            setWantFocus(true)
-            onExpand?.()
-          }}
-        >
-          <svg
-            aria-hidden="true"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
+        {magnifier(() => {
+          setWantFocus(true)
+          onExpand?.()
+        })}
       </div>
     )
   }
 
+  /* Shortened to initials once there is something to read in the field. The
+     switch is 116px of a 200px field, and the thing you are typing matters more
+     than the two words beside it — which stay in the accessible name. */
+  const short = searchQuery.length > 0
+
   return (
     <div className="search-bar-cluster">
-      <div className="search-field">
-        <Input
-          ref={inputRef}
-          type="search"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value)
-            go(e.target.value, mode)
-          }}
-          placeholder={mode === 'name' ? 'Search by name...' : 'Search by series...'}
-          aria-label={mode === 'name' ? 'Search by character name' : 'Search by series'}
-          autoComplete="off"
-        />
-        {/* Positioned inside the field, so it needs the field to have a width.
+      {compact && sortOpen ? (
+        magnifier(() => {
+          setWantFocus(true)
+          setSortOpen(false)
+        })
+      ) : (
+        <div className={`search-field${short ? ' is-short' : ''}`}>
+          <Input
+            ref={inputRef}
+            type="search"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              go(e.target.value, mode)
+            }}
+            placeholder={mode === 'name' ? 'Search by name...' : 'Search by series...'}
+            aria-label={mode === 'name' ? 'Search by character name' : 'Search by series'}
+            autoComplete="off"
+          />
+          {/* Positioned inside the field, so it needs the field to have a width.
             An absolutely positioned pill does not shrink with its container —
             it hangs out of the end of the bar — which is why the field
             collapses to its icon rather than being squeezed. */}
-        <SegmentedControl
-          name="search-mode"
-          label="Search by"
-          value={mode}
-          onChange={(v) => {
-            setMode(v)
-            go(searchQuery, v)
-          }}
-          options={[
-            { value: 'name', label: 'Name' },
-            { value: 'series', label: 'Series' },
-          ]}
-        />
-      </div>
+          <SegmentedControl
+            name="search-mode"
+            label="Search by"
+            value={mode}
+            onChange={(v) => {
+              setMode(v)
+              go(searchQuery, v)
+            }}
+            options={[
+              { value: 'name', label: 'Name', short: short ? 'N' : undefined },
+              { value: 'series', label: 'Series', short: short ? 'S' : undefined },
+            ]}
+          />
+        </div>
+      )}
       {/*
-        Was a div-based listbox with a document-level click-outside listener, no
-        arrow-key navigation and no Escape. A native select does all of that,
-        and gets the platform's own picker on mobile.
+        Wide: a native <select>, which brings arrow keys, Escape and a click
+        outside without any of it being written by hand. Narrow: a menu under
+        the arrow, because the platform's own picker opens as a sheet in the
+        middle of the screen, detached from the control that asked for it —
+        see SortMenu, which owes the native control everything it gave up.
       */}
       {compact ? (
-        /*
-          Folded to its arrow, with the real <select> lying invisibly over it.
-          An expand-then-choose version of this got stuck open — nothing
-          guarantees a change event or a blur when someone dismisses the
-          platform's picker — and a control that can be left in the wrong state
-          is worse than one that never changes state at all. Tapping the arrow
-          is tapping the select, so the phone draws its own list and folds it
-          away itself.
-        */
-        <span className="navbar-sort-compact">
-          <svg
-            aria-hidden="true"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-          <Select
-            className="navbar-sort-compact__select"
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            aria-label="Sort results"
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </span>
+        <SortMenu
+          options={SORT_OPTIONS}
+          value={sort}
+          open={sortOpen}
+          onOpenChange={setSortOpen}
+          onChange={setSort}
+        />
       ) : (
         <Select
           className="navbar-sort-select"

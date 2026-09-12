@@ -187,15 +187,38 @@ describe('folding on a narrow viewport', () => {
     )
   })
 
-  it('folds the sort select down to its arrow, still a real select', () => {
+  it('folds the sort control to an arrow, and opens it over the field', async () => {
+    const user = userEvent.setup()
     renderNarrow()
-    // The arrow is a round button with the select lying invisibly over it, so
-    // one tap reaches the platform's own list. An earlier version expanded on
-    // click and could be left open — nothing guarantees a change event or a
-    // blur when the picker is dismissed — which is how a 160px control ended up
-    // stuck across the bar.
-    expect(document.querySelector('.navbar-sort-compact')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: /Sort results/i })).toBeInTheDocument()
+
+    expect(screen.queryByRole('menu', { name: /Sort results/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Sort: Rank \(High-Low\)/i }))
+
+    // The list belongs under the arrow. The platform's own picker is a sheet in
+    // the middle of the screen, unattached to the control that asked for it.
+    expect(screen.getByRole('menu', { name: /Sort results/i })).toBeInTheDocument()
+    // And the field stands aside while it is open: there is no room for both.
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('menuitemradio', { name: /Name \(A-Z\)/i }))
+    expect(useStore.getState().searchSort).toBe('name')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+  })
+
+  it('shortens the Name/Series switch to initials once you are typing', async () => {
+    const user = userEvent.setup()
+    renderNarrow()
+
+    expect(screen.getByRole('radio', { name: 'Series' }).closest('label')).toHaveTextContent(
+      'Series',
+    )
+    await user.type(screen.getByRole('searchbox'), 'rei')
+
+    // Drawn as an initial, still announced as the word.
+    const option = screen.getByRole('radio', { name: 'Series' }).closest('label')
+    expect(option.querySelector('[aria-hidden="true"]')).toHaveTextContent('S')
+    expect(screen.getByRole('radio', { name: 'Series' })).toBeInTheDocument()
   })
 
   it('collapses the search field to its icon while the menu has the width', async () => {

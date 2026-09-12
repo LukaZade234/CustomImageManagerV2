@@ -67,39 +67,66 @@
   padding: 0;
   border-radius: var(--radius-pill);
 }
-/* Folded, the sort control is its arrow and nothing else: a round button with
-   the real <select> lying invisibly across it, so a tap opens the platform's
-   own list and the platform closes it again. */
-.navbar-sort-compact {
+/* The narrow-screen sort control: an arrow that grows into its label and drops
+   a list underneath, anchored to the right so it opens across the field it is
+   borrowing width from rather than off the side of the screen. */
+.sort-menu {
   position: relative;
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--nav-control-min-h);
-  height: var(--nav-control-min-h);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--text);
 }
-.navbar-sort-compact__select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
+.sort-menu__toggle {
+  width: var(--nav-control-min-h);
+  min-height: var(--nav-control-min-h);
   padding: 0;
+  border-radius: var(--radius-pill);
+}
+.sort-menu.is-open .sort-menu__toggle {
+  width: auto;
+  padding: 0 var(--space-3);
+}
+.sort-menu__current {
+  white-space: nowrap;
+}
+.sort-menu__list {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-overlay);
+}
+.sort-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--nav-control-min-h);
+  padding: 0 var(--space-3);
   border: 0;
-  opacity: 0;
-  appearance: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--type-meta);
+  text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
-/* The ring belongs on the thing you can see, since the control itself is
-   invisible by design. */
-.navbar-sort-compact:focus-within {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+.sort-menu__item:hover {
+  background: var(--surface-hover);
+}
+.sort-menu__item[aria-checked="true"] {
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+}
+.sort-menu__tick {
+  width: 1em;
+  flex-shrink: 0;
 }
 /* Nav controls sit at the taller touch height even though the base button is
    34px, because they are the most-tapped targets on mobile. */
@@ -204,8 +231,18 @@
     flex: 1 1 auto;
     min-width: 120px;
   }
-  .navbar-center:has(.search-bar-cluster--collapsed) {
+  /* Collapsed, the cluster is one 44px button, and the container has to stop
+     claiming the whole line for it. Its `width: 100%` was beating the flex
+     basis, so the button sat at the right-hand end of a full-width box and
+     pushed the links and the menu off the side of the screen. */
+  .navbar-center.is-collapsed {
     flex: 0 0 auto;
+    width: auto;
+  }
+  /* The links and the menu button keep to the right, so the search stays next
+     to the home link rather than drifting into the middle. */
+  .navbar-right {
+    margin-left: auto;
   }
   .stats-dashboard {
     gap: 12px;

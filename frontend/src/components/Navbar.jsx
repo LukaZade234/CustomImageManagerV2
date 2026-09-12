@@ -69,7 +69,9 @@ export default function Navbar() {
             to its magnifier exactly when the menu is open, so the only thing
             the handler could catch was focus landing on that magnifier, which
             it then unmounted before its own click handler could run. */}
-        <div className="navbar-center search-container">
+        <div
+          className={`navbar-center search-container${compact && menuOpen ? ' is-collapsed' : ''}`}
+        >
           <SearchBar
             compact={compact}
             collapsed={compact && menuOpen}
