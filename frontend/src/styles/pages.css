@@ -1561,15 +1561,25 @@ a.home-strip__item:hover .home-strip__shot {
   font-size: var(--type-micro);
   color: var(--text-muted);
 }
-/* Eight frames across stops being a picture and becomes a stripe. */
-@media (max-width: 960px) {
+/* Below the point where eight frames across stop being a picture and become a
+   stripe, stop wrapping altogether: half-size tiles in one scrolling row,
+   the same move the "Just added" strip makes for the same reason. */
+@media (max-width: 768px) {
   .home-strip {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    cursor: grab;
+    border-radius: var(--radius-md);
   }
-}
-@media (max-width: 480px) {
-  .home-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .home-strip.is-dragging {
+    cursor: grabbing;
+    scroll-behavior: auto;
+    user-select: none;
+  }
+  .home-strip > li {
+    flex: 0 0 50%;
   }
 }
 .home-ranked {

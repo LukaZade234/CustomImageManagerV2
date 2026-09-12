@@ -156,7 +156,7 @@ export default function HomePage() {
               card inside a card repeated, with the pictures reduced to 40px
               afterthoughts beside the names.
             */}
-            <ol className="home-strip">
+            <ol className="home-strip" {...dragScroll}>
               {mostViewed.map((c, i) => (
                 <li key={c.name}>
                   <Link className="home-strip__item" to={characterHref(c.name)}>
@@ -187,29 +187,26 @@ export default function HomePage() {
       {bestCovered.length > 0 && (
         <Card as="section" padding="lg">
           <Section title="Most popular characters">
-            <ol className="home-ranked">
-              {bestCovered.map((c, i) => (
+            <ol className="home-strip" {...dragScroll}>
+              {bestCovered.map((c) => (
                 <li key={c.name}>
-                  <Link className="home-ranked__item" to={characterHref(c.name)}>
-                    <span className="home-ranked__rank tabular" aria-hidden>
-                      {i + 1}
-                    </span>
+                  <Link className="home-strip__item" to={characterHref(c.name)}>
                     {c.image ? (
                       <img
-                        className="home-ranked__thumb"
+                        className="home-strip__shot"
                         src={getImageUrl(c.image)}
                         alt=""
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <span className="home-ranked__thumb home-ranked__thumb--empty" aria-hidden />
+                      <span className="home-strip__shot" aria-hidden />
                     )}
-                    <span className="home-ranked__text">
-                      <span className="home-ranked__title">{c.name}</span>
-                      {c.series && <span className="home-ranked__meta">{c.series}</span>}
+                    <span className="home-strip__caption">
+                      <span className="home-strip__rank tabular">{c.images}</span>
+                      <span className="home-strip__name">{c.name}</span>
+                      {c.series && <span className="home-strip__series">{c.series}</span>}
                     </span>
-                    <span className="home-ranked__count tabular">{c.images}</span>
                   </Link>
                 </li>
               ))}
