@@ -277,9 +277,9 @@ data that has ever existed. That is the reason pre-flight step 4 is a gate.
 
 - [ ] Update `CURRENT_STATE.md` — it describes v1 in the present tense throughout.
 - [ ] Close out the Phase 5 "Outstanding" items in `ROADMAP.md`.
-- [ ] Remove `flask-compress` — Cloudflare does Brotli at the edge, so origin gzip
-  only burns CPU. Deliberately left until after cut-over to keep one variable
-  out of it.
+- [x] Remove `flask-compress` — done ahead of the cut-over in `5c62b9c`, once
+  Cloudflare was in front and confirmed to be compressing. The edge does Brotli,
+  which beats gzip.
 - [ ] Decide whether `/custom_images.json` can go. Nothing in the SPA calls it any
   more; it is a ~486 KB response left in place only in case something external
   does.
