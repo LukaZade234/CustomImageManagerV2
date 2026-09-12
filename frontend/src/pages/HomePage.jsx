@@ -21,20 +21,6 @@ import { useStore } from '../store/useStore'
  * degrades to the parts that are true rather than displaying empty furniture.
  */
 
-function Stat({ value, label, children }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-icon" aria-hidden>
-        {children}
-      </div>
-      <div className="stat-info">
-        <span className="stat-value tabular">{value.toLocaleString()}</span>
-        <span className="stat-label">{label}</span>
-      </div>
-    </div>
-  )
-}
-
 function Section({ title, action, children }) {
   return (
     <section className="home-section">
@@ -77,6 +63,7 @@ export default function HomePage() {
   const recent = stats?.recent ?? []
   const bestCovered = stats?.best_covered ?? []
   const topSeries = stats?.top_series ?? []
+  const maxSeriesCharacters = Math.max(1, ...topSeries.map((s) => s.characters))
   // Empty until the view log has something in it, which is why the section
   // hides rather than rendering an authoritative-looking blank.
   const mostViewed = stats?.most_viewed ?? []
@@ -86,61 +73,36 @@ export default function HomePage() {
 
   return (
     <div className="home">
+      {/*
+        Identity on one side, what is in the library on the other.
+
+        It was a page title over three cards of icon-plus-number-plus-label,
+        which is a card inside a card and the laziest container there is. The
+        figures are a definition list now — they are definitions — so they read
+        as a table of contents for the library rather than as three badges.
+      */}
       <Card as="section" padding="lg">
-        <h1 className="page-title">ImgManager</h1>
-        <p className="page-subtitle">
-          Custom character images for Mudae — organised, deduplicated, and ready to paste.
-        </p>
-        <div className="stats-dashboard">
-          <Stat value={images} label="Custom images">
-            <svg
-              aria-hidden="true"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          </Stat>
-          <Stat value={characters} label="Characters covered">
-            <svg
-              aria-hidden="true"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </Stat>
-          <Stat value={seriesCount} label="Series">
-            <svg
-              aria-hidden="true"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-          </Stat>
+        <div className="home-hero">
+          <div>
+            <h1 className="page-title home-hero__title">ImgManager</h1>
+            <p className="home-hero__subtitle">
+              Custom character images for Mudae - organised, deduplicated, and ready to paste.
+            </p>
+          </div>
+          <dl className="home-hero__figures">
+            <div className="home-hero__figure">
+              <dt>Custom images</dt>
+              <dd>{images.toLocaleString()}</dd>
+            </div>
+            <div className="home-hero__figure">
+              <dt>Characters covered</dt>
+              <dd>{characters.toLocaleString()}</dd>
+            </div>
+            <div className="home-hero__figure">
+              <dt>Series</dt>
+              <dd>{seriesCount.toLocaleString()}</dd>
+            </div>
+          </dl>
         </div>
       </Card>
 
@@ -183,33 +145,37 @@ export default function HomePage() {
       {mostViewed.length > 0 && (
         <Card as="section" padding="lg">
           <Section title="Most visited this week">
+            {/* biome-ignore format: kept on one line so live's text verification finds it whole */}
             <p className="text-meta home-note">
-              Ranked by how many different people looked, not by how many visits — one enthusiast
-              refreshing cannot move it.
+              Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.
             </p>
-            <ol className="home-ranked">
+            {/*
+              A contact strip: the eight frames butt together into one band with
+              hairline dividers, which is how a proof sheet reads — and this page
+              is a proof sheet of the library. It was eight bordered tiles, a
+              card inside a card repeated, with the pictures reduced to 40px
+              afterthoughts beside the names.
+            */}
+            <ol className="home-strip" {...dragScroll}>
               {mostViewed.map((c, i) => (
                 <li key={c.name}>
-                  <Link className="home-ranked__item" to={characterHref(c.name)}>
-                    <span className="home-ranked__rank tabular" aria-hidden>
-                      {i + 1}
-                    </span>
+                  <Link className="home-strip__item" to={characterHref(c.name)}>
                     {c.image ? (
                       <img
-                        className="home-ranked__thumb"
+                        className="home-strip__shot"
                         src={getImageUrl(c.image)}
                         alt=""
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <span className="home-ranked__thumb home-ranked__thumb--empty" aria-hidden />
+                      <span className="home-strip__shot" aria-hidden />
                     )}
-                    <span className="home-ranked__text">
-                      <span className="home-ranked__title">{c.name}</span>
-                      {c.series && <span className="home-ranked__meta">{c.series}</span>}
+                    <span className="home-strip__caption">
+                      <span className="home-strip__rank tabular">{i + 1}</span>
+                      <span className="home-strip__name">{c.name}</span>
+                      {c.series && <span className="home-strip__series">{c.series}</span>}
                     </span>
-                    <span className="home-ranked__count tabular">{c.viewers.toLocaleString()}</span>
                   </Link>
                 </li>
               ))}
@@ -221,29 +187,26 @@ export default function HomePage() {
       {bestCovered.length > 0 && (
         <Card as="section" padding="lg">
           <Section title="Most popular characters">
-            <ol className="home-ranked">
-              {bestCovered.map((c, i) => (
+            <ol className="home-strip" {...dragScroll}>
+              {bestCovered.map((c) => (
                 <li key={c.name}>
-                  <Link className="home-ranked__item" to={characterHref(c.name)}>
-                    <span className="home-ranked__rank tabular" aria-hidden>
-                      {i + 1}
-                    </span>
+                  <Link className="home-strip__item" to={characterHref(c.name)}>
                     {c.image ? (
                       <img
-                        className="home-ranked__thumb"
+                        className="home-strip__shot"
                         src={getImageUrl(c.image)}
                         alt=""
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <span className="home-ranked__thumb home-ranked__thumb--empty" aria-hidden />
+                      <span className="home-strip__shot" aria-hidden />
                     )}
-                    <span className="home-ranked__text">
-                      <span className="home-ranked__title">{c.name}</span>
-                      {c.series && <span className="home-ranked__meta">{c.series}</span>}
+                    <span className="home-strip__caption">
+                      <span className="home-strip__rank tabular">{c.images}</span>
+                      <span className="home-strip__name">{c.name}</span>
+                      {c.series && <span className="home-strip__series">{c.series}</span>}
                     </span>
-                    <span className="home-ranked__count tabular">{c.images}</span>
                   </Link>
                 </li>
               ))}
@@ -255,14 +218,35 @@ export default function HomePage() {
       {topSeries.length > 0 && (
         <Card as="section" padding="lg">
           <Section title="Most popular series">
+            {/*
+              A bar per row, because "most popular" is a statement about
+              relative size and eight identically sized tiles are the one shape
+              that hides it. The bar measures characters while the order
+              measures images, so breadth and depth read apart: a series can
+              rank high on one and low on the other, and that is the
+              interesting part.
+            */}
             <ul className="home-series">
               {topSeries.map((s) => (
                 <li key={s.series}>
-                  <Link className="home-series__item" to={seriesHref(s.series)}>
+                  <Link
+                    className="home-series__item"
+                    to={seriesHref(s.series)}
+                    style={{ '--share': s.characters / maxSeriesCharacters }}
+                  >
                     <span className="home-series__name">{s.series}</span>
-                    <span className="home-series__meta tabular">
+                    {/* The compact pair is what the design wants to show; the
+                        link still has to say what its numbers are, or it
+                        announces itself as "Genshin Impact 808 · 31". */}
+                    <span className="home-series__meta tabular" aria-hidden="true">
+                      {s.images.toLocaleString()} · {s.characters}
+                    </span>
+                    <span className="sr-only">
                       {s.images.toLocaleString()} images · {s.characters}{' '}
                       {s.characters === 1 ? 'character' : 'characters'}
+                    </span>
+                    <span className="home-series__track">
+                      <span className="home-series__fill" />
                     </span>
                   </Link>
                 </li>
