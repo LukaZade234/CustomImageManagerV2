@@ -197,13 +197,12 @@ describe('folding on a narrow viewport', () => {
     // The list belongs under the arrow. The platform's own picker is a sheet in
     // the middle of the screen, unattached to the control that asked for it.
     expect(screen.getByRole('menu', { name: /Sort results/i })).toBeInTheDocument()
-    // And the field stands aside while it is open: there is no room for both.
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+    // The field stays where it is and simply narrows to make room.
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
 
     await user.click(screen.getByRole('menuitemradio', { name: /Name \(A-Z\)/i }))
     expect(useStore.getState().searchSort).toBe('name')
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
-    expect(screen.getByRole('searchbox')).toBeInTheDocument()
   })
 
   it('shortens the Name/Series switch to initials once you are typing', async () => {
@@ -221,32 +220,30 @@ describe('folding on a narrow viewport', () => {
     expect(screen.getByRole('radio', { name: 'Series' })).toBeInTheDocument()
   })
 
-  it('collapses the search field to its icon while the menu has the width', async () => {
+  it('keeps the search field while the menu has the bar, and drops the sort', async () => {
     const user = userEvent.setup()
     renderNarrow()
-    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Sort:/i })).toBeInTheDocument()
 
-    // Four links, a home button and a menu button leave about 30px of a 390px
-    // bar. A 30px text field is not a field, and the Name/Series pill inside it
-    // is positioned rather than flexible, so it hangs out of the end.
+    // The field gives ground rather than leaving: it shrinks to a pill, and the
+    // switch inside it steps out on its own once there is no room (a container
+    // query, so it answers to the field's width and not the window's). What
+    // does leave is the sort control, because four links, a home button and a
+    // menu button do not leave room for it as well.
     await user.click(screen.getByRole('button', { name: /Show menu/i }))
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
-    expect(screen.queryByRole('radio', { name: 'Series' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Search$/i })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Sort:/i })).not.toBeInTheDocument()
   })
 
-  it('gives the field back, focused, when the magnifier is tapped', async () => {
+  it('gets out of the way when you reach for the search field', async () => {
     const user = userEvent.setup()
     renderNarrow()
     await user.click(screen.getByRole('button', { name: /Show menu/i }))
-    await user.click(screen.getByRole('button', { name: /^Search$/i }))
+    expect(screen.getByRole('link', { name: /Customs/i })).toBeInTheDocument()
 
-    const field = screen.getByRole('searchbox')
-    expect(field).toBeInTheDocument()
-    // Only this tap moves focus. The menu also closes on navigation, and
-    // raising the keyboard every time someone follows a link is its own bug.
-    expect(document.activeElement).toBe(field)
+    await user.click(screen.getByRole('searchbox'))
     expect(screen.queryByRole('link', { name: /Customs/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Sort:/i })).toBeInTheDocument()
   })
 
   it('puts the menu button at the end of the bar', () => {

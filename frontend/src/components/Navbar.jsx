@@ -64,19 +64,10 @@ export default function Navbar() {
               one. */}
           {!compact && <span className="navbar-brand__name">ImgManager</span>}
         </Link>
-        {/* No focus handler here any more. There was one, to close the menu
-            when someone reached for the search field — but the field collapses
-            to its magnifier exactly when the menu is open, so the only thing
-            the handler could catch was focus landing on that magnifier, which
-            it then unmounted before its own click handler could run. */}
-        <div
-          className={`navbar-center search-container${compact && menuOpen ? ' is-collapsed' : ''}`}
-        >
-          <SearchBar
-            compact={compact}
-            collapsed={compact && menuOpen}
-            onExpand={() => setMenuOpen(false)}
-          />
+        {/* Reaching for the search field is a statement that you are done with
+            the menu, and the menu is standing in its way. */}
+        <div className="navbar-center search-container" onFocusCapture={() => setMenuOpen(false)}>
+          <SearchBar compact={compact} minimal={compact && menuOpen} />
         </div>
         {linksVisible && (
           <div className="navbar-right" id="navbar-links">

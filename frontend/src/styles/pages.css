@@ -934,7 +934,14 @@ body.reorder-touch-dragging {
 .search-field {
   position: relative;
   flex: 1 1 260px;
-  min-width: 0;
+  /* Never narrower than a tappable pill, and never so wide it stops the bar
+     fitting. It used to fold away to a circle when anything else wanted the
+     room; giving ground is not the same as leaving. */
+  min-width: 44px;
+  /* The switch inside is positioned rather than laid out, so it cannot be asked
+     to shrink. What it can be asked is to leave, and that depends on this
+     element's width rather than the window's. */
+  container-type: inline-size;
   --search-toggle-width: 150px;
 }
 .search-field .ui-input {
@@ -964,6 +971,17 @@ body.reorder-touch-dragging {
    words beside it. */
 .search-field.is-short {
   --search-toggle-width: 74px;
+}
+/* And gone entirely once the field is down to a pill, where it would cover the
+   text rather than sit beside it. Name and Series are still reachable — the
+   field grows back the moment whatever borrowed the width gives it up. */
+@container (max-width: 160px) {
+  .search-field .ui-segmented {
+    display: none;
+  }
+  .search-field .ui-input {
+    padding-right: var(--space-3);
+  }
 }
 /* ---- Identity and moderation -------------------------------------------- */
 .navbar-handle {

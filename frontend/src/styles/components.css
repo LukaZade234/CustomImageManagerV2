@@ -53,20 +53,6 @@
   width: var(--nav-control-min-h);
   padding: 0;
 }
-/* Collapsed, the search cluster is one round magnifier, and the sort steps out
-   of the bar entirely: on a 390px screen the open menu leaves about 30px, and a
-   30px text field is not a field — it is an overflow waiting to happen. */
-.search-bar-cluster--collapsed {
-  justify-content: flex-end;
-  width: auto;
-}
-.search-collapsed {
-  flex: 0 0 auto;
-  width: var(--nav-control-min-h);
-  min-height: var(--nav-control-min-h);
-  padding: 0;
-  border-radius: var(--radius-pill);
-}
 /* The narrow-screen sort control: an arrow that grows into its label and drops
    a list underneath, anchored to the right so it opens across the field it is
    borrowing width from rather than off the side of the screen. */
@@ -225,22 +211,12 @@
   .search-bar-cluster {
     flex-wrap: nowrap;
   }
-  /* Wide enough to still be a field. Below this it collapses to its icon
-     instead of being squeezed into something nobody can type in. */
   .search-field {
     flex: 1 1 auto;
-    min-width: 120px;
   }
-  /* Collapsed, the cluster is one 44px button, and the container has to stop
-     claiming the whole line for it. Its `width: 100%` was beating the flex
-     basis, so the button sat at the right-hand end of a full-width box and
-     pushed the links and the menu off the side of the screen. */
-  .navbar-center.is-collapsed {
-    flex: 0 0 auto;
-    width: auto;
-  }
-  /* The links and the menu button keep to the right, so the search stays next
-     to the home link rather than drifting into the middle. */
+  /* The links and the menu button keep to the right. The field takes whatever
+     is left, which is also what keeps the sort control snapped against the menu
+     button instead of trailing after the field. */
   .navbar-right {
     margin-left: auto;
   }
