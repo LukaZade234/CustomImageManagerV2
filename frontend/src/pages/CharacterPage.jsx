@@ -672,8 +672,13 @@ export default function CharacterPage() {
         onDrop={upload.onDrop}
       >
         <div className="custom-images-header-row">
-          <h3 className="section-heading custom-images-heading">
+          <h2 className="section-heading custom-images-heading">
             Custom Images
+            {/* The count belongs on a page whose premise is "up to 256 of
+                these". The class already existed and nothing rendered it. */}
+            {customs.length > 0 && (
+              <span className="toolbar-selection-count">{customs.length}</span>
+            )}
             {/*
               The mode travels with the content it governs. It used to be
               signalled only by which buttons happened to be rendered, in a
@@ -688,7 +693,7 @@ export default function CharacterPage() {
                 {MODE_LABELS[mode]}
               </span>
             )}
-          </h3>
+          </h2>
           {/* Browse only. Everything an open mode needs is in the bar fixed to
               the bottom of the viewport, within reach of wherever you have
               scrolled to. */}
@@ -747,10 +752,6 @@ export default function CharacterPage() {
           onChange={upload.onFileInputChange}
           disabled={!!upload.progress}
         />
-        <p className="gallery-drop-hint">
-          Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add
-          Image&quot;
-        </p>
         {upload.progress && (
           <div className="custom-upload-progress" role="status" aria-live="polite">
             <span className="custom-upload-progress-spinner" aria-hidden />
@@ -798,7 +799,7 @@ export default function CharacterPage() {
               <EmptyState
                 className="gallery-empty"
                 title="No custom images yet"
-                description={`Add one and it becomes part of the $ai command for ${name}.`}
+                description={`Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`}
                 action={
                   <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
                     Add image

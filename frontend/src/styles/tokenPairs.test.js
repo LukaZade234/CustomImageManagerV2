@@ -144,4 +144,31 @@ describe('DESIGN.md invariants', () => {
     }
     expect(offenders).toEqual([])
   })
+  it('spaces everything on the documented 4px scale', () => {
+    // The last of DESIGN.md's claims with nothing behind it. Radii, breakpoints,
+    // shadows and type sizes each got a test; spacing said "no value outside the
+    // scale appears in the system" while 48 declarations sat off it.
+    //
+    // The exceptions are the values that are not steps at all: hairlines and the
+    // 1-2px optical nudges that sit under a border, and the two clearances the
+    // fixed action bar reserves, which are measurements of a control's height.
+    const SCALE = new Set([0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64])
+    const OPTICAL = new Set([1, 2])
+    const MEASURED = new Set([96, 140])
+    const offScale = []
+    for (const { file, css } of sheets) {
+      for (const [, prop, value] of css.matchAll(
+        /((?:margin|padding|gap|row-gap|column-gap)[a-z-]*)\s*:\s*([^;]+);/g,
+      )) {
+        for (const token of value.split(/\s+/)) {
+          const match = /^(-?\d+(?:\.\d+)?)(px|rem)$/.exec(token)
+          if (!match) continue
+          const px = Math.abs(Number(match[1]) * (match[2] === 'rem' ? 16 : 1))
+          if (SCALE.has(px) || OPTICAL.has(px) || MEASURED.has(px)) continue
+          offScale.push(`${file}  ${prop}: ${token}`)
+        }
+      }
+    }
+    expect(offScale).toEqual([])
+  })
 })

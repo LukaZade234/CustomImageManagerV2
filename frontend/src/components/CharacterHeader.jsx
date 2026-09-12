@@ -44,16 +44,72 @@ export function CharacterHeader({
   )
 
   return (
+    /*
+      One band: portrait, then identity, then the actions that belong to them.
+      It was two columns carrying one column of content — a 916px text column
+      beside a 180px portrait, with ~660px of nothing between the words and the
+      picture. Putting the portrait first makes the emptiness trailing margin
+      rather than a hole, and the band shrinks to what it actually holds.
+    */
     <div className="character-top-section">
+      <div className="char-image-section">
+        {edit.active ? (
+          /**
+           * Only a control while the character is being edited. The two branches
+           * are spelled out rather than made conditional on one element: a div
+           * that is sometimes a button and sometimes inert is both a real
+           * accessibility problem and unreadable. As a real <button> it also
+           * gets Enter, Space and focus for free, where the div needed its own
+           * keydown handler and only ever honoured Enter.
+           */
+          <button
+            type="button"
+            className={`image-wrapper edit-mode ${dragOver ? 'drag-over-main' : ''}`}
+            onClick={() => mainInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              onDragOverChange(true)
+            }}
+            onDragLeave={() => onDragOverChange(false)}
+            onDrop={onMainImageDrop}
+          >
+            {portrait}
+            <div className="image-overlay">
+              <span>Click or Drop to Change</span>
+            </div>
+          </button>
+        ) : (
+          <div className="image-wrapper">{portrait}</div>
+        )}
+        <IconButton
+          className={`save-button ${isSaved ? 'saved' : ''}`}
+          onClick={onToggleSave}
+          label={isSaved ? 'Remove from saved' : 'Save this character'}
+          aria-pressed={isSaved}
+        >
+          <svg
+            aria-hidden="true"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            /* Filled once saved, so the state does not rest on colour alone. */
+            fill={isSaved ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+        </IconButton>
+      </div>
       <div className="char-info-section">
         {!edit.active ? (
           <div>
-            <h3 className="display-title">{char.name}</h3>
+            <h1 className="display-title">{char.name}</h1>
             <p className="text-body">{char.series || '\u2014'}</p>
             <p className="text-meta">Rank: {char.rank || '\u2014'}</p>
             <div className="char-page-actions">
               <Button
-                variant="secondary"
+                variant="ghost"
                 onClick={edit.start}
                 title="Edit name, series, rank, and main image"
               >
@@ -82,8 +138,10 @@ export function CharacterHeader({
                 Copying the lot is one more click; taking a few out is visible
                 rather than hidden behind a button named after something else.
               */}
+              {/* The one solid button on the browse screen. Producing the $ai
+                  command is what the page is for, and nothing on it led. */}
               <Button
-                variant="secondary"
+                variant="primary"
                 onClick={onGetAiCommand}
                 disabled={customCount === 0}
                 title={
@@ -145,73 +203,22 @@ export function CharacterHeader({
               <Button variant="secondary" onClick={edit.cancel}>
                 Cancel
               </Button>
+              {/* Replacing the portrait is an editing action, so it sits with
+                  the other ones rather than under the picture, where it was a
+                  third of the space above the gallery for every visitor. */}
+              {mudae.configured && (
+                <Button
+                  variant="secondary"
+                  disabled={mudae.busy || loading}
+                  onClick={mudae.onRefreshMain}
+                  title="Run $im via Mudae and set the card image as main"
+                >
+                  {mudae.busy ? 'Updating from Mudae…' : 'Update main from Mudae'}
+                </Button>
+              )}
             </div>
           </div>
         )}
-      </div>
-      <div className="char-image-section">
-        {edit.active ? (
-          /**
-           * Only a control while the character is being edited. The two branches
-           * are spelled out rather than made conditional on one element: a div
-           * that is sometimes a button and sometimes inert is both a real
-           * accessibility problem and unreadable. As a real <button> it also
-           * gets Enter, Space and focus for free, where the div needed its own
-           * keydown handler and only ever honoured Enter.
-           */
-          <button
-            type="button"
-            className={`image-wrapper edit-mode ${dragOver ? 'drag-over-main' : ''}`}
-            onClick={() => mainInputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              onDragOverChange(true)
-            }}
-            onDragLeave={() => onDragOverChange(false)}
-            onDrop={onMainImageDrop}
-          >
-            {portrait}
-            <div className="image-overlay">
-              <span>Click or Drop to Change</span>
-            </div>
-          </button>
-        ) : (
-          <div className="image-wrapper">{portrait}</div>
-        )}
-        {/* Only while editing. Replacing the portrait is an editing action, and
-            on a phone this button was a third of the space above the gallery,
-            offering something most visitors cannot do anything with. */}
-        {mudae.configured && edit.active && (
-          <div className="char-mudae-actions">
-            <Button
-              variant="secondary"
-              disabled={mudae.busy || loading}
-              onClick={mudae.onRefreshMain}
-              title="Run $im via Mudae and set the card image as main"
-            >
-              {mudae.busy ? 'Updating from Mudae…' : 'Update main from Mudae'}
-            </Button>
-          </div>
-        )}
-        <IconButton
-          className={`save-button ${isSaved ? 'saved' : ''}`}
-          onClick={onToggleSave}
-          label={isSaved ? 'Remove from saved' : 'Save this character'}
-          aria-pressed={isSaved}
-        >
-          <svg
-            aria-hidden="true"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            /* Filled once saved, so the state does not rest on colour alone. */
-            fill={isSaved ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-        </IconButton>
       </div>
     </div>
   )

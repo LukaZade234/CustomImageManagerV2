@@ -251,7 +251,9 @@ reflow as they change read as broken.
 ## Layout
 
 A single centred container at 1400px maximum, with 20px side padding collapsing to 12px
-below 768px. Spacing is a strict 4px base (4, 8, 12, 16, 20, 24, 32, 40, 48, 64); no
+below 768px. The character page's action bar shares that measure and the card's own
+padding, so the bar's contents line up with the gallery above rather than sitting inside
+it. Spacing is a strict 4px base (4, 8, 12, 16, 20, 24, 32, 40, 48, 64); no
 value outside the scale appears in the system.
 
 Controls are 34px tall by default and 28px in their small variant. Anything in the navbar
@@ -272,7 +274,10 @@ height.
 
 Character portraits are a fixed 9:14 (`--main-image-ratio: 0.643`). Every one of the
 1,000 stored portraits is exactly 225×350, so anything a different shape arrived from
-elsewhere and is cropped to match rather than allowed to make a grid ragged. Custom
+elsewhere and is cropped to match rather than allowed to make a grid ragged. On a
+character page the portrait is capped by height rather than width, because that is the
+dimension that binds on a 9:14 image — 168px, dropping to 132px below 768px. It
+identifies the character; it is not the content. Custom
 images are whatever shape they were drawn in, and the layout adapts to them rather than
 the other way round. The single exception is a degenerate shape: ratios are clamped to
 0.4–2.5, because a 10:1 banner flattens its entire row to a sliver and a 1:10 strip makes
@@ -470,3 +475,9 @@ is the thing people actually want from a command.
 - **Don't** write an inline `style` to resize a control. That is what the size variants
   are for, and the inline override is the exact thing the primitives replaced.
 - **Don't** remove focus outlines. One ring, on `:focus-visible`, everywhere.
+- **Don't** write a page's responsive rules in a different file from its base rules. A
+  media query adds no specificity, so a later rule of equal specificity wins at every
+  width. Nine declarations for the character page lived in `components.css`, were beaten
+  by `pages.css`, and had never once applied — the header was written to stack on a phone
+  and never did. Keep both halves of a rule in one file, and let the import order in
+  `index.css` mean what it says.
