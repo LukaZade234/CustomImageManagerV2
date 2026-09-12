@@ -57,6 +57,7 @@ export default function HistoryTab() {
     >
       {(items) => (
         <CardGrid
+          uniform
           items={items.map((row) => ({
             key: row.name,
             href: `/character/${encodeURIComponent(row.name)}`,

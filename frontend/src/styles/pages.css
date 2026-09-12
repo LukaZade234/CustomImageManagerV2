@@ -1769,6 +1769,20 @@ a.home-ranked__item:hover {
   border-color: var(--accent);
   background: var(--surface-hover);
 }
+/* Characters are all one shape, so their lists are a plain grid rather than
+   justified rows: every card the same size, and a short last row that keeps the
+   size of the rows above it instead of stretching one lonely character across
+   the width of a phone. */
+.profile-grid--uniform {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+}
+.profile-grid--uniform .profile-card {
+  /* A grid track is the width; the padding has to come out of it rather than be
+     added to it, which is the opposite of what the justified rows need. */
+  box-sizing: border-box;
+  flex: none;
+}
 /* Zero-basis, zero-height: absorbs the space flex-grow would otherwise use to
    stretch a lone trailing card across the whole row, without occupying any. */
 .profile-grid__filler {

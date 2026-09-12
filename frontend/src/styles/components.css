@@ -236,9 +236,11 @@
     width: 64px;
     height: 64px;
   }
+  /* No side padding of its own: the card it sits in already has some, and a
+     third inset inside that is width the images could be using. */
   .custom-images-section {
-    padding: 16px;
-    margin-top: 12px;
+    padding: var(--space-4) 0 0;
+    margin-top: var(--space-3);
   }
   .saved-characters-grid {
     gap: 12px;

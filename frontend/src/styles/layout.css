@@ -7,6 +7,9 @@
 @media (max-width: 768px) {
   .container {
     margin-top: var(--space-6);
-    padding-top: var(--space-4);
+    /* 12px side gutters, as the layout has always claimed. At 20px, plus a
+       card's own padding and a section's on top of that, a phone was giving up
+       nearly a third of its width to the space around the pictures. */
+    padding: var(--space-4) var(--space-3) 0;
   }
 }

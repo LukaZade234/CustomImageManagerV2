@@ -55,6 +55,7 @@ export default function SavedTab() {
     >
       {(items) => (
         <CardGrid
+          uniform
           items={items.map((char) => ({
             key: char.name,
             href: `/character/${encodeURIComponent(char.name)}`,

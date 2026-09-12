@@ -168,3 +168,18 @@ describe('an empty gallery', () => {
     expect(screen.queryByText(/No custom images yet/i)).not.toBeInTheDocument()
   })
 })
+
+describe('profile lists', () => {
+  /**
+   * Characters are all the same 9:14, so a list of them is a grid of equal
+   * cards. Under justified rows a short last row stretched to fill the width,
+   * which on a phone meant two normal cards and then one enormous one.
+   */
+  it('lays saved characters out as a uniform grid', () => {
+    renderAt(<SavedTab />)
+    const grid = document.querySelector('.profile-grid')
+    expect(grid).toHaveClass('profile-grid--uniform')
+    // Fillers exist to level a justified row; a grid has no row to level.
+    expect(document.querySelectorAll('.profile-grid__filler').length).toBe(0)
+  })
+})
