@@ -63,6 +63,7 @@ export default function HomePage() {
   const recent = stats?.recent ?? []
   const bestCovered = stats?.best_covered ?? []
   const topSeries = stats?.top_series ?? []
+  const maxSeriesCharacters = Math.max(1, ...topSeries.map((s) => s.characters))
   // Empty until the view log has something in it, which is why the section
   // hides rather than rendering an authoritative-looking blank.
   const mostViewed = stats?.most_viewed ?? []
@@ -220,14 +221,35 @@ export default function HomePage() {
       {topSeries.length > 0 && (
         <Card as="section" padding="lg">
           <Section title="Most popular series">
+            {/*
+              A bar per row, because "most popular" is a statement about
+              relative size and eight identically sized tiles are the one shape
+              that hides it. The bar measures characters while the order
+              measures images, so breadth and depth read apart: a series can
+              rank high on one and low on the other, and that is the
+              interesting part.
+            */}
             <ul className="home-series">
               {topSeries.map((s) => (
                 <li key={s.series}>
-                  <Link className="home-series__item" to={seriesHref(s.series)}>
+                  <Link
+                    className="home-series__item"
+                    to={seriesHref(s.series)}
+                    style={{ '--share': s.characters / maxSeriesCharacters }}
+                  >
                     <span className="home-series__name">{s.series}</span>
-                    <span className="home-series__meta tabular">
+                    {/* The compact pair is what the design wants to show; the
+                        link still has to say what its numbers are, or it
+                        announces itself as "Genshin Impact 808 · 31". */}
+                    <span className="home-series__meta tabular" aria-hidden="true">
+                      {s.images.toLocaleString()} · {s.characters}
+                    </span>
+                    <span className="sr-only">
                       {s.images.toLocaleString()} images · {s.characters}{' '}
                       {s.characters === 1 ? 'character' : 'characters'}
+                    </span>
+                    <span className="home-series__track">
+                      <span className="home-series__fill" />
                     </span>
                   </Link>
                 </li>
