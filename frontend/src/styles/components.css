@@ -220,9 +220,6 @@
   .navbar-right {
     margin-left: auto;
   }
-  .stats-dashboard {
-    gap: 12px;
-  }
   .search-result-item {
     gap: 12px;
     padding: var(--space-4) 12px;
@@ -253,12 +250,6 @@
     animation: none;
   }
 }
-@media (max-width: 480px) {
-  .stat-card {
-    flex: 1 1 100%;
-  }
-}
-
 /* Toast Notifications */
 #toast-container {
   position: fixed;
@@ -795,23 +786,6 @@
   white-space: nowrap;
   border: 0;
 }
-.skeleton-stats {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 2rem;
-}
-.skeleton-stat-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 200px;
-  padding: 20px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
 .skeleton-circle {
   width: 50px;
   height: 50px;
@@ -825,12 +799,25 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.2s ease-in-out infinite;
 }
-.skeleton-stat-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* Mirrors .home-hero, so the placeholder and the thing it stands in for are the
+   same shape and nothing jumps when the figures land. */
+.skeleton-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-6);
 }
+.skeleton-hero__identity,
+.skeleton-hero__figures {
+  display: grid;
+  gap: var(--space-3);
+}
+@media (max-width: 768px) {
+  .skeleton-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .skeleton-line {
   height: 12px;
   border-radius: var(--radius-sm);

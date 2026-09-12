@@ -273,10 +273,6 @@
    components.css and beaten by these files' own base rules. A phone was showing
    200px-wide stat cards and 160px search thumbnails, both meant to be smaller. */
 @media (max-width: 960px) {
-  .stat-card {
-    min-width: 0;
-    flex: 1 1 calc(50% - var(--space-2));
-  }
   .search-result-img {
     width: 64px;
     height: 64px;
@@ -753,68 +749,6 @@ body.reorder-touch-dragging {
 }
 .features-list li {
   margin-bottom: 0.5rem;
-}
-/* Stats Dashboard */
-.stats-dashboard {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: var(--space-8);
-  flex-wrap: wrap;
-}
-.stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 200px;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform var(--duration) var(--ease),
-    box-shadow var(--duration) var(--ease);
-}
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
-}
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.stat-icon svg {
-  width: 24px;
-  height: 24px;
-}
-.stat-icon.image-icon {
-  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-}
-.stat-icon.char-icon {
-  background-color: color-mix(in srgb, var(--success) 10%, transparent);
-  color: var(--success);
-}
-.stat-info {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-}
-.stat-value {
-  font-size: var(--type-page-title);
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1;
-}
-.stat-label {
-  font-size: var(--type-meta);
-  color: var(--text-muted);
-  margin-top: 4px;
 }
 .loading {
   padding: 40px;
@@ -1413,6 +1347,60 @@ body.reorder-touch-dragging {
 .gallery-item-wrapper.select-mode:hover .custom-image-full {
   border-color: var(--accent);
 }
+/* The hero band: who this is on one side, what is in the library on the other.
+
+   It was a page title above three cards of icon, number and label — a card
+   inside a card, and the same shape three times, which says nothing about the
+   figures being different kinds of thing. As a definition list the numbers read
+   as a table of contents for the library, and the rows carry the hairline that
+   the cards were using a whole border-box to achieve. */
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-6);
+}
+.home-hero__title {
+  margin: 0 0 var(--space-3);
+}
+.home-hero__subtitle {
+  margin: 0;
+  max-width: 42ch;
+  color: var(--text-muted);
+}
+.home-hero__figures {
+  margin: 0;
+  display: grid;
+}
+.home-hero__figure {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.home-hero__figure:first-child {
+  border-top: 1px solid var(--border);
+}
+.home-hero__figure dt {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+.home-hero__figure dd {
+  margin: 0;
+  font-size: var(--type-page-title);
+  font-weight: var(--weight-semibold);
+  /* A count that changes must not reflow the column it sits in. */
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-title);
+}
+@media (max-width: 768px) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---- Home page -----------------------------------------------------------
  * Everything here is drawn from the library. The page used to be two stat cards
  * above a bullet list explaining the site to people already using it.

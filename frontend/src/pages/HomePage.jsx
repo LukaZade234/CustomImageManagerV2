@@ -21,20 +21,6 @@ import { useStore } from '../store/useStore'
  * degrades to the parts that are true rather than displaying empty furniture.
  */
 
-function Stat({ value, label, children }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-icon" aria-hidden>
-        {children}
-      </div>
-      <div className="stat-info">
-        <span className="stat-value tabular">{value.toLocaleString()}</span>
-        <span className="stat-label">{label}</span>
-      </div>
-    </div>
-  )
-}
-
 function Section({ title, action, children }) {
   return (
     <section className="home-section">
@@ -86,61 +72,36 @@ export default function HomePage() {
 
   return (
     <div className="home">
+      {/*
+        Identity on one side, what is in the library on the other.
+
+        It was a page title over three cards of icon-plus-number-plus-label,
+        which is a card inside a card and the laziest container there is. The
+        figures are a definition list now — they are definitions — so they read
+        as a table of contents for the library rather than as three badges.
+      */}
       <Card as="section" padding="lg">
-        <h1 className="page-title">ImgManager</h1>
-        <p className="page-subtitle">
-          Custom character images for Mudae — organised, deduplicated, and ready to paste.
-        </p>
-        <div className="stats-dashboard">
-          <Stat value={images} label="Custom images">
-            <svg
-              aria-hidden="true"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          </Stat>
-          <Stat value={characters} label="Characters covered">
-            <svg
-              aria-hidden="true"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </Stat>
-          <Stat value={seriesCount} label="Series">
-            <svg
-              aria-hidden="true"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-          </Stat>
+        <div className="home-hero">
+          <div>
+            <h1 className="page-title home-hero__title">ImgManager</h1>
+            <p className="home-hero__subtitle">
+              Custom character images for Mudae — organised, deduplicated, and ready to paste.
+            </p>
+          </div>
+          <dl className="home-hero__figures">
+            <div className="home-hero__figure">
+              <dt>Custom images</dt>
+              <dd>{images.toLocaleString()}</dd>
+            </div>
+            <div className="home-hero__figure">
+              <dt>Characters covered</dt>
+              <dd>{characters.toLocaleString()}</dd>
+            </div>
+            <div className="home-hero__figure">
+              <dt>Series</dt>
+              <dd>{seriesCount.toLocaleString()}</dd>
+            </div>
+          </dl>
         </div>
       </Card>
 
