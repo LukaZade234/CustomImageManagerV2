@@ -321,6 +321,22 @@
     box-sizing: border-box;
   }
 }
+/* One row for the header's three buttons. At 360px their cell is 203px while
+   the two labels and their icons want 303px, so the icons go and Edit Character
+   becomes Edit. The primary then takes the width that is left, so the row ends
+   level with the identity above it rather than trailing off. */
+@media (max-width: 480px) {
+  .char-page-actions .ui-btn svg {
+    display: none;
+  }
+  .char-page-actions .ui-btn--primary {
+    flex: 1 1 auto;
+  }
+  .label-optional {
+    display: none;
+  }
+}
+
 /* One row for the gallery's four controls. At 360px the labels alone are about
    270px of the 336 available, so the icons are what has to go — they decorate a
    word that is already the whole meaning. */

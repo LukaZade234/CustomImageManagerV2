@@ -71,6 +71,15 @@ describe('CharacterHeader', () => {
     expect(props.onGetAiCommand).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the full label in the accessible name when the noun is hidden', () => {
+    // "Character" is dropped by CSS under 480px, so it has to be a separate
+    // node — and the space has to be its own node too, or the name computation
+    // trims it and the button announces itself as "EditCharacter".
+    setup()
+    expect(screen.getByRole('button', { name: 'Edit Character' })).toBeInTheDocument()
+    expect(document.querySelector('.label-optional')).toHaveTextContent('Character')
+  })
+
   it('falls back to an em dash for a missing series or rank', () => {
     setup({ char: { name: 'Nobody' } })
     expect(screen.getAllByText('—')).toHaveLength(1)
