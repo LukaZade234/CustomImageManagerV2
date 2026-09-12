@@ -1,0 +1,379 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "d1c51a33",
+      "pageUrl": "/",
+      "element": {
+        "tagName": "div",
+        "id": null,
+        "classes": [
+          "home"
+        ],
+        "textContent": "ImgManagerCustom character images for Mudae - organised, deduplicated, and ready to paste.Custom images8,556Characters covered707Series441Just addedBrowse everythingLucyAudrey HallMade In HeavenScarlet Witch (Wanda Maximoff)Harley Quinn (Harleen Quinzel)Queen of the Darkest SpringPoison Ivy (Pamela Isley)Elizabeth Rose BloodflameArtoria Pendragon (Alter)Spider-Gwen (Gwen Stacy)Nightwing (Dick Grayson)Mariya Mikhailovna KujouReinhard von LohengrammNelliel Tu OdelschwanckIllyasviel von EinzbernAli",
+        "outerHTML": "<div class=\"home\"><section class=\"ui-card ui-card--pad-lg\"><div class=\"home-hero\"><div><h1 class=\"page-title home-hero__title\" style=\"white-space: normal;\">ImgManager</h1><p class=\"home-hero__subtitle\" style=\"white-space: normal;\">Custom character images for Mudae - organised, deduplicated, and ready to paste.</p></div><dl class=\"home-hero__figures\"><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Custom images</dt><dd style=\"white-space: normal;\">8,556</dd></div><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Characters covered</dt><dd style=\"white-space: normal;\">707</dd></div><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Series</dt><dd style=\"white-space: normal;\">441</dd></div></dl></div></section><section class=\"ui-card ui-card--pad-lg\"><section class=\"home-section\"><div class=\"home-section__head\"><h2 class=\"section-heading\" style=\"white-space: normal;\">Just added</h2><a class=\"home-section__link\" href=\"/customs\" data-discover=\"true\" style=\"white-space: normal;\">Browse everything</a></div><ul class=\"home-recent\"><li><a class=\"home-recent__item\" style=\"--ratio: 0.6844162188568637;\" href=\"/character/Lucy\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1401\" height=\"2047\" src=\"/thumbs/8564.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Lucy</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.78564453125;\" href=\"/character/Audrey%20Hall\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1609\" height=\"2048\" src=\"/thumbs/8560.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Audrey Hall</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6844162188568637;\" href=\"/character/Made%20In%20Heaven\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1401\" height=\"2047\" src=\"/thumbs/8558.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Made In Heaven</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7282535401213756;\" href=\"/character/Scarlet%20Witch%20(Wanda%20Maximoff)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1080\" height=\"1483\" src=\"/thumbs/8547.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Scarlet Witch (Wanda Maximoff)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Harley%20Quinn%20(Harleen%20Quinzel)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"849\" height=\"849\" src=\"/thumbs/8545.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Harley Quinn (Harleen Quinzel)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.7777777777777777;\" href=\"/character/Queen%20of%20the%20Darkest%20Spring\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1024\" height=\"576\" src=\"/thumbs/8529.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Queen of the Darkest Spring</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Poison%20Ivy%20(Pamela%20Isley)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"849\" height=\"849\" src=\"/thumbs/8523.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Poison Ivy (Pamela Isley)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.845679012345679;\" href=\"/character/Elizabeth%20Rose%20Bloodflame\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"411\" height=\"486\" src=\"/thumbs/8512.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Elizabeth Rose Bloodflame</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7072727272727273;\" href=\"/character/Artoria%20Pendragon%20(Alter)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"778\" height=\"1100\" src=\"/thumbs/8481.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Artoria Pendragon (Alter)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7070707070707071;\" href=\"/character/Spider-Gwen%20(Gwen%20Stacy)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"2730\" height=\"3861\" src=\"/thumbs/8456.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Spider-Gwen (Gwen Stacy)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.5572033898305084;\" href=\"/character/Nightwing%20(Dick%20Grayson)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"735\" height=\"472\" src=\"/thumbs/8446.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Nightwing (Dick Grayson)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.0033444816053512;\" href=\"/character/Mariya%20Mikhailovna%20Kujou\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1200\" height=\"1196\" src=\"/thumbs/8421.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Mariya Mikhailovna Kujou</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Reinhard%20von%20Lohengramm\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"420\" height=\"420\" src=\"/thumbs/8415.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Reinhard von Lohengramm</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7066666666666667;\" href=\"/character/Nelliel%20Tu%20Odelschwanck\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"848\" height=\"1200\" src=\"/thumbs/8408.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Nelliel Tu Odelschwanck</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6014194994396713;\" href=\"/character/Illyasviel%20von%20Einzbern\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1610\" height=\"2677\" src=\"/thumbs/8407.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Illyasviel von Einzbern</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.6666666666666667;\" href=\"/character/Alisa%20Mikhailovna%20Kujou\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1200\" height=\"720\" src=\"/thumbs/8396.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Alisa Mikhailovna Kujou</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.7763157894736843;\" href=\"/character/Marinette%20Dupain-Cheng\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1080\" height=\"608\" src=\"/thumbs/8380.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Marinette Dupain-Cheng</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7964071856287425;\" href=\"/character/Alice%20Synthesis%20Thirty\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"399\" height=\"501\" src=\"/thumbs/8377.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Alice Synthesis Thirty</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.77587890625;\" href=\"/character/Watatsuki%20no%20Toyohime\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1589\" height=\"2048\" src=\"/thumbs/8376.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Watatsuki no Toyohime</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.70703125;\" href=\"/character/Reisen%20Udongein%20Inaba\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1448\" height=\"2048\" src=\"/thumbs/8371.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Reisen Udongein Inaba</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.2783149171270718;\" href=\"/character/Red%20Hood%20(Jason%20Todd)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1851\" height=\"1448\" src=\"/thumbs/8361.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Red Hood (Jason Todd)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.4143646408839778;\" href=\"/character/Pomp%20and%20Circumstance\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"2048\" height=\"1448\" src=\"/thumbs/8360.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Pomp and Circumstance</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6;\" href=\"/character/Loki%20(Loki%20Laufeyson)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"600\" height=\"1000\" src=\"/thumbs/8359.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Loki (Loki Laufeyson)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.295774647887324;\" href=\"/character/Iron%20Man%20(Tony%20Stark)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"736\" height=\"568\" src=\"/thumbs/8347.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Iron Man (Tony Stark)</span></a></li></ul></section></section><section class=\"ui-card ui-card--pad-lg\"><section class=\"home-section\"><div class=\"home-section__head\"><h2 class=\"section-heading\" style=\"white-space: normal;\">Most visited this week</h2></div><p class=\"text-meta home-note\" style=\"white-space: normal;\">Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.</p><ol class=\"home-ranked\"><li><a class=\"home-ranked__item\" href=\"/",
+        "computedStyles": {
+          "font-family": "\"Geist\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+          "font-size": "16px",
+          "font-weight": "400",
+          "line-height": "24px",
+          "color": "rgb(28, 32, 41)",
+          "background": "none",
+          "background-color": "rgba(0, 0, 0, 0)",
+          "padding": "0px",
+          "margin": "0px",
+          "display": "flex",
+          "position": "static",
+          "gap": "20px",
+          "border-radius": "0px",
+          "box-shadow": "none"
+        },
+        "cssCustomProperties": {
+          "--n-50": "#f8f9fb",
+          "--n-100": "#f1f3f6",
+          "--n-150": "#e8ebf0",
+          "--n-200": "#dde1e8",
+          "--n-300": "#c8cdd7",
+          "--n-400": "#a2aab8",
+          "--n-500": "#7c8595",
+          "--n-600": "#5c6575",
+          "--n-700": "#444c5a",
+          "--n-800": "#2e3440",
+          "--n-850": "#222732",
+          "--n-900": "#1a1e26",
+          "--n-950": "#14171d",
+          "--bg": "#f5f7f9",
+          "--surface": "#ffffff",
+          "--surface-raised": "#ffffff",
+          "--surface-sunken": "#f1f3f6",
+          "--surface-hover": "#f1f3f6",
+          "--border": "#e2e6ec",
+          "--border-strong": "#c8cdd7",
+          "--text": "#1c2029",
+          "--text-muted": "#5c6575",
+          "--text-subtle": "#7c8595",
+          "--text-on-accent": "#ffffff",
+          "--accent": "#0b7285",
+          "--accent-hover": "#095c6b",
+          "--accent-subtle": "#e3f2f5",
+          "--accent-fg": "#ffffff",
+          "--success": "#0f7a3d",
+          "--success-fg": "#ffffff",
+          "--success-subtle": "#e4f4ea",
+          "--danger": "#b3261e",
+          "--danger-hover": "#96201a",
+          "--danger-fg": "#ffffff",
+          "--danger-subtle": "#fbeae9",
+          "--warning": "#8a5a00",
+          "--warning-subtle": "#fbf1de",
+          "--focus-ring": "#0b7285",
+          "--focus-ring-offset": "#f5f7f9",
+          "--shadow-sm": "0 1px 2px rgb(16 20 28 / 0.06)",
+          "--shadow-overlay": "0 16px 48px -12px rgb(16 20 28 / 0.24)",
+          "--scrim": "rgb(16 20 28 / 0.55)",
+          "--ring": "0 0 0 3px color-mix(in srgb, #0b7285 30%, transparent)",
+          "--space-1": "4px",
+          "--space-2": "8px",
+          "--space-3": "12px",
+          "--space-4": "16px",
+          "--space-5": "20px",
+          "--space-6": "24px",
+          "--space-8": "32px",
+          "--space-10": "40px",
+          "--space-12": "48px",
+          "--space-16": "64px",
+          "--radius-sm": "4px",
+          "--radius-md": "6px",
+          "--radius-lg": "10px",
+          "--radius-pill": "999px",
+          "--font-sans": "\"Geist\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial,\n    sans-serif",
+          "--font-mono": "ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace",
+          "--type-display": "clamp(1.875rem, 4.5vw, 2.5rem)",
+          "--type-page-title": "clamp(1.5rem, 3.2vw, 1.875rem)",
+          "--type-section": "clamp(1.0625rem, 2vw, 1.25rem)",
+          "--type-body-lg": "1.0625rem",
+          "--type-body": "1rem",
+          "--type-meta": "0.875rem",
+          "--type-micro": "0.8125rem",
+          "--line-tight": "1.25",
+          "--line-body": "1.5",
+          "--line-relaxed": "1.6",
+          "--weight-regular": "400",
+          "--weight-medium": "500",
+          "--weight-semibold": "600",
+          "--weight-bold": "700",
+          "--tracking-display": "-0.022em",
+          "--tracking-title": "-0.015em",
+          "--tracking-normal": "0",
+          "--tracking-wide": "0.02em",
+          "--ease": "cubic-bezier(0.2, 0, 0.13, 1)",
+          "--duration-fast": "120ms",
+          "--duration": "180ms",
+          "--main-image-ratio": "0.643",
+          "--container-max": "1400px",
+          "--control-min-h": "44px",
+          "--nav-control-min-h": "44px",
+          "--nav-control-gap": "8px",
+          "--nav-control-radius": "22px",
+          "--nav-control-pad-x": "16px",
+          "--sticky-nav-height": "80px",
+          "--sticky-nav-height-mobile": "64px",
+          "--z-nav": "100",
+          "--z-dropdown": "200",
+          "--z-modal": "300",
+          "--z-toast": "400"
+        },
+        "parentContext": "<main class=\"container\">",
+        "boundingRect": {
+          "width": 1360,
+          "height": 1504
+        }
+      },
+      "ops": [
+        {
+          "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>div:nth-of-type(1)>p.home-hero__subtitle:nth-of-type(1)",
+          "tag": "p",
+          "elementId": null,
+          "classes": [
+            "home-hero__subtitle"
+          ],
+          "originalText": "Custom character images for Mudae — organised, deduplicated, and ready to paste.",
+          "newText": "Custom character images for Mudae - organised, deduplicated, and ready to paste.",
+          "leaf": {
+            "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>div:nth-of-type(1)>p.home-hero__subtitle:nth-of-type(1)",
+            "tagName": "p",
+            "id": null,
+            "classes": [
+              "home-hero__subtitle"
+            ],
+            "originalText": "Custom character images for Mudae — organised, deduplicated, and ready to paste.",
+            "newText": "Custom character images for Mudae - organised, deduplicated, and ready to paste.",
+            "textContent": "Custom character images for Mudae - organised, deduplicated, and ready to paste.",
+            "outerHTML": "<p class=\"home-hero__subtitle\" style=\"white-space: normal;\">Custom character images for Mudae - organised, deduplicated, and ready to paste.</p>"
+          },
+          "nearbyEditableTexts": [
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>div:nth-of-type(1)>h1.page-title.home-hero__title:nth-of-type(1)",
+              "tag": "h1",
+              "classes": [
+                "page-title",
+                "home-hero__title"
+              ],
+              "text": "ImgManager"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(1)>dt:nth-of-type(1)",
+              "tag": "dt",
+              "classes": [],
+              "text": "Custom images"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(1)>dd:nth-of-type(1)",
+              "tag": "dd",
+              "classes": [],
+              "text": "8,556"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(2)>dt:nth-of-type(1)",
+              "tag": "dt",
+              "classes": [],
+              "text": "Characters covered"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(2)>dd:nth-of-type(1)",
+              "tag": "dd",
+              "classes": [],
+              "text": "707"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(3)>dt:nth-of-type(1)",
+              "tag": "dt",
+              "classes": [],
+              "text": "Series"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(3)>dd:nth-of-type(1)",
+              "tag": "dd",
+              "classes": [],
+              "text": "441"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>div.home-section__head:nth-of-type(1)>h2.section-heading:nth-of-type(1)",
+              "tag": "h2",
+              "classes": [
+                "section-heading"
+              ],
+              "text": "Just added"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>div.home-section__head:nth-of-type(1)>a.home-section__link:nth-of-type(1)",
+              "tag": "a",
+              "classes": [
+                "home-section__link"
+              ],
+              "text": "Browse everything"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>ul.home-recent:nth-of-type(1)>li:nth-of-type(1)>a.home-recent__item:nth-of-type(1)>span.home-recent__name:nth-of-type(1)",
+              "tag": "span",
+              "classes": [
+                "home-recent__name"
+              ],
+              "text": "Lucy"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>ul.home-recent:nth-of-type(1)>li:nth-of-type(2)>a.home-recent__item:nth-of-type(1)>span.home-recent__name:nth-of-type(1)",
+              "tag": "span",
+              "classes": [
+                "home-recent__name"
+              ],
+              "text": "Audrey Hall"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>ul.home-recent:nth-of-type(1)>li:nth-of-type(3)>a.home-recent__item:nth-of-type(1)>span.home-recent__name:nth-of-type(1)",
+              "tag": "span",
+              "classes": [
+                "home-recent__name"
+              ],
+              "text": "Made In Heaven"
+            }
+          ],
+          "contextRef": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)",
+          "container": {
+            "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)",
+            "tagName": "div",
+            "id": null,
+            "classes": [
+              "home"
+            ],
+            "textContent": "ImgManagerCustom character images for Mudae - organised, deduplicated, and ready to paste.Custom images8,556Characters covered707Series441Just addedBrowse everythingLucyAudrey HallMade In HeavenScarlet Witch (Wanda Maximoff)Harley Quinn (Harleen Quinzel)Queen of the Darkest SpringPoison Ivy (Pamela Isley)Elizabeth Rose BloodflameArtoria Pendragon (Alter)Spider-Gwen (Gwen Stacy)Nightwing (Dick Grayson)Mariya Mikhailovna KujouReinhard von LohengrammNelliel Tu OdelschwanckIllyasviel von EinzbernAlisa Mikhailovna KujouMarinette Dupain-ChengAlice Synthesis ThirtyWatatsuki no ToyohimeReisen Udongein InabaRed Hood (Jason Todd)Pomp and CircumstanceLoki (Loki Laufeyson)Iron Man (Tony Stark)Most visited this weekRanked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.1ColumbinaGenshin Impact22LucyCyberpunk: Edgerunners23RezeChainsaw Man24Akito ShinonomeProject SEKAI: Colorful Stage!15Artoria Pendragon (Alter)Fate/stay night16Audrey HallLord o",
+            "outerHTML": "<div class=\"home\"><section class=\"ui-card ui-card--pad-lg\"><div class=\"home-hero\"><div><h1 class=\"page-title home-hero__title\" style=\"white-space: normal;\">ImgManager</h1><p class=\"home-hero__subtitle\" style=\"white-space: normal;\">Custom character images for Mudae - organised, deduplicated, and ready to paste.</p></div><dl class=\"home-hero__figures\"><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Custom images</dt><dd style=\"white-space: normal;\">8,556</dd></div><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Characters covered</dt><dd style=\"white-space: normal;\">707</dd></div><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Series</dt><dd style=\"white-space: normal;\">441</dd></div></dl></div></section><section class=\"ui-card ui-card--pad-lg\"><section class=\"home-section\"><div class=\"home-section__head\"><h2 class=\"section-heading\" style=\"white-space: normal;\">Just added</h2><a class=\"home-section__link\" href=\"/customs\" data-discover=\"true\" style=\"white-space: normal;\">Browse everything</a></div><ul class=\"home-recent\"><li><a class=\"home-recent__item\" style=\"--ratio: 0.6844162188568637;\" href=\"/character/Lucy\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1401\" height=\"2047\" src=\"/thumbs/8564.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Lucy</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.78564453125;\" href=\"/character/Audrey%20Hall\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1609\" height=\"2048\" src=\"/thumbs/8560.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Audrey Hall</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6844162188568637;\" href=\"/character/Made%20In%20Heaven\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1401\" height=\"2047\" src=\"/thumbs/8558.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Made In Heaven</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7282535401213756;\" href=\"/character/Scarlet%20Witch%20(Wanda%20Maximoff)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1080\" height=\"1483\" src=\"/thumbs/8547.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Scarlet Witch (Wanda Maximoff)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Harley%20Quinn%20(Harleen%20Quinzel)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"849\" height=\"849\" src=\"/thumbs/8545.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Harley Quinn (Harleen Quinzel)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.7777777777777777;\" href=\"/character/Queen%20of%20the%20Darkest%20Spring\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1024\" height=\"576\" src=\"/thumbs/8529.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Queen of the Darkest Spring</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Poison%20Ivy%20(Pamela%20Isley)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"849\" height=\"849\" src=\"/thumbs/8523.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Poison Ivy (Pamela Isley)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.845679012345679;\" href=\"/character/Elizabeth%20Rose%20Bloodflame\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"411\" height=\"486\" src=\"/thumbs/8512.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Elizabeth Rose Bloodflame</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7072727272727273;\" href=\"/character/Artoria%20Pendragon%20(Alter)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"778\" height=\"1100\" src=\"/thumbs/8481.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Artoria Pendragon (Alter)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7070707070707071;\" href=\"/character/Spider-Gwen%20(Gwen%20Stacy)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"2730\" height=\"3861\" src=\"/thumbs/8456.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Spider-Gwen (Gwen Stacy)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.5572033898305084;\" href=\"/character/Nightwing%20(Dick%20Grayson)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"735\" height=\"472\" src=\"/thumbs/8446.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Nightwing (Dick Grayson)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.0033444816053512;\" href=\"/character/Mariya%20Mikhailovna%20Kujou\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1200\" height=\"1196\" src=\"/thumbs/8421.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Mariya Mikhailovna Kujou</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Reinhard%20von%20Lohengramm\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"420\" height=\"420\" src=\"/thumbs/8415.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Reinhard von Lohengramm</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7066666666666667;\" href=\"/character/Nelliel%20Tu%20Odelschwanck\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"848\" height=\"1200\" src=\"/thumbs/8408.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Nelliel Tu Odelschwanck</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6014194994396713;\" href=\"/character/Illyasviel%20von%20Einzbern\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1610\" height=\"2677\" src=\"/thumbs/8407.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Illyasviel von Einzbern</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.6666666666666667;\" href=\"/character/Alisa%20Mikhailovna%20Kujou\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1200\" height=\"720\" src=\"/thumbs/8396.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Alisa Mikhailovna Kujou</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.7763157894736843;\" href=\"/character/Marinette%20Dupain-Cheng\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1080\" height=\"608\" src=\"/thumbs/8380.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Marinette Dupain-Cheng</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7964071856287425;\" href=\"/character/Alice%20Synthesis%20Thirty\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"399\" height=\"501\" src=\"/thumbs/8377.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Alice Synthesis Thirty</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.77587890625;\" href=\"/character/Watatsuki%20no%20Toyohime\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1589\" height=\"2048\" src=\"/thumbs/8376.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Watatsuki no Toyohime</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.70703125;\" href=\"/character/Reisen%20Udongein%20Inaba\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1448\" height=\"2048\" src=\"/thumbs/8371.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Reisen Udongein Inaba</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.2783149171270718;\" href=\"/character/Red%20Hood%20(Jason%20Todd)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1851\" height=\"1448\" src=\"/thumbs/8361.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Red Hood (Jason Todd)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.4143646408839778;\" href=\"/character/Pomp%20and%20Circumstance\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"2048\" height=\"1448\" src=\"/thumbs/8360.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Pomp and Circumstance</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6;\" href=\"/character/Loki%20(Loki%20Laufeyson)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"600\" height=\"1000\" src=\"/thumbs/8359.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Loki (Loki Laufeyson)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.295774647887324;\" href=\"/character/Iron%20Man%20(Tony%20Stark)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"736\" height=\"568\" src=\"/thumbs/8347.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Iron Man (Tony Stark)</span></a></li></ul></section></section><section class=\"ui-card ui-card--pad-lg\"><section class=\"home-section\"><div class=\"home-section__head\"><h2 class=\"section-heading\" style=\"white-space: normal;\">Most visited this week</h2></div><p class=\"text-meta home-note\" style=\"white-space: normal;\">Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.</p><ol class=\"home-ranked\"><li><a class=\"home-ranked__item\" href=\"/"
+          }
+        },
+        {
+          "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(3)>section.home-section:nth-of-type(1)>p.text-meta.home-note:nth-of-type(1)",
+          "tag": "p",
+          "elementId": null,
+          "classes": [
+            "text-meta",
+            "home-note"
+          ],
+          "originalText": "Ranked by how many different people looked, not by how many visits — one enthusiast refreshing cannot move it.",
+          "newText": "Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.",
+          "leaf": {
+            "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(3)>section.home-section:nth-of-type(1)>p.text-meta.home-note:nth-of-type(1)",
+            "tagName": "p",
+            "id": null,
+            "classes": [
+              "text-meta",
+              "home-note"
+            ],
+            "originalText": "Ranked by how many different people looked, not by how many visits — one enthusiast refreshing cannot move it.",
+            "newText": "Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.",
+            "textContent": "Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.",
+            "outerHTML": "<p class=\"text-meta home-note\" style=\"white-space: normal;\">Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.</p>"
+          },
+          "nearbyEditableTexts": [
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>div:nth-of-type(1)>h1.page-title.home-hero__title:nth-of-type(1)",
+              "tag": "h1",
+              "classes": [
+                "page-title",
+                "home-hero__title"
+              ],
+              "text": "ImgManager"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>div:nth-of-type(1)>p.home-hero__subtitle:nth-of-type(1)",
+              "tag": "p",
+              "classes": [
+                "home-hero__subtitle"
+              ],
+              "text": "Custom character images for Mudae — organised, deduplicated, and ready to paste."
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(1)>dt:nth-of-type(1)",
+              "tag": "dt",
+              "classes": [],
+              "text": "Custom images"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(1)>dd:nth-of-type(1)",
+              "tag": "dd",
+              "classes": [],
+              "text": "8,556"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(2)>dt:nth-of-type(1)",
+              "tag": "dt",
+              "classes": [],
+              "text": "Characters covered"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(2)>dd:nth-of-type(1)",
+              "tag": "dd",
+              "classes": [],
+              "text": "707"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(3)>dt:nth-of-type(1)",
+              "tag": "dt",
+              "classes": [],
+              "text": "Series"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(1)>div.home-hero:nth-of-type(1)>dl.home-hero__figures:nth-of-type(1)>div.home-hero__figure:nth-of-type(3)>dd:nth-of-type(1)",
+              "tag": "dd",
+              "classes": [],
+              "text": "441"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>div.home-section__head:nth-of-type(1)>h2.section-heading:nth-of-type(1)",
+              "tag": "h2",
+              "classes": [
+                "section-heading"
+              ],
+              "text": "Just added"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>div.home-section__head:nth-of-type(1)>a.home-section__link:nth-of-type(1)",
+              "tag": "a",
+              "classes": [
+                "home-section__link"
+              ],
+              "text": "Browse everything"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>ul.home-recent:nth-of-type(1)>li:nth-of-type(1)>a.home-recent__item:nth-of-type(1)>span.home-recent__name:nth-of-type(1)",
+              "tag": "span",
+              "classes": [
+                "home-recent__name"
+              ],
+              "text": "Lucy"
+            },
+            {
+              "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)>section.ui-card.ui-card--pad-lg:nth-of-type(2)>section.home-section:nth-of-type(1)>ul.home-recent:nth-of-type(1)>li:nth-of-type(2)>a.home-recent__item:nth-of-type(1)>span.home-recent__name:nth-of-type(1)",
+              "tag": "span",
+              "classes": [
+                "home-recent__name"
+              ],
+              "text": "Audrey Hall"
+            }
+          ],
+          "contextRef": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)",
+          "container": {
+            "ref": "body>div#root:nth-of-type(1)>main.container:nth-of-type(1)>div.home:nth-of-type(1)",
+            "tagName": "div",
+            "id": null,
+            "classes": [
+              "home"
+            ],
+            "textContent": "ImgManagerCustom character images for Mudae - organised, deduplicated, and ready to paste.Custom images8,556Characters covered707Series441Just addedBrowse everythingLucyAudrey HallMade In HeavenScarlet Witch (Wanda Maximoff)Harley Quinn (Harleen Quinzel)Queen of the Darkest SpringPoison Ivy (Pamela Isley)Elizabeth Rose BloodflameArtoria Pendragon (Alter)Spider-Gwen (Gwen Stacy)Nightwing (Dick Grayson)Mariya Mikhailovna KujouReinhard von LohengrammNelliel Tu OdelschwanckIllyasviel von EinzbernAlisa Mikhailovna KujouMarinette Dupain-ChengAlice Synthesis ThirtyWatatsuki no ToyohimeReisen Udongein InabaRed Hood (Jason Todd)Pomp and CircumstanceLoki (Loki Laufeyson)Iron Man (Tony Stark)Most visited this weekRanked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.1ColumbinaGenshin Impact22LucyCyberpunk: Edgerunners23RezeChainsaw Man24Akito ShinonomeProject SEKAI: Colorful Stage!15Artoria Pendragon (Alter)Fate/stay night16Audrey HallLord o",
+            "outerHTML": "<div class=\"home\"><section class=\"ui-card ui-card--pad-lg\"><div class=\"home-hero\"><div><h1 class=\"page-title home-hero__title\" style=\"white-space: normal;\">ImgManager</h1><p class=\"home-hero__subtitle\" style=\"white-space: normal;\">Custom character images for Mudae - organised, deduplicated, and ready to paste.</p></div><dl class=\"home-hero__figures\"><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Custom images</dt><dd style=\"white-space: normal;\">8,556</dd></div><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Characters covered</dt><dd style=\"white-space: normal;\">707</dd></div><div class=\"home-hero__figure\"><dt style=\"white-space: normal;\">Series</dt><dd style=\"white-space: normal;\">441</dd></div></dl></div></section><section class=\"ui-card ui-card--pad-lg\"><section class=\"home-section\"><div class=\"home-section__head\"><h2 class=\"section-heading\" style=\"white-space: normal;\">Just added</h2><a class=\"home-section__link\" href=\"/customs\" data-discover=\"true\" style=\"white-space: normal;\">Browse everything</a></div><ul class=\"home-recent\"><li><a class=\"home-recent__item\" style=\"--ratio: 0.6844162188568637;\" href=\"/character/Lucy\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1401\" height=\"2047\" src=\"/thumbs/8564.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Lucy</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.78564453125;\" href=\"/character/Audrey%20Hall\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1609\" height=\"2048\" src=\"/thumbs/8560.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Audrey Hall</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6844162188568637;\" href=\"/character/Made%20In%20Heaven\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1401\" height=\"2047\" src=\"/thumbs/8558.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Made In Heaven</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7282535401213756;\" href=\"/character/Scarlet%20Witch%20(Wanda%20Maximoff)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1080\" height=\"1483\" src=\"/thumbs/8547.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Scarlet Witch (Wanda Maximoff)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Harley%20Quinn%20(Harleen%20Quinzel)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"849\" height=\"849\" src=\"/thumbs/8545.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Harley Quinn (Harleen Quinzel)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.7777777777777777;\" href=\"/character/Queen%20of%20the%20Darkest%20Spring\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1024\" height=\"576\" src=\"/thumbs/8529.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Queen of the Darkest Spring</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Poison%20Ivy%20(Pamela%20Isley)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"849\" height=\"849\" src=\"/thumbs/8523.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Poison Ivy (Pamela Isley)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.845679012345679;\" href=\"/character/Elizabeth%20Rose%20Bloodflame\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"411\" height=\"486\" src=\"/thumbs/8512.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Elizabeth Rose Bloodflame</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7072727272727273;\" href=\"/character/Artoria%20Pendragon%20(Alter)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"778\" height=\"1100\" src=\"/thumbs/8481.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Artoria Pendragon (Alter)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7070707070707071;\" href=\"/character/Spider-Gwen%20(Gwen%20Stacy)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"2730\" height=\"3861\" src=\"/thumbs/8456.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Spider-Gwen (Gwen Stacy)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.5572033898305084;\" href=\"/character/Nightwing%20(Dick%20Grayson)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"735\" height=\"472\" src=\"/thumbs/8446.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Nightwing (Dick Grayson)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.0033444816053512;\" href=\"/character/Mariya%20Mikhailovna%20Kujou\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1200\" height=\"1196\" src=\"/thumbs/8421.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Mariya Mikhailovna Kujou</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1;\" href=\"/character/Reinhard%20von%20Lohengramm\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"420\" height=\"420\" src=\"/thumbs/8415.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Reinhard von Lohengramm</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7066666666666667;\" href=\"/character/Nelliel%20Tu%20Odelschwanck\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"848\" height=\"1200\" src=\"/thumbs/8408.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Nelliel Tu Odelschwanck</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6014194994396713;\" href=\"/character/Illyasviel%20von%20Einzbern\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1610\" height=\"2677\" src=\"/thumbs/8407.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Illyasviel von Einzbern</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.6666666666666667;\" href=\"/character/Alisa%20Mikhailovna%20Kujou\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1200\" height=\"720\" src=\"/thumbs/8396.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Alisa Mikhailovna Kujou</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.7763157894736843;\" href=\"/character/Marinette%20Dupain-Cheng\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1080\" height=\"608\" src=\"/thumbs/8380.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Marinette Dupain-Cheng</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.7964071856287425;\" href=\"/character/Alice%20Synthesis%20Thirty\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"399\" height=\"501\" src=\"/thumbs/8377.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Alice Synthesis Thirty</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.77587890625;\" href=\"/character/Watatsuki%20no%20Toyohime\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1589\" height=\"2048\" src=\"/thumbs/8376.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Watatsuki no Toyohime</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.70703125;\" href=\"/character/Reisen%20Udongein%20Inaba\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1448\" height=\"2048\" src=\"/thumbs/8371.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Reisen Udongein Inaba</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.2783149171270718;\" href=\"/character/Red%20Hood%20(Jason%20Todd)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"1851\" height=\"1448\" src=\"/thumbs/8361.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Red Hood (Jason Todd)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.4143646408839778;\" href=\"/character/Pomp%20and%20Circumstance\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"2048\" height=\"1448\" src=\"/thumbs/8360.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Pomp and Circumstance</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 0.6;\" href=\"/character/Loki%20(Loki%20Laufeyson)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"600\" height=\"1000\" src=\"/thumbs/8359.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Loki (Loki Laufeyson)</span></a></li><li><a class=\"home-recent__item\" style=\"--ratio: 1.295774647887324;\" href=\"/character/Iron%20Man%20(Tony%20Stark)\" data-discover=\"true\"><img class=\"home-recent__thumb\" alt=\"\" loading=\"lazy\" decoding=\"async\" width=\"736\" height=\"568\" src=\"/thumbs/8347.webp\"><span class=\"home-recent__name\" style=\"white-space: nowrap;\">Iron Man (Tony Stark)</span></a></li></ul></section></section><section class=\"ui-card ui-card--pad-lg\"><section class=\"home-section\"><div class=\"home-section__head\"><h2 class=\"section-heading\" style=\"white-space: normal;\">Most visited this week</h2></div><p class=\"text-meta home-note\" style=\"white-space: normal;\">Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.</p><ol class=\"home-ranked\"><li><a class=\"home-ranked__item\" href=\"/"
+          }
+        }
+      ],
+      "stagedAt": "2026-09-12T10:31:49.672Z"
+    }
+  ]
+}
