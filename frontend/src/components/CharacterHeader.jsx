@@ -45,11 +45,12 @@ export function CharacterHeader({
 
   return (
     /*
-      One band: portrait, then identity, then the actions that belong to them.
-      It was two columns carrying one column of content — a 916px text column
-      beside a 180px portrait, with ~660px of nothing between the words and the
-      picture. Putting the portrait first makes the emptiness trailing margin
-      rather than a hole, and the band shrinks to what it actually holds.
+      A two-by-two grid: portrait and identity on the top row, and the buttons
+      for each directly beneath them on the second. The buttons are cells rather
+      than the tails of two independent columns, so Save lands level with Edit
+      and $ai by construction instead of by auto-margins guessing which column
+      is taller. A long name pushes the whole button row down together, which is
+      the one thing that should move it.
     */
     <div className="character-top-section">
       <div className="char-image-section">
@@ -79,32 +80,6 @@ export function CharacterHeader({
         ) : (
           <div className="image-wrapper">{portrait}</div>
         )}
-        {/* Under the picture rather than on top of it. As a floating disc it
-            covered a corner of a portrait that is now small enough for that to
-            matter — and it is an action, so it belongs with the actions. It
-            takes the portrait's width and the action buttons' height, which is
-            what closes the gap beside them. */}
-        <Button
-          className={`save-button ${isSaved ? 'saved' : ''}`}
-          variant="secondary"
-          onClick={onToggleSave}
-          title={isSaved ? 'Remove from saved' : 'Save this character'}
-          aria-pressed={isSaved}
-        >
-          <svg
-            aria-hidden="true"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            /* Filled once saved, so the state does not rest on colour alone. */
-            fill={isSaved ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-          {isSaved ? 'Saved' : 'Save'}
-        </Button>
       </div>
       <div className="char-info-section">
         {!edit.active ? (
@@ -112,64 +87,6 @@ export function CharacterHeader({
             <h1 className="display-title">{char.name}</h1>
             <p className="text-body">{char.series || '\u2014'}</p>
             <p className="text-meta">Rank: {char.rank || '\u2014'}</p>
-            <div className="char-page-actions">
-              <Button
-                variant="ghost"
-                onClick={edit.start}
-                title="Edit name, series, rank, and main image"
-              >
-                <svg
-                  aria-hidden="true"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                Edit Character
-              </Button>
-              {/*
-                The door to the command, and the only one — which is the point.
-                It used to copy every image the moment it was clicked, so there
-                was no way to mean "all of them except those three", and the
-                place you could say that was a Select button down by the gallery
-                whose name gave no hint that $ai lived under it.
-
-                It opens the selection with everything already chosen instead.
-                Copying the lot is one more click; taking a few out is visible
-                rather than hidden behind a button named after something else.
-              */}
-              {/* The one solid button on the browse screen. Producing the $ai
-                  command is what the page is for, and nothing on it led. */}
-              <Button
-                variant="primary"
-                onClick={onGetAiCommand}
-                disabled={customCount === 0}
-                title={
-                  customCount === 0
-                    ? 'Add a custom image first'
-                    : `Choose which of the ${customCount} images go in the command, then copy it`
-                }
-              >
-                <svg
-                  aria-hidden="true"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                $ai command
-              </Button>
-            </div>
           </div>
         ) : (
           <div className="char-edit-form">
@@ -225,6 +142,92 @@ export function CharacterHeader({
           </div>
         )}
       </div>
+      {/* Under the picture rather than on top of it. As a floating disc it
+          covered a corner of a portrait that is now small enough for that to
+          matter — and it is an action, so it belongs with the actions. It
+          takes the portrait's width and the action buttons' height, which is
+          what closes the gap beside them. */}
+      <Button
+        className={`save-button ${isSaved ? 'saved' : ''}`}
+        variant="secondary"
+        onClick={onToggleSave}
+        title={isSaved ? 'Remove from saved' : 'Save this character'}
+        aria-pressed={isSaved}
+      >
+        <svg
+          aria-hidden="true"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          /* Filled once saved, so the state does not rest on colour alone. */
+          fill={isSaved ? 'currentColor' : 'none'}
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+        </svg>
+        {isSaved ? 'Saved' : 'Save'}
+      </Button>
+      {!edit.active && (
+        <div className="char-page-actions">
+          <Button
+            variant="ghost"
+            onClick={edit.start}
+            title="Edit name, series, rank, and main image"
+          >
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            Edit Character
+          </Button>
+          {/*
+              The door to the command, and the only one — which is the point.
+              It used to copy every image the moment it was clicked, so there
+              was no way to mean "all of them except those three", and the
+              place you could say that was a Select button down by the gallery
+              whose name gave no hint that $ai lived under it.
+  
+              It opens the selection with everything already chosen instead.
+              Copying the lot is one more click; taking a few out is visible
+              rather than hidden behind a button named after something else.
+            */}
+          {/* The one solid button on the browse screen. Producing the $ai
+                command is what the page is for, and nothing on it led. */}
+          <Button
+            variant="primary"
+            onClick={onGetAiCommand}
+            disabled={customCount === 0}
+            title={
+              customCount === 0
+                ? 'Add a custom image first'
+                : `Choose which of the ${customCount} images go in the command, then copy it`
+            }
+          >
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            $ai command
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

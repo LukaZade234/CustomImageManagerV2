@@ -29,32 +29,27 @@
  * is how it became 88px by accident.
  */
 .character-top-section {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: var(--space-5);
+  /* Two columns, two rows: portrait and identity above, their buttons directly
+     below. As two independent flex columns the buttons could only be aligned by
+     auto-margins, which meant guessing which column was taller — and guessing
+     wrong left the save button stranded a long way under the picture. Grid
+     cells are level because they are the same row. */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2) var(--space-5);
   width: 100%;
   min-width: 0;
 }
 .char-info-section {
-  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   text-align: left;
   min-width: 0;
 }
-.char-info-section > div {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-}
 .char-image-section {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  align-self: stretch;
   position: relative;
   min-width: 0;
 }
@@ -89,27 +84,16 @@
   box-sizing: border-box;
 }
 .char-page-actions {
-  /* Pushed to the foot, with a floor under it, so it lands level with the save
-     button under the portrait however tall the identity above it runs. */
-  margin-top: auto;
-  padding-top: var(--space-4);
+  grid-column: 2;
   display: flex;
-  flex-direction: row;
   flex-wrap: wrap;
   gap: var(--space-2);
-  width: 100%;
-  max-width: 100%;
+  min-width: 0;
 }
 .char-page-actions .ui-btn {
-  width: 100%;
+  flex: 0 1 auto;
   justify-content: center;
   box-sizing: border-box;
-}
-@media (min-width: 480px) {
-  .char-page-actions .ui-btn {
-    width: auto;
-    align-self: flex-start;
-  }
 }
 .character-page .char-info-section .display-title {
   margin-bottom: var(--space-2);
@@ -162,6 +146,11 @@
   white-space: nowrap;
 }
 @media (min-width: 769px) {
+  /* Half again as large: on a wide screen the band has the room, and the
+     portrait is the only thing on the page carrying the character's face. */
+  .char-image-section {
+    --portrait-max-h: 252px;
+  }
   .char-custom-toolbar {
     flex-direction: row;
     flex-wrap: wrap;
@@ -179,7 +168,7 @@
    put a second solid fill on a page that already has one primary action, and
    spent the palette's loudest colour on a state nothing had happened in. */
 .save-button {
-  margin-top: auto;
+  grid-column: 1;
   width: 100%;
   background-color: var(--surface);
   color: var(--text-muted);
@@ -348,7 +337,12 @@
 }
 @media (max-width: 768px) {
   .character-top-section {
-    gap: var(--space-4);
+    gap: var(--space-2) var(--space-4);
+  }
+  /* The button is the portrait's width, and the portrait is 85px here. The
+     word fits; the word and an icon do not, and .ui-btn does not wrap. */
+  .save-button svg {
+    display: none;
   }
   .char-page-actions {
     margin-top: var(--space-3);

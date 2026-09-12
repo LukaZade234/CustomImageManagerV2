@@ -171,12 +171,17 @@ describe('the save button', () => {
    */
   it('sits under the portrait rather than on top of it', () => {
     setup()
+    const band = document.querySelector('.character-top-section')
     const save = screen.getByRole('button', { name: /^Save$/ })
-    const imageColumn = document.querySelector('.char-image-section')
-    expect(imageColumn).toContainElement(save)
-    // In flow, not floated over the picture.
+
+    // A cell of the band's grid, not a disc floated over the picture. Being a
+    // direct child is what puts it in the same row as the other actions and the
+    // same column as the portrait; nesting it back inside the image column is
+    // what would quietly break that.
+    expect(save.parentElement).toBe(band)
+    expect(band.querySelector('.char-page-actions').parentElement).toBe(band)
     expect(save.className).not.toMatch(/ui-btn--icon/)
-    expect(imageColumn.querySelector('img')).toBeInTheDocument()
+    expect(document.querySelector('.char-image-section img')).toBeInTheDocument()
   })
 
   it('is the same kind of button as the actions it lines up with', () => {
