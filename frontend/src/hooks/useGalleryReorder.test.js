@@ -213,3 +213,92 @@ describe('teardown', () => {
     expect(view.result.current.isDragging).toBe(false)
   })
 })
+
+describe('keyboard reordering', () => {
+  /**
+   * Reordering was pointer-only. A keyboard user could add images, remove them
+   * and copy a command, but could not control the order the command emits --
+   * which is the product's entire output. The help panel told them to drag.
+   */
+  const items = ['a', 'b', 'c', 'd']
+
+  function keyboardHook(overrides = {}) {
+    const onReorder = vi.fn()
+    const hook = renderHook(() =>
+      useGalleryReorder({
+        items,
+        enabled: true,
+        indicesFor: (i) => [i],
+        onReorder,
+        ...overrides,
+      }),
+    )
+    return { hook, onReorder }
+  }
+
+  const press = (hook, index, key) => {
+    const event = { key, preventDefault: vi.fn() }
+    act(() => hook.result.current.itemProps(index).onKeyDown(event, index))
+    return event
+  }
+
+  it('moves an item left with ArrowLeft', () => {
+    const { hook, onReorder } = keyboardHook()
+    press(hook, 2, 'ArrowLeft')
+    expect(onReorder).toHaveBeenCalledWith(['a', 'c', 'b', 'd'])
+  })
+
+  it('moves an item right with ArrowRight', () => {
+    const { hook, onReorder } = keyboardHook()
+    press(hook, 1, 'ArrowRight')
+    expect(onReorder).toHaveBeenCalledWith(['a', 'c', 'b', 'd'])
+  })
+
+  it('treats up and down as the same axis, because the grid wraps', () => {
+    const { hook, onReorder } = keyboardHook()
+    press(hook, 2, 'ArrowUp')
+    expect(onReorder).toHaveBeenCalledWith(['a', 'c', 'b', 'd'])
+  })
+
+  it('does nothing at either end rather than wrapping around', () => {
+    const { hook, onReorder } = keyboardHook()
+    press(hook, 0, 'ArrowLeft')
+    press(hook, 3, 'ArrowRight')
+    expect(onReorder).not.toHaveBeenCalled()
+  })
+
+  it('moves a whole selection together, as a pointer drag does', () => {
+    const { hook, onReorder } = keyboardHook({ indicesFor: () => [0, 1] })
+    press(hook, 0, 'ArrowRight')
+    expect(onReorder).toHaveBeenCalledWith(['c', 'a', 'b', 'd'])
+  })
+
+  it('ignores keys that are not arrows, so typing still works', () => {
+    const { hook, onReorder } = keyboardHook()
+    const event = press(hook, 1, 'Enter')
+    expect(onReorder).not.toHaveBeenCalled()
+    expect(event.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('does nothing at all when reorder mode is off', () => {
+    const onReorder = vi.fn()
+    const hook = renderHook(() =>
+      useGalleryReorder({ items, enabled: false, indicesFor: (i) => [i], onReorder }),
+    )
+    // itemProps is empty outside the mode, so there is no handler to call.
+    expect(hook.result.current.itemProps(1).onKeyDown).toBeUndefined()
+  })
+
+  it('announces the move, because a key press has no visible drag', () => {
+    const { hook } = keyboardHook()
+    expect(hook.result.current.announcement).toBe('')
+    press(hook, 2, 'ArrowLeft')
+    expect(hook.result.current.announcement).toMatch(/Moved to position 2 of 4/)
+  })
+
+  it('says how many came along when a group moves', () => {
+    const { hook } = keyboardHook({ indicesFor: () => [0, 1] })
+    press(hook, 0, 'ArrowRight')
+    expect(hook.result.current.announcement).toMatch(/with 1 more/)
+  })
+})

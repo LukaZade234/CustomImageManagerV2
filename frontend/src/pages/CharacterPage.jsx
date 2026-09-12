@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import { CharacterHeader } from '../components/CharacterHeader'
+import CharacterLoadingState from '../components/CharacterLoadingState'
 import CustomImageGallery from '../components/CustomImageGallery'
+import { GallerySelectionBar } from '../components/GallerySelectionBar'
 import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
-import { Card, ConfirmDialog } from '../components/ui'
+import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
@@ -26,14 +28,23 @@ import {
 import { ratioOf } from '../utils/galleryRatios'
 import { isImageFileLike } from '../utils/imageFiles'
 
+/** What the heading says while a mode is active. Browse gets nothing. */
+const MODE_LABELS = {
+  select: 'selecting images',
+  reorder: 'reordering',
+}
+
 export default function CharacterPage() {
   const { name } = useParams()
   const navigate = useNavigate()
   const characters = useStore((s) => s.characters)
+  // Named apart from the edit form's own `loading` below.
+  const libraryLoading = useStore((s) => s.loading)
   const savedCharacters = useStore((s) => s.savedCharacters)
   const characterImages = useStore((s) => s.characterImages)
   const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
   const appendCustomImageUrls = useStore((s) => s.appendCustomImageUrls)
+  const setCustomImageOrder = useStore((s) => s.setCustomImageOrder)
   const loadCharacters = useStore((s) => s.loadCharacters)
   const loadSaved = useStore((s) => s.loadSaved)
   const renameCustomCharacterData = useStore((s) => s.renameCustomCharacterData)
@@ -69,9 +80,7 @@ export default function CharacterPage() {
    * "turn the others off" lines to stay consistent; one value cannot be wrong.
    */
   const [mode, setMode] = useState('browse')
-  const aiMode = mode === 'ai'
-  const deleteMode = mode === 'remove'
-  const downloadMode = mode === 'download'
+  const selectMode = mode === 'select'
   const reorderMode = mode === 'reorder'
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
   const [selectedUrls, setSelectedUrls] = useState([])
@@ -89,8 +98,20 @@ export default function CharacterPage() {
 
   const mainInputRef = useRef(null)
   const customInputRef = useRef(null)
-  /** Snapshot of the order when reorder mode opened, so Cancel can restore it. */
-  const reorderSessionBaselineRef = useRef(null)
+  /**
+   * Everything one reorder session needs in order to finish or undo itself:
+   * `baseline` is the order it opened on, `dirty` whether anything moved,
+   * `failed` whether a save came back an error, and `save` the chain those
+   * saves run on.
+   *
+   * Chained rather than parallel: each drop POSTs the whole order, and two of
+   * those in flight at once can arrive in either order, which would leave the
+   * server holding an order the person did not finish with — and the gallery,
+   * which now updates locally, would disagree with it silently until the next
+   * reload. Null whenever reorder mode is closed.
+   */
+  const reorderSessionRef = useRef(null)
+  const [confirmDiscardOrder, setConfirmDiscardOrder] = useState(false)
 
   useEffect(() => {
     if (char) {
@@ -122,51 +143,110 @@ export default function CharacterPage() {
     setMode('browse')
     setSelectedUrls([])
     setAiLimitDialog(null)
-    reorderSessionBaselineRef.current = null
+    reorderSessionRef.current = null
   }, [])
 
-  /** Leave whatever mode is current and enter `next`, clearing its state. */
-  const enterMode = useCallback(
-    (next) => {
+  /**
+   * One selection mode, entered before any verb is chosen.
+   *
+   * There were four of these — one per verb — and choosing between them meant
+   * deciding what you were going to do before you had picked anything to do it
+   * to. Now the images come first and the bar offers whatever fits them.
+   *
+   * `preselect` is what the $ai door hands over. A button that copies a command
+   * for every image the moment it is clicked gives you no way to mean "all but
+   * those three", and a command is exactly the thing people want to trim. So it
+   * opens the selection with everything already chosen: copying all of them is
+   * one more click, and the fact that you can take some out is on screen rather
+   * than hidden behind a Select button that says nothing about $ai.
+   */
+  const enterSelectMode = useCallback(
+    (preselect = []) => {
       resetModes()
-      setMode(next)
+      setSelectedUrls(preselect)
+      setMode('select')
     },
     [resetModes],
   )
 
-  const enterDownloadMode = useCallback(() => {
-    reorderSessionBaselineRef.current = null
-    setSelectedUrls([])
-    setMode('download')
-  }, [])
-
   const enterReorderMode = useCallback(() => {
     setSelectedUrls([])
-    reorderSessionBaselineRef.current = [...customs]
+    reorderSessionRef.current = {
+      baseline: [...customs],
+      dirty: false,
+      failed: false,
+      save: Promise.resolve(),
+    }
     setMode('reorder')
   }, [customs])
 
-  const cancelReorder = useCallback(async () => {
-    const baseline = reorderSessionBaselineRef.current
-    try {
-      if (baseline) {
-        await apiClient.reorderCustomImages(name, baseline)
-        await loadCustomImagesForCharacter(name)
-      }
-      reorderSessionBaselineRef.current = null
-      setMode('browse')
-      setSelectedUrls([])
-      addToast('Order reverted to before you started reordering.', 'info')
-    } catch (e) {
-      addToast(e.message || 'Could not revert order', 'error')
-    }
-  }, [name, loadCustomImagesForCharacter, addToast])
+  /** The file picker behind both "Add image" buttons — toolbar and empty state. */
+  const openCustomFilePicker = useCallback(() => customInputRef.current?.click(), [])
 
-  const doneReorder = useCallback(() => {
-    reorderSessionBaselineRef.current = null
+  const exitReorderMode = useCallback(() => {
+    reorderSessionRef.current = null
+    setConfirmDiscardOrder(false)
     setMode('browse')
     setSelectedUrls([])
   }, [])
+
+  /**
+   * Put the order back the way it was when the session opened.
+   *
+   * The baseline is a snapshot, so writing it back verbatim would re-assert
+   * positions for images that have since been removed and would say nothing
+   * about images added since. Reconciling it against what is actually here
+   * keeps the request describing the gallery in front of the person, rather
+   * than the one they opened twenty minutes ago.
+   */
+  const discardReorder = useCallback(async () => {
+    const session = reorderSessionRef.current
+    exitReorderMode()
+    if (!session?.dirty) return
+    const { baseline } = session
+    try {
+      await session.save
+      const present = new Set(allRows.map((row) => row.url))
+      const inBaseline = new Set(baseline)
+      const order = [
+        ...baseline.filter((url) => present.has(url)),
+        ...allRows.map((row) => row.url).filter((url) => !inBaseline.has(url)),
+      ]
+      await apiClient.reorderCustomImages(name, order)
+      setCustomImageOrder(name, order)
+      addToast('Order reverted to before you started reordering.', 'info')
+    } catch (e) {
+      addToast(e.message || 'Could not revert order', 'error')
+      await loadCustomImagesForCharacter(name)
+    }
+  }, [allRows, exitReorderMode, name, setCustomImageOrder, loadCustomImagesForCharacter, addToast])
+
+  /**
+   * Leaving reorder mode by the Discard button.
+   *
+   * Discarding is a server write that throws away everything the session did,
+   * and it sat one click away with nothing in between. Having moved nothing,
+   * though, there is nothing to confirm and nothing to write, so that case
+   * stays a plain exit.
+   */
+  const cancelReorder = useCallback(() => {
+    if (!reorderSessionRef.current?.dirty) {
+      exitReorderMode()
+      return
+    }
+    setConfirmDiscardOrder(true)
+  }, [exitReorderMode])
+
+  const doneReorder = useCallback(async () => {
+    const session = reorderSessionRef.current
+    exitReorderMode()
+    if (!session?.dirty) return
+    // One confirmation for the whole session. A toast per drop meant a dozen
+    // identical undo-less toasts stacked over the gallery being edited, which
+    // is how people learn to dismiss toasts without reading them.
+    await session.save
+    if (!session.failed) addToast('New order saved', 'success')
+  }, [exitReorderMode, addToast])
 
   const getIndicesToMove = useCallback(
     (startIndex) => {
@@ -197,18 +277,46 @@ export default function CharacterPage() {
 
   const applyReorder = useCallback(
     (newOrder) => {
-      apiClient
-        .reorderCustomImages(name, newOrder)
-        .then(() => {
-          loadCustomImagesForCharacter(name)
-          addToast('Order updated', 'success')
+      // The gallery renders from the store, so writing the order there is what
+      // makes the drop land. It used to wait for a refetch of the whole
+      // character before the image appeared in its new place.
+      setCustomImageOrder(name, newOrder)
+      const session = reorderSessionRef.current
+      if (!session) return
+      session.dirty = true
+      session.save = session.save
+        .then(() => apiClient.reorderCustomImages(name, newOrder))
+        .catch(async (err) => {
+          // Say so once, then show what the server actually holds: the gallery
+          // is now displaying an order that was never saved.
+          if (!session.failed) addToast(err.message || 'Could not save the new order', 'error')
+          session.failed = true
+          await loadCustomImagesForCharacter(name)
         })
-        .catch((err) => addToast(err.message, 'error'))
     },
-    [name, loadCustomImagesForCharacter, addToast],
+    [name, setCustomImageOrder, loadCustomImagesForCharacter, addToast],
   )
 
-  if (!char) return <div className="loading">Character not found</div>
+  // Three states, not two. `char` is absent both while the library is loading
+  // and when the character genuinely does not exist, and conflating them meant
+  // every shared link opened on an error.
+  if (!char && libraryLoading) return <CharacterLoadingState />
+  if (!char) {
+    return (
+      <Card as="section" padding="lg">
+        <h1 className="page-title">Character not found</h1>
+        <EmptyState
+          title={`Nothing here called "${name}"`}
+          description="It may have been renamed, or the link may be wrong."
+          action={
+            <Button as={Link} to="/">
+              Back to search
+            </Button>
+          }
+        />
+      </Card>
+    )
+  }
 
   const handleSaveEdit = async () => {
     setLoading(true)
@@ -333,6 +441,8 @@ export default function CharacterPage() {
   // toolbar has to offer both actions. DECISIONS.md section 1.
   const selectedRows = selectedUrls.map((url) => rowByUrl.get(url)).filter(Boolean)
   const mineSelected = selectedRows.filter((row) => row.is_mine)
+  /** Every image here you added, selected or not — what "Select mine" reaches. */
+  const mineCount = rows.filter((row) => row.is_mine).length
   const othersSelected = selectedRows.filter((row) => !row.is_mine)
 
   const removeOwnImages = async () => {
@@ -438,8 +548,29 @@ export default function CharacterPage() {
     setSelectedUrls([...customs])
   }
 
-  const generateAiCommand = () => {
-    const urls = selectedUrls.length ? selectedUrls : customs
+  /**
+   * Select every image you added.
+   *
+   * Removing your own images used to mean entering a mode that tagged all 256
+   * thumbnails with who added them and reading the gallery for the handful that
+   * said "Yours". The set is already known here, so it can simply be handed
+   * over.
+   */
+  const selectMineImages = () => {
+    setSelectedUrls(rows.filter((row) => row.is_mine).map((row) => row.url))
+  }
+
+  /**
+   * Build the $ai command for `urls`.
+   *
+   * Takes them rather than reading the selection, because it serves two callers
+   * that mean different things: the header copies the command for the whole
+   * character in one click, and the toolbar copies one for the images you
+   * picked. It used to read `selectedUrls.length ? selectedUrls : customs`,
+   * which made the same button mean either depending on invisible state.
+   */
+  const generateAiCommand = (urls) => {
+    if (!urls.length) return
     const charName = editMode ? editName : char.name
     recordTakes(urls, 'copy_command')
     const cmd = buildAiCommand(charName, urls)
@@ -490,7 +621,11 @@ export default function CharacterPage() {
   const galleryModalImages = customs.map((u) => getImageUrl(u) || u).filter(Boolean)
 
   return (
-    <Card as="article" padding="lg" className="character-page">
+    <Card
+      as="article"
+      padding="lg"
+      className={`character-page${mode === 'browse' ? '' : ' has-action-bar'}`}
+    >
       <CharacterHeader
         char={char}
         mainImage={mainImage}
@@ -502,7 +637,8 @@ export default function CharacterPage() {
         onMainImageDrop={handleMainImageDrop}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
-        onGetAiCommand={() => enterMode('ai')}
+        onGetAiCommand={() => enterSelectMode([...customs])}
+        customCount={customs.length}
         edit={{
           active: editMode,
           name: editName,
@@ -536,35 +672,47 @@ export default function CharacterPage() {
         onDrop={upload.onDrop}
       >
         <div className="custom-images-header-row">
-          <h3 className="section-heading custom-images-heading">Custom Images</h3>
-          <div className="char-custom-toolbar">
-            <GalleryToolbar
-              mode={mode}
-              selectedUrls={selectedUrls}
-              totalCount={customs.length}
-              mineSelected={mineSelected}
-              othersSelected={othersSelected}
-              hiddenCount={hiddenCount}
-              showHidden={showHidden}
-              uploadBusy={!!upload.progress}
-              onEnterRemove={() => enterMode('remove')}
-              onEnterDownload={enterDownloadMode}
-              onEnterReorder={enterReorderMode}
-              onExitMode={resetModes}
-              onCancelReorder={cancelReorder}
-              onDoneReorder={doneReorder}
-              onSelectAll={selectAllImages}
-              onClearSelection={() => setSelectedUrls([])}
-              onGenerateAiCommand={generateAiCommand}
-              onRemoveSelected={handleRemoveSelected}
-              onHideSelected={handleHideSelected}
-              onDownloadSelected={handleDownloadSelected}
-              onUnhideAll={handleUnhideAll}
-              onToggleShowHidden={() => setShowHidden((v) => !v)}
-              onOpenRemovedDrawer={openRemovedDrawer}
-              onAddImage={() => customInputRef.current?.click()}
-            />
-          </div>
+          <h2 className="section-heading custom-images-heading">
+            Custom Images
+            {/* The count belongs on a page whose premise is "up to 256 of
+                these". The class already existed and nothing rendered it. */}
+            {customs.length > 0 && (
+              <span className="toolbar-selection-count">{customs.length}</span>
+            )}
+            {/*
+              The mode travels with the content it governs. It used to be
+              signalled only by which buttons happened to be rendered, in a
+              toolbar that scrolls out of sight on a long gallery -- so on a
+              256-image character the only way to discover you were in remove
+              mode was to click an image and watch it be selected rather than
+              opened. role="status" announces the change rather than leaving a
+              screen reader to find it by re-reading an item's label.
+            */}
+            {MODE_LABELS[mode] && (
+              <span className="custom-images-mode" role="status">
+                {MODE_LABELS[mode]}
+              </span>
+            )}
+          </h2>
+          {/* Browse only. Everything an open mode needs is in the bar fixed to
+              the bottom of the viewport, within reach of wherever you have
+              scrolled to. */}
+          {mode === 'browse' && (
+            <div className="char-custom-toolbar">
+              <GalleryToolbar
+                totalCount={customs.length}
+                hiddenCount={hiddenCount}
+                showHidden={showHidden}
+                uploadBusy={!!upload.progress}
+                onEnterSelect={() => enterSelectMode()}
+                onEnterReorder={enterReorderMode}
+                onUnhideAll={handleUnhideAll}
+                onToggleShowHidden={() => setShowHidden((v) => !v)}
+                onOpenRemovedDrawer={openRemovedDrawer}
+                onAddImage={openCustomFilePicker}
+              />
+            </div>
+          )}
         </div>
         {reorderMode && (
           <details className="reorder-mode-hint-details">
@@ -579,8 +727,18 @@ export default function CharacterPage() {
                 it is picked up, then drag and release where you want it.
               </p>
               <p>
+                <strong>Keyboard:</strong> tab to an image and use the <strong>arrow keys</strong>{' '}
+                to move it. Each move is announced.
+              </p>
+              <p>
                 <strong>Move several at once:</strong> tap images to select them (or Clear
-                selection), then drag any selected image — the whole group moves together.
+                selection), then drag any selected image — or use the arrow keys. The whole group
+                moves together.
+              </p>
+              <p>
+                <strong>Saving:</strong> every move is saved as you make it. Done simply closes
+                reorder mode; <strong>Discard changes</strong> puts the order back the way it was
+                when you opened it.
               </p>
             </div>
           </details>
@@ -594,10 +752,6 @@ export default function CharacterPage() {
           onChange={upload.onFileInputChange}
           disabled={!!upload.progress}
         />
-        <p className="gallery-drop-hint">
-          Drag &amp; drop files or images from the web (e.g. Pinterest) here, or click &quot;Add
-          Image&quot;
-        </p>
         {upload.progress && (
           <div className="custom-upload-progress" role="status" aria-live="polite">
             <span className="custom-upload-progress-spinner" aria-hidden />
@@ -611,15 +765,72 @@ export default function CharacterPage() {
         <CustomImageGallery
           rows={rows}
           ratios={ratios}
-          modes={{ ai: aiMode, remove: deleteMode, download: downloadMode, reorder: reorderMode }}
+          modes={{ select: selectMode, reorder: reorderMode }}
           selectedUrls={selectedUrls}
           reorder={reorder}
           onToggleSelect={toggleSelect}
           onOpenImage={openModal}
           onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
+          /*
+            An empty gallery used to be a blank strip under the drop hint, which
+            reads as something that failed to load rather than a character
+            nobody has added an image to yet. Hidden images make that worse:
+            hiding the last one emptied the gallery with no sign that the images
+            still exist and are one button away.
+          */
+          empty={
+            hiddenCount > 0 && !showHidden ? (
+              <EmptyState
+                className="gallery-empty"
+                title={
+                  hiddenCount === 1
+                    ? 'The only image here is one you hid'
+                    : `All ${hiddenCount} images here are ones you hid`
+                }
+                description="Hiding is per person, so this is only how the page looks to you."
+                action={
+                  <Button size="sm" onClick={() => setShowHidden(true)}>
+                    Show them
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                className="gallery-empty"
+                title="No custom images yet"
+                description={`Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`}
+                action={
+                  <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
+                    Add image
+                  </Button>
+                }
+              />
+            )
+          }
         />
       </div>
+
+      {mode !== 'browse' && (
+        <GallerySelectionBar
+          mode={mode}
+          selectedCount={selectedUrls.length}
+          totalCount={customs.length}
+          mineCount={mineCount}
+          mineSelectedCount={mineSelected.length}
+          othersSelectedCount={othersSelected.length}
+          onSelectAll={selectAllImages}
+          onSelectMine={selectMineImages}
+          onClearSelection={() => setSelectedUrls([])}
+          onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
+          onDownloadSelected={handleDownloadSelected}
+          onRemoveSelected={handleRemoveSelected}
+          onHideSelected={handleHideSelected}
+          onExitMode={resetModes}
+          onCancelReorder={cancelReorder}
+          onDoneReorder={doneReorder}
+        />
+      )}
 
       {modalOpen && (
         <ImageModal
@@ -644,6 +855,21 @@ export default function CharacterPage() {
           variant="danger"
           onConfirm={removeOwnImages}
           onCancel={() => setConfirmRemove(null)}
+        />
+      )}
+      {confirmDiscardOrder && (
+        <ConfirmDialog
+          title="Discard the new order?"
+          body={
+            <>
+              Every move you made in this session goes back to the order you started with. Images
+              added or removed while you were reordering stay where they are.
+            </>
+          }
+          confirmLabel="Discard"
+          variant="danger"
+          onConfirm={discardReorder}
+          onCancel={() => setConfirmDiscardOrder(false)}
         />
       )}
       {reportTarget && (

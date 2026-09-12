@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T00:00:00Z",
+  "title": "Design System: ImgManager",
+  "extensions": {
+    "colorMeta": {
+      "deep-harbour-teal": {
+        "role": "primary",
+        "displayName": "Deep Harbour Teal",
+        "canonical": "#0b7285",
+        "darkValue": "#2fb3c4",
+        "tonalRamp": ["#04262c", "#063a44", "#08505d", "#0b7285", "#1291a8", "#2fb3c4", "#6fd0dc", "#e3f2f5"]
+      },
+      "cool-slate-500": {
+        "role": "neutral",
+        "displayName": "Cool Slate",
+        "canonical": "#7c8595",
+        "tonalRamp": ["#14171d", "#1a1e26", "#2e3440", "#444c5a", "#7c8595", "#c8cdd7", "#e8ebf0", "#f8f9fb"]
+      },
+      "affirm-green": {
+        "role": "tertiary",
+        "displayName": "Affirm Green",
+        "canonical": "#0f7a3d",
+        "darkValue": "#48c07a",
+        "tonalRamp": ["#052012", "#0a4726", "#0f7a3d", "#18a353", "#48c07a", "#7fd6a2", "#b6e8c9", "#e4f4ea"]
+      },
+      "refuse-red": {
+        "role": "tertiary",
+        "displayName": "Refuse Red",
+        "canonical": "#b3261e",
+        "darkValue": "#f2857a",
+        "tonalRamp": ["#2b1210", "#5a1712", "#96201a", "#b3261e", "#d95a50", "#f2857a", "#f7b5ae", "#fbeae9"]
+      },
+      "caution-amber": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "canonical": "#8a5a00",
+        "darkValue": "#e0b341",
+        "tonalRamp": ["#33280f", "#4d3a00", "#6b4d00", "#8a5a00", "#b98700", "#e0b341", "#eed08a", "#fbf1de"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The character name on a character page. One per page." },
+      "headline": { "displayName": "Headline", "purpose": "The page title. Exactly one h1 per page." },
+      "title": { "displayName": "Title", "purpose": "Section headings within a page." },
+      "body": { "displayName": "Body", "purpose": "Prose, capped at 42rem." },
+      "label": { "displayName": "Label", "purpose": "Controls and list meta. The most common size in a dense tool." }
+    },
+    "shadows": [
+      { "name": "shadow-sm", "value": "0 1px 2px rgb(16 20 28 / 0.06)", "purpose": "A single hairline lift, for controls sitting on top of an image." },
+      { "name": "shadow-overlay", "value": "0 16px 48px -12px rgb(16 20 28 / 0.24)", "purpose": "Modals and dialogs only. The one thing that says 'in front of the page'." },
+      { "name": "scrim", "value": "rgb(16 20 28 / 0.55)", "purpose": "The backdrop behind a modal." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.2, 0, 0.13, 1)", "purpose": "The only easing curve. No bounce or elastic anywhere." },
+      { "name": "duration-fast", "value": "120ms", "purpose": "Colour and border state changes on controls." },
+      { "name": "duration", "value": "180ms", "purpose": "Everything else." }
+    ],
+    "breakpoints": [
+      { "name": "phone-sm", "value": "480px" },
+      { "name": "phone", "value": "768px" },
+      { "name": "nav-wrap", "value": "960px" },
+      { "name": "nav-labels", "value": "1200px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one solid shape allowed on a screen. At most one per page.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Add Image</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:34px; padding:0 12px; border:1px solid transparent; border-radius:6px; font:500 0.875rem/1 var(--font-sans, Geist, system-ui, sans-serif); white-space:nowrap; cursor:pointer; transition:background-color 120ms cubic-bezier(0.2,0,0.13,1), border-color 120ms cubic-bezier(0.2,0,0.13,1), color 120ms cubic-bezier(0.2,0,0.13,1); } .ds-btn-primary { background:var(--accent,#0b7285); border-color:var(--accent,#0b7285); color:#fff; } .ds-btn-primary:hover { background:var(--accent-hover,#095c6b); border-color:var(--accent-hover,#095c6b); } .ds-btn-primary:focus-visible { outline:2px solid var(--accent,#0b7285); outline-offset:2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The workhorse: a hairline outline, not a filled shape. Most buttons are this.",
+      "html": "<button class=\"ds-btn-secondary\">Reorder</button>",
+      "css": ".ds-btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:34px; padding:0 12px; border:1px solid var(--border-strong,#c8cdd7); border-radius:6px; background:var(--surface,#fff); color:var(--text,#1c2029); font:500 0.875rem/1 var(--font-sans, Geist, system-ui, sans-serif); cursor:pointer; transition:background-color 120ms cubic-bezier(0.2,0,0.13,1); } .ds-btn-secondary:hover { background:var(--surface-hover,#f1f3f6); } .ds-btn-secondary:focus-visible { outline:2px solid var(--accent,#0b7285); outline-offset:2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Hairline separation, never a shadow. The page-level container.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">Most popular series</h2><p class=\"ds-card-meta\">441 series in the library.</p></section>",
+      "css": ".ds-card { background:var(--surface,#fff); border:1px solid var(--border,#e2e6ec); border-radius:10px; padding:24px; font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-card-title { margin:0 0 12px; font-size:1.25rem; font-weight:600; letter-spacing:-0.015em; color:var(--text,#1c2029); } .ds-card-meta { margin:0; font-size:0.875rem; color:var(--text-muted,#5c6575); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Hairline stroke; the border shifts to the accent on focus.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search saved\" />",
+      "css": ".ds-input { width:100%; min-height:34px; padding:0 12px; border:1px solid var(--border-strong,#c8cdd7); border-radius:6px; background:var(--surface,#fff); color:var(--text,#1c2029); font:400 0.875rem/1.5 var(--font-sans, Geist, system-ui, sans-serif); transition:border-color 120ms cubic-bezier(0.2,0,0.13,1); } .ds-input::placeholder { color:var(--text-subtle,#7c8595); } .ds-input:focus-visible { outline:2px solid var(--accent,#0b7285); outline-offset:2px; border-color:var(--accent,#0b7285); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": "segmented",
+      "description": "A pill well with a raised chip inside. A real radiogroup, not two buttons that look like one.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\" aria-label=\"Search by\"><span class=\"ds-seg-opt is-on\" role=\"radio\" aria-checked=\"true\">Name</span><span class=\"ds-seg-opt\" role=\"radio\" aria-checked=\"false\">Series</span></div>",
+      "css": ".ds-seg { display:inline-flex; padding:2px; border:1px solid var(--border,#e2e6ec); border-radius:999px; background:var(--surface-sunken,#f1f3f6); font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-seg-opt { display:inline-flex; align-items:center; min-height:26px; padding:0 12px; border-radius:999px; font-size:0.8125rem; font-weight:500; color:var(--text-muted,#5c6575); cursor:pointer; } .ds-seg-opt.is-on { background:var(--surface,#fff); color:var(--text,#1c2029); box-shadow:0 1px 2px rgb(16 20 28 / 0.06); }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "A small inline count. Tabular figures so it does not reflow as it changes.",
+      "html": "<span class=\"ds-badge\">256</span>",
+      "css": ".ds-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; background:var(--surface-sunken,#f1f3f6); color:var(--text-muted,#5c6575); font:500 0.8125rem/1.4 var(--font-sans, Geist, system-ui, sans-serif); font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Empty State",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Says what is absent and how it would get here. Deliberately distinct from a search that matched nothing.",
+      "html": "<div class=\"ds-empty\"><p class=\"ds-empty-title\">Nothing hidden</p><p class=\"ds-empty-desc\">Images you hide from a character page will collect here.</p></div>",
+      "css": ".ds-empty { padding:40px 24px; text-align:center; font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-empty-title { margin:0 0 8px; font-size:1.0625rem; font-weight:500; color:var(--text,#1c2029); } .ds-empty-desc { margin:0; font-size:0.875rem; color:var(--text-muted,#5c6575); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Contact Sheet",
+    "overview": "A photographer's contact sheet is a dense, ordered grid of real images with almost no chrome around it, made for someone doing a job rather than someone browsing. That is what this interface is. The character artwork is the content, the content is photographic, and every decision about the frame exists to keep the frame out of the way.\n\nThe register is a dense, restrained tool — Linear and Vercel rather than a consumer product. Surfaces are white or near-black, separated by hairlines rather than shadows. Neutrals are tinted toward blue (hue ~222) and never pure grey, because untinted grey is the most reliable signal that no palette was chosen at all. Type is Geist, self-hosted, with negative tracking on anything large. Light and dark are equally first-class, derived from one token set.\n\nThe one thing this system refuses to do is compete with the pictures. Chrome is grey; artwork is not.",
+    "keyCharacteristics": [
+      "Hairline separation; shadows only for things that genuinely float",
+      "Cool-tinted neutrals, never pure grey",
+      "One accent, used only to mark state",
+      "Images at their true aspect ratio, in justified rows",
+      "Equal-weight light and dark, following the system by default",
+      "4px spacing base, 34px controls, 44px touch targets"
+    ],
+    "rules": [
+      { "name": "The Art Carries the Colour Rule", "section": "colors", "body": "The accent marks state and nothing else: focus, selection, the active tab, at most one solid button per screen. No coloured headers, no gradient surfaces, no tinted cards. The character artwork is the only saturated thing on screen." },
+      { "name": "The Tinted Neutral Rule", "section": "colors", "body": "No pure grey anywhere. Every neutral carries the ~222 hue cast. A #888 in a diff is a bug." },
+      { "name": "The Subtle-Tint Pairing Rule", "section": "colors", "body": "--accent-subtle takes --accent as its foreground; --accent-fg belongs only on solid --accent. A test enforces this, because the failure mode is invisible text rather than a crash." },
+      { "name": "The Negative Tracking Rule", "section": "typography", "body": "Anything at title size or larger gets negative letter spacing. Default tracking on large type is the clearest tell of an unconsidered heading." },
+      { "name": "The Tabular Figures Rule", "section": "typography", "body": "Any number that updates in place carries font-variant-numeric: tabular-nums. Numbers that reflow as they change read as broken." },
+      { "name": "The Four Breakpoints Rule", "section": "layout", "body": "480, 768, 960, 1200. A fifth value in a media query is a bug, not a refinement." },
+      { "name": "The Line Not Shadow Rule", "section": "elevation", "body": "The default separator is a 1px border. Reach for a shadow only when the element genuinely floats, and then use one of the two that exist." }
+    ],
+    "dos": [
+      "Do put every colour in tokens.css. A hex literal anywhere else is a bug — the system was built by removing 387 of them.",
+      "Do use the four radii (4/6/10/999) and the 4px spacing scale.",
+      "Do pair a -subtle tint with its own base colour as foreground, never with -fg.",
+      "Do give large type negative tracking (−0.015em at title, −0.022em at display).",
+      "Do use tabular-nums on any figure that updates in place.",
+      "Do let images keep their real aspect ratio in galleries, and crop only character portraits.",
+      "Do define every colour in the base :root block.",
+      "Do reach for Button, Card, Input, Field, Modal, Badge, EmptyState before writing a new control."
+    ],
+    "donts": [
+      "Don't saturate the chrome. No coloured headers, gradient surfaces or tinted cards.",
+      "Don't use pure grey. Every neutral carries the ~222 hue cast.",
+      "Don't use Bootstrap's palette, or a purple-to-violet gradient.",
+      "Don't add a third shadow.",
+      "Don't use bounce or elastic easing.",
+      "Don't introduce a fifth breakpoint.",
+      "Don't put more than one solid accent button on a screen.",
+      "Don't write an inline style to resize a control.",
+      "Don't remove focus outlines. One ring, on :focus-visible, everywhere."
+    ]
+  }
+}

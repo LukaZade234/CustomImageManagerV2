@@ -77,6 +77,9 @@
   --shadow-sm: 0 1px 2px rgb(16 20 28 / 0.06);
   --shadow-overlay: 0 16px 48px -12px rgb(16 20 28 / 0.24);
   --scrim: rgb(16 20 28 / 0.55);
+  /* Not a third elevation: a focus/active ring, drawn as a shadow because an
+     outline cannot be tinted. Named so it stops being retyped in three files. */
+  --ring: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
 
   /* ---- Spacing (4px base) ------------------------------------------ */
   --space-1: 4px;
@@ -147,7 +150,8 @@
   --nav-control-radius: 22px;
   --nav-control-pad-x: var(--space-4);
   --sticky-nav-height: 80px;
-  --sticky-nav-height-mobile: 148px;
+  /* One row since the links fold behind a button; it was three. */
+  --sticky-nav-height-mobile: 64px;
 
   /*
    * ---- Breakpoints --------------------------------------------------

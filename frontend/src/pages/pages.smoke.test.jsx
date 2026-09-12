@@ -6,8 +6,8 @@
  * the page, in front of a user. A render is the cheapest thing that catches it,
  * and it also guards the migration onto the shared primitives.
  */
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../api', () => ({
@@ -92,5 +92,94 @@ describe('page smoke tests', () => {
 
   it('renders a character page', () => {
     renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
+  })
+})
+
+describe('character page loading states', () => {
+  /**
+   * The page used to show "Character not found" whenever its record was absent,
+   * and the record is absent for as long as the library takes to load. Every
+   * refresh, bookmark and link pasted into Discord therefore opened on an error
+   * claiming the character did not exist.
+   */
+  it('shows a skeleton while the library is still loading, not an error', () => {
+    useStore.setState({ characters: [], loading: true })
+    renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
+
+    expect(screen.getByText(/Loading character/i)).toBeInTheDocument()
+    expect(screen.queryByText(/not found/i)).not.toBeInTheDocument()
+  })
+
+  it('only says not-found once the library has actually arrived', () => {
+    useStore.setState({ characters: CHARACTERS, loading: false })
+    renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: /Character not found/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Nothing here called/i)).toBeInTheDocument()
+  })
+
+  it('offers a way back rather than stranding you', () => {
+    useStore.setState({ characters: CHARACTERS, loading: false })
+    renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
+    expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/')
+  })
+})
+
+describe('an empty gallery', () => {
+  /**
+   * An empty gallery was a blank strip under the drop hint, which reads as a
+   * load that failed rather than a character nobody has added an image to. The
+   * hidden case is worse: hiding the last image emptied the gallery with no
+   * sign that the images still exist.
+   */
+  /** The other tests here render the page bare; these need the :name param. */
+  function renderCharacter() {
+    return render(
+      <MemoryRouter initialEntries={['/character/Ayanami%20Rei']}>
+        <Routes>
+          <Route path="/character/:name" element={<CharacterPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('says there is nothing here yet, and offers the way to add one', () => {
+    useStore.setState({ characterImages: { 'Ayanami Rei': [] } })
+    renderCharacter()
+
+    expect(screen.getByText(/No custom images yet/i)).toBeInTheDocument()
+    // Its own button, inside the gallery, rather than only the toolbar's — the
+    // point is that the way out sits where the missing images would be.
+    const gallery = within(document.querySelector('.custom-images-gallery'))
+    expect(gallery.getByRole('button', { name: /^Add image$/i })).toBeInTheDocument()
+  })
+
+  it('distinguishes an empty gallery from one you have hidden all of', () => {
+    useStore.setState({
+      characterImages: {
+        'Ayanami Rei': [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }],
+      },
+    })
+    renderCharacter()
+
+    expect(screen.getByText(/The only image here is one you hid/i)).toBeInTheDocument()
+    expect(screen.queryByText(/No custom images yet/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('profile lists', () => {
+  /**
+   * Characters are all the same 9:14, so a list of them is a grid of equal
+   * cards. Under justified rows a short last row stretched to fill the width,
+   * which on a phone meant two normal cards and then one enormous one.
+   */
+  it('lays saved characters out as a uniform grid', () => {
+    renderAt(<SavedTab />)
+    const grid = document.querySelector('.profile-grid')
+    expect(grid).toHaveClass('profile-grid--uniform')
+    // Fillers exist to level a justified row; a grid has no row to level.
+    expect(document.querySelectorAll('.profile-grid__filler').length).toBe(0)
   })
 })

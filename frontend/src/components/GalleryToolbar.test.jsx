@@ -1,11 +1,15 @@
 /**
- * The gallery mode bar.
+ * The row of controls beside the "Custom Images" heading.
  *
- * This is a wide seam — twenty-odd callbacks handed down from CharacterPage —
- * and a mistyped prop name renders a button that simply does nothing when
- * clicked, with no error anywhere. So the test worth having is not that the
- * markup is right but that every button is wired to the callback it claims,
- * and that each mode shows only its own controls.
+ * This is a wide seam — a dozen callbacks handed down from CharacterPage — and
+ * a mistyped prop name renders a button that simply does nothing when clicked,
+ * with no error anywhere. So the test worth having is not that the markup is
+ * right but that every button is wired to the callback it claims.
+ *
+ * What is pinned beyond that is how little is here. There were seven controls,
+ * four of which only chose which verb you would be allowed to use once you had
+ * selected something. Those live in GallerySelectionBar now, after the images
+ * are picked.
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -13,35 +17,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { GalleryToolbar } from './GalleryToolbar'
 
 const handlerNames = [
-  'onEnterRemove',
-  'onEnterDownload',
+  'onEnterSelect',
   'onEnterReorder',
-  'onExitMode',
-  'onCancelReorder',
-  'onDoneReorder',
-  'onSelectAll',
-  'onClearSelection',
-  'onGenerateAiCommand',
-  'onRemoveSelected',
-  'onHideSelected',
-  'onDownloadSelected',
   'onUnhideAll',
   'onToggleShowHidden',
   'onOpenRemovedDrawer',
   'onAddImage',
 ]
 
-/** Renders fresh each time, so one test can exercise two modes in sequence. */
+/** Renders fresh each time, so one test can exercise two states in sequence. */
 function setup(overrides = {}) {
   cleanup()
   const handlers = Object.fromEntries(handlerNames.map((name) => [name, vi.fn()]))
   render(
     <GalleryToolbar
-      mode="browse"
-      selectedUrls={['a', 'b']}
       totalCount={5}
-      mineSelected={['a']}
-      othersSelected={['b']}
       hiddenCount={0}
       showHidden={false}
       uploadBusy={false}
@@ -62,71 +52,48 @@ async function clickExpecting(label, handlers, fired) {
 }
 
 describe('GalleryToolbar', () => {
-  it('browse mode offers the entry points and nothing else', async () => {
+  it('offers three things to start, and the way back to what was removed', async () => {
     const handlers = setup()
-    await clickExpecting(/Remove or hide/i, handlers, 'onEnterRemove')
 
-    expect(screen.queryByRole('button', { name: /Copy Command/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Done$/i })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Removed',
+      'Select',
+      'Reorder',
+      'Add image',
+    ])
+
+    // The verbs are not up here any more: none of them can act until images are
+    // chosen, and choosing happens in the bar along the bottom.
+    for (const absent of [/Remove \(/i, /^Hide \(/i, /\$ai command/i, /^Download/i, /^Done$/i]) {
+      expect(screen.queryByRole('button', { name: absent })).not.toBeInTheDocument()
+    }
+    await clickExpecting(/^Select$/i, handlers, 'onEnterSelect')
   })
 
   it.each([
-    ['Download', 'onEnterDownload'],
     ['Reorder', 'onEnterReorder'],
-    ['Add Image', 'onAddImage'],
+    ['Add image', 'onAddImage'],
     ['Removed', 'onOpenRemovedDrawer'],
-  ])('browse: %s calls %s', async (label, fired) => {
+  ])('%s calls %s', async (label, fired) => {
     await clickExpecting(new RegExp(`^${label}$`, 'i'), setup(), fired)
   })
 
-  it('disables Add Image while an upload is in flight', () => {
+  it('disables Add image while an upload is in flight', () => {
     setup({ uploadBusy: true })
-    expect(screen.getByRole('button', { name: /Add Image/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Add image/i })).toBeDisabled()
   })
 
-  it('ai mode copies the command and counts the selection', async () => {
-    const handlers = setup({ mode: 'ai' })
-    await clickExpecting(/Copy Command \(2\)/, handlers, 'onGenerateAiCommand')
+  it('does not offer to select or reorder an empty gallery', () => {
+    setup({ totalCount: 0 })
+    expect(screen.getByRole('button', { name: /^Select$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Reorder$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Add image/i })).toBeEnabled()
   })
 
-  it('ai mode counts every image when nothing is selected', () => {
-    setup({ mode: 'ai', selectedUrls: [] })
-    expect(screen.getByRole('button', { name: /Copy Command \(5\)/ })).toBeInTheDocument()
-  })
-
-  it('remove mode separates your images from other people’s', async () => {
-    const handlers = setup({ mode: 'remove' })
-    await clickExpecting(/Remove mine \(1\)/, handlers, 'onRemoveSelected')
-
-    const fresh = setup({ mode: 'remove' })
-    await clickExpecting(/Hide theirs \(1\)/, fresh, 'onHideSelected')
-  })
-
-  it('remove mode disables each action when its side of the selection is empty', () => {
-    setup({ mode: 'remove', mineSelected: [], othersSelected: [] })
-    expect(screen.getByRole('button', { name: /Remove mine/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Hide theirs/i })).toBeDisabled()
-  })
-
-  it('download mode downloads the selection', async () => {
-    await clickExpecting(/Download \(2\)/, setup({ mode: 'download' }), 'onDownloadSelected')
-  })
-
-  it('download mode disables the action with nothing selected', () => {
-    setup({ mode: 'download', selectedUrls: [] })
-    expect(screen.getByRole('button', { name: /Download \(0\)/ })).toBeDisabled()
-  })
-
-  it('reorder mode offers cancel and done, not the generic exit', async () => {
-    const handlers = setup({ mode: 'reorder' })
-    await clickExpecting(/^Done$/i, handlers, 'onDoneReorder')
-
-    const fresh = setup({ mode: 'reorder' })
-    await clickExpecting(/^Cancel$/i, fresh, 'onCancelReorder')
-  })
-
-  it.each(['ai', 'remove', 'download'])('%s mode exits through Cancel', async (mode) => {
-    await clickExpecting(/^Cancel$/i, setup({ mode }), 'onExitMode')
+  it('does not offer to reorder a single image', () => {
+    setup({ totalCount: 1 })
+    expect(screen.getByRole('button', { name: /^Select$/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Reorder$/i })).toBeDisabled()
   })
 
   it('hidden images stay out of the way until there are some', () => {

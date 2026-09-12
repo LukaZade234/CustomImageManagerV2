@@ -382,9 +382,11 @@ selection. Its per-character caching is also what makes killing the full-map fet
 
 - **`protobuf`** — declared directly but never imported by our code; it is transitive via
   `discord.py-self`. Pinning another package's transitive dependency only creates future conflicts.
-- **`flask-compress`** — removed *once Cloudflare is in front*, not before. The edge does Brotli,
-  which beats gzip, so origin-side compression would just burn CPU on a box we are paying for in
-  uptime.
+- **`flask-compress`** — **removed** in `5c62b9c`, once Cloudflare was in front and confirmed to
+  be compressing. The edge does Brotli, which beats gzip, so origin-side compression only spent CPU
+  on a box we pay for in uptime. The ordering was the whole point: it stayed until the CDN was
+  proven, because removing it first would have meant serving everything uncompressed and blaming
+  the CDN for it.
 - **`flask-cors` is kept.** It looks droppable, but once the SPA is on Pages the API is genuinely
   cross-origin, and cookie identity makes CORS subtle — `*` is invalid with credentials.
   Hand-rolling that is how it gets done wrong.

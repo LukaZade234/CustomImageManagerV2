@@ -264,15 +264,21 @@ correct for different targets, and picking the wrong one fails silently — the 
 wrong reason, or makes a real network call. Whenever a route moves module, every monkeypatch aimed
 at its old home has to move with it.
 
-App setup (`upload_imgchest.py:377`):
+App setup (`upload_imgchest.py:59`):
 ```python
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-key-change-in-production")
-_origins = os.environ.get("CORS_ORIGINS", "*")
-cors_origins = [o.strip() for o in _origins.split(",")] if _origins != "*" else "*"
-CORS(app, origins=cors_origins)
-Compress(app)
+_secret_key, _secret_is_ephemeral = identity.resolve_secret_key()
+app.config["SECRET_KEY"] = _secret_key
+# CORS_ORIGINS="*" is refused outright: this API sends credentials, and browsers
+# reject a wildcard origin on credentialed requests.
+_origins = os.environ.get("CORS_ORIGINS", "").strip()
+cors_origins = [o.strip() for o in _origins.split(",") if o.strip()]
+CORS(app, origins=cors_origins, supports_credentials=True)
 ```
+
+No `Compress(app)`. Responses are compressed at the Cloudflare edge, which does
+Brotli; doing it again on the origin would only spend CPU on a box billed for it.
+See DECISIONS.md.
 
 Notable helpers:
 - `_validate_character_name` (`:321`) — length, no `/` `\` `..`, no control characters

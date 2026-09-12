@@ -6,7 +6,7 @@
  * reachable from a keyboard. They are now one real button whose meaning depends
  * on the gallery's mode, which is what these tests pin.
  */
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -19,7 +19,7 @@ const ROWS = [
   { id: 2, url: 'https://cdn/b.png', thumb: '/thumbs/2.webp', is_mine: false, owner: 'Someone' },
 ]
 
-const NO_MODES = { ai: false, remove: false, download: false, reorder: false }
+const NO_MODES = { select: false, reorder: false }
 
 function setup(overrides = {}) {
   const props = {
@@ -68,7 +68,7 @@ describe('CustomImageGallery', () => {
   })
 
   it('selects instead of opening once a mode is active', async () => {
-    const props = setup({ modes: { ...NO_MODES, remove: true } })
+    const props = setup({ modes: { ...NO_MODES, select: true } })
     const button = screen.getAllByRole('button')[0]
     expect(button).toHaveAccessibleName(/Select image 1/i)
 
@@ -78,10 +78,24 @@ describe('CustomImageGallery', () => {
   })
 
   it('reports selection state to assistive technology', () => {
-    setup({ modes: { ...NO_MODES, remove: true }, selectedUrls: ['https://cdn/a.png'] })
+    setup({ modes: { ...NO_MODES, select: true }, selectedUrls: ['https://cdn/a.png'] })
     const [first, second] = screen.getAllByRole('button')
     expect(first).toHaveAttribute('aria-pressed', 'true')
     expect(second).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('says who added an image once you have picked it, and not before', () => {
+    // Ownership decides which verb the toolbar offers, so it belongs on what
+    // you picked. Tagging all 256 thumbnails throughout the mode, as remove
+    // mode used to, put the answer everywhere except where it was needed.
+    setup({ modes: { ...NO_MODES, select: true } })
+    expect(screen.queryByText('Yours')).not.toBeInTheDocument()
+
+    cleanup()
+    setup({ modes: { ...NO_MODES, select: true }, selectedUrls: ['https://cdn/a.png'] })
+    expect(screen.getByText('Yours')).toBeInTheDocument()
+    // The other image is not selected, so nothing is said about it.
+    expect(screen.queryByText('Someone')).not.toBeInTheDocument()
   })
 
   it('is not a toggle when there is nothing to select', () => {
@@ -103,5 +117,35 @@ describe('CustomImageGallery', () => {
     await userEvent.click(screen.getAllByRole('button')[0])
     expect(props.onToggleSelect).not.toHaveBeenCalled()
     expect(props.onOpenImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('layout', () => {
+  const mql = (matches) => ({
+    matches,
+    media: '',
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })
+
+  it('lays out in justified rows on a wide viewport', () => {
+    setup()
+    const gallery = document.querySelector('.custom-images-gallery')
+    expect(gallery).not.toHaveClass('is-masonry')
+    // The fillers level the last row, which only rows have.
+    expect(document.querySelectorAll('.gallery-filler').length).toBeGreaterThan(0)
+  })
+
+  it('lays out in uniform columns on a narrow one', () => {
+    // One portrait across a 390px screen is a gallery you scroll past one image
+    // at a time. Columns of equal width and unequal height fit four or five.
+    window.matchMedia = vi.fn().mockImplementation(() => mql(true))
+    try {
+      setup()
+      expect(document.querySelector('.custom-images-gallery')).toHaveClass('is-masonry')
+      expect(document.querySelectorAll('.gallery-filler').length).toBe(0)
+    } finally {
+      window.matchMedia = vi.fn().mockImplementation(() => mql(false))
+    }
   })
 })

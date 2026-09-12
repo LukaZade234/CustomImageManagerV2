@@ -37,9 +37,10 @@ Dockerfile 3.11, pyright 3.11), there was no lockfile, and 8 of 10 dependencies 
       `checkJs: false`, so existing `.js`/`.jsx` keep working untouched and only converted files
       are checked. `src/types.ts` holds the current API shapes and is the first thing Phase 3
       updates.
-- [ ] **Remove `flask-compress`** once Cloudflare is in front; the edge does Brotli, which beats
-      gzip, and origin-side compression just burns CPU. **Deliberately not done yet** — it must not
-      land before the CDN (Phase 5).
+- [x] **Removed `flask-compress`** (`5c62b9c`), once Cloudflare was in front and confirmed to be
+      doing the job. The edge does Brotli, which beats gzip, so origin-side compression only spent
+      CPU on a box billed for uptime. It was deliberately held back until after the CDN landed in
+      Phase 5, so that one variable stayed out of the migration.
 
 Keep `flask-cors`: once the SPA is on Pages the API is genuinely cross-origin, and cookie identity
 makes CORS subtle enough (no `*` with credentials) that hand-rolling it is a mistake.
@@ -302,8 +303,8 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
       anything *deleted* on v1 is not removed from v2 either. The procedure, the rollback boundary
       and the three decisions it forces are in **[CUTOVER.md](CUTOVER.md)**.
 - [ ] **Decommission** the DigitalOcean app and the Neon database, only after the above.
-- [ ] **Remove `flask-compress`.** Now actionable: Cloudflare is in front and does Brotli, so
-      origin-side gzip only burns CPU.
+- [x] **Removed `flask-compress`** (`5c62b9c`). Cloudflare is in front and does Brotli, so
+      origin-side gzip only spent CPU.
 
 ---
 
@@ -463,8 +464,8 @@ them. There are no v2 users yet, so this costs nothing now.
 - [ ] **Serve character images from the CDN**, not from Flask off local disk (follows from R2).
       Generated thumbnails could move to R2 by the same route, which would also make them a
       backup rather than derived data the origin has to hold.
-- [ ] **Reconsider gzip.** `flask-compress` runs on the origin; with Cloudflare in front, the edge
-      can handle compression instead.
+- [x] **Reconsidered gzip, and dropped it** (`5c62b9c`). `flask-compress` ran on the origin; with
+      Cloudflare in front the edge compresses instead, and does it better.
 
 ---
 

@@ -45,3 +45,11 @@ pending_characters.json
 temp_custom_*
 temp_add_*
 temp_main_*
+
+# Impeccable: a third-party design skill pack, vendored per-developer rather
+# than committed. ~2 MB of playbooks plus a launcher that caches a downloaded
+# engine binary — none of it ours, and none of it needed to build or run the
+# app. Reinstall from github.com/pbakaus/impeccable.
+# What it *produces* (DESIGN.md, PRODUCT.md) is ours and does get committed.
+.claude/skills/impeccable/
+.impeccable/config.local.json

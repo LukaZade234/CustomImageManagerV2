@@ -31,6 +31,13 @@
     color var(--duration-fast) var(--ease);
 }
 
+/* An icon is a fixed shape, not a flexible one. Without this a narrow button
+   squeezes the glyph before it wraps or truncates the label, which is how the
+   16px icons on the character page became dots on a phone. */
+.ui-btn svg {
+  flex-shrink: 0;
+}
+
 .ui-btn--sm {
   min-height: 28px;
   padding: 0 var(--space-2);
@@ -307,7 +314,13 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* dvh, because a phone browser's 100vh includes the strip behind its own
+     toolbars: at 100vh the dialog is taller than what you can see, so its title
+     hides under the address bar and the backdrop you would tap to dismiss it is
+     off the bottom of the screen. vh first, for anything without dvh. */
   max-height: calc(100vh - var(--space-16));
+  /* biome-ignore lint/suspicious/noDuplicateProperties: the vh line is the fallback for dvh */
+  max-height: calc(100dvh - var(--space-16));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -324,8 +337,24 @@
   max-width: 860px;
 }
 
+/* Outside the scrolling body, so the title and the way out stay put however
+   long the list inside runs. */
 .ui-modal__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   padding: var(--space-5) var(--space-6) 0;
+}
+
+.ui-modal__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-modal__close {
+  flex: 0 0 auto;
+  margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0;
+  color: var(--text-muted);
 }
 
 .ui-modal__title {
