@@ -148,29 +148,33 @@ export default function HomePage() {
             <p className="text-meta home-note">
               Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.
             </p>
-            <ol className="home-ranked">
+            {/*
+              A contact strip: the eight frames butt together into one band with
+              hairline dividers, which is how a proof sheet reads — and this page
+              is a proof sheet of the library. It was eight bordered tiles, a
+              card inside a card repeated, with the pictures reduced to 40px
+              afterthoughts beside the names.
+            */}
+            <ol className="home-strip">
               {mostViewed.map((c, i) => (
                 <li key={c.name}>
-                  <Link className="home-ranked__item" to={characterHref(c.name)}>
-                    <span className="home-ranked__rank tabular" aria-hidden>
-                      {i + 1}
-                    </span>
+                  <Link className="home-strip__item" to={characterHref(c.name)}>
                     {c.image ? (
                       <img
-                        className="home-ranked__thumb"
+                        className="home-strip__shot"
                         src={getImageUrl(c.image)}
                         alt=""
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <span className="home-ranked__thumb home-ranked__thumb--empty" aria-hidden />
+                      <span className="home-strip__shot" aria-hidden />
                     )}
-                    <span className="home-ranked__text">
-                      <span className="home-ranked__title">{c.name}</span>
-                      {c.series && <span className="home-ranked__meta">{c.series}</span>}
+                    <span className="home-strip__caption">
+                      <span className="home-strip__rank tabular">{i + 1}</span>
+                      <span className="home-strip__name">{c.name}</span>
+                      {c.series && <span className="home-strip__series">{c.series}</span>}
                     </span>
-                    <span className="home-ranked__count tabular">{c.viewers.toLocaleString()}</span>
                   </Link>
                 </li>
               ))}

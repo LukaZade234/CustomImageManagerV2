@@ -1500,6 +1500,78 @@ body.reorder-touch-dragging {
   }
 }
 /* Ranked lists: best-covered characters, and contributors. */
+/* The most-visited strip: eight frames butted into one band, hairline-divided,
+   captions beneath. A proof sheet of the week, which is what the ranking is —
+   and it replaces eight bordered tiles that were a card inside a card, with the
+   pictures shrunk to 40px beside the names.
+
+   Every frame is the same size by construction: one aspect ratio and a cover
+   fit, so no portrait crops differently from its neighbour. */
+.home-strip {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.home-strip__item {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.home-strip li + li .home-strip__item {
+  border-left: 1px solid var(--border);
+}
+.home-strip__shot {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--main-image-ratio);
+  object-fit: cover;
+  background: var(--surface-sunken);
+  transition: opacity var(--duration) var(--ease);
+}
+a.home-strip__item:hover .home-strip__shot {
+  opacity: 0.88;
+}
+.home-strip__caption {
+  display: grid;
+  gap: 1px;
+  padding: var(--space-2);
+  background: var(--surface);
+}
+.home-strip__rank {
+  color: var(--text-subtle);
+  font-size: var(--type-micro);
+  font-weight: var(--weight-semibold);
+}
+.home-strip__name,
+.home-strip__series {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-strip__name {
+  font-size: var(--type-micro);
+  font-weight: var(--weight-medium);
+}
+.home-strip__series {
+  font-size: var(--type-micro);
+  color: var(--text-muted);
+}
+/* Eight frames across stops being a picture and becomes a stripe. */
+@media (max-width: 960px) {
+  .home-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .home-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .home-ranked {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
