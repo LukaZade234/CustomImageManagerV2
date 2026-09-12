@@ -85,7 +85,7 @@ export default function HomePage() {
           <div>
             <h1 className="page-title home-hero__title">ImgManager</h1>
             <p className="home-hero__subtitle">
-              Custom character images for Mudae — organised, deduplicated, and ready to paste.
+              Custom character images for Mudae - organised, deduplicated, and ready to paste.
             </p>
           </div>
           <dl className="home-hero__figures">
@@ -144,9 +144,9 @@ export default function HomePage() {
       {mostViewed.length > 0 && (
         <Card as="section" padding="lg">
           <Section title="Most visited this week">
+            {/* biome-ignore format: kept on one line so live's text verification finds it whole */}
             <p className="text-meta home-note">
-              Ranked by how many different people looked, not by how many visits — one enthusiast
-              refreshing cannot move it.
+              Ranked by how many different people looked, not by how many visits - one enthusiast refreshing cannot move it.
             </p>
             <ol className="home-ranked">
               {mostViewed.map((c, i) => (
