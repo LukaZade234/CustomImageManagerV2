@@ -1,5 +1,5 @@
 import { getImageUrl } from '../api'
-import { Button, Field, IconButton, Input } from './ui'
+import { Button, Field, Input } from './ui'
 
 /**
  * The portrait, the character's details, and the form that edits them.
@@ -65,6 +65,7 @@ export function CharacterHeader({
           <button
             type="button"
             className={`image-wrapper edit-mode ${dragOver ? 'drag-over-main' : ''}`}
+            aria-label="Change the main image"
             onClick={() => mainInputRef.current?.click()}
             onDragOver={(e) => {
               e.preventDefault()
@@ -74,23 +75,26 @@ export function CharacterHeader({
             onDrop={onMainImageDrop}
           >
             {portrait}
-            <div className="image-overlay">
-              <span>Click or Drop to Change</span>
-            </div>
           </button>
         ) : (
           <div className="image-wrapper">{portrait}</div>
         )}
-        <IconButton
+        {/* Under the picture rather than on top of it. As a floating disc it
+            covered a corner of a portrait that is now small enough for that to
+            matter — and it is an action, so it belongs with the actions. It
+            takes the portrait's width and the action buttons' height, which is
+            what closes the gap beside them. */}
+        <Button
           className={`save-button ${isSaved ? 'saved' : ''}`}
+          variant="secondary"
           onClick={onToggleSave}
-          label={isSaved ? 'Remove from saved' : 'Save this character'}
+          title={isSaved ? 'Remove from saved' : 'Save this character'}
           aria-pressed={isSaved}
         >
           <svg
             aria-hidden="true"
-            width="18"
-            height="18"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             /* Filled once saved, so the state does not rest on colour alone. */
             fill={isSaved ? 'currentColor' : 'none'}
@@ -99,7 +103,8 @@ export function CharacterHeader({
           >
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
-        </IconButton>
+          {isSaved ? 'Saved' : 'Save'}
+        </Button>
       </div>
       <div className="char-info-section">
         {!edit.active ? (

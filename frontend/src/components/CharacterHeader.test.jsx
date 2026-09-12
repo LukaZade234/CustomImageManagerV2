@@ -80,8 +80,8 @@ describe('CharacterHeader', () => {
   it('the portrait is inert until the character is being edited', () => {
     setup()
     // The only button on the image side is Save; the portrait is not a control.
-    expect(screen.queryByText(/Click or Drop to Change/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Save this character/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Change the main image/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Save$/ })).toBeInTheDocument()
   })
 
   it('the portrait becomes a real button in edit mode', async () => {
@@ -90,7 +90,7 @@ describe('CharacterHeader', () => {
     const fileInput = document.querySelector('input[type="file"]')
     const clicked = vi.fn()
     fileInput.click = clicked
-    const portrait = screen.getByRole('button', { name: /Click or Drop to Change/i })
+    const portrait = screen.getByRole('button', { name: /Change the main image/i })
 
     await userEvent.click(portrait)
     expect(clicked).toHaveBeenCalledTimes(1)
@@ -154,9 +154,39 @@ describe('CharacterHeader', () => {
 
   it('reflects whether the character is already saved', async () => {
     const props = setup({ isSaved: true })
-    const save = screen.getByRole('button', { name: /Remove from saved/i })
+    // The visible word is the name, and the state rides on aria-pressed rather
+    // than on a second, different label that speech control could not match.
+    const save = screen.getByRole('button', { name: /^Saved$/ })
     expect(save).toHaveAttribute('aria-pressed', 'true')
     await userEvent.click(save)
     expect(props.onToggleSave).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the save button', () => {
+  /**
+   * It used to float over the portrait's top-right corner. That was tolerable
+   * while the portrait was 280px tall and became a problem when it was not:
+   * a 36px disc over a 108px-wide picture covers a lot of a face.
+   */
+  it('sits under the portrait rather than on top of it', () => {
+    setup()
+    const save = screen.getByRole('button', { name: /^Save$/ })
+    const imageColumn = document.querySelector('.char-image-section')
+    expect(imageColumn).toContainElement(save)
+    // In flow, not floated over the picture.
+    expect(save.className).not.toMatch(/ui-btn--icon/)
+    expect(imageColumn.querySelector('img')).toBeInTheDocument()
+  })
+
+  it('is the same kind of button as the actions it lines up with', () => {
+    setup()
+    const save = screen.getByRole('button', { name: /^Save$/ })
+    const ai = screen.getByRole('button', { name: /\$ai command/i })
+    // Same primitive and size, so their heights match without being told to.
+    for (const cls of ['ui-btn', 'ui-btn--md']) {
+      expect(save.className).toContain(cls)
+      expect(ai.className).toContain(cls)
+    }
   })
 })

@@ -43,11 +43,18 @@
   text-align: left;
   min-width: 0;
 }
+.char-info-section > div {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
 .char-image-section {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  gap: var(--space-2);
+  align-self: stretch;
   position: relative;
   min-width: 0;
 }
@@ -82,7 +89,10 @@
   box-sizing: border-box;
 }
 .char-page-actions {
-  margin-top: var(--space-4);
+  /* Pushed to the foot, with a floor under it, so it lands level with the save
+     button under the portrait however tall the identity above it runs. */
+  margin-top: auto;
+  padding-top: var(--space-4);
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -118,6 +128,10 @@
   min-width: 0;
 }
 .custom-images-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-bottom: 0;
 }
 /* A row of wrapped actions at every width. `flex-direction: column` sat here
@@ -155,43 +169,30 @@
     align-items: center;
   }
 }
+/* Sits under the portrait, filling its width, level with the action buttons
+   beside it — `.char-image-section` stretches to the band's height and this is
+   pushed to its foot, so the two bottom edges meet whatever the identity column
+   holds. It was a floating disc over the picture's corner, which mattered more
+   once the picture got smaller.
+
+   Neutral until it means something: a solid accent fill in the unsaved state
+   put a second solid fill on a page that already has one primary action, and
+   spent the palette's loudest colour on a state nothing had happened in. */
 .save-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 10;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  /* Neutral until it means something. A solid accent fill in the default,
-     unsaved state put a second solid fill on a page that already has one
-     primary action, and spent the palette's loudest colour on a state nothing
-     had happened in. */
+  margin-top: auto;
+  width: 100%;
   background-color: var(--surface);
   color: var(--text-muted);
   border: 1px solid var(--border);
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background-color var(--duration) var(--ease),
-    transform var(--duration) var(--ease);
-  box-shadow: var(--shadow-sm);
 }
 .save-button:hover {
   background-color: var(--surface-hover);
   color: var(--text);
-  transform: scale(1.05);
 }
-.save-button.saved {
-  background-color: var(--success);
-  border-color: var(--success);
-  color: var(--text-on-accent);
-}
+.save-button.saved,
 .save-button.saved:hover {
   background-color: var(--success);
+  border-color: var(--success);
   color: var(--text-on-accent);
 }
 .empty-saved {
@@ -329,6 +330,20 @@
     width: auto;
     flex: 0 0 auto;
     box-sizing: border-box;
+  }
+}
+/* One row for the gallery's four controls. At 360px the labels alone are about
+   270px of the 336 available, so the icons are what has to go — they decorate a
+   word that is already the whole meaning. */
+@media (max-width: 480px) {
+  .char-custom-toolbar-actions {
+    gap: var(--space-1);
+  }
+  .char-custom-toolbar-actions .ui-btn svg {
+    display: none;
+  }
+  .char-custom-toolbar-actions .ui-btn {
+    padding: 0 var(--space-2);
   }
 }
 @media (max-width: 768px) {
@@ -681,23 +696,6 @@ body.reorder-touch-dragging {
   font: inherit;
   color: inherit;
   text-align: inherit;
-}
-.image-overlay {
-  display: none;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--scrim);
-  color: var(--text-on-accent);
-  padding: var(--space-3) 20px;
-  border-radius: var(--radius-md);
-  font-weight: bold;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.image-wrapper.edit-mode .image-overlay {
-  display: block;
 }
 .image-wrapper.drag-over-main {
   border-color: var(--success);
