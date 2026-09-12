@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-11T00:00:00Z",
+  "generatedAt": "2026-09-12T00:00:00Z",
   "title": "Design System: ImgManager",
   "extensions": {
     "colorMeta": {
@@ -47,7 +47,7 @@
       "label": { "displayName": "Label", "purpose": "Controls and list meta. The most common size in a dense tool." }
     },
     "shadows": [
-      { "name": "shadow-sm", "value": "0 1px 2px rgb(16 20 28 / 0.06)", "purpose": "A single hairline lift, for controls sitting on top of an image." },
+      { "name": "shadow-sm", "value": "0 1px 2px rgb(16 20 28 / 0.06)", "purpose": "A single hairline lift for small things that float one step off the page without claiming the overlay layer — toasts, the autocomplete dropdown, the reorder drag badge, and the selected chip inside the segmented control." },
       { "name": "shadow-overlay", "value": "0 16px 48px -12px rgb(16 20 28 / 0.24)", "purpose": "Modals and dialogs only. The one thing that says 'in front of the page'." },
       { "name": "scrim", "value": "rgb(16 20 28 / 0.55)", "purpose": "The backdrop behind a modal." }
     ],
@@ -113,6 +113,22 @@
       "css": ".ds-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:4px; background:var(--surface-sunken,#f1f3f6); color:var(--text-muted,#5c6575); font:500 0.8125rem/1.4 var(--font-sans, Geist, system-ui, sans-serif); font-variant-numeric:tabular-nums; }"
     },
     {
+      "name": "Contact Strip",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "The ranked lists on the landing page — frames butted into one hairline-divided band. A proof sheet of the week.",
+      "html": "<ol class=\"ds-strip\"><li class=\"ds-strip-item\"><a class=\"ds-strip-link\" href=\"#\"><span class=\"ds-strip-shot\"></span><span class=\"ds-strip-caption\"><span class=\"ds-strip-rank\">1</span><span class=\"ds-strip-name\">Kamisato Ayaka</span><span class=\"ds-strip-series\">Genshin Impact</span></span></a></li><li class=\"ds-strip-item\"><a class=\"ds-strip-link\" href=\"#\"><span class=\"ds-strip-shot\"></span><span class=\"ds-strip-caption\"><span class=\"ds-strip-rank\">2</span><span class=\"ds-strip-name\">Rem</span><span class=\"ds-strip-series\">Re:Zero</span></span></a></li></ol>",
+      "css": ".ds-strip { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); border:1px solid var(--border,#e2e6ec); border-radius:6px; overflow:hidden; list-style:none; margin:0; padding:0; font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-strip-item + .ds-strip-item .ds-strip-link { border-left:1px solid var(--border,#e2e6ec); } .ds-strip-link { display:block; text-decoration:none; color:inherit; } .ds-strip-shot { display:block; width:100%; aspect-ratio:9/14; background:var(--surface-sunken,#f1f3f6); object-fit:cover; } .ds-strip-caption { display:grid; gap:1px; padding:8px; background:var(--surface,#fff); } .ds-strip-rank { font:600 0.8125rem/1.5 var(--font-sans, Geist, system-ui, sans-serif); color:var(--text-subtle,#7c8595); font-variant-numeric:tabular-nums; } .ds-strip-name { font:500 0.8125rem/1.5 var(--font-sans, Geist, system-ui, sans-serif); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ds-strip-series { font:400 0.8125rem/1.5 var(--font-sans, Geist, system-ui, sans-serif); color:var(--text-muted,#5c6575); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }"
+    },
+    {
+      "name": "Series Bar",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "One row per series with a hairline bar measuring its share of the largest character count.",
+      "html": "<ul class=\"ds-series\"><li><a class=\"ds-series-item\" href=\"#\"><span class=\"ds-series-name\">Genshin Impact</span><span class=\"ds-series-meta\">808 · 31</span><span class=\"ds-series-track\"><span class=\"ds-series-fill\" style=\"width:75%\"></span></span></a></li><li><a class=\"ds-series-item\" href=\"#\"><span class=\"ds-series-name\">Fate</span><span class=\"ds-series-meta\">210 · 9</span><span class=\"ds-series-track\"><span class=\"ds-series-fill\" style=\"width:29%\"></span></span></a></li></ul>",
+      "css": ".ds-series { display:grid; gap:8px; list-style:none; margin:0; padding:0; font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-series-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline; gap:4px 12px; padding:4px 0; text-decoration:none; color:var(--text,#1c2029); } .ds-series-name { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ds-series-meta { font:400 0.8125rem/1.5 var(--font-sans, Geist, system-ui, sans-serif); color:var(--text-muted,#5c6575); font-variant-numeric:tabular-nums; } .ds-series-track { grid-column:1/-1; height:2px; background:var(--surface-sunken,#f1f3f6); } .ds-series-fill { display:block; height:100%; background:var(--border-strong,#c8cdd7); } .ds-series-item:hover .ds-series-fill { background:var(--accent,#0b7285); } .ds-series-item:hover .ds-series-name { color:var(--accent,#0b7285); }"
+    },
+    {
       "name": "Empty State",
       "kind": "custom",
       "refersTo": "",
@@ -143,24 +159,27 @@
     ],
     "dos": [
       "Do put every colour in tokens.css. A hex literal anywhere else is a bug — the system was built by removing 387 of them.",
-      "Do use the four radii (4/6/10/999) and the 4px spacing scale.",
+      "Do use the four radii (4/6/10/999) and the 4px spacing scale. A value outside the scale means the scale is wrong; fix the scale.",
       "Do pair a -subtle tint with its own base colour as foreground, never with -fg.",
       "Do give large type negative tracking (−0.015em at title, −0.022em at display).",
       "Do use tabular-nums on any figure that updates in place.",
-      "Do let images keep their real aspect ratio in galleries, and crop only character portraits.",
-      "Do define every colour in the base :root block.",
-      "Do reach for Button, Card, Input, Field, Modal, Badge, EmptyState before writing a new control."
+      "Do let images keep their real aspect ratio in galleries, and crop only character portraits, which have one canonical shape.",
+      "Do define every colour in the base :root block. A token whose only definition lives in a media query renders as nothing in a browser that never matches it.",
+      "Do reach for Button, Card, Input, Field, Modal, Badge, EmptyState before writing a new control.",
+      "Do give every dialog a visible close button beside its title. Backdrop dismissal and Escape are conveniences layered on top of real controls — on a phone the backdrop is a thin band nobody can reliably hit and Escape needs a keyboard, so a dialog with no visible button has no way out of it. The rule was written before the button existed; a test now enforces it."
     ],
     "donts": [
-      "Don't saturate the chrome. No coloured headers, gradient surfaces or tinted cards.",
+      "Don't saturate the chrome. No coloured headers, gradient surfaces or tinted cards — the artwork is the only saturated thing on screen.",
       "Don't use pure grey. Every neutral carries the ~222 hue cast.",
-      "Don't use Bootstrap's palette, or a purple-to-violet gradient.",
-      "Don't add a third shadow.",
-      "Don't use bounce or elastic easing.",
+      "Don't use Bootstrap's palette, or a purple-to-violet gradient. Both were removed deliberately.",
+      "Don't add a third shadow. Two exist; a new one means the depth vocabulary is being reinvented.",
+      "Don't use bounce or elastic easing. One curve (cubic-bezier(0.2, 0, 0.13, 1)) and two durations (120ms, 180ms).",
       "Don't introduce a fifth breakpoint.",
       "Don't put more than one solid accent button on a screen.",
-      "Don't write an inline style to resize a control.",
-      "Don't remove focus outlines. One ring, on :focus-visible, everywhere."
+      "Don't show a control that cannot act. A verb belongs on screen when the selection contains something for it to act on, and absent otherwise — a disabled button with a count of zero is a dead end wearing the clothes of an action.",
+      "Don't write an inline style to resize a control. That is what the size variants are for, and the inline override is the exact thing the primitives replaced.",
+      "Don't remove focus outlines. One ring, on :focus-visible, everywhere.",
+      "Don't write a page's responsive rules in a different file from its base rules. A media query adds no specificity, so a later rule of equal specificity wins at every width. Nine declarations for the character page lived in components.css, were beaten by pages.css, and had never once applied — the header was written to stack on a phone and never did. Keep both halves of a rule in one file, and let the import order in index.css mean what it says."
     ]
   }
 }

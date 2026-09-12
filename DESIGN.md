@@ -303,9 +303,10 @@ loses its depth vocabulary.
 
 ### Shadow Vocabulary
 
-- **`--shadow-sm`** (`0 1px 2px rgb(16 20 28 / 0.06)`): A single hairline lift. Used on
-  the save button and the saved-card control — elements that sit on top of an image and
-  need to separate from it.
+- **`--shadow-sm`** (`0 1px 2px rgb(16 20 28 / 0.06)`): A single hairline lift, for
+  small things that float one step off the page without claiming the overlay layer —
+  toasts, the autocomplete dropdown, the reorder drag badge, and the selected chip
+  inside the segmented control.
 - **`--shadow-overlay`** (`0 16px 48px -12px rgb(16 20 28 / 0.24)`): Modals and dialogs
   only. The thing it says is "this is in front of the page", and nothing else should say
   that.
@@ -417,6 +418,37 @@ the flat document.
 - **Use:** Name versus Series search. It is a real radiogroup, not two buttons that look
   like one.
 
+### Contact strip
+
+The ranked lists on the landing page — "Most visited this week" and "Most popular
+characters". The page is a proof sheet of the library, and the ranking is a proof sheet
+of the week.
+
+- **Style:** A band of frames butted edge to edge with 1px hairline dividers inside one
+  rounded hairline border, captions beneath each shot. Every frame is the same size by
+  construction: one aspect ratio (`--main-image-ratio`) and a cover fit, so no portrait
+  crops differently from its neighbour.
+- **Ranking:** The rank is a tabular micro figure above the name and series; on "Most
+  popular characters" the rank slot shows the image count instead.
+- **Responsive:** Below 768px the grid stops wrapping and becomes one horizontally
+  scrollable row of half-width tiles — the same move the "Just added" strip makes.
+  Strips are draggable with the mouse via `useDragScroll`, which recognises a drag only
+  after a 6px slop and swallows exactly the one click a drag produces, so links inside
+  it still navigate.
+
+### Series bar
+
+- **Use:** "Most popular series" on the landing page — a ranking where relative size is
+  the point.
+- **Style:** One row per series: the name, a tabular `images · characters` pair, and a
+  2px hairline track underneath whose fill is the series' share of the largest character
+  count (`--share`, set per row against the leader, which is not necessarily the first
+  row).
+- **Why a bar:** eight identically sized tiles are the one shape that hides what "most
+  popular" means. The bar measures characters while the order measures images, so a
+  series wide in one and narrow in the other shows it. Hover shifts the fill and name to
+  the accent.
+
 ### Signature component — the justified gallery
 
 The defining component of the system. Images sit in rows that end flush at a common
@@ -455,6 +487,11 @@ is the thing people actually want from a command.
   lives in a media query renders as nothing in a browser that never matches it.
 - **Do** reach for `Button`, `Card`, `Input`, `Field`, `Modal`, `Badge`, `EmptyState`
   before writing a new control.
+- **Do** give every dialog a visible close button beside its title. Backdrop dismissal
+  and Escape are conveniences layered on top of real controls — on a phone the backdrop
+  is a thin band nobody can reliably hit and Escape needs a keyboard, so a dialog with
+  no visible button has no way out of it. The rule was written before the button
+  existed; a test now enforces it.
 
 ### Don't:
 

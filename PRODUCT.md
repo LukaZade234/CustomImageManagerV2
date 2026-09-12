@@ -49,6 +49,10 @@ and deduplicated across everyone rather than per-account, and removal is always 
 - Both phone and desktop are real usage. Curating a character's images is done on either.
 - A Mudae self-bot can fetch a character's metadata (series, rank, card art) so a character can be
   added without typing it.
+- The landing page is drawn from the library rather than from copy: the product name beside
+  its headline figures, the newest images, a weekly "Most visited" ranking, the most popular
+  characters and series, and a contributor list. Every section hides itself when it has nothing
+  to show, so the page degrades to the parts that are true.
 
 ## Capabilities and Constraints
 
@@ -84,6 +88,8 @@ Real, and usable in any surface that needs numbers or imagery:
 
 - ~1,706 characters, ~8,556 custom images, ~441 series in the live library.
 - Character portraits are uniformly 225×350; custom images are whatever shape they were drawn in.
+- The weekly "Most visited" ranking is real, deduplicated per visitor: one enthusiast refreshing
+  cannot move it.
 - Written project record: `DECISIONS.md` (why, including rejected options), `ROADMAP.md` (phase
   state), `CUTOVER.md`, `CURRENT_STATE.md`, `DESIGN.md`.
 
