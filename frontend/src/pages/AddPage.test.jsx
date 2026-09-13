@@ -243,6 +243,59 @@ describe('AddPage catalog integration', () => {
     expect(screen.queryByRole('link', { name: /Rem/ })).toBeNull()
   })
 
+  it("offers a series' characters as the name suggestions", async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({ found: false, character: null })
+    api.suggestCharacters.mockImplementation((q, _limit, seriesArg) => {
+      if (!q && seriesArg === 'Re:Zero') {
+        return Promise.resolve({
+          items: [
+            { name: 'Rem', series: 'Re:Zero', rank: '3', image: '' },
+            { name: 'Emilia', series: 'Re:Zero', rank: '2', image: '' },
+          ],
+        })
+      }
+      return Promise.resolve({ items: [] })
+    })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Series'), 'Re:Zero')
+    await user.click(screen.getByLabelText('Character Name'))
+
+    await waitFor(() => {
+      const texts = screen.getAllByRole('option').map((option) => option.textContent)
+      expect(texts.some((text) => text.includes('Rem'))).toBe(true)
+      expect(texts.some((text) => text.includes('Emilia'))).toBe(true)
+    })
+    expect(api.suggestCharacters).toHaveBeenCalledWith('', 8, 'Re:Zero')
+  })
+
+  it("offers the matched name's series as the only series suggestion", async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({
+      found: true,
+      character: {
+        name: 'Saber',
+        series: 'Fate/stay night',
+        rank: '4',
+        image: '',
+        in_library: true,
+      },
+    })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character Name'), 'Saber')
+    const seriesInput = await screen.findByDisplayValue('Fate/stay night')
+    await user.clear(seriesInput)
+    await user.click(seriesInput)
+
+    await waitFor(() => {
+      const options = screen.getAllByRole('option')
+      expect(options).toHaveLength(1)
+      expect(options[0]).toHaveTextContent('Fate/stay night')
+    })
+  })
+
   it('shows the existing card in the lookup panel', async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({

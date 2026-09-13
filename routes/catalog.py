@@ -29,9 +29,19 @@ def _int_arg(name: str, default: int, maximum: int) -> int:
 @catalog_bp.route("/api/catalog/characters", methods=["GET"])
 @rate_limited("suggest")
 def catalog_characters():
-    """Name suggestions for the combobox, best-ranked first on an empty query."""
+    """Name suggestions for the combobox, best-ranked first on an empty query.
+
+    `series` narrows to one exact series, so a visitor who has already named the
+    series is offered its characters.
+    """
     return jsonify(
-        {"items": db.suggest_characters(request.args.get("q", ""), limit=_int_arg("limit", 10, 25))}
+        {
+            "items": db.suggest_characters(
+                request.args.get("q", ""),
+                limit=_int_arg("limit", 10, 25),
+                series=request.args.get("series", ""),
+            )
+        }
     )
 
 

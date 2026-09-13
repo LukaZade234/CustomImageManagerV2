@@ -60,6 +60,19 @@ class TestSuggestCharacters:
         seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
         assert clean_db.suggest_characters("zzzz") == []
 
+    def test_series_filter_returns_only_that_series(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Rem", "Re:Zero", "3"),
+                _catalog_row("Emilia", "Re:Zero", "2"),
+                _catalog_row("Saber", "Fate/stay night", "4"),
+            ],
+        )
+        names = [i["name"] for i in clean_db.suggest_characters("", series="Re:Zero")]
+        assert names == ["Emilia", "Rem"]
+        assert clean_db.suggest_characters("", series="Nope") == []
+
 
 class TestSuggestSeries:
     def test_unions_catalog_and_working_series(self, clean_db):

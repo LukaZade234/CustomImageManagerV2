@@ -83,7 +83,9 @@ export default function AddPage() {
   }, [])
 
   // Catalog-backed suggestions and the library's own record for the typed name.
-  const nameSuggestions = useCatalogSuggest(name, { kind: 'characters', limit: 8 })
+  // The name combobox gets the typed series as a hint, so a named series offers
+  // its characters until the visitor starts typing a name of their own.
+  const nameSuggestions = useCatalogSuggest(name, { kind: 'characters', limit: 8, series })
   const seriesSuggestions = useCatalogSuggest(series, { kind: 'series', limit: 20 })
   const panelNameSuggestions = useCatalogSuggest(mudaeLookupName, { kind: 'characters', limit: 8 })
   const bulkSeriesSuggestions = useCatalogSuggest(seriesBulkName, { kind: 'series', limit: 20 })
@@ -135,6 +137,10 @@ export default function AddPage() {
     matchedExactly && nameMatch && !nameMatch.in_library && seriesMatchesKnown
       ? nameMatch.image || ''
       : ''
+  // While the series field is empty, a matched name offers its series as the
+  // only suggestion. Typing switches to the normal series list.
+  const seriesSuggestionValues =
+    !series.trim() && nameMatch?.series ? [nameMatch.series] : seriesSuggestions
   // The lookup panel's card shows only while its own field still spells the
   // found character exactly.
   const panelExact = Boolean(
@@ -769,7 +775,7 @@ export default function AddPage() {
                 setSeries(e.target.value)
                 setSeriesTouched(true)
               }}
-              suggestions={seriesSuggestions}
+              suggestions={seriesSuggestionValues}
               ariaLabel="Series suggestions"
               ariaInvalid={seriesMismatch}
             />

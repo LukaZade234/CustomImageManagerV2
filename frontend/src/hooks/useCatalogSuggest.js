@@ -9,21 +9,40 @@ import { apiClient } from '../api'
  * what keeps a fast typist to a handful of calls rather than one per keystroke.
  */
 
-/** Suggestions for a combobox. `kind` is 'characters' or 'series'. */
-export function useCatalogSuggest(query, { kind = 'characters', limit = 10, delay = 250 } = {}) {
+/**
+ * Suggestions for a combobox. `kind` is 'characters' or 'series'.
+ *
+ * `series` (characters only) is the connected-series hint: while the query is
+ * empty, the characters of that exact series are offered instead of the generic
+ * list. If the series matches nothing, it falls back to the generic list so an
+ * unrecognised series still gives useful suggestions. Once the visitor types,
+ * the series hint is dropped and the query is what drives the list.
+ */
+export function useCatalogSuggest(
+  query,
+  { kind = 'characters', limit = 10, delay = 250, series = '' } = {},
+) {
   const [items, setItems] = useState([])
 
   useEffect(() => {
     const q = (query || '').trim()
+    const seriesHint = q || kind !== 'characters' ? '' : (series || '').trim()
     let cancelled = false
     const timer = setTimeout(() => {
-      const fetch =
-        kind === 'series'
-          ? apiClient.suggestSeries(q, limit)
-          : apiClient.suggestCharacters(q, limit)
-      fetch
-        .then((res) => {
-          if (!cancelled) setItems(res?.items || [])
+      const run = async () => {
+        if (seriesHint) {
+          const filtered = await apiClient.suggestCharacters('', limit, seriesHint)
+          if (filtered?.items?.length) return filtered.items
+        }
+        const response =
+          kind === 'series'
+            ? await apiClient.suggestSeries(q, limit)
+            : await apiClient.suggestCharacters(q, limit, seriesHint)
+        return response?.items || []
+      }
+      run()
+        .then((next) => {
+          if (!cancelled) setItems(next)
         })
         .catch(() => {
           if (!cancelled) setItems([])
@@ -33,7 +52,7 @@ export function useCatalogSuggest(query, { kind = 'characters', limit = 10, dela
       cancelled = true
       clearTimeout(timer)
     }
-  }, [query, kind, limit, delay])
+  }, [query, kind, limit, delay, series])
 
   return items
 }

@@ -64,8 +64,11 @@ export const apiClient = {
     if (q) params.set('q', q)
     return api(`/api/customs?${params}`)
   },
-  suggestCharacters: (q = '', limit = 10) =>
-    api(`/api/catalog/characters?q=${encodeURIComponent(q)}&limit=${limit}`),
+  suggestCharacters: (q = '', limit = 10, series = '') => {
+    const params = new URLSearchParams({ q, limit: String(limit) })
+    if (series) params.set('series', series)
+    return api(`/api/catalog/characters?${params}`)
+  },
   suggestSeries: (q = '', limit = 20) =>
     api(`/api/catalog/series?q=${encodeURIComponent(q)}&limit=${limit}`),
   findCatalogCharacter: (name) => api(`/api/catalog/character?name=${encodeURIComponent(name)}`),

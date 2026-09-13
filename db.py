@@ -379,28 +379,34 @@ def _like_escape(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def suggest_characters(term: str, *, limit: int = 10) -> list[dict]:
+def suggest_characters(
+    term: str, *, limit: int = 10, series: str | None = None
+) -> list[dict]:
     """Name suggestions, drawn from the working set and the full catalog.
 
     The working set wins where a name exists in both: its series/rank may have
     been edited by hand. A working row with no portrait borrows the catalog's.
     Empty `term` returns the best-ranked names, so focusing the field is useful
     on its own.
+
+    `series` restricts to one exact series (case-insensitive), which is how the
+    Add form offers the characters of a series the visitor has already named.
     """
     import catalog_import
 
     conn = get_connection()
     term = (term or "").strip()
+    series = (series or "").strip()
     like = f"%{_like_escape(term)}%"
     rows: dict[str, dict] = {}
 
-    def take(name, series, rank, image, in_library):
+    def take(name, series_value, rank, image, in_library):
         key = catalog_import.name_key(name)
         current = rows.get(key)
         if current is None:
             rows[key] = {
                 "name": name,
-                "series": series or "",
+                "series": series_value or "",
                 "rank": rank or "",
                 "image": image or "",
                 "in_library": in_library,
@@ -408,31 +414,35 @@ def suggest_characters(term: str, *, limit: int = 10) -> list[dict]:
             return
         if in_library:
             current["in_library"] = True
-            if series:
-                current["series"] = series
+            if series_value:
+                current["series"] = series_value
             if rank:
                 current["rank"] = rank
         if not current["image"] and image:
             current["image"] = image
-        if not current["series"] and series:
-            current["series"] = series
+        if not current["series"] and series_value:
+            current["series"] = series_value
 
-    working_sql = "SELECT name, series, rank, main_image_url AS image FROM characters"
-    catalog_sql = (
-        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog"
-    )
+    where = []
+    params: list[str] = []
     if term:
-        working_sql += " WHERE name COLLATE NOCASE LIKE ? ESCAPE '\\'"
-        catalog_sql += " WHERE name COLLATE NOCASE LIKE ? ESCAPE '\\'"
-        for row in conn.execute(working_sql, (like,)):
-            take(row["name"], row["series"], row["rank"], row["image"], True)
-        for row in conn.execute(catalog_sql, (like,)):
-            take(row["name"], row["series"], row["rank"], row["image"], False)
-    else:
-        for row in conn.execute(working_sql):
-            take(row["name"], row["series"], row["rank"], row["image"], True)
-        for row in conn.execute(catalog_sql):
-            take(row["name"], row["series"], row["rank"], row["image"], False)
+        where.append("name COLLATE NOCASE LIKE ? ESCAPE '\\'")
+        params.append(like)
+    if series:
+        where.append("series COLLATE NOCASE = ?")
+        params.append(series)
+    clause = f" WHERE {' AND '.join(where)}" if where else ""
+
+    working_sql = (
+        "SELECT name, series, rank, main_image_url AS image FROM characters" + clause
+    )
+    catalog_sql = (
+        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog" + clause
+    )
+    for row in conn.execute(working_sql, params):
+        take(row["name"], row["series"], row["rank"], row["image"], True)
+    for row in conn.execute(catalog_sql, params):
+        take(row["name"], row["series"], row["rank"], row["image"], False)
 
     term_key = catalog_import.name_key(term)
 
