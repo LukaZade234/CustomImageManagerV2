@@ -5,17 +5,20 @@ import { useDialog } from './ui'
 const SWIPE_THRESHOLD_PX = 50
 
 export default function ImageModal({ images, currentIndex, onClose, onPrev, onNext, onReport }) {
-  const { dialogRef, onKeyDown, onBackdropClick } = useDialog({ onClose })
+  const { dialogRef, onKeyDown, onBackdropClick, isTopmost } = useDialog({ onClose })
   const touchStartRef = useRef(null)
 
   useEffect(() => {
     const h = (e) => {
+      // Let a dialog opened over the lightbox (the report dialog) keep its
+      // own keys instead of navigating the image behind it.
+      if (!isTopmost()) return
       if (e.key === 'ArrowLeft') onPrev()
       if (e.key === 'ArrowRight') onNext()
     }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [onPrev, onNext])
+  }, [onPrev, onNext, isTopmost])
 
   const onTouchStart = useCallback((e) => {
     const t = e.touches[0]

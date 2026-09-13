@@ -270,6 +270,204 @@ def update_last_modified(char_name: str) -> None:
         conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
 
 
+# --- Mudae catalog ------------------------------------------------------
+#
+# `characters` is the working set; `character_catalog` is the full scrape. The
+# importer writes the catalog, then optionally copies rank/series/portrait onto
+# matching working rows. Nothing here mints a `characters` row: a name becomes
+# real only when someone saves or customises it.
+
+
+def upsert_catalog_characters(
+    rows: Iterable[dict], *, scraped_at: str, source_batch: str | None = None
+) -> tuple[int, int]:
+    """Insert or refresh catalog rows by name_key. Returns (inserted, updated).
+
+    Rows are plain dicts, so this stays independent of the parser dataclasses.
+    The unique key is `name_key`, not `name`, which collapses NFC/NFD, fullwidth
+    and whitespace variants of the same character.
+    """
+    inserted = 0
+    updated = 0
+    with transaction() as conn:
+        existing = {row[0] for row in conn.execute("SELECT name_key FROM character_catalog")}
+        for row in rows:
+            params = {
+                "name": row["name"],
+                "name_key": row["name_key"],
+                "series": row.get("series", ""),
+                "rank": row.get("rank", ""),
+                "mudae_image_url": row.get("mudae_image_url", ""),
+                "pool": row.get("pool", ""),
+                "is_waifu": int(bool(row.get("is_waifu"))),
+                "is_husbando": int(bool(row.get("is_husbando"))),
+                "is_anime": int(bool(row.get("is_anime"))),
+                "is_game": int(bool(row.get("is_game"))),
+                "scraped_at": scraped_at,
+                "source_batch": source_batch,
+                "updated_at": _now(),
+            }
+            conn.execute(
+                "INSERT INTO character_catalog"
+                " (name, name_key, series, rank, mudae_image_url, pool,"
+                "  is_waifu, is_husbando, is_anime, is_game,"
+                "  scraped_at, source_batch, updated_at)"
+                " VALUES"
+                " (:name, :name_key, :series, :rank, :mudae_image_url, :pool,"
+                "  :is_waifu, :is_husbando, :is_anime, :is_game,"
+                "  :scraped_at, :source_batch, :updated_at)"
+                " ON CONFLICT(name_key) DO UPDATE SET"
+                "   name = excluded.name,"
+                "   series = excluded.series,"
+                "   rank = excluded.rank,"
+                "   mudae_image_url = excluded.mudae_image_url,"
+                "   pool = excluded.pool,"
+                "   is_waifu = excluded.is_waifu,"
+                "   is_husbando = excluded.is_husbando,"
+                "   is_anime = excluded.is_anime,"
+                "   is_game = excluded.is_game,"
+                "   scraped_at = excluded.scraped_at,"
+                "   source_batch = excluded.source_batch,"
+                "   updated_at = excluded.updated_at",
+                params,
+            )
+            if row["name_key"] in existing:
+                updated += 1
+            else:
+                inserted += 1
+                existing.add(row["name_key"])
+    return inserted, updated
+
+
+def upsert_catalog_series(rows: Iterable[dict], *, scraped_at: str) -> int:
+    """Record series coverage, keeping the widest seen. Returns rows written."""
+    written = 0
+    with transaction() as conn:
+        for row in rows:
+            conn.execute(
+                "INSERT INTO catalog_series (series, listed, total, scraped_at)"
+                " VALUES (:series, :listed, :total, :scraped_at)"
+                " ON CONFLICT(series) DO UPDATE SET"
+                "   listed = max(coalesce(listed, 0), coalesce(excluded.listed, 0)),"
+                "   total = max(coalesce(total, 0), coalesce(excluded.total, 0)),"
+                "   scraped_at = excluded.scraped_at",
+                {
+                    "series": row["series"],
+                    "listed": row.get("listed"),
+                    "total": row.get("total"),
+                    "scraped_at": scraped_at,
+                },
+            )
+            written += 1
+    return written
+
+
+def get_catalog_characters() -> list[dict]:
+    conn = get_connection()
+    return [
+        dict(row)
+        for row in conn.execute(
+            "SELECT id, name, name_key, series, rank, mudae_image_url, pool,"
+            "       is_waifu, is_husbando, is_anime, is_game, scraped_at, source_batch"
+            "  FROM character_catalog ORDER BY id"
+        )
+    ]
+
+
+def enrich_characters_from_catalog(
+    *, overwrite: bool = True, dry_run: bool = False, catalog: dict | None = None
+) -> dict:
+    """Copy rank, series and portrait from the catalog onto matching characters.
+
+    Matching is on the Unicode-folded name key (`catalog_import.name_key`), not
+    a `COLLATE NOCASE` join: SQLite folds ASCII only, so it would miss accented
+    or NFD spellings of the same name. Only existing `characters` rows are
+    touched; a catalog name on its own does not become a working row.
+
+    With `overwrite=False` only empty character fields are filled. Pass
+    `catalog` to preview against an in-memory mapping (the parsed batch) and
+    `dry_run=True` to compute the changes without writing them. Returns the
+    matched/updated/unchanged counts, the unmatched character names, and a
+    before/after change list for the import report.
+    """
+    import catalog_import
+
+    if catalog is None:
+        conn = get_connection()
+        catalog = {
+            row["name_key"]: {
+                "series": row["series"],
+                "rank": row["rank"],
+                "mudae_image_url": row["mudae_image_url"],
+            }
+            for row in conn.execute(
+                "SELECT name_key, name, series, rank, mudae_image_url FROM character_catalog"
+            )
+        }
+
+    def choose(new_value: str, current: str) -> bool:
+        new_value = (new_value or "").strip()
+        if not new_value or new_value == current:
+            return False
+        return overwrite or not current
+
+    changes: list[dict] = []
+    unmatched: list[str] = []
+    matched = 0
+    unchanged = 0
+
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, name, series, rank, main_image_url FROM characters"
+    ).fetchall()
+    for row in rows:
+        entry = catalog.get(catalog_import.name_key(row["name"]))
+        if entry is None:
+            unmatched.append(row["name"])
+            continue
+        matched += 1
+        fields: dict[str, str] = {}
+        for column, source_key in (
+            ("series", "series"),
+            ("rank", "rank"),
+            ("main_image_url", "mudae_image_url"),
+        ):
+            if choose(entry[source_key], row[column]):
+                fields[column] = (entry[source_key] or "").strip()
+        if not fields:
+            unchanged += 1
+            continue
+        changes.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "fields": {
+                    column: {"before": row[column], "after": value}
+                    for column, value in fields.items()
+                },
+            }
+        )
+
+    if changes and not dry_run:
+        with transaction() as conn:
+            for change in changes:
+                columns = list(change["fields"])
+                assignments = ", ".join(f"{column} = ?" for column in columns)
+                values = [change["fields"][column]["after"] for column in columns]
+                conn.execute(
+                    f"UPDATE characters SET {assignments}, updated_at = ? WHERE id = ?",
+                    (*values, _now(), change["id"]),
+                )
+
+    return {
+        "matched": matched,
+        "updated": len(changes),
+        "unchanged": unchanged,
+        "unmatched": unmatched,
+        "changes": changes,
+    }
+
+
 def check_health() -> dict:
     """Is the database usable, and does it hold anything?
 
@@ -519,10 +717,10 @@ def list_characters_with_customs(
     # Previews for this page only, in one query rather than one per row.
     if rows and preview_count > 0:
         ids = [r["id"] for r in rows]
-        by_id: dict[int, list[str]] = {i: [] for i in ids}
+        by_id: dict[int, list[dict]] = {i: [] for i in ids}
         placeholders = ",".join("?" for _ in ids)
         previews = conn.execute(
-            "SELECT character_id, url FROM custom_images"
+            "SELECT character_id, id, url FROM custom_images"
             f" WHERE state = 'active' AND character_id IN ({placeholders})"
             " ORDER BY character_id, position, id",
             ids,
@@ -530,7 +728,15 @@ def list_characters_with_customs(
         for row in previews:
             bucket = by_id[row["character_id"]]
             if len(bucket) < preview_count:
-                bucket.append(row["url"])
+                bucket.append(
+                    {
+                        "id": row["id"],
+                        "url": row["url"],
+                        # The row draws the WebP, not the 1.9 MB original the
+                        # canonical url points at; see thumbnails.py.
+                        "thumb": thumbnails.thumb_url(row["id"], row["url"]),
+                    }
+                )
         for item, r in zip(items, rows, strict=True):
             item["previews"] = by_id[r["id"]]
 

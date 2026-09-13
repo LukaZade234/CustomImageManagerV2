@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import FilterBar from '../components/FilterBar'
 import { Badge, Button, Card, EmptyState } from '../components/ui'
+import { apiUrl } from '../config'
 import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
@@ -15,13 +16,19 @@ const SORT_OPTIONS = [
 ]
 
 /** Direction each sort reads best in when it is first chosen. */
-const SORT_DEFAULT_ORDER = { recent: 'desc', rank: 'asc', alphabet: 'asc', count: 'desc' }
+const SORT_DEFAULT_ORDER = { recent: 'desc', rank: 'desc', alphabet: 'asc', count: 'desc' }
 
-/** The server whitelists whole ORDER BY fragments, so build the key from them. */
+/**
+ * The server whitelists whole ORDER BY fragments, so build the key from them.
+ *
+ * Rank is inverted: 1 is the *top* rank, so "Descending" (highest rank first)
+ * is what reads best-first, and "Ascending" means the lowest-ranked characters
+ * lead. The SQL keys name the numeric order, hence the swap.
+ */
 function customsSortKey(sort, order) {
   if (sort === 'alphabet') return order === 'desc' ? 'name_desc' : 'name_asc'
   if (sort === 'count') return order === 'desc' ? 'count_desc' : 'count_asc'
-  if (sort === 'rank') return order === 'desc' ? 'rank_desc' : 'rank_asc'
+  if (sort === 'rank') return order === 'desc' ? 'rank_asc' : 'rank_desc'
   return order === 'asc' ? 'recent_asc' : 'recent'
 }
 
@@ -137,9 +144,13 @@ export default function CustomsPage() {
 
   // A shrinking result set can leave you past the last page. Replaced rather
   // than pushed: correcting an impossible page is not a place to go back to.
+  // Guarded on `result`: before the first response `totalPages` is a
+  // placeholder 1, and clamping against it rewrote a restored `?page=2` to page
+  // one before the page-2 fetch could land — which made the back button from a
+  // character page land on page one.
   useEffect(() => {
-    if (page > totalPages) changePage(totalPages, { replace: true })
-  }, [page, totalPages, changePage])
+    if (result && page > totalPages) changePage(totalPages, { replace: true })
+  }, [result, page, totalPages, changePage])
 
   // Every page move — by the arrows, the jump, or the browser's back button —
   // starts the reader at the top of the new page rather than at the pager they
@@ -294,12 +305,16 @@ export default function CustomsPage() {
                 </div>
                 {c.previews?.length > 0 && (
                   <div className="customs-preview-row">
-                    {c.previews.map((url) => (
+                    {c.previews.map((p) => (
                       <img
-                        key={url}
-                        src={getImageUrl(url)}
+                        key={p.id ?? p.url}
+                        src={p.thumb ? apiUrl(p.thumb) : getImageUrl(p.url)}
                         alt=""
                         className="customs-preview-thumb"
+                        width="80"
+                        height="80"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ))}
                   </div>

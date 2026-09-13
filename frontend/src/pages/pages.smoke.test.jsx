@@ -7,6 +7,7 @@
  * and it also guards the migration onto the shared primitives.
  */
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -99,6 +100,33 @@ describe('page smoke tests', () => {
     useStore.setState({ searchOrder: 'desc' })
     renderAt(<SearchResultsPage />, '/search?q=a&by=name')
     expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
+  })
+
+  it('caps the rendered results behind a Show more button', async () => {
+    const many = Array.from({ length: 75 }, (_, i) => ({
+      name: `Char ${String(i).padStart(2, '0')}`,
+      series: 'S',
+      rank: i + 1,
+      image: `${i}.png`,
+    }))
+    useStore.setState({ characters: many })
+    renderAt(<SearchResultsPage />, '/search?q=char&by=name')
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(60)
+    await userEvent.click(screen.getByRole('button', { name: /show 15 more/i }))
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(75)
+  })
+
+  it('reads rank as top-first, matching the character page', () => {
+    const names = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    // Ayanami Rei is rank 12, Makise Kurisu rank 4 — so rank 4 is the better
+    // rank and descending shows it first.
+    useStore.setState({ searchSort: 'rank', searchOrder: 'desc' })
+    const { unmount } = renderAt(<SearchResultsPage />, '/search?q=a&by=name')
+    expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
+    unmount()
+    useStore.setState({ searchOrder: 'asc' })
+    renderAt(<SearchResultsPage />, '/search?q=a&by=name')
+    expect(names()).toEqual(['Ayanami Rei', 'Makise Kurisu'])
   })
 
   it('renders a character page', () => {

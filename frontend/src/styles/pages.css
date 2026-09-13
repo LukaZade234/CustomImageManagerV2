@@ -262,6 +262,11 @@
   flex-direction: column;
   gap: 0;
 }
+.search-results-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-6);
+}
 /* Search Result Styles */
 .search-result-item {
   display: flex;
@@ -371,6 +376,11 @@
 /* One row for the gallery's four controls. At 360px the labels alone are about
    270px of the 336 available, so the icons are what has to go — they decorate a
    word that is already the whole meaning. */
+@media (max-width: 768px) {
+  .char-custom-toolbar-actions .ui-btn {
+    min-height: 44px;
+  }
+}
 @media (max-width: 480px) {
   .char-custom-toolbar-actions {
     gap: var(--space-1);
@@ -1090,15 +1100,15 @@ body.reorder-touch-dragging {
   bottom: var(--space-4);
   z-index: 2;
   padding: var(--space-2) var(--space-4);
-  border: 1px solid rgb(255 255 255 / 0.35);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-pill);
-  background: rgb(0 0 0 / 0.55);
-  color: #fff;
+  background: var(--overlay-scrim);
+  color: var(--overlay-fg);
   font-size: var(--type-meta);
   cursor: pointer;
 }
 .image-modal-report:hover {
-  background: rgb(0 0 0 / 0.75);
+  background: var(--overlay-scrim-hover);
 }
 .report-dialog__lead {
   margin: 0 0 var(--space-4);
@@ -2201,6 +2211,15 @@ a.home-ranked__item:hover {
   .gallery-action-bar__verbs .ui-btn {
     flex: 1 1 auto;
     justify-content: center;
+  }
+  /* A thumb needs 44px. The small variant is 28px, which is a fine mouse
+     density and a poor touch one, so the gallery controls grow to the same
+     height the navbar already uses on a phone. */
+  .gallery-action-bar .ui-btn {
+    min-height: 44px;
+  }
+  .gallery-action-bar .ui-btn--icon {
+    width: 44px;
   }
   /* Two rows of bar need more room kept for them at the end of the document. */
   .character-page.has-action-bar {

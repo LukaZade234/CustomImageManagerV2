@@ -77,6 +77,10 @@ class TestListing:
         assert item["series"] == "Re:Zero"
         assert item["count"] == 5
         assert len(item["previews"]) == 3, "previews are capped so the page stays small"
+        preview = item["previews"][0]
+        # The row renders the WebP, not the 1.9 MB ImgChest original.
+        assert preview["thumb"] == f"/thumbs/{preview['id']}.webp"
+        assert preview["url"].startswith("https://")
 
     def test_characters_without_customs_are_absent(self, client, clean_db):
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 1)})

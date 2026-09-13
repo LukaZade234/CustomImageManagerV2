@@ -54,6 +54,60 @@ describe('colour token pairings', () => {
   )
 })
 
+describe('text contrast (WCAG AA)', () => {
+  /**
+   * `--text-subtle` sat a full ramp step too faint: #7c8595 is 3.72:1 on white
+   * and 4.49:1 on the dark card, so 13px hints, placeholders and notes failed
+   * AA in both themes. It is now tuned per theme (4.5:1 on both --bg and
+   * --surface), and this pins it — a decorative-looking token is exactly the
+   * kind that silently drifts back.
+   */
+  const css = readFileSync(join(DIR, 'tokens.css'), 'utf8')
+
+  function block(selector) {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const m = css.match(new RegExp(`${escaped}\\s*\\{([\\s\\S]*?)\\}`))
+    if (!m) throw new Error(`token block not found: ${selector}`)
+    return m[1]
+  }
+  const base = block(':root')
+  const dark = block(':root[data-theme="dark"]')
+  const ramp = Object.fromEntries(
+    [...base.matchAll(/(--n-\d+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1], m[2]]),
+  )
+  const resolve = (value, tokens) => {
+    const m = value.trim().match(/^var\((--[\w-]+)\)$/)
+    return m ? (tokens[m[1]] ?? value) : value.trim()
+  }
+  const decl = (body, name) => {
+    const m = body.match(new RegExp(`--${name}:\\s*([^;]+);`))
+    return m ? m[1].trim() : null
+  }
+  const luminance = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255)
+    const f = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+  }
+  const contrast = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+
+  it.each([
+    ['light', base],
+    ['dark', dark],
+  ])('keeps muted and subtle text at 4.5:1 in %s mode', (_mode, tokens) => {
+    const bg = resolve(decl(tokens, 'bg'), ramp)
+    const surface = resolve(decl(tokens, 'surface'), ramp)
+    for (const name of ['text-muted', 'text-subtle']) {
+      const fg = resolve(decl(tokens, name), ramp)
+      for (const behind of [bg, surface]) {
+        expect(contrast(fg, behind), `${name} on ${behind}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+})
+
 describe('justified card rows', () => {
   /**
    * `.profile-card` must opt out of the global border-box.
@@ -171,6 +225,24 @@ describe('DESIGN.md invariants', () => {
     }
     expect(offScale).toEqual([])
   })
+  it('orders the dialog layers so a dialog opened over the lightbox wins', () => {
+    // The report dialog opens over the image lightbox. The lightbox once sat on
+    // a hand-picked z-index of 2000, far above --z-modal (300), so the report
+    // dialog painted underneath the scrim that captured its clicks. The layer
+    // order is the actual fix; this pins it.
+    const tokens = readFileSync(join(DIR, 'tokens.css'), 'utf8')
+    const layers = Object.fromEntries(
+      [...tokens.matchAll(/--z-([a-z]+):\s*(\d+);/g)].map((m) => [m[1], Number(m[2])]),
+    )
+    expect(layers.lightbox).toBeLessThan(layers.modal)
+    expect(layers.modal).toBeLessThan(layers.toast)
+
+    const imageModal = rules(readFileSync(join(DIR, 'components.css'), 'utf8')).find(
+      (r) => r.selector === '.image-modal',
+    )
+    expect(imageModal.body).toMatch(/z-index:\s*var\(--z-lightbox\)/)
+  })
+
   it('lets the grid row own the space around the header band buttons', () => {
     // Save sits in column one and Edit/$ai in column two of the same grid row,
     // so they are level by construction. A vertical margin or padding on either

@@ -130,16 +130,33 @@ def _dedupe_import_urls_preserve_order(urls):
     return out
 
 
-def _allowed_image_proxy_url(url):
-    """Only ImgChest hosts — same URLs we store from upload_to_imgchest (avoids CORS + SSRF)."""
+def _host_in(url, domains):
+    """True when `url` is http(s) on one of `domains` or a subdomain of one."""
     try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
             return False
-        h = (p.hostname or "").lower()
-        return h == "imgchest.com" or h.endswith(".imgchest.com")
+        host = (parsed.hostname or "").lower()
     except Exception:
         return False
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
+
+
+def _allowed_image_proxy_url(url):
+    """Only ImgChest hosts — same URLs we store from upload_to_imgchest (avoids CORS + SSRF)."""
+    return _host_in(url, ("imgchest.com",))
+
+
+def _allowed_portrait_url(url):
+    """Hosts a character portrait may be fetched from for accent measurement.
+
+    ImgChest for portraits that were re-hosted there, and `mudae.net` for the
+    catalog's own uploads (225x350, hotlinkable, CORS-open). This is deliberately
+    separate from `_allowed_image_proxy_url`, which also gates the user-facing
+    download proxy: a visitor may download an ImgChest image, but the internal
+    portrait fetch is not a general-purpose "fetch this URL" service.
+    """
+    return _host_in(url, ("imgchest.com", "mudae.net"))
 
 
 # Ranges the stdlib does not flag but that must not be reachable from the origin.
