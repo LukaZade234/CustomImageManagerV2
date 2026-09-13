@@ -101,4 +101,31 @@ describe('SeriesSuggestInput', () => {
     await userEvent.click(screen.getByRole('option', { name: 'Frieren' }))
     expect(onChange).toHaveBeenCalledWith({ target: { value: 'Frieren' } })
   })
+
+  it('accepts object suggestions and reports the whole item on pick', async () => {
+    const onChange = vi.fn()
+    const onPick = vi.fn()
+    const items = [
+      { value: 'Saber', label: 'Saber', meta: 'Fate/stay night', series: 'Fate/stay night' },
+      { value: 'Rem', label: 'Rem', meta: 'Re:Zero', series: 'Re:Zero' },
+    ]
+    render(
+      <SeriesSuggestInput
+        id="name"
+        value=""
+        onChange={onChange}
+        suggestions={items}
+        onPick={onPick}
+        ariaLabel="Character name suggestions"
+      />,
+    )
+    await userEvent.click(screen.getByRole('combobox'))
+    expect(screen.getByRole('option', { name: /Rem/ })).toHaveTextContent('Re:Zero')
+    await userEvent.click(screen.getByRole('option', { name: /Rem/ }))
+
+    // The name is what lands in the input; the whole item lets the caller fill
+    // the series too.
+    expect(onChange).toHaveBeenCalledWith({ target: { value: 'Rem' } })
+    expect(onPick).toHaveBeenCalledWith(items[1])
+  })
 })

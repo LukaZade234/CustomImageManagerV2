@@ -376,11 +376,6 @@
 /* One row for the gallery's four controls. At 360px the labels alone are about
    270px of the 336 available, so the icons are what has to go — they decorate a
    word that is already the whole meaning. */
-@media (max-width: 768px) {
-  .char-custom-toolbar-actions .ui-btn {
-    min-height: 44px;
-  }
-}
 @media (max-width: 480px) {
   .char-custom-toolbar-actions {
     gap: var(--space-1);
@@ -905,6 +900,68 @@ body.reorder-touch-dragging {
   font-size: var(--type-micro);
   color: var(--text-subtle);
 }
+/* The manual form's portrait, offered from the catalog once name and series
+   match. A chosen file replaces it. */
+.add-char-image-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.add-char-image-preview__img {
+  width: 96px;
+  height: 128px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+/* A character the library already has, offered as a link from the Add form so
+   the visitor opens it instead of creating a duplicate. */
+.existing-character-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--duration) var(--ease);
+}
+.existing-character-card:hover {
+  border-color: var(--accent);
+}
+.existing-character-card__img {
+  width: 56px;
+  aspect-ratio: var(--main-image-ratio);
+  height: auto;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+.existing-character-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.existing-character-card__name {
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+.existing-character-card__series {
+  font-size: var(--type-meta);
+  color: var(--text-muted);
+}
+.existing-character-card__hint {
+  font-size: var(--type-micro);
+  color: var(--text-subtle);
+}
 .mudae-divider {
   margin: var(--space-6) 0;
   border: 0;
@@ -926,6 +983,71 @@ body.reorder-touch-dragging {
 }
 .mudae-result summary {
   cursor: pointer;
+}
+/* The reviewed `$imartsmi-` extract: what the series adds vs. what it changes. */
+.mudae-extract {
+  margin-top: var(--space-4);
+  font-size: var(--type-meta);
+}
+.mudae-extract details {
+  margin-top: var(--space-2);
+}
+.mudae-extract summary {
+  cursor: pointer;
+}
+/* A reviewed character reads like a saved-character card: a big portrait with
+   the name and its changes beneath it, in the same uniform grid the profile
+   lists use. */
+.mudae-extract__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.mudae-extract__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.mudae-extract__img {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--main-image-ratio);
+  height: auto;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+}
+.mudae-extract__img--empty {
+  display: block;
+}
+.mudae-extract__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+}
+.mudae-extract__rank {
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+}
+.mudae-extract__changes {
+  color: var(--text-subtle);
+  font-size: var(--type-micro);
+}
+.mudae-extract__actions {
+  margin-top: var(--space-3);
 }
 .mudae-item--ok {
   color: var(--success);
@@ -965,6 +1087,93 @@ body.reorder-touch-dragging {
 .add-char-actions {
   justify-content: flex-start;
   margin-top: var(--space-6);
+}
+/* ---- Add page: workbench layout -----------------------------------------
+ * Lookup leads in the wide column and manual add sits beside it; below the
+ * tablet breakpoint the columns stack and the divider turns vertical to
+ * horizontal. The card keeps its own --pad-lg rhythm.
+ */
+.add-layout--workbench > .page-title {
+  margin-bottom: var(--space-8);
+}
+.add-layout--workbench .add-layout__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-10);
+}
+.add-layout--workbench .mudae-panel,
+.add-layout--workbench .add-char-panel {
+  max-width: none;
+  margin: 0;
+}
+.add-layout--workbench .add-layout__columns > .add-char-panel {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-10);
+}
+@media (max-width: 960px) {
+  .add-layout--workbench .add-layout__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .add-layout--workbench .add-layout__columns > .add-char-panel {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-8);
+  }
+}
+/* ---- Add page: type ramp -------------------------------------------------
+ * One deliberate role scale: a larger display title, a clear step down to the
+ * section headings, and a single sentence-case label voice shared by both
+ * panels. Display tracking is negative; label tracking is neutral.
+ */
+.add-type--ramp > .page-title {
+  font-size: var(--type-page-title);
+  letter-spacing: var(--tracking-display);
+  margin-bottom: var(--space-8);
+}
+.add-type--ramp .section-heading {
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-3);
+}
+.add-type--ramp .edit-group > label:not(.file-upload-box),
+.add-type--ramp .ui-field__label {
+  font-size: var(--type-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
+  color: var(--text-muted);
+}
+.add-type--ramp .mudae-note,
+.add-type--ramp .mudae-preview__hint,
+.add-type--ramp .ui-field__hint,
+.add-type--ramp .file-upload-hint {
+  font-size: var(--type-micro);
+  line-height: var(--line-body);
+  color: var(--text-subtle);
+}
+/* ---- Add page: manual form spacing --------------------------------------
+ * The manual form mixes the Field primitive with the older .edit-group markup,
+ * and the two spaced labels differently: a 4px flex gap beside an 8px label
+ * margin, with no gap at all between the fields. Both now use the Field
+ * primitive, so one rule owns the label-to-control gap and the form owns the
+ * gap between field blocks.
+ */
+.add-char-form.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.add-char-form.field-stack > .ui-field {
+  gap: var(--space-1);
+}
+.add-char-form.field-stack > .edit-actions {
+  margin-top: 0;
+}
+.add-char-form.field-stack .form-error {
+  margin-top: var(--space-1);
 }
 .char-mudae-actions {
   display: flex;
@@ -1315,6 +1524,12 @@ body.reorder-touch-dragging {
     --gallery-row-height: 150px;
 
     gap: var(--space-1);
+  }
+  /* A drop target is a desktop gesture, so the dashed box is not drawn on a
+     phone; the empty state keeps its copy and its Add image button. */
+  .custom-images-gallery .gallery-empty {
+    border: 0;
+    padding: var(--space-4) 0;
   }
 }
 /* Reorder uses pointer events, so the browser must not treat a press on an item

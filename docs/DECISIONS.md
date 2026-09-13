@@ -517,12 +517,34 @@ The importer merges every extract by `name_key` before writing: extracts overlap
 repeats are dropped, and when two captures disagree the better (lower) rank wins. It is idempotent,
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
-**Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the
-PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring the
+**Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than
+the PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring the
 self-bot to gap-filling and refreshes, and pool filters are all natural next phases. The catalog
 only *adds* a table, so none of them are blocked by this one. `remote_images._allowed_portrait_url`
 is deliberately separate from the user-facing download proxy's allowlist: the internal accent
 fetch may read Mudae, a visitor's "download this image" may not.
+
+### Bulk-adding a series: one DM, then review
+
+Bulk-adding used to run `$ima` for the series and then one `$im` per character, which is both slow
+(one Discord interaction per character) and blind (it writes as it goes). `$imartsmi- <series>` does
+the whole job in one command: Mudae DMs the account the full roster with claim ranks, pools and
+`mudae.net` portrait URLs, split across as many messages as the list needs. The flow is now fetch,
+review, apply:
+
+- **Fetch** runs one `$imartsmi-` call; `$ima` is never sent. The DM parts are collected until the
+  header's total is reached or the messages stop arriving.
+- **Review** shows the roster split into "not in the library" and "already in the library", with the
+  fields applying would change. Nothing is written yet.
+- **Apply** creates the missing characters and updates the existing ones. It writes only the fields
+  that differ (series, rank, portrait), so re-running an unchanged series is a no-op. Portraits are
+  the DM's `mudae.net` URLs, written directly with no ImgChest upload — the same rule the catalog
+  add uses.
+
+The parser is separate from the paste parser because the DM format is different: a header without
+the ` - ` separator (`Lord of the Mysteries   0/55`), then alias lines, pool totals and value stats
+around the character lines. Only the header and the `#rank - Name · ($pools) - url` lines carry
+data, so an alias block never becomes a parse failure.
 
 ---
 

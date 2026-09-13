@@ -64,6 +64,20 @@ export const apiClient = {
     if (q) params.set('q', q)
     return api(`/api/customs?${params}`)
   },
+  suggestCharacters: (q = '', limit = 10, series = '') => {
+    const params = new URLSearchParams({ q, limit: String(limit) })
+    if (series) params.set('series', series)
+    return api(`/api/catalog/characters?${params}`)
+  },
+  suggestSeries: (q = '', limit = 20) =>
+    api(`/api/catalog/series?q=${encodeURIComponent(q)}&limit=${limit}`),
+  findCatalogCharacter: (name) => api(`/api/catalog/character?name=${encodeURIComponent(name)}`),
+  catalogAddCharacter: (name) =>
+    api('/api/catalog/add-character', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
   saveCharacter: (data) =>
     api('/api/saved', {
       method: 'POST',
@@ -250,101 +264,25 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, add }),
     }),
-  mudaeLookupSeries: (series) =>
-    api('/api/mudae/lookup-series', {
+  mudaeSeriesExtract: (series) =>
+    api('/api/mudae/series-extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ series }),
     }),
-  mudaeAddSeries: (series) =>
-    fetch(`${API_BASE}/api/mudae/add-series`, {
+  mudaeSeriesExtractApply: (series, items) =>
+    api('/api/mudae/series-extract/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: CREDENTIALS,
-      body: JSON.stringify({ series }),
-    })
-      .catch((e) => {
-        throw toNetworkError(e)
-      })
-      .then(async (r) => {
-        const text = await r.text()
-        let j = {}
-        try {
-          j = text ? JSON.parse(text) : {}
-        } catch {
-          j = {}
-        }
-        if (!r.ok) {
-          throw new Error(messageFromFailedResponse(r, text, j))
-        }
-        return j
+      body: JSON.stringify({
+        series,
+        items: items.map((c) => ({
+          name: c.name,
+          rank: c.rank,
+          image_url: c.image_url,
+        })),
       }),
-  mudaeAddSeriesStream: async (series, handlers = {}) => {
-    const res = await fetch(`${API_BASE}/api/mudae/add-series?stream=1`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      credentials: CREDENTIALS,
-      body: JSON.stringify({ series }),
-    }).catch((e) => {
-      throw toNetworkError(e)
-    })
-
-    if (!res.ok) {
-      const text = await res.text()
-      let j = {}
-      try {
-        j = text ? JSON.parse(text) : {}
-      } catch {
-        j = {}
-      }
-      throw new Error(messageFromFailedResponse(res, text, j))
-    }
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let finalResult = null
-
-    const dispatchBlock = (block) => {
-      let event = 'message'
-      let data = ''
-      for (const line of block.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim()
-        else if (line.startsWith('data:')) data = line.slice(5).trim()
-      }
-      if (!data) return
-      const parsed = JSON.parse(data)
-      if (event === 'done') {
-        finalResult = parsed
-        return
-      }
-      if (event === 'error') {
-        const err = new Error(parsed.error || 'Series import failed')
-        if (parsed.type === 'candidates' && Array.isArray(parsed.candidate_matches)) {
-          err.ambiguousSeries = true
-          err.candidateMatches = parsed.candidate_matches
-        }
-        throw err
-      }
-      const fn = handlers[event]
-      if (typeof fn === 'function') fn(parsed)
-      else if (typeof handlers.onEvent === 'function') handlers.onEvent(event, parsed)
-    }
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() || ''
-      for (const block of parts) {
-        if (block.trim()) dispatchBlock(block)
-      }
-    }
-    if (buffer.trim()) dispatchBlock(buffer)
-    return finalResult
-  },
-  mudaeCancelSeries: () => api('/api/mudae/cancel-series', { method: 'POST' }),
+    }),
   mudaeRefreshMainImage: (characterName) =>
     api('/api/mudae/refresh-main-image', {
       method: 'POST',

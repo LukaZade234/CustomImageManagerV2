@@ -16,6 +16,7 @@ import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
 import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -36,9 +37,13 @@ const MODE_LABELS = {
   reorder: 'reordering',
 }
 
+/** The phone boundary, shared with the gallery's own column layout. */
+const NARROW = '(max-width: 768px)'
+
 export default function CharacterPage() {
   const { name } = useParams()
   const navigate = useNavigate()
+  const isNarrow = useMediaQuery(NARROW)
   const characters = useStore((s) => s.characters)
   // Named apart from the edit form's own `loading` below.
   const libraryLoading = useStore((s) => s.loading)
@@ -836,7 +841,11 @@ export default function CharacterPage() {
               <EmptyState
                 className="gallery-empty"
                 title="No custom images yet"
-                description={`Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`}
+                description={
+                  isNarrow
+                    ? `Add one and it becomes part of the $ai command for ${name}.`
+                    : `Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`
+                }
                 action={
                   <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
                     Add image

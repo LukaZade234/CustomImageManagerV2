@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Portraits are hotlinked from mudae.net, which returns 403 when the
+         request carries a foreign Referer. No component relies on the Referer,
+         so the document omits it for every subresource and the images load. -->
+    <meta name="referrer" content="no-referrer" />
     <meta
       name="description"
       content="ImgManager — personal tool to browse characters, manage custom images for Mudae, and copy $ai commands. No login; not affiliated with Discord or Mudae."

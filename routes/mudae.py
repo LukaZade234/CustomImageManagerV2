@@ -3,32 +3,32 @@
 The Discord self-bot is a metadata fetcher, not part of the data layer: it looks
 a character up in Mudae's own database so a person does not have to retype the
 name, series and rank, and grabs the card art. Everything it returns goes
-through the same validation and the same ImgChest upload as a manual entry.
+through the same validation as a manual entry.
 
-Each call spends one of Discord's ~1000 daily interactions, which is why these
-are rate limited more tightly than anything else, and why `add-series` reports
-progress rather than silently running for minutes.
+A series is fetched in one shot: `$imartsmi- <series>` makes Mudae DM the whole
+roster with ranks and portraits, which replaces an `$ima` plus one `$im` per
+character. Each Mudae call spends one of Discord's ~1000 daily interactions,
+which is why these are rate limited more tightly than anything else.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import queue
-import threading
 
 import requests
 from flask import Blueprint, Response, jsonify, request
 
+import catalog_import
 import db
 import logs
 import mudae_discord
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
-from mudae_discord import MudaeAmbiguousSeries, MudaeCancelled, MudaeError
+from mudae_discord import MudaeError
 from ratelimit import rate_limited
 from remote_images import (
     MAX_FILE_SIZE,
+    _allowed_portrait_url,
     _fetch_image_from_url_for_import,
     _get_with_validated_redirects,
     _safe_import_image_url,
@@ -66,6 +66,21 @@ def _upload_remote_image_to_imgchest(image_url, character_name):
             os.remove(temp_path)
 
 
+def _mudae_main_image_url(image_url, character_name):
+    """The URL to store as a character's main image, given one from Mudae.
+
+    Mudae's own portrait hosts (`mudae.net`) are hotlinkable and are what the
+    catalog and the bulk extract store, so such a URL is kept as it came back.
+    A host we cannot rely on -- notably a Discord CDN link that expires -- is
+    downloaded and re-hosted on ImgChest instead.
+    """
+    if not image_url:
+        return ""
+    if _allowed_portrait_url(image_url):
+        return image_url
+    return _upload_remote_image_to_imgchest(image_url, character_name)
+
+
 def _persist_mudae_character(info, *, overwrite_main=False):
     """
     Add character from CharacterInfo, or update main image if already exists and overwrite_main.
@@ -83,9 +98,7 @@ def _persist_mudae_character(info, *, overwrite_main=False):
 
     series = (info.series or "").strip()[:MAX_SERIES_LENGTH]
     rank = (info.rank or "").strip()[:MAX_RANK_LENGTH]
-    image_url = ""
-    if info.image_url:
-        image_url = _upload_remote_image_to_imgchest(info.image_url, name)
+    image_url = _mudae_main_image_url(info.image_url, name)
 
     existing = [c for c in (db.get_characters() or []) if c.get("name") == name]
     if existing:
@@ -194,13 +207,14 @@ def mudae_lookup_character():
         ), 500
 
 
-@mudae_bp.route("/api/mudae/lookup-series", methods=["POST"])
+@mudae_bp.route("/api/mudae/series-extract", methods=["POST"])
 @rate_limited("mudae")
-def mudae_lookup_series():
-    """
-    Resolve a series name via Mudae $ima.
+def mudae_series_extract():
+    """Fetch a whole series via one `$imartsmi-` DM and return it for review.
+
     Body: { series }
-    Returns { type: 'series', series_label } or { type: 'candidates', candidate_matches }.
+    Each character is marked `in_library`, with the fields that differ from the
+    working row so the UI can show what applying would change.
     """
     data = request.get_json(silent=True) or {}
     series = str(data.get("series") or "").strip()
@@ -209,194 +223,146 @@ def mudae_lookup_series():
     if len(series) > MAX_SERIES_LENGTH:
         return jsonify({"error": f"Series too long (max {MAX_SERIES_LENGTH} characters)"}), 400
 
+    if db.get_characters() is None:
+        return jsonify(
+            {
+                "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
+            }
+        ), 500
+
     try:
-        result = mudae_discord.lookup_series(series)
-        return jsonify(result.to_dict())
+        raw = mudae_discord.fetch_series_extract(series)
     except MudaeError as e:
         return jsonify({"error": str(e)}), 503
     except Exception:
-        log.exception("mudae.lookup_series_failed")
+        log.exception("mudae.series_extract_failed")
         return jsonify(
-            {"error": "Something went wrong during Mudae series lookup. Try again in a moment."}
+            {"error": "Something went wrong fetching the series. Try again in a moment."}
         ), 500
 
-
-@mudae_bp.route("/api/mudae/add-series", methods=["POST"])
-@rate_limited("mudae")
-def mudae_add_series():
-    """
-    Bulk-add characters from a series via $ima then $im each.
-    Body: { series }
-    Query ?stream=1 for Server-Sent Events with live progress.
-    """
-    data = request.get_json(silent=True) or {}
-    series = str(data.get("series") or "").strip()
-    if not series:
-        return jsonify({"error": "Series is required"}), 400
-    if len(series) > MAX_SERIES_LENGTH:
-        return jsonify({"error": f"Series too long (max {MAX_SERIES_LENGTH} characters)"}), 400
-    stream = request.args.get("stream") == "1"
-
-    try:
-        if db.get_characters() is None:
-            return jsonify(
-                {
-                    "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
-                }
-            ), 500
-
-        existing = {
-            c.get("name", "").casefold() for c in (db.get_characters() or []) if c.get("name")
-        }
-        mudae_discord.clear_series_cancel()
-
-        if stream:
-            progress_q: queue.Queue = queue.Queue()
-
-            def _worker():
-                try:
-                    payload = _run_mudae_add_series(series, existing, progress_q.put)
-                    progress_q.put(("done", payload))
-                except MudaeAmbiguousSeries as e:
-                    progress_q.put(("error", e.to_dict()))
-                except Exception as e:
-                    progress_q.put(("error", {"error": str(e)}))
-
-            def _sse_stream():
-                thread = threading.Thread(target=_worker, daemon=True)
-                thread.start()
-                while True:
-                    item = progress_q.get()
-                    kind = item[0]
-                    if kind == "progress":
-                        _, event, event_data = item
-                        yield f"event: {event}\ndata: {json.dumps(event_data)}\n\n"
-                    elif kind == "done":
-                        yield f"event: done\ndata: {json.dumps(item[1])}\n\n"
-                        break
-                    elif kind == "error":
-                        yield f"event: error\ndata: {json.dumps(item[1])}\n\n"
-                        break
-                thread.join(timeout=1.0)
-
-            return Response(
-                _sse_stream(),
-                mimetype="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "X-Accel-Buffering": "no",
-                },
-            )
-
-        return jsonify(_run_mudae_add_series(series, existing))
-    except MudaeAmbiguousSeries as e:
-        return jsonify(e.to_dict()), 409
-    except MudaeCancelled as e:
-        return jsonify({"error": str(e), "cancelled": True}), 499
-    except MudaeError as e:
-        return jsonify({"error": str(e)}), 503
-    except ImgChestError as e:
-        return jsonify({"error": str(e)}), 503
-    except Exception:
-        log.exception("mudae.add_series_failed")
+    parsed = catalog_import.parse_series_extract(raw)
+    if not parsed.characters:
         return jsonify(
-            {"error": "Something went wrong during series import. Try again in a moment."}
-        ), 500
+            {
+                "error": (
+                    "Mudae's reply had no characters. Check the series name, then try again."
+                ),
+                "issues": [
+                    {"line": issue.line_no, "text": issue.text, "reason": issue.reason}
+                    for issue in parsed.issues[:20]
+                ],
+            }
+        ), 502
 
-
-@mudae_bp.route("/api/mudae/cancel-series", methods=["POST"])
-def mudae_cancel_series():
-    """Request stop of an in-progress bulk series import (checked between characters)."""
-    mudae_discord.request_series_cancel()
-    return jsonify({"success": True, "message": "Cancel requested"})
-
-
-def _run_mudae_add_series(series, existing, progress_cb=None):
-    """Run bulk series import. progress_cb(event, payload) for SSE when set."""
-    added_out = []
-    persist_errors = []
-
-    def _emit(event, payload):
-        if progress_cb:
-            progress_cb(("progress", event, payload))
-
-    def on_character(info):
-        try:
-            action, image_url = _persist_mudae_character(info)
-            if action == "added":
-                entry = {
-                    **info.to_dict(),
-                    "image_url": image_url or info.image_url,
-                }
-                added_out.append(entry)
-                _emit("added", entry)
-            elif action == "exists":
-                persist_errors.append({"name": info.name, "error": "already exists", "_skip": True})
-                _emit("skipped", {"name": info.name, "reason": "already exists"})
-        except MudaeCancelled:
-            raise
-        except Exception as e:
-            log.exception("mudae.persist_failed", character=getattr(info, "name", None))
-            persist_errors.append(
-                {
-                    "name": getattr(info, "name", "?"),
-                    "error": "Could not save character",
-                }
-            )
-            raise MudaeError("Could not save character") from e
-
-    try:
-        result = mudae_discord.list_series_and_lookup(
-            series,
-            on_character=on_character,
-            skip_names=existing,
-            on_progress=_emit,
-        )
-    except MudaeCancelled:
-        result = {
-            "series": series,
-            "total_listed": 0,
-            "added": [],
-            "skipped": [],
-            "failed": [],
-            "cancelled": True,
-        }
-
-    skipped = list(result.get("skipped") or [])
-    failed = list(result.get("failed") or [])
-    for pe in persist_errors:
-        if pe.pop("_skip", False):
-            skipped.append(pe["name"])
-        else:
-            failed.append(pe)
-
-    series_name = mudae_discord.clean_series_label(result.get("series") or series)
-    total = int(result.get("total_listed") or 0)
-    processed = len(added_out) + len(skipped) + len(failed)
-    cancelled = bool(result.get("cancelled"))
-
-    if cancelled:
-        message = (
-            f'Series "{series_name}" import cancelled — {processed}/{total} processed — '
-            f"added {len(added_out)}, skipped {len(skipped)}, failed {len(failed)}"
-        )
-    else:
-        message = (
-            f'Series "{series_name}": {processed}/{total} — '
-            f"added {len(added_out)}, skipped {len(skipped)}, failed {len(failed)}"
-        )
-
-    return {
-        "success": True,
-        "series": series_name,
-        "total_listed": total,
-        "processed": processed,
-        "added": added_out,
-        "skipped": skipped,
-        "failed": failed,
-        "cancelled": cancelled,
-        "message": message,
+    series_label = parsed.series or series
+    in_library = {
+        catalog_import.name_key(c.get("name") or ""): c for c in (db.get_characters() or [])
     }
+
+    items = []
+    for character in parsed.characters:
+        row = in_library.get(catalog_import.name_key(character.name))
+        if row is None:
+            items.append(
+                {
+                    "name": character.name,
+                    "rank": character.rank,
+                    "image_url": character.image_url,
+                    "pool": character.pool,
+                    "in_library": False,
+                    "changes": ["create"],
+                }
+            )
+            continue
+        changes = []
+        if series_label and row.get("series") != series_label:
+            changes.append("series")
+        if character.rank and row.get("rank") != character.rank:
+            changes.append("rank")
+        if character.image_url and row.get("image") != character.image_url:
+            changes.append("image")
+        items.append(
+            {
+                "name": row.get("name") or character.name,
+                "rank": character.rank,
+                "image_url": character.image_url,
+                "pool": character.pool,
+                "in_library": True,
+                "changes": changes,
+            }
+        )
+
+    return jsonify(
+        {
+            "series": series_label,
+            "listed": parsed.listed,
+            "total": parsed.total,
+            "items": items,
+            "new_count": sum(1 for item in items if not item["in_library"]),
+            "update_count": sum(1 for item in items if item["in_library"] and item["changes"]),
+            "unchanged_count": sum(
+                1 for item in items if item["in_library"] and not item["changes"]
+            ),
+        }
+    )
+
+
+@mudae_bp.route("/api/mudae/series-extract/apply", methods=["POST"])
+@rate_limited("add_character")
+def mudae_series_extract_apply():
+    """Create and refresh working characters from a reviewed series extract.
+
+    Body: { series, items: [{name, rank, image_url}] }
+    No Discord call: the extract was already fetched. Portraits are the Mudae
+    URLs from the DM, so a changed one is written as-is, with no ImgChest upload.
+    """
+    data = request.get_json(silent=True) or {}
+    series = str(data.get("series") or "").strip()[:MAX_SERIES_LENGTH]
+    raw_items = data.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        return jsonify({"error": "No characters to add"}), 400
+    if len(raw_items) > 2000:
+        return jsonify({"error": "Too many characters in one request"}), 400
+
+    if db.get_characters() is None:
+        return jsonify(
+            {
+                "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
+            }
+        ), 500
+
+    items = []
+    rejected = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()
+        rank = str(raw.get("rank") or "").strip()[:MAX_RANK_LENGTH]
+        image_url = str(raw.get("image_url") or "").strip()
+        ok, err = catalog_import.validate_catalog_name(name)
+        if not ok:
+            rejected.append({"name": name, "error": err or "invalid name"})
+            continue
+        if image_url and not _allowed_portrait_url(image_url):
+            rejected.append({"name": name, "error": "Image must be from ImgChest or Mudae"})
+            continue
+        items.append({"name": name, "rank": rank, "image": image_url})
+
+    if not items:
+        return jsonify({"error": "No valid characters to add", "rejected": rejected}), 400
+
+    try:
+        result = db.apply_series_characters(series, items)
+    except Exception:
+        log.exception("mudae.series_apply_failed")
+        return jsonify({"error": "Failed to save the series. Try again in a moment."}), 500
+
+    result["rejected"] = rejected
+    message = (
+        f'Series "{series}" — added {result["created"]}, '
+        f'updated {result["updated"]}, unchanged {result["unchanged"]}'
+    )
+    return jsonify({"success": True, "series": series, "message": message, **result})
 
 
 @mudae_bp.route("/api/mudae/refresh-main-image", methods=["POST"])
@@ -427,7 +393,7 @@ def mudae_refresh_main_image():
         if not info.image_url:
             return jsonify({"error": "Mudae reply had no image"}), 502
 
-        image_url = _upload_remote_image_to_imgchest(info.image_url, char_name)
+        image_url = _mudae_main_image_url(info.image_url, char_name)
         if not db.set_main_image(char_name, image_url):
             return jsonify({"error": "Character not found"}), 404
         db.update_last_modified(char_name)

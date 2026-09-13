@@ -1,0 +1,210 @@
+"""Catalog suggestions, name lookup and the catalog add endpoint.
+
+These back the Add flow: the comboboxes read the catalog, a typed name resolves
+to its series, and adding a known character needs no Discord or ImgChest call.
+"""
+
+import catalog_import
+
+
+def _catalog_row(name, series, rank, image=None):
+    return {
+        "name": name,
+        "name_key": catalog_import.name_key(name),
+        "series": series,
+        "rank": rank,
+        "mudae_image_url": image or f"https://mudae.net/uploads/{rank}/a~b.png",
+        "pool": "wa",
+        "is_waifu": True,
+    }
+
+
+def seed_catalog(clean_db, rows):
+    clean_db.upsert_catalog_characters(rows, scraped_at="2026-01-01T00:00:00Z", source_batch="test")
+
+
+class TestSuggestCharacters:
+    def test_empty_query_returns_best_rank_first(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("High Rank", "S", "9000"),
+                _catalog_row("Top Rank", "S", "4"),
+                _catalog_row("Mid Rank", "S", "300"),
+            ],
+        )
+        names = [i["name"] for i in clean_db.suggest_characters("", limit=10)]
+        assert names == ["Top Rank", "Mid Rank", "High Rank"]
+
+    def test_prefix_matches_come_before_substring_matches(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Xen Saber", "S", "1"),
+                _catalog_row("Saber Alter", "S", "2"),
+            ],
+        )
+        names = [i["name"] for i in clean_db.suggest_characters("Saber")]
+        assert names[0] == "Saber Alter"
+
+    def test_working_row_wins_and_borrows_the_catalog_image(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Saber", "Fate/stay night", "4")])
+        clean_db.add_character("Saber", "Hand Edited", "999", "")
+        item = clean_db.suggest_characters("Saber", limit=5)[0]
+        assert item["series"] == "Hand Edited"
+        assert item["rank"] == "999"
+        assert item["image"].startswith("https://mudae.net/")
+        assert item["in_library"] is True
+
+    def test_nothing_matches_returns_empty(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        assert clean_db.suggest_characters("zzzz") == []
+
+    def test_series_filter_returns_only_that_series(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Rem", "Re:Zero", "3"),
+                _catalog_row("Emilia", "Re:Zero", "2"),
+                _catalog_row("Saber", "Fate/stay night", "4"),
+            ],
+        )
+        names = [i["name"] for i in clean_db.suggest_characters("", series="Re:Zero")]
+        assert names == ["Emilia", "Rem"]
+        assert clean_db.suggest_characters("", series="Nope") == []
+
+
+class TestSuggestSeries:
+    def test_unions_catalog_and_working_series(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        clean_db.add_character("Custom", "My Series", "1", "")
+        series = clean_db.suggest_series("")
+        assert "Re:Zero" in series
+        assert "My Series" in series
+
+    def test_filters_by_term_case_insensitively(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        assert clean_db.suggest_series("zero") == ["Re:Zero"]
+        assert clean_db.suggest_series("nope") == []
+
+    def test_series_differing_only_in_case_collapse_to_the_catalog_spelling(self, clean_db):
+        clean_db.upsert_catalog_series(
+            [{"series": "Zenless Zone Zero", "listed": 1, "total": 1}], scraped_at="x"
+        )
+        seed_catalog(clean_db, [_catalog_row("A", "zenless zone zero", "1")])
+        assert clean_db.suggest_series("zenless") == ["Zenless Zone Zero"]
+
+
+class TestFindCharacter:
+    def test_prefers_the_working_row(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Saber", "Fate/stay night", "4")])
+        clean_db.add_character("Saber", "Edited", "1", "local.png")
+        found = clean_db.find_character("Saber")
+        assert found["series"] == "Edited"
+        assert found["in_library"] is True
+
+    def test_falls_back_to_the_catalog(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Artoria Pendragon", "Fate/stay night", "4")])
+        found = clean_db.find_character("Artoria Pendragon")
+        assert found["in_library"] is False
+        assert found["image"].startswith("https://mudae.net/")
+
+    def test_matches_accented_spellings_by_key(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Hange Zoe\u0308", "AOT", "42")])
+        assert clean_db.find_character("Hange Zoë")["series"] == "AOT"
+
+    def test_unknown_is_none(self, clean_db):
+        assert clean_db.find_character("Nobody Here") is None
+
+
+class TestCatalogRoutes:
+    def _seed(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Artoria Pendragon", "Fate/stay night", "4"),
+                _catalog_row("Rem", "Re:Zero", "3"),
+            ],
+        )
+
+    def test_suggestions_endpoint(self, client, clean_db):
+        self._seed(clean_db)
+        body = client.get("/api/catalog/characters?q=art").get_json()
+        assert body["items"][0]["name"] == "Artoria Pendragon"
+        assert body["items"][0]["series"] == "Fate/stay night"
+
+    def test_series_endpoint(self, client, clean_db):
+        self._seed(clean_db)
+        body = client.get("/api/catalog/series").get_json()
+        assert set(body["items"]) >= {"Fate/stay night", "Re:Zero"}
+
+    def test_character_lookup_found_and_missing(self, client, clean_db):
+        self._seed(clean_db)
+        found = client.get("/api/catalog/character?name=Rem").get_json()
+        assert found["found"] is True
+        assert found["character"]["series"] == "Re:Zero"
+        missing = client.get("/api/catalog/character?name=Nobody").get_json()
+        assert missing == {"found": False, "character": None}
+
+    def test_add_from_catalog_uses_the_mudae_portrait(self, client, clean_db):
+        self._seed(clean_db)
+        res = client.post("/api/catalog/add-character", json={"name": "Rem"})
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body["success"] is True
+        assert body["source"] == "catalog"
+        row = clean_db.get_connection().execute(
+            "SELECT series, rank, main_image_url FROM characters WHERE name = 'Rem'"
+        ).fetchone()
+        assert row["series"] == "Re:Zero"
+        assert row["main_image_url"].startswith("https://mudae.net/")
+
+    def test_add_from_catalog_rejects_a_known_working_character(self, client, clean_db):
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        self._seed(clean_db)
+        res = client.post("/api/catalog/add-character", json={"name": "Rem"})
+        assert res.status_code == 400
+        assert "already exists" in res.get_json()["error"]
+
+    def test_add_from_catalog_rejects_an_unknown_name(self, client, clean_db):
+        self._seed(clean_db)
+        res = client.post("/api/catalog/add-character", json={"name": "Nobody"})
+        assert res.status_code == 404
+
+
+class TestManualAdd:
+    """The manual form can carry a catalog portrait and refuses duplicates."""
+
+    def _seed(self, clean_db):
+        clean_db.add_character("Seed", "Some Series", "1", "")
+
+    def test_accepts_a_mudae_portrait_url(self, client, clean_db):
+        self._seed(clean_db)
+        res = client.post(
+            "/api/add-character",
+            data={
+                "name": "Newcomer",
+                "series": "Some Series",
+                "rank": "500",
+                "image_url": "https://mudae.net/uploads/1/a~b.png",
+            },
+        )
+        assert res.status_code == 200
+        row = clean_db.get_connection().execute(
+            "SELECT main_image_url FROM characters WHERE name = 'Newcomer'"
+        ).fetchone()
+        assert row["main_image_url"] == "https://mudae.net/uploads/1/a~b.png"
+
+    def test_refuses_a_portrait_url_from_an_unexpected_host(self, client, clean_db):
+        self._seed(clean_db)
+        res = client.post(
+            "/api/add-character",
+            data={"name": "Newcomer", "image_url": "https://evil.example/x.png"},
+        )
+        assert res.status_code == 400
+
+    def test_a_name_already_in_the_library_is_refused_case_insensitively(self, client, clean_db):
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        res = client.post("/api/add-character", data={"name": "rem", "series": "Re:Zero"})
+        assert res.status_code == 400
+        assert "already exists" in res.get_json()["error"]

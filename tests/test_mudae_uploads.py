@@ -13,6 +13,7 @@ and what is asserted is the wiring between them.
 import pytest
 from PIL import Image
 
+import mudae_discord
 from imgchest_utils import ImgChestError
 from routes import mudae as mudae_routes
 
@@ -66,3 +67,49 @@ class TestUploadRemoteImage:
         with pytest.raises(ImgChestError):
             mudae_routes._upload_remote_image_to_imgchest("https://x/y.png", "Rei")
         assert not card.exists()
+
+
+class TestPersistMudaeCharacterImage:
+    """A card from $im must keep Mudae's host, not be re-hosted needlessly."""
+
+    def test_a_mudae_portrait_is_stored_without_an_upload(self, clean_db, monkeypatch):
+        clean_db.add_character("Seed", "S", "1", "")
+        uploads = []
+        monkeypatch.setattr(
+            mudae_routes,
+            "_upload_remote_image_to_imgchest",
+            lambda url, name: uploads.append(url) or "https://cdn.imgchest.com/x.png",
+        )
+        info = mudae_discord.CharacterInfo(
+            name="Rem",
+            series="Re:Zero",
+            rank="3",
+            image_url="https://mudae.net/uploads/1/x.png",
+        )
+
+        action, image_url = mudae_routes._persist_mudae_character(info)
+
+        assert action == "added"
+        assert image_url == "https://mudae.net/uploads/1/x.png"
+        assert uploads == []
+        row = next(c for c in clean_db.get_characters() if c["name"] == "Rem")
+        assert row["image"] == "https://mudae.net/uploads/1/x.png"
+
+    def test_a_non_portrait_host_is_re_hosted(self, clean_db, monkeypatch):
+        clean_db.add_character("Seed", "S", "1", "")
+        monkeypatch.setattr(
+            mudae_routes,
+            "_upload_remote_image_to_imgchest",
+            lambda url, name: "https://cdn.imgchest.com/x.png",
+        )
+        info = mudae_discord.CharacterInfo(
+            name="Rem",
+            series="Re:Zero",
+            rank="3",
+            image_url="https://cdn.discordapp.com/attachments/1/x.png",
+        )
+
+        action, image_url = mudae_routes._persist_mudae_character(info)
+
+        assert action == "added"
+        assert image_url == "https://cdn.imgchest.com/x.png"

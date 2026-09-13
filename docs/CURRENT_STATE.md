@@ -361,12 +361,11 @@ limited per identity (`ratelimit.py`).
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/mudae/add-series` | Bulk-add characters from a series via $ima then $im each. |
-| POST | `/api/mudae/cancel-series` | Request stop of an in-progress bulk series import (checked between characters). |
 | POST | `/api/mudae/lookup-character` | Lookup a character via Mudae $im. |
-| POST | `/api/mudae/lookup-series` | Resolve a series name via Mudae $ima. |
 | GET | `/api/mudae/proxy-image` | Proxy a remote character image for browser preview (Discord CDN often blocks hotlinking). |
 | POST | `/api/mudae/refresh-main-image` | Fetch character card image from Mudae $im and set as main image. |
+| POST | `/api/mudae/series-extract` | Fetch a whole series via one `$imartsmi-` DM and preview it (new vs. changed) without saving. |
+| POST | `/api/mudae/series-extract/apply` | Create and refresh working characters from a reviewed series extract; only fields that differ are written. |
 | GET | `/api/mudae/status` | — |
 
 **`spa`**

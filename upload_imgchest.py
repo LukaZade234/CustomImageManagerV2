@@ -46,6 +46,7 @@ import logs
 import thumbnails
 from imgchest_utils import upload_to_imgchest
 from routes.auth import auth_bp
+from routes.catalog import catalog_bp
 from routes.characters import characters_bp
 from routes.customs import customs_bp
 from routes.media import media_bp
@@ -100,6 +101,7 @@ app.after_request(identity.persist_identity)
 # Blueprints. Each owns a subject, not a URL prefix -- paths are unchanged from
 # when every route was declared here with @app.route.
 app.register_blueprint(auth_bp)
+app.register_blueprint(catalog_bp)
 app.register_blueprint(characters_bp)
 app.register_blueprint(customs_bp)
 app.register_blueprint(media_bp)

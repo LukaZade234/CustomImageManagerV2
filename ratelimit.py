@@ -69,6 +69,9 @@ RATE_LIMITS = {
     "settings": _limits_from_env("settings", [(30, 60), (200, 3600)]),
     # Recording a page view is one small upsert, and browsing quickly is normal.
     "view": _limits_from_env("view", [(120, 60), (1000, 3600)]),
+    # Catalog suggestions are debounced DB reads; the ceiling is only so the
+    # endpoint is not an unbounded loop.
+    "suggest": _limits_from_env("suggest", [(120, 60), (1500, 3600)]),
 }
 
 
