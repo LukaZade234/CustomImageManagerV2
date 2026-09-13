@@ -1093,6 +1093,93 @@ body.reorder-touch-dragging {
   justify-content: flex-start;
   margin-top: var(--space-6);
 }
+/* ---- Add page: workbench layout -----------------------------------------
+ * Lookup leads in the wide column and manual add sits beside it; below the
+ * tablet breakpoint the columns stack and the divider turns vertical to
+ * horizontal. The card keeps its own --pad-lg rhythm.
+ */
+.add-layout--workbench > .page-title {
+  margin-bottom: var(--space-8);
+}
+.add-layout--workbench .add-layout__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-10);
+}
+.add-layout--workbench .mudae-panel,
+.add-layout--workbench .add-char-panel {
+  max-width: none;
+  margin: 0;
+}
+.add-layout--workbench .add-layout__columns > .add-char-panel {
+  border-left: 1px solid var(--border);
+  padding-left: var(--space-10);
+}
+@media (max-width: 960px) {
+  .add-layout--workbench .add-layout__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .add-layout--workbench .add-layout__columns > .add-char-panel {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-8);
+  }
+}
+/* ---- Add page: type ramp -------------------------------------------------
+ * One deliberate role scale: a larger display title, a clear step down to the
+ * section headings, and a single sentence-case label voice shared by both
+ * panels. Display tracking is negative; label tracking is neutral.
+ */
+.add-type--ramp > .page-title {
+  font-size: var(--type-page-title);
+  letter-spacing: var(--tracking-display);
+  margin-bottom: var(--space-8);
+}
+.add-type--ramp .section-heading {
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-3);
+}
+.add-type--ramp .edit-group > label:not(.file-upload-box),
+.add-type--ramp .ui-field__label {
+  font-size: var(--type-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
+  color: var(--text-muted);
+}
+.add-type--ramp .mudae-note,
+.add-type--ramp .mudae-preview__hint,
+.add-type--ramp .ui-field__hint,
+.add-type--ramp .file-upload-hint {
+  font-size: var(--type-micro);
+  line-height: var(--line-body);
+  color: var(--text-subtle);
+}
+/* ---- Add page: manual form spacing --------------------------------------
+ * The manual form mixes the Field primitive with the older .edit-group markup,
+ * and the two spaced labels differently: a 4px flex gap beside an 8px label
+ * margin, with no gap at all between the fields. Both now use the Field
+ * primitive, so one rule owns the label-to-control gap and the form owns the
+ * gap between field blocks.
+ */
+.add-char-form.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.add-char-form.field-stack > .ui-field {
+  gap: var(--space-1);
+}
+.add-char-form.field-stack > .edit-actions {
+  margin-top: 0;
+}
+.add-char-form.field-stack .form-error {
+  margin-top: var(--space-1);
+}
 .char-mudae-actions {
   display: flex;
   flex-wrap: wrap;
