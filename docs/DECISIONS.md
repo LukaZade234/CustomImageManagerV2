@@ -532,9 +532,8 @@ the whole job in one command: Mudae DMs the account the full roster with claim r
 `mudae.net` portrait URLs, split across as many messages as the list needs. The flow is now fetch,
 review, apply:
 
-- **Fetch** runs `$ima` once to resolve the exact series label (and offer candidates when the name
-  is ambiguous), then one `$imartsmi-` call. The DM parts are collected until the header's total is
-  reached or the messages stop arriving.
+- **Fetch** runs one `$imartsmi-` call; `$ima` is never sent. The DM parts are collected until the
+  header's total is reached or the messages stop arriving.
 - **Review** shows the roster split into "not in the library" and "already in the library", with the
   fields applying would change. Nothing is written yet.
 - **Apply** creates the missing characters and updates the existing ones. It writes only the fields

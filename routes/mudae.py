@@ -194,33 +194,6 @@ def mudae_lookup_character():
         ), 500
 
 
-@mudae_bp.route("/api/mudae/lookup-series", methods=["POST"])
-@rate_limited("mudae")
-def mudae_lookup_series():
-    """
-    Resolve a series name via Mudae $ima.
-    Body: { series }
-    Returns { type: 'series', series_label } or { type: 'candidates', candidate_matches }.
-    """
-    data = request.get_json(silent=True) or {}
-    series = str(data.get("series") or "").strip()
-    if not series:
-        return jsonify({"error": "Series is required"}), 400
-    if len(series) > MAX_SERIES_LENGTH:
-        return jsonify({"error": f"Series too long (max {MAX_SERIES_LENGTH} characters)"}), 400
-
-    try:
-        result = mudae_discord.lookup_series(series)
-        return jsonify(result.to_dict())
-    except MudaeError as e:
-        return jsonify({"error": str(e)}), 503
-    except Exception:
-        log.exception("mudae.lookup_series_failed")
-        return jsonify(
-            {"error": "Something went wrong during Mudae series lookup. Try again in a moment."}
-        ), 500
-
-
 @mudae_bp.route("/api/mudae/series-extract", methods=["POST"])
 @rate_limited("mudae")
 def mudae_series_extract():

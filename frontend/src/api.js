@@ -264,12 +264,6 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, add }),
     }),
-  mudaeLookupSeries: (series) =>
-    api('/api/mudae/lookup-series', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ series }),
-    }),
   mudaeSeriesExtract: (series) =>
     api('/api/mudae/series-extract', {
       method: 'POST',

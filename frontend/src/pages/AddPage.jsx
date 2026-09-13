@@ -55,8 +55,6 @@ export default function AddPage() {
   const [mudaePreview, setMudaePreview] = useState(null)
   const [mudaeCandidates, setMudaeCandidates] = useState([])
   const [seriesBulkName, setSeriesBulkName] = useState('')
-  const [seriesCandidates, setSeriesCandidates] = useState([])
-  const [seriesResolving, setSeriesResolving] = useState(false)
   const [seriesBusy, setSeriesBusy] = useState(false)
   const [seriesPreview, setSeriesPreview] = useState(null)
   const [seriesApplying, setSeriesApplying] = useState(false)
@@ -339,43 +337,14 @@ export default function AddPage() {
     e.preventDefault()
     const s = seriesBulkName.trim()
     if (!s) return
-    setSeriesCandidates([])
-    setSeriesResolving(true)
-    setSeriesPreview(null)
-    setSeriesApplyResult(null)
-    let importName = null
-    try {
-      // $ima resolves the exact label (and offers candidates when ambiguous);
-      // the extract itself is one $imartsmi- call for the whole series.
-      const resolved = await apiClient.mudaeLookupSeries(s)
-      if (resolved.type === 'candidates') {
-        const matches = mudaeCandidatesFromResponse(resolved)
-        if (!matches.length) {
-          addToast('Mudae returned matches but none could be parsed', 'error')
-          return
-        }
-        setSeriesCandidates(matches)
-        addToast(`Multiple series matches — pick one (${matches.length})`, 'info')
-        return
-      }
-      importName = resolved.series_label || s
-      setSeriesBulkName(importName)
-    } catch (err) {
-      addToast(err.message, 'error')
-      setSeriesApplyResult({ error: err.message })
-    } finally {
-      setSeriesResolving(false)
-    }
-    if (importName) {
-      await fetchSeriesPreview(importName)
-    }
+    // One $imartsmi- call for the whole series. $ima is never sent.
+    await fetchSeriesPreview(s)
   }
 
   const fetchSeriesPreview = async (seriesName) => {
     const s = (seriesName || seriesBulkName).trim()
     if (!s) return
     setSeriesBusy(true)
-    setSeriesCandidates([])
     setSeriesPreview(null)
     setSeriesApplyResult(null)
     addToast(`Fetching "${s}" from Mudae — this can take a moment…`, 'info')
@@ -393,12 +362,6 @@ export default function AddPage() {
     } finally {
       setSeriesBusy(false)
     }
-  }
-
-  const handlePickSeriesCandidate = (name) => {
-    setSeriesBulkName(name)
-    setSeriesCandidates([])
-    fetchSeriesPreview(name)
   }
 
   const handleApplySeries = async () => {
@@ -528,37 +491,20 @@ export default function AddPage() {
                     value={seriesBulkName}
                     onChange={(e) => setSeriesBulkName(e.target.value)}
                     suggestions={bulkSeriesSuggestions}
-                    disabled={seriesBusy || seriesResolving}
+                    disabled={seriesBusy}
                   />
                   <Button
                     variant="primary"
                     type="submit"
-                    disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}
+                    disabled={seriesBusy || !seriesBulkName.trim()}
                   >
-                    {seriesResolving ? 'Checking…' : seriesBusy ? 'Fetching…' : 'Fetch series'}
+                    {seriesBusy ? 'Fetching…' : 'Fetch series'}
                   </Button>
                 </div>
                 <p className="mudae-preview__hint">
                   Runs <code>$imartsmi-</code> once for the whole series. You review what will be
                   added and updated before anything is saved.
                 </p>
-                {seriesCandidates.length > 0 && (
-                  <div className="mudae-candidates">
-                    <div className="mudae-candidates__label">Pick a series:</div>
-                    <div className="mudae-chips">
-                      {seriesCandidates.map((c) => (
-                        <Button
-                          variant="secondary"
-                          key={`${c.name}-${c.label}`}
-                          disabled={seriesBusy || seriesResolving}
-                          onClick={() => handlePickSeriesCandidate(c.name)}
-                        >
-                          {c.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </form>
 

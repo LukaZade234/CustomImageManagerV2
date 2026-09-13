@@ -362,7 +362,6 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/mudae/lookup-character` | Lookup a character via Mudae $im. |
-| POST | `/api/mudae/lookup-series` | Resolve a series name via Mudae $ima. |
 | GET | `/api/mudae/proxy-image` | Proxy a remote character image for browser preview (Discord CDN often blocks hotlinking). |
 | POST | `/api/mudae/refresh-main-image` | Fetch character card image from Mudae $im and set as main image. |
 | POST | `/api/mudae/series-extract` | Fetch a whole series via one `$imartsmi-` DM and preview it (new vs. changed) without saving. |

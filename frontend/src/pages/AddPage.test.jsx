@@ -17,7 +17,6 @@ const api = vi.hoisted(() => ({
   findCatalogCharacter: vi.fn(),
   catalogAddCharacter: vi.fn(),
   mudaeLookupCharacter: vi.fn(),
-  mudaeLookupSeries: vi.fn(),
   mudaeSeriesExtract: vi.fn(),
   mudaeSeriesExtractApply: vi.fn(),
   addCharacter: vi.fn(),
@@ -353,10 +352,6 @@ describe('AddPage catalog integration', () => {
   it('fetches a series, previews new vs existing, then applies it', async () => {
     const user = userEvent.setup()
     api.mudaeStatus.mockResolvedValue({ configured: true })
-    api.mudaeLookupSeries.mockResolvedValue({
-      type: 'series',
-      series_label: 'Lord of the Mysteries',
-    })
     api.mudaeSeriesExtract.mockResolvedValue({
       series: 'Lord of the Mysteries',
       total: 3,
@@ -400,7 +395,7 @@ describe('AddPage catalog integration', () => {
     await user.type(await screen.findByLabelText('Bulk-add series'), 'Lord of the Mysteries')
     await user.click(screen.getByRole('button', { name: 'Fetch series' }))
 
-    expect(api.mudaeLookupSeries).toHaveBeenCalledWith('Lord of the Mysteries')
+    expect(api.mudaeSeriesExtract).toHaveBeenCalledWith('Lord of the Mysteries')
     expect(await screen.findByText('Not in the library (2)')).toBeInTheDocument()
     expect(screen.getByText('Already in the library (1)')).toBeInTheDocument()
     expect(screen.getByText('updates series, rank, image')).toBeInTheDocument()
@@ -413,24 +408,5 @@ describe('AddPage catalog integration', () => {
     expect(items).toHaveLength(3)
     expect(items[0]).toMatchObject({ name: 'Klein Moretti', rank: '4252' })
     expect(api.getCharacters).toHaveBeenCalled()
-  })
-
-  it('offers series candidates when the name is ambiguous', async () => {
-    const user = userEvent.setup()
-    api.mudaeStatus.mockResolvedValue({ configured: true })
-    api.mudaeLookupSeries.mockResolvedValue({
-      type: 'candidates',
-      candidate_matches: [
-        { name: 'Re:Zero', series: '', label: 'Re:Zero - 12' },
-        { name: 'Re:Zero kara Hajimeru', series: '', label: 'Re:Zero kara Hajimeru - 30' },
-      ],
-    })
-    renderPage()
-
-    await user.type(await screen.findByLabelText('Bulk-add series'), 'Re:Zero')
-    await user.click(screen.getByRole('button', { name: 'Fetch series' }))
-
-    expect(await screen.findByText('Pick a series:')).toBeInTheDocument()
-    expect(api.mudaeSeriesExtract).not.toHaveBeenCalled()
   })
 })

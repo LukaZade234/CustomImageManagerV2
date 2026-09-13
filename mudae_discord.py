@@ -8,7 +8,6 @@ violates Discord ToS — use a dedicated alt only.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 import re
 import threading
@@ -18,7 +17,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import discord
-from discord.components import Button
 
 import logs
 
@@ -28,14 +26,7 @@ log = logs.get(__name__)
 _DEFAULT_MUDAE_ID = 432610292342587392
 
 REPLY_TIMEOUT_S = 25.0
-ACTION_DELAY_S = 1.0  # pause before Discord actions outside bulk $im pacing
-POST_IMA_TO_IM_DELAY_S = 1.0  # gap after $ima before the first $im
-IM_INTERVAL_S = 1.0  # target min gap between $im sends when lookup + persist succeed
-IM_RETRY_DELAY_S = 2.5  # longer wait before retrying a failed lookup or persist
-IMA_PAGE_DELAY_S = 2.2
-MAX_IMA_PAGES = 40
-CHARACTER_LOOKUP_RETRIES = 2  # 3 attempts total per character
-IMA_REACTION_WAIT_S = 10.0
+ACTION_DELAY_S = 1.0  # pause before Discord actions
 
 # `$imartsmi-` answers by DM, split across as many messages as the list needs.
 # The first part arrives after the command is sent; the rest follow immediately,
@@ -50,26 +41,6 @@ class MudaeError(Exception):
 
 class MudaeCancelled(MudaeError):
     """Raised when a bulk series import is stopped by the user."""
-
-
-class MudaeAmbiguousSeries(MudaeError):
-    """$ima returned multiple series options instead of a character list."""
-
-    def __init__(self, query: str, candidate_matches: list[CandidateMatch]) -> None:
-        self.query = query
-        self.candidate_matches = candidate_matches
-        labels = [m.label for m in candidate_matches[:20]]
-        suffix = f" (+{len(candidate_matches) - 20} more)" if len(candidate_matches) > 20 else ""
-        super().__init__("Ambiguous series name; pick one: " + ", ".join(labels) + suffix)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": "candidates",
-            "query": self.query,
-            "error": str(self),
-            "candidate_matches": [m.to_dict() for m in self.candidate_matches],
-            "candidates": [m.name for m in self.candidate_matches],
-        }
 
 
 @dataclass
@@ -119,35 +90,8 @@ class LookupResult:
         return d
 
 
-@dataclass
-class SeriesLookupResult:
-    """Result of $ima: a series character list, or ambiguous series names."""
-
-    type: str  # 'series' | 'candidates'
-    series_label: str = ""
-    query: str = ""
-    candidate_matches: list[CandidateMatch] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"type": self.type, "query": self.query}
-        if self.type == "series":
-            d["series_label"] = self.series_label
-        if self.candidate_matches:
-            d["candidate_matches"] = [m.to_dict() for m in self.candidate_matches]
-            d["candidates"] = [m.name for m in self.candidate_matches]
-        return d
-
-
 _lock = threading.Lock()
 _series_cancel = threading.Event()
-
-
-def clear_series_cancel() -> None:
-    _series_cancel.clear()
-
-
-def request_series_cancel() -> None:
-    _series_cancel.set()
 
 
 def is_series_cancelled() -> bool:
@@ -166,75 +110,6 @@ async def _cancellable_sleep(seconds: float) -> None:
     while time.monotonic() < deadline:
         _raise_if_series_cancelled()
         await asyncio.sleep(min(0.25, deadline - time.monotonic()))
-
-
-class _ImPacer:
-    """Enforce a minimum interval between successful $im + persist cycles."""
-
-    __slots__ = ("interval", "_last_done")
-
-    def __init__(self, interval: float = IM_INTERVAL_S) -> None:
-        self.interval = interval
-        self._last_done: float | None = None
-
-    async def before_next(self) -> None:
-        if self._last_done is None:
-            return
-        remaining = self.interval - (time.monotonic() - self._last_done)
-        if remaining > 0:
-            await _cancellable_sleep(remaining)
-
-    def mark_done(self) -> None:
-        self._last_done = time.monotonic()
-
-
-# Unicode arrows the bot may have added by mistake — not Mudae's nav buttons.
-_NAV_ARROW_EMOJI = frozenset({"➡️", "▶️", "▶", "⏩", "⬅️", "◀️", "◀", "⏪"})
-
-
-def _mudae_nav_buttons(msg: discord.Message) -> list[Button]:
-    """Mudae $ima nav as message component buttons (1st = prev, 2nd = next)."""
-    out: list[Button] = []
-    for row in getattr(msg, "components", []) or []:
-        for child in getattr(row, "children", []) or []:
-            if isinstance(child, Button):
-                out.append(child)
-    return out
-
-
-def _mudae_nav_reactions(msg: discord.Message) -> list:
-    """Mudae $ima nav buttons are custom emojis on the message (1st = prev, 2nd = next)."""
-    out: list = []
-    for reaction in msg.reactions:
-        if isinstance(reaction.emoji, str):
-            continue
-        if not reaction.is_custom_emoji():
-            continue
-        emoji_str = str(reaction.emoji)
-        if emoji_str in _NAV_ARROW_EMOJI:
-            continue
-        out.append(reaction)
-
-    out.sort(key=lambda r: int(getattr(r.emoji, "id", 0) or 0))
-    return out
-
-
-def _mudae_nav_ready(msg: discord.Message, min_count: int = 2) -> bool:
-    return len(_mudae_nav_buttons(msg)) >= min_count or len(_mudae_nav_reactions(msg)) >= min_count
-
-
-def _embed_marker(embed: discord.Embed) -> str:
-    return (embed.description or "") + "|" + (embed.footer.text if embed.footer else "")
-
-
-def _ima_embed_changed(msg: discord.Message, prev_marker: str, prev_page_idx: int) -> bool:
-    if not msg.embeds:
-        return False
-    embed = msg.embeds[0]
-    if _embed_marker(embed) != prev_marker:
-        return True
-    page = _footer_page_info(embed)
-    return page is not None and page[0] != prev_page_idx
 
 
 def _log_mudae_error(context: str, exc: Exception) -> None:
@@ -524,15 +399,6 @@ def parse_im_message(msg: discord.Message) -> LookupResult:
     return parse_im_embed(_TextEmbed(text))
 
 
-def _ima_reply_embed(msg: discord.Message, fallback: str):
-    if msg.embeds:
-        return msg.embeds[0]
-    text = (msg.content or "").strip()
-    if not text:
-        raise MudaeError("Mudae $ima reply had no content")
-    return _TextEmbed(text)
-
-
 def _dm_body(msg: discord.Message) -> str:
     """The text of one DM part: message content, else the first embed's body."""
     text = (msg.content or "").strip()
@@ -561,60 +427,12 @@ def _ima_text_ready(text: str) -> bool:
     return len(lines) >= 2
 
 
-def parse_ima_series_reply(embed, series: str) -> SeriesLookupResult:
-    """Parse $ima embed or plain-text body into series resolution or candidates."""
-    series = (series or "").strip()
-    if _is_ima_ambiguous_series_embed(embed):
-        candidates = _parse_ima_series_candidates(embed)
-        if candidates:
-            return SeriesLookupResult(type="candidates", query=series, candidate_matches=candidates)
-        raise MudaeError("Mudae returned multiple series matches but they could not be parsed")
-
-    series_label = _ima_series_label_from_embed(embed, series)
-    page_info = _footer_page_info(embed)
-    first_page = _is_first_ima_page(page_info)
-    names = parse_ima_names(
-        embed,
-        series_hint=series,
-        series_label=series_label,
-        first_page=first_page,
-    )
-    if names and _looks_like_ima_character_list(embed, names):
-        return SeriesLookupResult(
-            type="series",
-            series_label=clean_series_label(series_label),
-            query=series,
-        )
-    candidates = _parse_ima_series_candidates(embed)
-    if candidates:
-        return SeriesLookupResult(type="candidates", query=series, candidate_matches=candidates)
-    if names:
-        return SeriesLookupResult(
-            type="series",
-            series_label=clean_series_label(series_label),
-            query=series,
-        )
-    raise MudaeError("Could not parse Mudae $ima reply")
-
-
-def parse_ima_message(msg: discord.Message, series: str) -> SeriesLookupResult:
-    embed = _ima_reply_embed(msg, series)
-    return parse_ima_series_reply(embed, series)
-
-
 def _is_blank_ima_line(raw: str) -> bool:
     if raw is None:
         return True
     if not raw.strip():
         return True
     return not _strip_md(raw)
-
-
-def _is_first_ima_page(page_info: tuple[int, int] | None) -> bool:
-    """Mudae uses 0- or 1-based page indexes depending on series."""
-    if page_info is None:
-        return True
-    return page_info[0] <= 1
 
 
 def _is_obvious_character_name(line: str) -> bool:
@@ -796,14 +614,6 @@ def parse_ima_names(
     return out
 
 
-def _ima_series_label_from_embed(embed: discord.Embed, fallback: str) -> str:
-    return (
-        _strip_md(embed.author.name if embed.author and embed.author.name else "")
-        or _strip_md(embed.title or "")
-        or fallback
-    )
-
-
 def _parse_ima_series_candidates(embed: discord.Embed) -> list[CandidateMatch]:
     """Parse ambiguous $ima series list (multiple series names, not characters)."""
     matches: list[CandidateMatch] = []
@@ -831,16 +641,6 @@ def _parse_ima_series_candidates(embed: discord.Embed) -> list[CandidateMatch]:
         seen.add(key)
         matches.append(CandidateMatch(name=name, series=extra))
     return matches
-
-
-def _looks_like_ima_character_list(embed: discord.Embed, names: list[str]) -> bool:
-    if _is_ima_ambiguous_series_embed(embed):
-        return False
-    if _footer_page_info(embed) is not None:
-        return True
-    if _is_character_card(embed):
-        return True
-    return bool(names)
 
 
 def _is_ima_ambiguous_series_embed(embed: discord.Embed) -> bool:
@@ -893,8 +693,6 @@ class _MudaeSession:
         self._pending: asyncio.Future[discord.Message] | None = None
         self._start_task: asyncio.Task | None = None
         self._expect_message_id: int | None = None
-        self._watch_reactions_msg_id: int | None = None
-        self._reaction_notify: asyncio.Event | None = None
         self._reply_not_before: float | None = None
         # `$imartsmi-` collects the series list from DMs, not the channel.
         self._dm_parts: list[str] = []
@@ -953,168 +751,6 @@ class _MudaeSession:
         except Exception:
             return msg
 
-    async def _wait_for_nav_controls(
-        self,
-        msg: discord.Message,
-        *,
-        min_count: int = 2,
-        timeout: float = IMA_REACTION_WAIT_S,
-    ) -> discord.Message:
-        """Wait until Mudae adds component buttons or custom-emoji reactions."""
-        self._watch_reactions_msg_id = msg.id
-        self._reaction_notify = asyncio.Event()
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            _raise_if_series_cancelled()
-            msg = await self._refresh_message(msg)
-            if _mudae_nav_ready(msg, min_count):
-                return msg
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            try:
-                await asyncio.wait_for(self._reaction_notify.wait(), timeout=min(0.4, remaining))
-            except TimeoutError:
-                pass
-            if self._reaction_notify:
-                self._reaction_notify.clear()
-        return msg
-
-    async def _try_click_button(self, button: Button) -> bool:
-        try:
-            await button.click()
-            label = button.label or button.emoji or button.custom_id
-            log.debug("mudae.button_clicked", label=label, message_id=button.message.id)
-            return True
-        except Exception as exc:
-            log.warning("mudae.button_click_failed", error=f"{type(exc).__name__}: {exc}")
-            return False
-
-    async def _try_click_reaction(self, msg: discord.Message, reaction: discord.Reaction) -> bool:
-        me = self._client.user if self._client else None
-        try:
-            if reaction.me and me is not None:
-                await msg.remove_reaction(reaction.emoji, me)
-                await _cancellable_sleep(0.15)
-        except Exception as exc:
-            log.debug("mudae.remove_reaction_failed", emoji=str(reaction.emoji), error=str(exc))
-        try:
-            await msg.add_reaction(reaction)
-            log.debug("mudae.reaction_added", emoji=str(reaction.emoji), message_id=msg.id)
-            return True
-        except Exception as exc:
-            log.warning(
-                "mudae.add_reaction_failed",
-                emoji=str(reaction.emoji),
-                error=f"{type(exc).__name__}: {exc}",
-            )
-            return False
-
-    async def _click_mudae_page(self, msg: discord.Message, direction: str = "next") -> bool:
-        """Click Mudae nav control (component button preferred, else reaction)."""
-        msg = await self._refresh_message(msg)
-        buttons = _mudae_nav_buttons(msg)
-        if len(buttons) >= 2:
-            idx = 0 if direction == "prev" else 1
-            return await self._try_click_button(buttons[idx])
-        reactions = _mudae_nav_reactions(msg)
-        idx = 0 if direction == "prev" else 1
-        if len(reactions) <= idx:
-            return False
-        return await self._try_click_reaction(msg, reactions[idx])
-
-    async def _wait_for_ima_embed_update(
-        self,
-        msg: discord.Message,
-        prev_marker: str,
-        prev_page_idx: int,
-        timeout: float = REPLY_TIMEOUT_S,
-    ) -> discord.Message | None:
-        """Wait for Mudae to edit the $ima embed after a nav click."""
-        deadline = time.monotonic() + timeout
-        loop = asyncio.get_running_loop()
-        self._expect_message_id = msg.id
-        self._pending = loop.create_future()
-
-        async def _poll_for_edit() -> None:
-            while not self._pending.done() and time.monotonic() < deadline:
-                await asyncio.sleep(0.35)
-                if self._pending.done():
-                    return
-                try:
-                    fresh = await self._refresh_message(msg)
-                    if _ima_embed_changed(fresh, prev_marker, prev_page_idx):
-                        if not self._pending.done():
-                            self._pending.set_result(fresh)
-                        return
-                except Exception:
-                    pass
-
-        poll_task = asyncio.create_task(_poll_for_edit())
-        try:
-            remaining = max(0.1, deadline - time.monotonic())
-            return await asyncio.wait_for(self._pending, timeout=remaining)
-        except TimeoutError:
-            return None
-        finally:
-            poll_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await poll_task
-            self._expect_message_id = None
-            self._pending = None
-
-    async def _advance_ima_page(
-        self,
-        msg: discord.Message,
-        embed: discord.Embed,
-        page_info: tuple[int, int],
-    ) -> tuple[discord.Message, discord.Embed] | None:
-        """Click nav buttons/reactions until the $ima embed page changes."""
-        prev_page_idx = page_info[0]
-        prev_marker = _embed_marker(embed)
-
-        msg = await self._wait_for_nav_controls(msg, min_count=2, timeout=IMA_REACTION_WAIT_S)
-        buttons = _mudae_nav_buttons(msg)
-        reactions = _mudae_nav_reactions(msg)
-        use_buttons = len(buttons) >= 2
-
-        if not use_buttons and len(reactions) < 2:
-            log.warning(
-                "mudae.pagination_unavailable",
-                message_id=msg.id,
-                buttons=len(buttons),
-                reactions=len(reactions),
-            )
-            return None
-
-        controls: list = buttons if use_buttons else reactions
-        mode = "button" if use_buttons else "reaction"
-        try_indices = [1, 0] + [i for i in range(2, len(controls))]
-
-        for idx in try_indices:
-            if idx >= len(controls):
-                continue
-            _raise_if_series_cancelled()
-            target = controls[idx]
-            if mode == "button":
-                clicked = await self._try_click_button(target)
-            else:
-                clicked = await self._try_click_reaction(msg, target)
-            if not clicked:
-                continue
-
-            await _cancellable_sleep(IMA_PAGE_DELAY_S - ACTION_DELAY_S)
-            updated = await self._wait_for_ima_embed_update(msg, prev_marker, prev_page_idx)
-            if updated is None or not updated.embeds:
-                continue
-
-            new_embed = updated.embeds[0]
-            if _ima_embed_changed(updated, prev_marker, prev_page_idx):
-                return updated, new_embed
-
-        log.warning("mudae.pagination_stalled", message_id=msg.id, mode=mode)
-        return None
-
     async def __aenter__(self) -> _MudaeSession:
         # discord.py-self 2.1.0 has no Intents — user clients use plain Client().
         client = discord.Client()
@@ -1132,11 +768,6 @@ class _MudaeSession:
         @client.event
         async def on_message_edit(_before: discord.Message, after: discord.Message):
             await self._maybe_capture(after)
-
-        @client.event
-        async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-            if payload.message_id == self._watch_reactions_msg_id and self._reaction_notify:
-                self._reaction_notify.set()
 
         self._start_task = asyncio.create_task(client.start(_token()))
         try:
@@ -1369,94 +1000,6 @@ class _MudaeSession:
         msg = await self._ensure_embed_ready(msg)
         return parse_im_message(msg)
 
-    async def resolve_character(self, name: str, *, fast: bool = False) -> CharacterInfo:
-        """$im until a single character card; may follow first candidate."""
-        pause = not fast
-        result = await self.lookup_im(name, pause_before=pause)
-        if result.type == "character" and result.character:
-            return result.character
-        if result.candidates:
-            if not fast:
-                await self._action_pause()
-            pick = im_lookup_name(result.candidates[0])
-            result = await self.lookup_im(pick, pause_before=pause)
-        if result.type == "character" and result.character:
-            return result.character
-        raise MudaeError("Ambiguous or missing $im card")
-
-    async def lookup_series(self, series: str) -> SeriesLookupResult:
-        """$ima once — resolve an exact series or return ambiguous series options."""
-        series = (series or "").strip()
-        if not series:
-            raise MudaeError("Series name is required")
-        msg = await self.send_and_wait(f"$ima {series}")
-        msg = await self._ensure_embed_ready(msg)
-        return parse_ima_message(msg, series)
-
-    async def list_series_characters(self, series: str) -> tuple[str, list[str]]:
-        series = (series or "").strip()
-        if not series:
-            raise MudaeError("Series name is required")
-        msg = await self.send_and_wait(f"$ima {series}")
-        msg = await self._ensure_embed_ready(msg)
-        has_component_embed = bool(msg.embeds)
-        embed = _ima_reply_embed(msg, series)
-
-        resolved = parse_ima_series_reply(embed, series)
-        if resolved.type == "candidates":
-            raise MudaeAmbiguousSeries(series, resolved.candidate_matches)
-
-        if has_component_embed:
-            msg = await self._wait_for_nav_controls(msg)
-            embed = msg.embeds[0]
-
-        series_label = _ima_series_label_from_embed(embed, series)
-        page_info = _footer_page_info(embed)
-        first_page = _is_first_ima_page(page_info)
-        names = parse_ima_names(
-            embed,
-            series_hint=series,
-            series_label=series_label,
-            first_page=first_page,
-        )
-
-        if not names and not _is_character_card(embed):
-            raise MudaeError("Could not parse characters from $ima reply")
-
-        all_names = list(names)
-        pages_done = 1
-
-        try:
-            while page_info and page_info[0] < page_info[1] and pages_done < MAX_IMA_PAGES:
-                _raise_if_series_cancelled()
-                advanced = await self._advance_ima_page(msg, embed, page_info)
-                if advanced is None:
-                    break
-                msg, embed = advanced
-                more = parse_ima_names(
-                    embed,
-                    series_hint=series,
-                    series_label=series_label,
-                    first_page=False,
-                )
-                existing = {x.casefold() for x in all_names}
-                for n in more:
-                    if n.casefold() not in existing:
-                        all_names.append(n)
-                        existing.add(n.casefold())
-                page_info = _footer_page_info(embed)
-                if page_info is None:
-                    break
-                pages_done += 1
-        except MudaeCancelled:
-            if all_names:
-                return clean_series_label(series_label), all_names
-            raise
-
-        if not all_names:
-            raise MudaeError(f'No characters found for series "{series}"')
-        return clean_series_label(series_label), all_names
-
 
 def _run_async(coro):
     return asyncio.run(coro)
@@ -1478,17 +1021,6 @@ def lookup_character(name: str) -> LookupResult:
         async def _inner():
             async with _MudaeSession() as session:
                 return await session.lookup_im(name)
-
-        return _run_async(_inner())
-
-    return with_discord_lock(_do)
-
-
-def lookup_series(series: str) -> SeriesLookupResult:
-    def _do():
-        async def _inner():
-            async with _MudaeSession() as session:
-                return await session.lookup_series(series)
 
         return _run_async(_inner())
 
@@ -1520,160 +1052,3 @@ def lookup_character_exact(name: str) -> CharacterInfo:
         else "Character not found in Mudae"
     )
 
-
-def list_series_and_lookup(
-    series: str,
-    *,
-    on_character: Callable[[CharacterInfo], None] | None = None,
-    skip_names: set[str] | None = None,
-    max_retries: int = CHARACTER_LOOKUP_RETRIES,
-    on_progress: Callable[[str, dict], None] | None = None,
-) -> dict[str, Any]:
-    """
-    $ima series then $im each character in one Discord session.
-    on_character called for each successful character card (sync callback).
-    on_progress(event, payload) for live UI updates (ima_complete, lookup_start, added, …).
-    """
-    skip = {n.casefold() for n in (skip_names or set())}
-
-    def _emit(event: str, payload: dict) -> None:
-        if on_progress:
-            on_progress(event, payload)
-
-    async def _add_one_with_retries(
-        session: _MudaeSession,
-        char_name: str,
-        *,
-        pacer: _ImPacer | None = None,
-    ) -> CharacterInfo:
-        last_err = "Unknown error"
-        for attempt in range(max_retries + 1):
-            _raise_if_series_cancelled()
-            if attempt > 0:
-                await _cancellable_sleep(IM_RETRY_DELAY_S)
-                _emit("retry", {"name": char_name, "attempt": attempt + 1})
-            elif pacer is not None:
-                await pacer.before_next()
-            try:
-                info = await session.resolve_character(
-                    char_name,
-                    fast=pacer is not None and attempt == 0,
-                )
-                if on_character:
-                    on_character(info)
-                if pacer is not None:
-                    pacer.mark_done()
-                return info
-            except MudaeCancelled:
-                raise
-            except MudaeError as e:
-                last_err = str(e)
-            except Exception as e:
-                _log_mudae_error(f"lookup failed for {char_name!r}", e)
-                last_err = "Could not look up character in Mudae"
-        raise MudaeError(last_err)
-
-    def _do():
-        async def _inner():
-            added: list[dict] = []
-            skipped: list[str] = []
-            failed: list[dict] = []
-            cancelled = False
-            series_label = series
-            names: list[str] = []
-            pacer = _ImPacer(IM_INTERVAL_S)
-            async with _MudaeSession() as session:
-                try:
-                    series_label, names = await session.list_series_characters(series)
-                except MudaeCancelled:
-                    _emit("cancelled", {})
-                    return {
-                        "series": clean_series_label(series_label) if series_label else series,
-                        "total_listed": 0,
-                        "added": added,
-                        "skipped": skipped,
-                        "failed": failed,
-                        "cancelled": True,
-                    }
-                _emit(
-                    "ima_complete",
-                    {
-                        "series": series_label,
-                        "total_listed": len(names),
-                    },
-                )
-                try:
-                    await _cancellable_sleep(POST_IMA_TO_IM_DELAY_S)
-                    _emit("ima_delay_done", {"seconds": POST_IMA_TO_IM_DELAY_S})
-
-                    for char_name in names:
-                        if is_series_cancelled():
-                            cancelled = True
-                            _emit("cancelled", {})
-                            break
-                        if char_name.casefold() in skip:
-                            skipped.append(char_name)
-                            _emit("skipped", {"name": char_name, "reason": "already in database"})
-                            continue
-                        _emit("lookup_start", {"name": char_name})
-                        try:
-                            info = await _add_one_with_retries(session, char_name, pacer=pacer)
-                            added.append(info.to_dict())
-                        except MudaeCancelled:
-                            cancelled = True
-                            _emit("cancelled", {})
-                            break
-                        except MudaeError as e:
-                            err = {"name": char_name, "error": str(e)}
-                            failed.append(err)
-                            _emit("failed", err)
-                        except Exception as e:
-                            err = {"name": char_name, "error": str(e)}
-                            failed.append(err)
-                            _emit("failed", err)
-
-                    if not cancelled and failed:
-                        _emit("retry_pass_start", {"count": len(failed)})
-                        retry_queue = list(failed)
-                        failed = []
-                        await _cancellable_sleep(IM_RETRY_DELAY_S)
-                        for item in retry_queue:
-                            if is_series_cancelled():
-                                cancelled = True
-                                _emit("cancelled", {})
-                                break
-                            char_name = item["name"]
-                            if char_name.casefold() in skip:
-                                continue
-                            _emit("lookup_start", {"name": char_name, "retry": True})
-                            try:
-                                info = await _add_one_with_retries(session, char_name)
-                                added.append(info.to_dict())
-                            except MudaeCancelled:
-                                cancelled = True
-                                _emit("cancelled", {})
-                                break
-                            except MudaeError as e:
-                                err = {"name": char_name, "error": str(e)}
-                                failed.append(err)
-                                _emit("failed", err)
-                            except Exception as e:
-                                err = {"name": char_name, "error": str(e)}
-                                failed.append(err)
-                                _emit("failed", err)
-                except MudaeCancelled:
-                    cancelled = True
-                    _emit("cancelled", {})
-
-            return {
-                "series": series_label,
-                "total_listed": len(names),
-                "added": added,
-                "skipped": skipped,
-                "failed": failed,
-                "cancelled": cancelled,
-            }
-
-        return _run_async(_inner())
-
-    return with_discord_lock(_do)
