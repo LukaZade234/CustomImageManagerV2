@@ -245,7 +245,9 @@ crash.
 **Character:** One family across the whole system, carrying its weight range from 100 to
 900 in a single variable file. Geist is a neutral grotesque with true tabular figures —
 which matters here, because counts sit next to each other in every list and must not
-reflow as they change.
+reflow as they change. Geist is a committed choice, not a system-font fallback, so the
+design detector's generic "overused font" warning is a known false positive on this
+project and is deliberately not acted on.
 
 ### Hierarchy
 
@@ -346,6 +348,19 @@ loses its depth vocabulary.
 
 Dark mode deepens all three rather than reusing the light values, because a shadow tuned
 for white ground disappears on near-black.
+
+One pair of colours sits outside the surface system by necessity: the **overlay
+controls** in the lightbox (`--overlay-scrim`, `--overlay-scrim-hover`,
+`--overlay-border`, `--overlay-fg`). The report button floats over arbitrary artwork,
+where no surface or text token can promise contrast, so the control carries its own
+dark fill, white text and translucent white border. They are tokens like every other
+colour; they simply do not follow the light/dark theme, because the photograph behind
+them does not either.
+
+The layer order is part of the depth vocabulary: `--z-nav` (100) < `--z-dropdown` (200)
+< `--z-lightbox` (250) < `--z-modal` (300) < `--z-toast` (400). The lightbox is a layer
+in that scale rather than a higher hand-picked number, so the report dialog opened from
+it paints above it, as a dialog should.
 
 ### Named Rules
 

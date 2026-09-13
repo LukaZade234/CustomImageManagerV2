@@ -72,6 +72,13 @@ img {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  /* Indeterminate progress is the one thing the blanket kill should not take:
+     a spinner frozen mid-turn reads as a hung app. Slowed, not removed. */
+  .ui-spin,
+  .custom-upload-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: end reduced-motion */
 
@@ -144,6 +151,38 @@ img {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Keyboard bypass. The navbar is the search field, the filter menu and several
+   controls deep, so a keyboard user would tab through all of it on every route
+   before reaching the page. The first focusable element jumps past it and is
+   hidden off the top until focused. */
+.skip-link {
+  position: fixed;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-8)));
+  transition: transform var(--duration) var(--ease);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* The skip link's fragment target. Focus is moved here programmatically and
+   the landmark takes no keyboard interaction, so the ring would only draw a
+   box around the whole page. Interactive elements keep theirs. */
+#main-content:focus {
+  outline: none;
 }
 
 /* ---- Typeface ---------------------------------------------------------

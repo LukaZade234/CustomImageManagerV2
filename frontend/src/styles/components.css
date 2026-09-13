@@ -487,33 +487,7 @@
   background: var(--surface-sunken);
   border-color: var(--border-strong);
 }
-.toast--success /* The toast's own dismiss control. The message takes the slack so this and Undo
-   stay at the trailing edge whatever the text length. */
-.toast-message {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.toast-dismiss {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text-muted);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-}
-.toast-dismiss:hover {
-  background: var(--surface-sunken);
-  color: var(--text);
-}
-.toast-undo {
+.toast--success .toast-undo {
   border-color: color-mix(in srgb, var(--success) 45%, transparent);
   color: var(--success);
 }
@@ -670,7 +644,7 @@
   width: 100%;
   height: 100%;
   background: var(--scrim);
-  z-index: 2000;
+  z-index: var(--z-lightbox);
   display: flex;
   align-items: center;
   justify-content: center;

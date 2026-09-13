@@ -46,7 +46,10 @@
   /* ---- Text -------------------------------------------------------- */
   --text: #1c2029;
   --text-muted: var(--n-600);
-  --text-subtle: var(--n-500);
+  /* Between n-500 and n-600: n-500 is 3.7:1 on white, which is fine for a
+       hairline but not for a 13px hint, placeholder or note. Tuned (with the
+       dark value below) to clear 4.5:1 on both --bg and --surface. */
+  --text-subtle: #5f6877;
   --text-on-accent: #ffffff;
 
   /* ---- Accent ------------------------------------------------------ */
@@ -77,6 +80,13 @@
   --shadow-sm: 0 1px 2px rgb(16 20 28 / 0.06);
   --shadow-overlay: 0 16px 48px -12px rgb(16 20 28 / 0.24);
   --scrim: rgb(16 20 28 / 0.55);
+  /* Controls that sit on arbitrary artwork in the lightbox, where no surface
+     token can promise contrast: the control carries its own dark fill, white
+     text and translucent white border so it reads over any image. */
+  --overlay-scrim: rgb(0 0 0 / 0.55);
+  --overlay-scrim-hover: rgb(0 0 0 / 0.75);
+  --overlay-border: rgb(255 255 255 / 0.35);
+  --overlay-fg: #ffffff;
   /* Not a third elevation: a focus/active ring, drawn as a shadow because an
      outline cannot be tinted. Named so it stops being retyped in three files. */
   --ring: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
@@ -170,6 +180,7 @@
   /* ---- Layers ------------------------------------------------------ */
   --z-nav: 100;
   --z-dropdown: 200;
+  --z-lightbox: 250;
   --z-modal: 300;
   --z-toast: 400;
 
@@ -190,7 +201,7 @@
 
     --text: #e6e9ef;
     --text-muted: var(--n-400);
-    --text-subtle: var(--n-500);
+    --text-subtle: #8b94a3;
 
     --accent: #2fb3c4;
     --accent-hover: #4cc6d6;
@@ -227,7 +238,7 @@
 
   --text: #e6e9ef;
   --text-muted: var(--n-400);
-  --text-subtle: var(--n-500);
+  --text-subtle: #8b94a3;
 
   --accent: #2fb3c4;
   --accent-hover: #4cc6d6;

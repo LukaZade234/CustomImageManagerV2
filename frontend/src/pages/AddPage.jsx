@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
-import { Button, Card } from '../components/ui'
+import { Button, Card, Field, Input } from '../components/ui'
 import { useStore } from '../store/useStore'
 
 /** Discord/CDN images often fail as bare <img src>; preview via backend proxy. */
@@ -559,18 +559,17 @@ export default function AddPage() {
       <div className="edit-form-container add-char-panel">
         <h3 className="section-heading">Manual add</h3>
         <form onSubmit={handleSubmit} className="add-char-form">
-          <div className="edit-group full-width">
-            <label htmlFor="addCharName">Character Name</label>
-            <input
+          <Field label="Character Name" htmlFor="addCharName" className="full-width">
+            <Input
               id="addCharName"
               type="text"
-              className="modern-input"
               placeholder="e.g. Saber"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              aria-describedby={status?.type === 'error' ? 'addCharStatus' : undefined}
               required
             />
-          </div>
+          </Field>
           <div className="edit-group full-width">
             <label htmlFor="addCharSeries">Series</label>
             <SeriesSuggestInput
@@ -581,17 +580,15 @@ export default function AddPage() {
               suggestions={seriesSuggestions}
             />
           </div>
-          <div className="edit-group full-width">
-            <label htmlFor="addCharRank">Rank (Optional)</label>
-            <input
+          <Field label="Rank (Optional)" htmlFor="addCharRank" className="full-width">
+            <Input
               id="addCharRank"
               type="number"
-              className="modern-input"
               placeholder="Leave blank to skip"
               value={rank}
               onChange={(e) => setRank(e.target.value)}
             />
-          </div>
+          </Field>
           <div className="edit-group full-width">
             <label htmlFor="addCharImage">Main Photo (Optional)</label>
             {/*
@@ -634,7 +631,7 @@ export default function AddPage() {
             </Button>
           </div>
           {status?.type === 'error' && (
-            <div id="addCharStatus" className="form-error">
+            <div id="addCharStatus" className="form-error" role="alert">
               {status.message}
             </div>
           )}

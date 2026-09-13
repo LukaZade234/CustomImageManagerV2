@@ -9,6 +9,13 @@ const SORT_OPTIONS = [
   { value: 'count', label: 'Image count' },
 ]
 
+/**
+ * The direction each sort opens in when it is chosen. Rank and image count read
+ * best from the top down, so they default to descending; A–Z reads upward.
+ * Rank is inverted because 1 is the top rank (see SearchResultsPage).
+ */
+const SORT_DEFAULT_ORDER = { rank: 'desc', alphabet: 'asc', count: 'desc' }
+
 export function searchPath(query, mode) {
   return `/search?q=${encodeURIComponent(query)}&by=${mode}`
 }
@@ -89,7 +96,10 @@ export default function SearchBar({ minimal = false }) {
       }}
       sortOptions={SORT_OPTIONS}
       sort={sort}
-      onSort={setSort}
+      onSort={(value) => {
+        setSort(value)
+        setOrder(SORT_DEFAULT_ORDER[value] ?? 'asc')
+      }}
       order={order}
       onOrder={setOrder}
       filterHidden={minimal}

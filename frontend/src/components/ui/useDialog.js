@@ -4,6 +4,19 @@ const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 /**
+ * Every enabled dialog is pushed onto this stack in mount order. Only the
+ * topmost one answers document-level keys, so a dialog opened over another
+ * (the report dialog over the image lightbox) does not let Escape close both,
+ * nor leave the lightbox's arrow keys driving the image behind the dialog.
+ */
+const dialogStack = []
+let dialogSeq = 0
+
+export function isTopmostDialog(id) {
+  return dialogStack.length > 0 && dialogStack[dialogStack.length - 1] === id
+}
+
+/**
  * Modal behaviour shared by every dialog: scroll lock, focus on open, focus
  * restore on close, Escape to dismiss, and a Tab trap.
  *
@@ -15,7 +28,21 @@ const FOCUSABLE =
  */
 export function useDialog({ onClose, enabled = true }) {
   const dialogRef = useRef(null)
+  const idRef = useRef(null)
+  if (idRef.current === null) idRef.current = ++dialogSeq
   const prevActiveRef = useRef(null)
+
+  const isTopmost = useCallback(() => isTopmostDialog(idRef.current), [])
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    const id = idRef.current
+    dialogStack.push(id)
+    return () => {
+      const i = dialogStack.lastIndexOf(id)
+      if (i !== -1) dialogStack.splice(i, 1)
+    }
+  }, [enabled])
 
   const getFocusables = useCallback(() => {
     const root = dialogRef.current
@@ -48,10 +75,11 @@ export function useDialog({ onClose, enabled = true }) {
   useEffect(() => {
     if (!enabled) return undefined
     const handler = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onClose?.()
-      }
+      if (e.key !== 'Escape') return
+      // A dialog opened above this one owns Escape until it closes.
+      if (!isTopmostDialog(idRef.current)) return
+      e.preventDefault()
+      onClose?.()
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
@@ -84,5 +112,5 @@ export function useDialog({ onClose, enabled = true }) {
     [onClose],
   )
 
-  return { dialogRef, onKeyDown, onBackdropClick }
+  return { dialogRef, onKeyDown, onBackdropClick, isTopmost }
 }

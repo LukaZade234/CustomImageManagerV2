@@ -125,6 +125,14 @@ export default function CharacterPage() {
   const reorderSessionRef = useRef(null)
   const [confirmDiscardOrder, setConfirmDiscardOrder] = useState(false)
 
+  // Measure image ratios off the onLoad event, which fires once per image in
+  // its own tick — a 256-image gallery meant 256 full re-renders of the grid
+  // while it filled in. Coalescing a frame's worth of measurements into one
+  // state update makes the fill cost one render per frame instead.
+  const pendingRatiosRef = useRef({})
+  const ratioFrameRef = useRef(0)
+  useEffect(() => () => cancelAnimationFrame(ratioFrameRef.current), [])
+
   useEffect(() => {
     if (char) {
       setEditName(char.name)
@@ -528,7 +536,24 @@ export default function CharacterPage() {
   const noteRatio = (imageId, element) => {
     const ratio = ratioOf(element)
     if (ratio === null) return
-    setRatios((prev) => (prev[imageId] === ratio ? prev : { ...prev, [imageId]: ratio }))
+    pendingRatiosRef.current[imageId] = ratio
+    if (ratioFrameRef.current) return
+    ratioFrameRef.current = requestAnimationFrame(() => {
+      ratioFrameRef.current = 0
+      const pending = pendingRatiosRef.current
+      pendingRatiosRef.current = {}
+      setRatios((prev) => {
+        let changed = false
+        const next = { ...prev }
+        for (const [id, measured] of Object.entries(pending)) {
+          if (next[id] !== measured) {
+            next[id] = measured
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    })
   }
 
   const handleReport = async (imageId, reason) => {

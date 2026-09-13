@@ -519,10 +519,10 @@ def list_characters_with_customs(
     # Previews for this page only, in one query rather than one per row.
     if rows and preview_count > 0:
         ids = [r["id"] for r in rows]
-        by_id: dict[int, list[str]] = {i: [] for i in ids}
+        by_id: dict[int, list[dict]] = {i: [] for i in ids}
         placeholders = ",".join("?" for _ in ids)
         previews = conn.execute(
-            "SELECT character_id, url FROM custom_images"
+            "SELECT character_id, id, url FROM custom_images"
             f" WHERE state = 'active' AND character_id IN ({placeholders})"
             " ORDER BY character_id, position, id",
             ids,
@@ -530,7 +530,15 @@ def list_characters_with_customs(
         for row in previews:
             bucket = by_id[row["character_id"]]
             if len(bucket) < preview_count:
-                bucket.append(row["url"])
+                bucket.append(
+                    {
+                        "id": row["id"],
+                        "url": row["url"],
+                        # The row draws the WebP, not the 1.9 MB original the
+                        # canonical url points at; see thumbnails.py.
+                        "thumb": thumbnails.thumb_url(row["id"], row["url"]),
+                    }
+                )
         for item, r in zip(items, rows, strict=True):
             item["previews"] = by_id[r["id"]]
 

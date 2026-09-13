@@ -59,10 +59,13 @@ function App() {
 
   return (
     <>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <Navbar />
       <Toast />
       <AppErrorBoundary>
-        <main className="container">
+        <main id="main-content" className="container" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/saved" element={<Navigate to="/profile/saved" replace />} />

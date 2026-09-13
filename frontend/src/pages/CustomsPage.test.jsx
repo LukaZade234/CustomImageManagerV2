@@ -37,7 +37,10 @@ const ITEM = {
   rank: '1',
   image: 'rem.png',
   count: 5,
-  previews: ['a.png', 'b.png'],
+  previews: [
+    { id: 1, url: 'https://cdn/a.png', thumb: '/thumbs/1.webp' },
+    { id: 2, url: 'https://cdn/b.png', thumb: '/thumbs/2.webp' },
+  ],
 }
 
 const lastCall = () => listCustoms.mock.calls.at(-1)[0]
@@ -90,11 +93,14 @@ describe('server-driven listing', () => {
     expect(screen.getByText(/1 characters with custom images/)).toBeInTheDocument()
   })
 
-  it('shows the previews the server chose', async () => {
+  it('shows the previews the server chose, as thumbnails', async () => {
     renderPage()
     await screen.findByText('Rem')
     const previews = document.querySelectorAll('.customs-preview-thumb')
     expect(previews).toHaveLength(2)
+    // The row draws the WebP, never the 1.9 MB ImgChest original.
+    expect(previews[0]).toHaveAttribute('src', '/thumbs/1.webp')
+    expect(previews[0]).toHaveAttribute('loading', 'lazy')
   })
 
   it('sends the search term to the server rather than filtering locally', async () => {
@@ -197,6 +203,43 @@ describe('server-driven listing', () => {
     await user.click(screen.getByRole('button', { name: 'back' }))
     await waitFor(() => expect(location()).toBe('/customs'))
     await waitFor(() => expect(lastCall().q).toBe(''))
+  })
+
+  it('restores a deep-linked page instead of clamping it to one', async () => {
+    // Arriving at /customs?page=2 remounts the page with no result yet, so
+    // total_pages is a placeholder 1. Clamping against that placeholder used to
+    // rewrite the URL to page one before the page-2 fetch landed, which is what
+    // made Back from a character page land on the first page.
+    listCustoms.mockResolvedValue(page([ITEM], { total: 60, total_pages: 3 }))
+    renderRouted(['/customs?page=2'])
+    await screen.findByText('Rem')
+    await waitFor(() => expect(lastCall().page).toBe(2))
+    expect(screen.getByTestId('location').textContent).toBe('/customs?page=2')
+    expect(listCustoms.mock.calls.some(([args]) => args.page === 1)).toBe(false)
+  })
+
+  it('reads rank as top-first in both directions', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Rem')
+    await user.click(screen.getByRole('button', { name: /Filter/i }))
+    await user.click(
+      within(screen.getByRole('group', { name: 'Sort by' })).getByRole('menuitemradio', {
+        name: 'Rank',
+      }),
+    )
+    // Rank opens descending: highest rank (lowest number) first.
+    await waitFor(() => expect(lastCall().sort).toBe('rank_asc'))
+
+    // Choosing a sort closes the panel, so reopen it for the direction.
+    await user.click(screen.getByRole('button', { name: /Filter/i }))
+    await user.click(
+      within(screen.getByRole('group', { name: 'Order' })).getByRole('menuitemradio', {
+        name: 'Ascending',
+      }),
+    )
+    // Ascending means the lowest-ranked characters lead.
+    await waitFor(() => expect(lastCall().sort).toBe('rank_desc'))
   })
 
   it('goes back to page one when the search changes', async () => {
