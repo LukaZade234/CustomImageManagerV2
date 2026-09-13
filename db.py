@@ -375,7 +375,11 @@ def get_catalog_characters() -> list[dict]:
 
 
 def enrich_characters_from_catalog(
-    *, overwrite: bool = True, dry_run: bool = False, catalog: dict | None = None
+    *,
+    overwrite: bool = True,
+    dry_run: bool = False,
+    catalog: dict | None = None,
+    aliases: dict | None = None,
 ) -> dict:
     """Copy rank, series and portrait from the catalog onto matching characters.
 
@@ -384,18 +388,27 @@ def enrich_characters_from_catalog(
     or NFD spellings of the same name. Only existing `characters` rows are
     touched; a catalog name on its own does not become a working row.
 
+    `aliases` maps a working name key to `(catalog name key, rename)`. It is the
+    fallback for a character Mudae has renamed (the old name is still accepted as
+    an alias): without it the row would be unmatched. `rename` false keeps the
+    working name and only refreshes its fields; true adopts the catalog's display
+    name. A rename that would collide with another working character is refused
+    and reported rather than raising.
+
     With `overwrite=False` only empty character fields are filled. Pass
     `catalog` to preview against an in-memory mapping (the parsed batch) and
     `dry_run=True` to compute the changes without writing them. Returns the
-    matched/updated/unchanged counts, the unmatched character names, and a
-    before/after change list for the import report.
+    matched/updated/unchanged counts, the unmatched character names, alias usage,
+    renames, and a before/after change list for the import report.
     """
     import catalog_import
 
+    aliases = aliases or {}
     if catalog is None:
         conn = get_connection()
         catalog = {
             row["name_key"]: {
+                "name": row["name"],
                 "series": row["series"],
                 "rank": row["rank"],
                 "mudae_image_url": row["mudae_image_url"],
@@ -411,21 +424,35 @@ def enrich_characters_from_catalog(
             return False
         return overwrite or not current
 
-    changes: list[dict] = []
-    unmatched: list[str] = []
-    matched = 0
-    unchanged = 0
-
     conn = get_connection()
     rows = conn.execute(
         "SELECT id, name, series, rank, main_image_url FROM characters"
     ).fetchall()
+    # Every working name key, to refuse a rename onto a name already taken.
+    taken = {catalog_import.name_key(row["name"]): row["id"] for row in rows}
+
+    changes: list[dict] = []
+    unmatched: list[str] = []
+    aliased: list[dict] = []
+    renamed: list[dict] = []
+    rename_conflicts: list[dict] = []
+    matched = 0
+    unchanged = 0
+
     for row in rows:
-        entry = catalog.get(catalog_import.name_key(row["name"]))
+        key = catalog_import.name_key(row["name"])
+        entry = catalog.get(key)
+        alias = None
+        if entry is None and key in aliases:
+            target_key, rename = aliases[key]
+            entry = catalog.get(target_key)
+            if entry is not None:
+                alias = {"rename": rename, "catalog_name": entry.get("name") or ""}
         if entry is None:
             unmatched.append(row["name"])
             continue
         matched += 1
+
         fields: dict[str, str] = {}
         for column, source_key in (
             ("series", "series"),
@@ -434,6 +461,19 @@ def enrich_characters_from_catalog(
         ):
             if choose(entry[source_key], row[column]):
                 fields[column] = (entry[source_key] or "").strip()
+
+        if alias is not None:
+            aliased.append({"name": row["name"], "catalog_name": alias["catalog_name"]})
+            if alias["rename"]:
+                new_name = (alias["catalog_name"] or "").strip()
+                new_key = catalog_import.name_key(new_name)
+                holder = taken.get(new_key)
+                if new_name and new_key != key and holder not in (None, row["id"]):
+                    rename_conflicts.append({"name": row["name"], "to": new_name})
+                elif new_name and new_name != row["name"]:
+                    fields["name"] = new_name
+                    renamed.append({"from": row["name"], "to": new_name})
+
         if not fields:
             unchanged += 1
             continue
@@ -464,6 +504,9 @@ def enrich_characters_from_catalog(
         "updated": len(changes),
         "unchanged": unchanged,
         "unmatched": unmatched,
+        "aliased": aliased,
+        "renamed": renamed,
+        "rename_conflicts": rename_conflicts,
         "changes": changes,
     }
 
