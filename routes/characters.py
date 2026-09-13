@@ -22,7 +22,7 @@ import tempfiles
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from ratelimit import rate_limited
-from remote_images import MAX_FILE_SIZE, imgchest_filename
+from remote_images import MAX_FILE_SIZE, _allowed_portrait_url, imgchest_filename
 from validation import MAX_RANK_LENGTH, MAX_SERIES_LENGTH, validate_character_name
 
 log = logs.get(__name__)
@@ -160,14 +160,22 @@ def save_character():
 @characters_bp.route("/api/add-character", methods=["POST"])
 @rate_limited("add_character")
 def add_character():
-    """Add a new character."""
+    """Add a new character.
+
+    The portrait is either an uploaded file (uploaded to ImgChest) or, when the
+    Add form already knows one from the catalog, an `image_url` on an accepted
+    portrait host. A name that already exists is refused before either, so a
+    duplicate never costs an ImgChest upload.
+    """
     name = request.form.get("name", "").strip()
+    provided_image_url = request.form.get("image_url", "").strip()
     if not name:
         json_data = request.get_json(silent=True)
         if json_data:
             name = str(json_data.get("name", "")).strip()
             series = str(json_data.get("series", "")).strip()
             rank = str(json_data.get("rank", "")).strip()
+            provided_image_url = str(json_data.get("image_url", "")).strip()
         else:
             return jsonify({"error": "Name is required"}), 400
     else:
@@ -182,7 +190,24 @@ def add_character():
     if len(rank) > MAX_RANK_LENGTH:
         return jsonify({"error": f"Rank too long (max {MAX_RANK_LENGTH} characters)"}), 400
 
+    if db.get_characters() is None:
+        return jsonify(
+            {
+                "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
+            }
+        ), 500
+
+    # Refuse a duplicate up front: matching is on the folded name key, so a
+    # differently-cased spelling of a character already here is caught too.
+    existing = db.find_character(name)
+    if existing and existing["in_library"]:
+        return jsonify({"error": f'Character "{existing["name"]}" already exists'}), 400
+
     image_url = ""
+    if provided_image_url:
+        if not _allowed_portrait_url(provided_image_url):
+            return jsonify({"error": "Image must be from ImgChest or Mudae"}), 400
+        image_url = provided_image_url
 
     if "image" in request.files:
         file = request.files["image"]
@@ -209,12 +234,6 @@ def add_character():
                     os.remove(temp_path)
 
     try:
-        if db.get_characters() is None:
-            return jsonify(
-                {
-                    "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
-                }
-            ), 500
         if not db.add_character(name, series, rank, image_url):
             return jsonify({"error": f'Character "{name}" already exists'}), 400
         db.update_last_modified(name)

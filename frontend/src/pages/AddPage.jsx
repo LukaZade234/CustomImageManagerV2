@@ -109,9 +109,17 @@ export default function AddPage() {
     Boolean(series.trim()) &&
     normalizeSeries(series) !== normalizeSeries(nameMatch.series)
 
+  // A name already in the working set cannot be added again. Otherwise, when the
+  // name is a catalog entry and the series agrees, its portrait is offered too.
+  const duplicateName = Boolean(nameMatch?.in_library)
+  const catalogImage =
+    nameMatch && !nameMatch.in_library && !seriesMismatch ? nameMatch.image || '' : ''
+
   useEffect(() => {
+    // Untouched: the library's series follows the name. Once the field is
+    // edited or chosen, it stops and the mismatch check takes over.
     if (!nameMatch?.series || seriesTouched) return
-    if (!series.trim() && series !== nameMatch.series) {
+    if (series !== nameMatch.series) {
       setSeries(nameMatch.series)
     }
   }, [nameMatch, series, seriesTouched])
@@ -126,6 +134,12 @@ export default function AddPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim()) return
+    if (duplicateName) {
+      const message = `Character "${nameMatch.name}" already exists.`
+      setStatus({ type: 'error', message })
+      addToast(message, 'error')
+      return
+    }
     if (seriesMismatch) {
       const message = `Series doesn't match — "${nameMatch.name}" is in "${nameMatch.series}".`
       setStatus({ type: 'error', message })
@@ -139,7 +153,9 @@ export default function AddPage() {
       formData.append('name', name.trim())
       formData.append('series', series.trim())
       formData.append('rank', rank.trim())
+      // A file wins; otherwise a matched catalog portrait rides along as a URL.
       if (imageFile) formData.append('image', imageFile)
+      else if (catalogImage) formData.append('image_url', catalogImage)
       await apiClient.addCharacter(formData)
       await loadCharacters()
       addToast(`Added "${name}"`, 'success')
@@ -683,6 +699,12 @@ export default function AddPage() {
               required
             />
           </Field>
+          {duplicateName && (
+            <p className="form-error" role="alert">
+              Character &quot;{nameMatch.name}&quot; already exists — open it instead of adding it
+              again.
+            </p>
+          )}
           <div className="edit-group full-width">
             <label htmlFor="addCharSeries">Series</label>
             <SeriesSuggestInput
@@ -716,6 +738,14 @@ export default function AddPage() {
           </Field>
           <div className="edit-group full-width">
             <label htmlFor="addCharImage">Main Photo (Optional)</label>
+            {catalogImage && !imageFile && (
+              <div className="add-char-image-preview">
+                <img src={catalogImage} alt="" className="add-char-image-preview__img" />
+                <p className="mudae-preview__hint">
+                  Filled from the library. Choose a file below to replace it.
+                </p>
+              </div>
+            )}
             {/*
               A <label> for the file input rather than a div pretending to be a
               button. Clicking a label activates its control, so the picker opens
@@ -739,7 +769,11 @@ export default function AddPage() {
                 <polyline points="21 15 16 10 5 21" />
               </svg>
               <span id="addCharImageLabel" className="file-upload-hint">
-                {imageFile ? imageFile.name : 'Click to select image (can be added later)'}
+                {imageFile
+                  ? imageFile.name
+                  : catalogImage
+                    ? 'Click to replace with your own image'
+                    : 'Click to select image (can be added later)'}
               </span>
               <input
                 id="addCharImage"

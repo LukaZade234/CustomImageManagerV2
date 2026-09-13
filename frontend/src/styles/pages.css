@@ -905,6 +905,22 @@ body.reorder-touch-dragging {
   font-size: var(--type-micro);
   color: var(--text-subtle);
 }
+/* The manual form's portrait, offered from the catalog once name and series
+   match. A chosen file replaces it. */
+.add-char-image-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.add-char-image-preview__img {
+  width: 96px;
+  height: 128px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
 .mudae-divider {
   margin: var(--space-6) 0;
   border: 0;

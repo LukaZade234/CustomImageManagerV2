@@ -157,3 +157,41 @@ class TestCatalogRoutes:
         self._seed(clean_db)
         res = client.post("/api/catalog/add-character", json={"name": "Nobody"})
         assert res.status_code == 404
+
+
+class TestManualAdd:
+    """The manual form can carry a catalog portrait and refuses duplicates."""
+
+    def _seed(self, clean_db):
+        clean_db.add_character("Seed", "Some Series", "1", "")
+
+    def test_accepts_a_mudae_portrait_url(self, client, clean_db):
+        self._seed(clean_db)
+        res = client.post(
+            "/api/add-character",
+            data={
+                "name": "Newcomer",
+                "series": "Some Series",
+                "rank": "500",
+                "image_url": "https://mudae.net/uploads/1/a~b.png",
+            },
+        )
+        assert res.status_code == 200
+        row = clean_db.get_connection().execute(
+            "SELECT main_image_url FROM characters WHERE name = 'Newcomer'"
+        ).fetchone()
+        assert row["main_image_url"] == "https://mudae.net/uploads/1/a~b.png"
+
+    def test_refuses_a_portrait_url_from_an_unexpected_host(self, client, clean_db):
+        self._seed(clean_db)
+        res = client.post(
+            "/api/add-character",
+            data={"name": "Newcomer", "image_url": "https://evil.example/x.png"},
+        )
+        assert res.status_code == 400
+
+    def test_a_name_already_in_the_library_is_refused_case_insensitively(self, client, clean_db):
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        res = client.post("/api/add-character", data={"name": "rem", "series": "Re:Zero"})
+        assert res.status_code == 400
+        assert "already exists" in res.get_json()["error"]

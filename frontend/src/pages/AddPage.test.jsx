@@ -125,4 +125,57 @@ describe('AddPage catalog integration', () => {
       expect(api.mudaeLookupCharacter).toHaveBeenCalledWith('Unknown Person', false),
     )
   })
+
+  it('fills the portrait from the library and sends it with the form', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({
+      found: true,
+      character: {
+        name: 'Saber',
+        series: 'Fate/stay night',
+        rank: '4',
+        image: 'https://mudae.net/uploads/8363458/x.png',
+        in_library: false,
+      },
+    })
+    api.addCharacter.mockResolvedValue({ success: true })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character Name'), 'Saber')
+    await screen.findByDisplayValue('Fate/stay night')
+    await waitFor(() =>
+      expect(document.querySelector('.add-char-image-preview__img')).toHaveAttribute(
+        'src',
+        'https://mudae.net/uploads/8363458/x.png',
+      ),
+    )
+
+    await user.click(screen.getByRole('button', { name: /Add Character/ }))
+    await waitFor(() => expect(api.addCharacter).toHaveBeenCalled())
+    const formData = api.addCharacter.mock.calls[0][0]
+    expect(formData.get('name')).toBe('Saber')
+    expect(formData.get('series')).toBe('Fate/stay night')
+    expect(formData.get('image_url')).toBe('https://mudae.net/uploads/8363458/x.png')
+  })
+
+  it('refuses to add a character that already exists', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({
+      found: true,
+      character: {
+        name: 'Rem',
+        series: 'Re:Zero',
+        rank: '3',
+        image: 'https://mudae.net/x.png',
+        in_library: true,
+      },
+    })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character Name'), 'Rem')
+    expect(await screen.findByText(/already exists/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Add Character/ }))
+    expect(api.addCharacter).not.toHaveBeenCalled()
+  })
 })
