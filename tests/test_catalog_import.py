@@ -142,6 +142,28 @@ class TestAccountMarkers:
         assert rem.pool == "ha,wa"
         assert rem.is_waifu and rem.is_husbando and rem.is_anime and not rem.is_game
 
+    def test_serverdisable_marker_is_stripped(self):
+        result = ci.parse_text(
+            "#1,395 - Louise Françoise Le Blanc de La Vallière 🚫  "
+            "($serverdisable) · ($wa) - https://mudae.net/uploads/1/aa~bb.png"
+        )
+        louise = result.characters[ci.name_key("Louise Françoise Le Blanc de La Vallière")]
+        assert louise.name == "Louise Françoise Le Blanc de La Vallière"
+        assert louise.rank == "1395"
+        assert louise.pool == "wa"
+        assert result.issues == []
+
+    def test_serverdisable_marker_on_a_two_letter_name(self):
+        result = ci.parse_text(
+            "#3,250 - Ca 🚫  ($serverdisable) · ($wa) - https://mudae.net/uploads/1/aa~bb.png"
+        )
+        assert result.characters[ci.name_key("Ca")].name == "Ca"
+
+    def test_marker_stripper_handles_serverdisable_variants(self):
+        assert ci.strip_account_marker("Rem  ($serverdisable)") == "Rem"
+        assert ci.strip_account_marker("Rem  $serverdisable") == "Rem"
+        assert ci.strip_account_marker("Rem 🚫  (serverdisable)") == "Rem"
+
 
 class TestNameKey:
     def test_folds_nfd_nfc_fullwidth_and_nbsp(self):
