@@ -307,6 +307,22 @@ describe('AddPage catalog integration', () => {
     })
   })
 
+  it('fills the series only when a name suggestion is picked, not when typed', async () => {
+    const user = userEvent.setup()
+    api.suggestCharacters.mockResolvedValue({
+      items: [{ name: 'Saber', series: 'Fate/stay night', rank: '4', image: '' }],
+    })
+    renderPage()
+
+    const nameInput = screen.getByLabelText('Character Name')
+    await user.type(nameInput, 'Sab')
+    // Typing alone leaves the series empty.
+    expect(screen.getByLabelText('Series')).toHaveValue('')
+
+    await user.click(await screen.findByRole('option', { name: /Saber/ }))
+    expect(screen.getByLabelText('Series')).toHaveValue('Fate/stay night')
+  })
+
   it('shows the existing card in the lookup panel', async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({

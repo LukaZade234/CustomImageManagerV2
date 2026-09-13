@@ -158,6 +158,12 @@ export default function AddPage() {
     if (rank !== expected) setRank(expected)
   }, [seriesMatchesKnown, nameMatch, rank, rankTouched])
 
+  // Choosing a suggestion is a deliberate pick, and the suggestion showed the
+  // series, so fill it. Typing a name without choosing does not.
+  const handlePickName = (item) => {
+    if (item?.series) setSeries(item.series)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim()) return
@@ -736,6 +742,7 @@ export default function AddPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               suggestions={nameSuggestionItems}
+              onPick={handlePickName}
               ariaLabel="Character name suggestions"
               ariaDescribedBy={status?.type === 'error' ? 'addCharStatus' : undefined}
               required
