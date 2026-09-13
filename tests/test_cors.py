@@ -23,6 +23,7 @@ def _import_app_with(env_extra: dict) -> subprocess.CompletedProcess:
         "IMGCHEST_API_KEY": "test",
         "SECRET_KEY": "test",
         "DATABASE_PATH": "/tmp/imgmanager-cors-check.db",
+        "THUMB_DIR": "/tmp/imgmanager-cors-thumbs",
         **env_extra,
     }
     return subprocess.run(
@@ -57,6 +58,9 @@ def cors_client(clean_db, monkeypatch):
     import importlib
 
     monkeypatch.setenv("CORS_ORIGINS", "https://img.example.com")
+    # A deployed config must also point its durable paths outside the code tree,
+    # or the startup guard refuses to load the app.
+    monkeypatch.setenv("THUMB_DIR", "/tmp/imgmanager-cors-thumbs")
     import upload_imgchest
 
     importlib.reload(upload_imgchest)
