@@ -378,7 +378,9 @@
    word that is already the whole meaning. */
 @media (max-width: 768px) {
   .char-custom-toolbar-actions .ui-btn {
-    min-height: 44px;
+    /* Touch still needs a real target, but 44px made a wrapped row of four
+       controls taller than the images below it. */
+    min-height: 36px;
   }
 }
 @media (max-width: 480px) {
@@ -1529,6 +1531,12 @@ body.reorder-touch-dragging {
     --gallery-row-height: 150px;
 
     gap: var(--space-1);
+  }
+  /* A drop target is a desktop gesture, so the dashed box is not drawn on a
+     phone; the empty state keeps its copy and its Add image button. */
+  .custom-images-gallery .gallery-empty {
+    border: 0;
+    padding: var(--space-4) 0;
   }
 }
 /* Reorder uses pointer events, so the browser must not treat a press on an item

@@ -52,8 +52,12 @@ export default function CustomImageGallery({
     rows hold every image in a row to one height and vary the widths, which puts
     exactly one portrait across a 390px screen. Columns of equal width and
     unequal height fit four or five.
+
+    An empty gallery stays out of the masonry grid: that grid's rows are 1px
+    tall by design and the empty state, which is not an image, cannot span them,
+    so it would overflow the card.
   */
-  const masonry = useMediaQuery(NARROW)
+  const masonry = useMediaQuery(NARROW) && rows.length > 0
   const columns = useMasonryColumns(masonry)
 
   return (
