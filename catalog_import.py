@@ -79,8 +79,17 @@ _DISABLED_MARKER_RE = re.compile(
 
 
 def strip_account_marker(name: str) -> str:
-    """Drop a trailing account marker ("🚫 $wa DISABLED", "🚫 ($serverdisable)")."""
-    return _DISABLED_MARKER_RE.sub("", name).strip()
+    """Drop trailing account markers ("🚫 $wa DISABLED", "🚫 ($serverdisable)").
+
+    A character disabled in several pools carries one marker per pool
+    ("... 🚫 $wa DISABLED 🚫 $ha DISABLED"), so strip repeatedly rather than
+    once; a single pass would leave every marker but the last in the name.
+    """
+    previous = None
+    while previous != name:
+        previous = name
+        name = _DISABLED_MARKER_RE.sub("", name).strip()
+    return name
 
 
 def validate_catalog_name(name: str) -> tuple[bool, str | None]:

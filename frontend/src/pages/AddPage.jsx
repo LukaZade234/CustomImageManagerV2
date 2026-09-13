@@ -63,6 +63,10 @@ export default function AddPage() {
   // Once the series field is edited or chosen, the library's suggestion stops
   // overwriting it -- the mismatch check is what speaks after that.
   const [seriesTouched, setSeriesTouched] = useState(false)
+  // Same for rank: the library fills it until the field is edited.
+  const [rankTouched, setRankTouched] = useState(false)
+  // A message shown inside the lookup panel, e.g. "already exists".
+  const [mudaeError, setMudaeError] = useState(null)
 
   const navigate = useNavigate()
   const loadCharacters = useStore((s) => s.loadCharacters)
@@ -130,6 +134,14 @@ export default function AddPage() {
     if (catalogImage) setImageFile(null)
   }, [catalogImage])
 
+  useEffect(() => {
+    // The library's rank follows the name while the field is untouched and the
+    // series agrees, so a matched character arrives fully described.
+    if (!nameMatch || rankTouched || seriesMismatch) return
+    const expected = nameMatch.rank || ''
+    if (rank !== expected) setRank(expected)
+  }, [nameMatch, rank, rankTouched, seriesMismatch])
+
   const handlePickName = (item) => {
     if (item?.series) {
       setSeries(item.series)
@@ -171,6 +183,7 @@ export default function AddPage() {
       setRank('')
       setImageFile(null)
       setSeriesTouched(false)
+      setRankTouched(false)
       setTimeout(() => navigate(`/character/${encodeURIComponent(name.trim())}`), 500)
     } catch (err) {
       setStatus({ type: 'error', message: err.message })
@@ -205,11 +218,18 @@ export default function AddPage() {
     setMudaeBusy(true)
     setMudaeCandidates([])
     setMudaePreview(null)
+    setMudaeError(null)
     setStatus(null)
     try {
       // Library first: a name the catalog already knows costs no Mudae request.
       const local = await apiClient.findCatalogCharacter(q)
       if (local.found) {
+        if (local.character.in_library) {
+          const message = `Character "${local.character.name}" already exists.`
+          setMudaeError(message)
+          addToast(message, 'error')
+          return
+        }
         applyMudaeCharacter(local.character)
         setMudaeLookupName(local.character.name || q)
         addToast(`Found "${local.character.name}" in the library`, 'success')
@@ -252,13 +272,15 @@ export default function AddPage() {
       return
     }
     setMudaeBusy(true)
+    setMudaeError(null)
     setStatus(null)
     try {
       // Catalog first: adding a known character needs no Discord and no ImgChest.
       const local = await apiClient.findCatalogCharacter(q)
       if (local.found) {
         if (local.character.in_library) {
-          const message = `Character "${local.character.name}" already exists`
+          const message = `Character "${local.character.name}" already exists.`
+          setMudaeError(message)
           addToast(message, 'error')
           setStatus({ type: 'error', message })
           return
@@ -484,6 +506,12 @@ export default function AddPage() {
             </Button>
           </div>
         </div>
+
+        {mudaeError && (
+          <p className="form-error" role="alert">
+            {mudaeError}
+          </p>
+        )}
 
         {mudaeCandidates.length > 0 && (
           <div className="mudae-candidates">
@@ -740,7 +768,10 @@ export default function AddPage() {
               type="number"
               placeholder="Leave blank to skip"
               value={rank}
-              onChange={(e) => setRank(e.target.value)}
+              onChange={(e) => {
+                setRank(e.target.value)
+                setRankTouched(true)
+              }}
             />
           </Field>
           <div className="edit-group full-width">

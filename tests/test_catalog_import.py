@@ -164,6 +164,26 @@ class TestAccountMarkers:
         assert ci.strip_account_marker("Rem  $serverdisable") == "Rem"
         assert ci.strip_account_marker("Rem 🚫  (serverdisable)") == "Rem"
 
+    def test_every_marker_is_stripped_when_a_character_has_several_pools(self):
+        # A multi-pool character carries one marker per pool; only stripping the
+        # last would leave the rest in the name.
+        assert (
+            ci.strip_account_marker("Futaba  🚫  $wa  DISABLED  🚫  $ha  DISABLED") == "Futaba"
+        )
+        narrow = "Haruna Kasuga\u202f\u202f🚫\u202f\u202f$wa\u202f\u202fDISABLED\u202f\u202f🚫\u202f\u202f$wg\u202f\u202fDISABLED"
+        assert ci.strip_account_marker(narrow) == "Haruna Kasuga"
+
+    def test_a_three_marker_name_parses_to_the_bare_name(self):
+        result = ci.parse_text(
+            "#16,843 - Futaba\u202f\u202f🚫\u202f\u202f$wa\u202f\u202fDISABLED"
+            "\u202f\u202f🚫\u202f\u202f$ha\u202f\u202fDISABLED"
+            "\u202f\u202f🚫\u202f\u202f$wg\u202f\u202fDISABLED"
+            " · ($wa, $ha, $wg, $hg) - https://mudae.net/uploads/1/a~b.png"
+        )
+        futaba = result.characters[ci.name_key("Futaba")]
+        assert futaba.name == "Futaba"
+        assert futaba.pool == "ha,hg,wa,wg"
+
 
 class TestRealExtractQuirks:
     def test_slash_names_are_kept(self):

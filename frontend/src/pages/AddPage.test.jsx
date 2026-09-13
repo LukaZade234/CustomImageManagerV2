@@ -143,6 +143,8 @@ describe('AddPage catalog integration', () => {
 
     await user.type(screen.getByLabelText('Character Name'), 'Saber')
     await screen.findByDisplayValue('Fate/stay night')
+    // The rank follows the name too.
+    await waitFor(() => expect(screen.getByLabelText('Rank (Optional)')).toHaveValue(4))
     await waitFor(() =>
       expect(document.querySelector('.add-char-image-preview__img')).toHaveAttribute(
         'src',
@@ -187,5 +189,26 @@ describe('AddPage catalog integration', () => {
 
     await user.click(screen.getByRole('button', { name: /Add Character/ }))
     expect(api.addCharacter).not.toHaveBeenCalled()
+  })
+
+  it('shows the already-exists message in the lookup panel', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({
+      found: true,
+      character: {
+        name: 'Rem',
+        series: 'Re:Zero',
+        rank: '3',
+        image: 'https://mudae.net/x.png',
+        in_library: true,
+      },
+    })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character name'), 'Rem')
+    await user.click(screen.getByRole('button', { name: 'Lookup' }))
+
+    expect(await screen.findByText(/Character "Rem" already exists/i)).toBeInTheDocument()
+    expect(api.mudaeLookupCharacter).not.toHaveBeenCalled()
   })
 })
