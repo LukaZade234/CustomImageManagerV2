@@ -129,7 +129,8 @@
   cursor: pointer;
 }
 .sort-menu__item:hover {
-  background: var(--surface-hover);
+  background: var(--accent-subtle);
+  color: var(--accent);
 }
 .sort-menu__item[aria-checked="true"] {
   color: var(--accent);
@@ -586,7 +587,7 @@
   border-bottom: none;
 }
 .autocomplete-item:hover {
-  background-color: var(--surface-sunken);
+  background-color: var(--accent-subtle);
   color: var(--accent);
 }
 .autocomplete-item strong {

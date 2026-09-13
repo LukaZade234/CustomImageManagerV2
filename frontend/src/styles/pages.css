@@ -91,7 +91,7 @@
 .char-image-section img {
   max-width: 100%;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
 }
 /* Sized to identify, not to impress: the stored portraits are all 225x350, so
    a height cap is what actually binds and the width follows from it. */
@@ -210,8 +210,9 @@
   border: 1px solid var(--border);
 }
 .save-button:hover {
-  background-color: var(--surface-hover);
-  color: var(--text);
+  background-color: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .save-button.saved,
 .save-button.saved:hover {
