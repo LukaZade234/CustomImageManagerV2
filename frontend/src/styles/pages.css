@@ -1000,49 +1000,56 @@ body.reorder-touch-dragging {
 .mudae-extract summary {
   cursor: pointer;
 }
+/* A reviewed character reads like a saved-character card: a big portrait with
+   the name and its changes beneath it, in the same uniform grid the profile
+   lists use. */
 .mudae-extract__list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-1) var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: var(--space-3);
   margin: var(--space-2) 0 0;
-  padding-left: var(--space-5);
-  max-height: 320px;
+  padding: 0;
+  list-style: none;
+  max-height: 70vh;
   overflow-y: auto;
 }
 .mudae-extract__item {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
 }
 .mudae-extract__img {
-  width: 32px;
+  display: block;
+  width: 100%;
   aspect-ratio: var(--main-image-ratio);
   height: auto;
   object-fit: cover;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  flex-shrink: 0;
+  background: var(--surface-hover);
 }
 .mudae-extract__img--empty {
   display: block;
 }
 .mudae-extract__name {
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
 }
 .mudae-extract__rank {
-  flex-shrink: 0;
   color: var(--text-muted);
+  font-size: var(--type-micro);
 }
 .mudae-extract__changes {
-  flex-shrink: 0;
-  font-size: var(--type-micro);
   color: var(--text-subtle);
+  font-size: var(--type-micro);
 }
 .mudae-extract__actions {
   margin-top: var(--space-3);
