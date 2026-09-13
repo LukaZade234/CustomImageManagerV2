@@ -51,8 +51,8 @@ and deduplicated across everyone rather than per-account, and removal is always 
   added without typing it.
 - The landing page is drawn from the library rather than from copy: the product name beside
   its headline figures, the newest images, a weekly "Most visited" ranking, the most popular
-  characters and series, and a contributor list. Every section hides itself when it has nothing
-  to show, so the page degrades to the parts that are true.
+  characters and series, and a top-ten contributor board. Every section hides itself when it
+  has nothing to show, so the page degrades to the parts that are true.
 
 ## Capabilities and Constraints
 

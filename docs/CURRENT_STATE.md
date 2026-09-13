@@ -146,8 +146,9 @@ installed although the project contains no TypeScript.
 
 ## 4. Database
 
-SQLite, one file, replicated to R2 by Litestream. Ten tables, created by the
-migrations in `migrations/` and applied on first connect.
+SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
+the nine migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
 documents, in which a custom image was a bare URL string in a list — no id, no
@@ -165,7 +166,9 @@ because that had to stop being true.
 | `saved` | — | Bookmarks, per identity |
 | `user_hidden` | — | Per-viewer hidden images |
 | `image_reports` | — | Two distinct reporters remove an image |
-| `schema_migrations` | 6 | Which migrations have run |
+| `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
+| `catalog_series` | — | Series names seen in the catalog, for autocomplete |
+| `schema_migrations` | 9 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),
@@ -219,31 +222,35 @@ disappearing — indistinguishable from someone deleting them, but unrelated.
 
 ## 5. Backend
 
-6,361 lines of Python.
+8,299 lines of Python, plus 1,241 in `scripts/`.
 
 | File | Lines | Role |
 |---|---|---|
-| `upload_imgchest.py` | 248 | App construction, CORS, identity hooks, status endpoints |
-| `routes/customs.py` | 601 | Custom images: add, order, remove, hide, report |
-| `routes/mudae.py` | 454 | Mudae lookup, series import, portrait refresh |
-| `routes/characters.py` | 323 | Characters, saved list, main image |
+| `upload_imgchest.py` | 324 | App construction, CORS, identity hooks, health/stats endpoints |
+| `routes/customs.py` | 632 | Custom images: add, order, remove, hide, report; serves the accent seed |
+| `routes/mudae.py` | 419 | Mudae lookup, series import, portrait refresh |
+| `routes/characters.py` | 369 | Characters, saved list, main image |
 | `routes/media.py` | 117 | Thumbnails, static images, the download proxy |
-| `routes/auth.py` | 117 | Discord sign-in |
-| `routes/spa.py` | 56 | Serving the built React app |
-| `logs.py` | 140 | Logfmt logging, with identity attached inside a request |
+| `routes/catalog.py` | 98 | The Mudae catalog: search, series, add-character |
+| `routes/auth.py` | 170 | Discord sign-in and per-identity settings |
+| `routes/spa.py` | 58 | Serving the built React app |
+| `logs.py` | 135 | Logfmt logging, with identity attached inside a request |
 | `validation.py` | 33 | Character field limits and name checks |
-| `mudae_discord.py` | 1552 | Discord self-bot automation and Mudae embed parsing |
-| `db.py` | 1061 | SQLite/Postgres data layer |
-| `remote_images.py` | 330 | SSRF guards, remote fetch, ImgChest naming |
+| `mudae_discord.py` | 1054 | Discord self-bot automation and Mudae embed parsing |
+| `db.py` | 2022 | SQLite data layer |
+| `accent_extract.py` | 706 | Measures a character's accent colour from portrait and gallery |
+| `catalog_import.py` | 613 | Parses `$wa`/`$ima` extracts into `character_catalog` |
+| `remote_images.py` | 343 | SSRF guards, remote fetch, ImgChest naming |
 | `identity.py` | 235 | Cookie pseudonyms and the Discord binding |
-| `image_utils.py` | 206 | Pillow validation, format detection, WebP conversion |
-| `imgchest_utils.py` | 198 | ImgChest upload client with retry/backoff |
+| `image_utils.py` | 218 | Pillow validation, format detection, WebP conversion |
+| `imgchest_utils.py` | 210 | ImgChest upload client with retry/backoff |
 | `discord_auth.py` | 169 | OAuth2 flow (`identify` scope only) |
-| `ratelimit.py` | 100 | Per-identity fixed-window limits |
+| `ratelimit.py` | 115 | Per-identity fixed-window limits |
 | `thumbnails.py` | 96 | On-demand WebP thumbnails |
+| `tempfiles.py` | 58 | Scratch files under the service's private temp directory |
 | `gunicorn.conf.py` | 85 | Production server config |
 | `app.py` | 10 | WSGI shim |
-| `scripts/` | 601 | Migration, backfill and snapshot scripts |
+| `scripts/` | 1241 | Migration, backfill, catalog-import and snapshot scripts |
 
 ### 5.1 `upload_imgchest.py` and `routes/`
 
@@ -254,8 +261,8 @@ under `routes/` and `upload_imgchest` attaches them at the bottom. The import go
 
 Paths are unchanged: a blueprint owns a subject, not a URL prefix. `upload_imgchest.py` keeps what
 belongs to the app rather than to any subject — the Flask object and SECRET_KEY, CORS, the identity
-hooks, the upload guard, the database-configuration error handler, and `/api/health`, `/api/stats`
-and `/api/last-updated`.
+hooks, the upload guard, the database-configuration error handler, the deployment path guard, and
+`/api/health` and `/api/stats`.
 
 **Note for tests.** A route calls an imported helper as a name in **its own** module's namespace.
 So `monkeypatch.setattr("routes.media._get_with_validated_redirects", ...)` patches what the
@@ -335,7 +342,7 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/custom-image` | — |
-| GET | `/api/custom-image/<path:char_name>` | Active images for one character, annotated for the caller. |
+| GET | `/api/custom-image/<path:char_name>` | Active images for one character, annotated for the caller. Also carries the character's accent seed, and is where a stale seed is noticed and re-measured. |
 | GET | `/api/customs` | One page of the browse-customs list, searched and sorted server-side. |
 | POST | `/api/delete-custom-image` | Remove a single image. 403 when it is not the caller's to remove. |
 | POST | `/api/delete-custom-images` | Remove the caller's own images from a selection. |
@@ -368,6 +375,15 @@ limited per identity (`ratelimit.py`).
 | POST | `/api/mudae/series-extract/apply` | Create and refresh working characters from a reviewed series extract; only fields that differ are written. |
 | GET | `/api/mudae/status` | — |
 
+**`catalog`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/catalog/characters` | Search the imported Mudae catalog, paginated. |
+| GET | `/api/catalog/character` | One catalog entry by name. |
+| GET | `/api/catalog/series` | Series names for autocomplete. |
+| POST | `/api/catalog/add-character` | Promote a catalog entry into the working set. |
+
 **`spa`**
 
 | Method | Path | Purpose |
@@ -384,7 +400,6 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | Is this deployment actually serving? 200 if yes, 503 if not. |
-| GET | `/api/last-updated` | — |
 | GET | `/api/stats` | Everything the landing page renders, in one request. |
 
 ### 5.3 Image upload pipeline
@@ -444,20 +459,20 @@ notes this. The account can be banned, which would take out all Mudae features.
 
 ## 6. Frontend
 
-React 18 + react-router-dom 6 + zustand + Vite. 6,663 lines across 60-odd files,
-none of them over 700.
+React 19 + react-router-dom 7 + zustand 5 + Vite 8. 8,879 lines of source
+across 106 files (14,062 including tests).
 
 | Area | Lines | Notes |
 |---|---|---|
-| `pages/CharacterPage.jsx` | 684 | The gallery and its five modes. Was 1,611 |
-| `pages/AddPage.jsx` | 645 | Add character + Mudae series import. Not yet split |
-| `api.js` | 356 | Hand-rolled API client |
-| `pages/CustomsPage.jsx` | 320 | Browse all customs, filtered server-side |
-| `pages/HomePage.jsx` | 302 | Totals, just-added, most-visited, popular characters and series |
-| `components/GalleryToolbar.jsx` | 281 | The gallery's mode bar, lifted out of CharacterPage |
-| `hooks/useGalleryReorder.js` | 266 | Pointer-events drag-to-reorder, mouse and touch |
-| `pages/profile/` | ~700 | Five tabs: settings, saved, history, hidden, removed |
-| `components/ui/` | ~370 | The primitives |
+| `pages/CharacterPage.jsx` | 963 | The gallery and its three modes. Was 1,611 |
+| `pages/AddPage.jsx` | 745 | Add character + Mudae series import. Not yet split |
+| `pages/HomePage.jsx` | 577 | Totals, just-added ticker, most-visited, popular characters, series ledger, contributor board |
+| `pages/CustomsPage.jsx` | 410 | Browse all customs, filtered server-side |
+| `hooks/useGalleryReorder.js` | 316 | Pointer-events drag-to-reorder, mouse and touch, plus arrow-key moves |
+| `api.js` | 294 | Hand-rolled API client |
+| `components/GalleryToolbar.jsx` | 129 | The gallery's mode bar, lifted out of CharacterPage |
+| `pages/profile/` | ~1,178 | Five tabs: settings, saved, history, hidden, removed |
+| `components/ui/` | 377 | The primitives |
 
 **Pages.** `/`, `/customs`, `/search`, `/add`, `/character/:name`, and `/profile`
 with five nested tab routes. `/saved` redirects into the profile, where the list
@@ -558,7 +573,6 @@ Still open:
 | Mudae lock is per-process | `mudae_discord.py` + 2 workers | Two concurrent lookups can connect at once and capture each other's replies |
 | Discord identify quota burn | `mudae_discord.py` | Connect/disconnect per request against a ~1000/day cap |
 | Discord self-bot ToS | `mudae_discord.py` | An account ban would remove every Mudae feature |
-| `THUMB_DIR` / `DATABASE_PATH` default inside the code tree | `thumbnails.py`, `db.py` | Production sets both; unset, they would fail the way uploads did under `ProtectSystem=strict` |
 | SSE imports over the worker timeout | `gunicorn.conf.py` | A very large series import can still be cut off mid-stream |
 | The two databases have forked | v1 Neon vs v2 SQLite | See `CUTOVER.md`; the migration is insert-only and re-running gives the union |
 
@@ -571,9 +585,10 @@ is worth remembering:
 | Anyone could delete anything | Ownership-scoped removal, soft delete, reports |
 | No rate limiting anywhere | `ratelimit.py`, per identity, per action |
 | `CORS: *` by default | Explicit origins; wildcards refused at startup |
-| No tests at all | 316 backend, 249 frontend |
+| No tests at all | 438 backend, 386 frontend |
 | `print()` with no actor | `logs.py`; identity attaches automatically inside a request |
 | Health check could not fail | Reads the database; 503 when it cannot |
 | Full-map fetch on the home page | `/api/stats`, with a test that it stays bounded |
 | Uploads wrote next to the code | `tempfiles.py`; the server's filesystem is read-only |
+| `THUMB_DIR`/`DATABASE_PATH` could silently default into the code tree | A startup guard refuses a deployed config whose durable paths land in the checkout |
 | Hiding an unknown image id returned 500 | The insert selects from `custom_images`, so it is a no-op |

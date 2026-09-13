@@ -25,6 +25,12 @@ colors:
   affirm-green: "#0f7a3d"
   refuse-red: "#b3261e"
   caution-amber: "#8a5a00"
+  medal-gold: "#8a6a00"
+  medal-gold-subtle: "#fbf3d9"
+  medal-silver: "#55606f"
+  medal-silver-subtle: "#eef1f5"
+  medal-bronze: "#8a4b1f"
+  medal-bronze-subtle: "#f8e9df"
 typography:
   display:
     fontFamily: "Geist, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
@@ -194,6 +200,11 @@ artwork is the only saturated thing on screen.
 Each status colour has a `-subtle` tint for use as a background. The foreground on a
 subtle tint is always the status colour itself, never the `-fg` token: `-fg` is designed
 for the *solid* fill, and pairing it with the tint produces white-on-near-white.
+
+**Medals** are their own small group, not a status: `--medal-gold`, `--medal-silver` and
+`--medal-bronze`, each with a matching `-subtle` tint. They exist for exactly one job —
+the rank of the top three contributors — and go nowhere else. Gold is deliberately a deep
+ochre rather than a bright yellow, because the board sits beside character art.
 
 ### Named Rules
 
@@ -478,18 +489,53 @@ of the week.
   after a 6px slop and swallows exactly the one click a drag produces, so links inside
   it still navigate.
 
+### Just added ticker
+
+The "Just added" strip above the ranked lists, drifting continuously so new arrivals are
+seen without a scroll.
+
+- **Motion:** a compositor-only `translate3d` loop, not animated `scrollLeft` — the track
+  is duplicated once and the transform resets at the clone's offset, so the seam is
+  invisible and motion is sub-pixel smooth. It is the one piece of continuous motion in
+  the system, and it is content, not decoration: it is the newest images in the library.
+- **Interaction:** pointer drag (mouse and touch) that only becomes a drag after a 6px
+  slop, a flick that coasts and decays, hover that eases the drift to a stop, and the one
+  click a drag produces is swallowed so a stray release never opens an image.
+  `touch-action: pan-y` leaves vertical page scroll alone.
+- **Reduced motion:** the loop and the clone are removed and the strip becomes a plain
+  horizontally scrollable row of the same frames.
+
 ### Series bar
 
 - **Use:** "Most popular series" on the landing page — a ranking where relative size is
   the point.
-- **Style:** One row per series: the name, a tabular `images · characters` pair, and a
-  2px hairline track underneath whose fill is the series' share of the largest character
-  count (`--share`, set per row against the leader, which is not necessarily the first
-  row).
+- **Style:** One row per series. The first column is the name with a 2px hairline track
+  underneath whose fill is the series' share of the largest character count (`--share`,
+  set per row against the leader, which is not necessarily the first row). The second is a
+  tabular `images · characters` pair. The third, "Most represented", names the character
+  carrying the most images in that series with its count.
 - **Why a bar:** eight identically sized tiles are the one shape that hides what "most
   popular" means. The bar measures characters while the order measures images, so a
   series wide in one and narrow in the other shows it. Hover shifts the fill and name to
   the accent.
+- **The third column is desktop-only.** It is dropped below 768px, and because the row is
+  the only wide thing in the lower region it is given the full measure: when the
+  contributor board is present the ledger takes the card's own grid so its columns line up
+  with the "Most popular characters" card above rather than floating inside it.
+
+### Contributor board
+
+"Top contributors" — the aside beside the ranked lists, ranking who has uploaded the most.
+
+- **Style:** One card, one row per person: a rank slot, the handle, and a tabular count on
+  the right, hairline-separated. The top three ranks only are tinted with the medal tokens
+  (`--medal-gold/silver/bronze` and their `-subtle`); every other row is plain. The
+  handles and counts never take a colour — the medal is the entire decoration.
+- **The standing line:** when the visitor is ranked but outside the visible ten, a
+  separated footer restates it — "You are **#12** with 5 images" — so the board is legible
+  to someone who is not on it. It is absent when you are in the visible ten, or unranked.
+- **Only signed-in uploads are ranked,** and `hide_from_leaderboard` removes a contributor
+  at the query rather than anonymising the row. The card hides itself when nobody qualifies.
 
 ### Signature component — the justified gallery
 

@@ -295,9 +295,12 @@ Use `tempfiles.reserve(prefix, original_filename)` for anything short-lived and
 gives every file a unique name — the old scheme named the file after the upload,
 so two people adding `image.png` at once overwrote each other.
 
-Anything durable belongs under `DATABASE_PATH` or `THUMB_DIR`. Both currently
-*default* to directories inside the code tree, which production overrides; if you
-add a third such path, give it the same treatment and set it in `secrets.env`.
+Anything durable belongs under `DATABASE_PATH` or `THUMB_DIR`. Both *default* to
+directories inside the code tree so a checkout works unconfigured, but a
+deployed configuration (`CORS_ORIGINS` set) refuses to start if either resolves
+inside the checkout — the tree is read-only there, so it would fail at the first
+write. If you add a third such path, give it the same treatment: set it in
+`secrets.env` and add it to `_guard_deployed_paths` in `upload_imgchest.py`.
 
 `tests/test_tempfiles.py` makes the working directory read-only and uploads
 anyway, which is the shape any test of this needs.
@@ -310,9 +313,14 @@ builder — read the SQL.
 ```python
 db.get_custom_images_for(name)  # one character's active images
 db.add_custom_images(name, urls)  # returns how many landed
-db.delete_custom_images(name, urls)  # 'no_character' | 'no_match' | 'deleted'
+db.remove_custom_images(name, urls, actor_id)  # {removed, denied, missing}
 db.reorder_custom_images(name, new_order)  # False if the character is unknown
 ```
+
+`remove_custom_images` is ownership-scoped: it takes the caller's identity and
+removes only their rows unless `is_moderator=True` (see "Identity and
+ownership" above). It reports `{removed, denied, missing}` rather than a bare
+count because a mixed selection is the normal case.
 
 Two rules that are easy to break and expensive to debug:
 

@@ -37,6 +37,27 @@
         "canonical": "#8a5a00",
         "darkValue": "#e0b341",
         "tonalRamp": ["#33280f", "#4d3a00", "#6b4d00", "#8a5a00", "#b98700", "#e0b341", "#eed08a", "#fbf1de"]
+      },
+      "medal-gold": {
+        "role": "accent",
+        "displayName": "Medal Gold",
+        "canonical": "#8a6a00",
+        "darkValue": "#e8c24a",
+        "tonalRamp": ["#33280f", "#4d3a00", "#6b4d00", "#8a6a00", "#b98a00", "#e8c24a", "#f0d68c", "#fbf3d9"]
+      },
+      "medal-silver": {
+        "role": "neutral",
+        "displayName": "Medal Silver",
+        "canonical": "#55606f",
+        "darkValue": "#c3ccd9",
+        "tonalRamp": ["#222732", "#2e3440", "#444c5a", "#55606f", "#7c8595", "#a2aab8", "#c3ccd9", "#eef1f5"]
+      },
+      "medal-bronze": {
+        "role": "accent",
+        "displayName": "Medal Bronze",
+        "canonical": "#8a4b1f",
+        "darkValue": "#d79a6a",
+        "tonalRamp": ["#33200f", "#4d2c14", "#6b3a19", "#8a4b1f", "#a8632e", "#d79a6a", "#e8c3a0", "#f8e9df"]
       }
     },
     "typographyMeta": {
@@ -127,6 +148,14 @@
       "description": "One row per series with a hairline bar measuring its share of the largest character count.",
       "html": "<ul class=\"ds-series\"><li><a class=\"ds-series-item\" href=\"#\"><span class=\"ds-series-name\">Genshin Impact</span><span class=\"ds-series-meta\">808 · 31</span><span class=\"ds-series-track\"><span class=\"ds-series-fill\" style=\"width:75%\"></span></span></a></li><li><a class=\"ds-series-item\" href=\"#\"><span class=\"ds-series-name\">Fate</span><span class=\"ds-series-meta\">210 · 9</span><span class=\"ds-series-track\"><span class=\"ds-series-fill\" style=\"width:29%\"></span></span></a></li></ul>",
       "css": ".ds-series { display:grid; gap:8px; list-style:none; margin:0; padding:0; font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-series-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline; gap:4px 12px; padding:4px 0; text-decoration:none; color:var(--text,#1c2029); } .ds-series-name { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ds-series-meta { font:400 0.8125rem/1.5 var(--font-sans, Geist, system-ui, sans-serif); color:var(--text-muted,#5c6575); font-variant-numeric:tabular-nums; } .ds-series-track { grid-column:1/-1; height:2px; background:var(--surface-sunken,#f1f3f6); } .ds-series-fill { display:block; height:100%; background:var(--border-strong,#c8cdd7); } .ds-series-item:hover .ds-series-fill { background:var(--accent,#0b7285); } .ds-series-item:hover .ds-series-name { color:var(--accent,#0b7285); }"
+    },
+    {
+      "name": "Contributor Board",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Top contributors: one hairline row per person. Only the top three ranks take a colour, and only the medal tokens. A standing line restates your own rank when it is below the visible ten.",
+      "html": "<section class=\"ds-board\"><h2 class=\"ds-board-title\">Top contributors</h2><ol class=\"ds-board-list\"><li class=\"ds-board-row is-lead\"><span class=\"ds-board-rank ds-board-rank--1\">1</span><span class=\"ds-board-name\">Scarlet Ibis</span><span class=\"ds-board-count\">214</span></li><li class=\"ds-board-row\"><span class=\"ds-board-rank\">4</span><span class=\"ds-board-name\">Quiet Otter</span><span class=\"ds-board-count\">88</span></li></ol><p class=\"ds-board-you\">You are <strong>#12</strong> with 5 images</p></section>",
+      "css": ".ds-board { background:var(--surface,#fff); border:1px solid var(--border,#e2e6ec); border-radius:10px; padding:24px; font-family:var(--font-sans, Geist, system-ui, sans-serif); } .ds-board-title { margin:0 0 12px; font-size:1.25rem; font-weight:600; letter-spacing:-0.015em; color:var(--text,#1c2029); } .ds-board-list { list-style:none; margin:0; padding:0; } .ds-board-row { display:grid; grid-template-columns:1.5rem minmax(0,1fr) auto; align-items:baseline; gap:8px; padding:8px 0; border-top:1px solid var(--border,#e2e6ec); } .ds-board-row:first-child { border-top:0; } .ds-board-rank { font-variant-numeric:tabular-nums; font-weight:600; color:var(--text-subtle,#7c8595); } .ds-board-rank--1 { color:var(--medal-gold,#8a6a00); } .ds-board-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ds-board-count { color:var(--text-muted,#5c6575); font-variant-numeric:tabular-nums; } .ds-board-you { margin:12px 0 0; padding-top:12px; border-top:1px solid var(--border,#e2e6ec); font-size:0.875rem; color:var(--text-muted,#5c6575); }"
     },
     {
       "name": "Empty State",

@@ -280,7 +280,6 @@ data that has ever existed. That is the reason pre-flight step 4 is a gate.
 - [x] Remove `flask-compress` — done ahead of the cut-over in `5c62b9c`, once
   Cloudflare was in front and confirmed to be compressing. The edge does Brotli,
   which beats gzip.
-- [ ] Decide whether `/custom_images.json` can go. Nothing in the SPA calls it any
-  more; it is a ~486 KB response left in place only in case something external
-  does.
+- [x] Remove `/custom_images.json` — done. Nothing in the SPA called it any more,
+  and the ~486 KB endpoint has been deleted rather than left as a superseded stub.
 
