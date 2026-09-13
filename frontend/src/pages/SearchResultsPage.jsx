@@ -11,6 +11,7 @@ export default function SearchResultsPage() {
   const searchQuery = params.get('q') || ''
   const mode = params.get('by') === 'series' ? 'series' : 'name'
   const sort = useStore((s) => s.searchSort)
+  const order = useStore((s) => s.searchOrder)
   const characters = useStore((s) => s.characters)
   const loading = useStore((s) => s.loading)
 
@@ -21,14 +22,16 @@ export default function SearchResultsPage() {
       const field = mode === 'name' ? c.name : c.series || ''
       return field.toLowerCase().includes(q)
     })
+    const direction = order === 'desc' ? -1 : 1
     const sorted = [...filtered].sort((a, b) => {
-      if (sort === 'rank') return (parseInt(a.rank, 10) || 9999) - (parseInt(b.rank, 10) || 9999)
-      if (sort === 'name') return (a.name || '').localeCompare(b.name || '')
-      if (sort === 'series') return (a.series || '').localeCompare(b.series || '')
-      return 0
+      let rank = 0
+      if (sort === 'rank') rank = (parseInt(a.rank, 10) || 9999) - (parseInt(b.rank, 10) || 9999)
+      else if (sort === 'alphabet') rank = (a.name || '').localeCompare(b.name || '')
+      else if (sort === 'count') rank = (a.custom_count || 0) - (b.custom_count || 0)
+      return rank * direction
     })
     return sorted
-  }, [searchQuery, mode, sort, characters])
+  }, [searchQuery, mode, sort, order, characters])
 
   if (loading && characters.length === 0) {
     return (

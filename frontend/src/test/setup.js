@@ -22,3 +22,11 @@ if (!window.matchMedia) {
     dispatchEvent: () => false,
   }))
 }
+
+/**
+ * jsdom does not scroll. Its `window.scrollTo` exists but reports "not
+ * implemented" to the console, which a component that scrolls to the top on a
+ * page change would repeat on every test that paginates. A no-op keeps the
+ * output readable; a test that cares spies on it.
+ */
+window.scrollTo = () => {}

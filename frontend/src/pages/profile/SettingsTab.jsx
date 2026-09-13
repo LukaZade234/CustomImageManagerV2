@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiClient } from '../../api'
-import { Button, Card } from '../../components/ui'
+import { Button, Card, SegmentedControl } from '../../components/ui'
 import { signInUrl } from '../../config'
 import { useStore } from '../../store/useStore'
 
@@ -41,6 +41,7 @@ export default function SettingsTab() {
   const loadMe = useStore((s) => s.loadMe)
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
+  const setMySettings = useStore((s) => s.setMySettings)
   const addToast = useStore((s) => s.addToast)
 
   const [settings, setSettings] = useState(null)
@@ -59,6 +60,10 @@ export default function SettingsTab() {
     try {
       const result = await apiClient.updateSettings(change)
       setSettings(result.settings)
+      // Publish to the store as well: the character-accent switch is read from
+      // `me.settings` by hook, so leaving it local would make it look like it
+      // needed a page reload to take effect.
+      setMySettings(result.settings)
     } catch (e) {
       setSettings(before)
       addToast(e.message || 'Could not save that setting', 'error')
@@ -111,21 +116,45 @@ export default function SettingsTab() {
 
       <Card as="section" padding="lg">
         <h2 className="section-heading">Appearance</h2>
-        <fieldset className="profile-themes">
-          <legend className="sr-only">Theme</legend>
-          {THEMES.map((option) => (
-            <label key={option.value} className="profile-theme">
+        <div className="appearance-list">
+          <div className="appearance-row">
+            <div className="appearance-copy">
+              <span className="appearance-label">Theme</span>
+              <span className="appearance-desc">Follow your system, or pin light or dark.</span>
+            </div>
+            <SegmentedControl
+              name="theme"
+              value={theme}
+              onChange={setTheme}
+              options={THEMES}
+              label="Theme"
+            />
+          </div>
+          <div className="appearance-row">
+            <div className="appearance-copy">
+              <span className="appearance-label" id="appearance-accents-label">
+                Use character-based accent colours
+              </span>
+              <span className="appearance-desc">
+                Character pages borrow their accent from that character's artwork. It is a best
+                guess and will not always be accurate. Turn this off to always use the default
+                colour — with it off, nothing is measured for you in the first place.
+              </span>
+            </div>
+            <label className="appearance-switch">
               <input
-                type="radio"
-                name="theme"
-                value={option.value}
-                checked={theme === option.value}
-                onChange={() => setTheme(option.value)}
+                type="checkbox"
+                aria-labelledby="appearance-accents-label"
+                checked={settings?.character_accents !== false}
+                disabled={busy}
+                onChange={(e) => save({ character_accents: e.target.checked })}
               />
-              <span>{option.label}</span>
+              <span className="appearance-switch__track" aria-hidden="true">
+                <span className="appearance-switch__thumb" />
+              </span>
             </label>
-          ))}
-        </fieldset>
+          </div>
+        </div>
       </Card>
 
       <Card as="section" padding="lg">

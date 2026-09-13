@@ -127,11 +127,12 @@ def get_me():
 def update_my_settings():
     """Change a display preference.
 
-    Only the two privacy toggles are writable. Neither touches what is stored --
-    ownership is always recorded, because removal is ownership-scoped and an
-    uploader who could not be identified could not manage their own images. Both
-    are applied when rendering, which is what makes them retroactive and
-    reversible.
+    Only the listed preferences are writable. None of them touches what is
+    stored -- ownership is always recorded, because removal is ownership-scoped
+    and an uploader who could not be identified could not manage their own
+    images. All are applied when rendering, which is what makes them retroactive
+    and reversible. `character_accents` additionally gates server work: with it
+    off, gallery requests never measure an accent for this visitor.
     """
     data = request.get_json(silent=True) or {}
     me = identity.current_identity()
@@ -140,6 +141,7 @@ def update_my_settings():
         hide_from_leaderboard=data.get("hide_from_leaderboard"),
         hide_attribution=data.get("hide_attribution"),
         show_nsfw=data.get("show_nsfw"),
+        character_accents=data.get("character_accents"),
     )
     log.info("settings.updated", **settings)
     return jsonify({"success": True, "settings": settings})

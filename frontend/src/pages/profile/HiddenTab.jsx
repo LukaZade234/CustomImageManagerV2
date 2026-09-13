@@ -4,7 +4,7 @@ import { apiUrl } from '../../config'
 import { useStore } from '../../store/useStore'
 import CardGrid, { cardRatio } from './CardGrid'
 import ListTab from './ListTab'
-import { byDesc, byText, useFilteredList } from './useFilteredList'
+import { byAsc, byText, useFilteredList } from './useFilteredList'
 
 /**
  * Images you have hidden, across every character.
@@ -14,8 +14,8 @@ import { byDesc, byText, useFilteredList } from './useFilteredList'
  */
 
 const SORTS = {
-  recent: { label: 'Recently hidden', compare: byDesc('hidden_at') },
-  character: { label: 'Character (A–Z)', compare: byText('character') },
+  recent: { label: 'Recently hidden', compare: byAsc('hidden_at'), order: 'desc' },
+  character: { label: 'Character (A–Z)', compare: byText('character'), order: 'asc' },
 }
 const FIELDS = ['character']
 

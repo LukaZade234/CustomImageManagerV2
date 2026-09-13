@@ -1,11 +1,13 @@
-import { Input, Select } from '../../components/ui'
+import FilterBar from '../../components/FilterBar'
 
 /**
- * The search field and sort control above each of the profile's lists.
+ * The filter row above each of the profile's lists.
  *
- * `count` is shown rather than implied: once a search is narrowing a list, "12
- * of 340" is the difference between trusting the list and wondering what is
- * missing from it.
+ * It is the navbar's bar: the same capsule, the same one-panel filter, the same
+ * search-by, sort and order. What differs is only the sort set and whether the
+ * list has a name/series choice to make; the count rides to the right, because
+ * once a search is narrowing a list "12 of 340" is the difference between
+ * trusting the list and wondering what is missing from it.
  */
 export default function ListControls({
   label,
@@ -13,35 +15,39 @@ export default function ListControls({
   onQuery,
   sort,
   onSort,
+  order,
+  onOrder,
   options,
+  mode,
+  onMode,
+  modeOptions,
   shown,
   total,
 }) {
-  const id = `${label.toLowerCase().replace(/\s+/g, '-')}-search`
+  const placeholder =
+    mode === undefined ? label : mode === 'series' ? 'Search by series...' : 'Search by name...'
+
   return (
     <div className="profile-controls">
-      <div className="profile-controls__search">
-        <label className="sr-only" htmlFor={id}>
-          {label}
-        </label>
-        <Input
-          id={id}
-          type="search"
-          value={query}
-          placeholder={label}
-          onChange={(e) => onQuery(e.target.value)}
-        />
-      </div>
-      <Select value={sort} onChange={(e) => onSort(e.target.value)} aria-label="Sort by">
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </Select>
-      <span className="profile-controls__count text-meta tabular">
-        {shown === total ? `${total}` : `${shown} of ${total}`}
-      </span>
+      <FilterBar
+        query={query}
+        onQuery={onQuery}
+        placeholder={placeholder}
+        ariaLabel={label}
+        mode={mode}
+        onMode={onMode}
+        modeOptions={modeOptions}
+        sortOptions={options}
+        sort={sort}
+        onSort={onSort}
+        order={order}
+        onOrder={onOrder}
+        trailing={
+          <span className="profile-controls__count text-meta tabular">
+            {shown === total ? `${total}` : `${shown} of ${total}`}
+          </span>
+        }
+      />
     </div>
   )
 }

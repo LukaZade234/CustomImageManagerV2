@@ -12,6 +12,8 @@ import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
+import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
+import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useStore } from '../store/useStore'
@@ -71,6 +73,16 @@ export default function CharacterPage() {
   const [editSeries, setEditSeries] = useState('')
   const [editRank, setEditRank] = useState('')
   const [mainImage, setMainImage] = useState('')
+  // Above the early returns: hooks must run in the same order every render.
+  // The seed is the server-measured accent (see useCharacterTheme); the
+  // character list carries it, and the gallery response refreshes it after
+  // any change to the images it was measured from. Turning character accents
+  // off in settings discards it here as well as on the server, so a row that
+  // already carries a seed is never applied against the viewer's choice.
+  const characterAccents = useStore((s) => s.me?.settings?.character_accents !== false)
+  const seededAccent = useStore((s) => s.accentSeeds[name]) ?? char?.accent_seed ?? null
+  const theme = useCharacterTheme(name, characterAccents ? seededAccent : null)
+  useApplyCharacterTheme(theme)
   const [loading, setLoading] = useState(false)
   const [mudaeMainBusy, setMudaeMainBusy] = useState(false)
   const [mudaeConfigured, setMudaeConfigured] = useState(false)

@@ -20,7 +20,7 @@ def _seed(db, char="Rem", count=2, owner=None):
 
 
 class TestSettings:
-    def test_they_all_default_to_off(self, client, clean_db):
+    def test_they_all_default_to_the_documented_side(self, client, clean_db):
         assert client.get("/api/me").get_json()["settings"] == {
             "hide_from_leaderboard": False,
             "hide_attribution": False,
@@ -28,6 +28,9 @@ class TestSettings:
             # Defaulting to off means the filter, when it arrives, is not
             # switched on for people who never asked for it.
             "show_nsfw": False,
+            # On by default: it is part of what a character page is, and it is
+            # the only preference that defaults on.
+            "character_accents": True,
         }
 
     def test_each_toggles_independently(self, client, clean_db):
@@ -41,6 +44,7 @@ class TestSettings:
             "hide_from_leaderboard": False,
             "hide_attribution": True,
             "show_nsfw": False,
+            "character_accents": True,
         }
 
         r = client.patch("/api/me/settings", json={"hide_from_leaderboard": True})
@@ -48,7 +52,12 @@ class TestSettings:
             "hide_from_leaderboard": True,
             "hide_attribution": True,
             "show_nsfw": False,
+            "character_accents": True,
         }
+
+    def test_character_accents_can_be_turned_off(self, client, clean_db):
+        client.patch("/api/me/settings", json={"character_accents": False})
+        assert client.get("/api/me").get_json()["settings"]["character_accents"] is False
 
     def test_an_omitted_field_is_left_alone(self, client, clean_db):
         client.patch("/api/me/settings", json={"hide_attribution": True})
@@ -80,7 +89,7 @@ class TestHiddenAttribution:
         _seed(clean_db, owner=identity_id)
         client.patch("/api/me/settings", json={"hide_attribution": True})
 
-        rows = client.get("/api/custom-image/Rem").get_json()
+        rows = client.get("/api/custom-image/Rem").get_json()["rows"]
         assert all(r["is_mine"] for r in rows), "the owner must still own them"
 
         removed = client.post(
@@ -92,7 +101,7 @@ class TestHiddenAttribution:
     def test_you_can_always_see_your_own_name(self, client, clean_db, identity_id):
         _seed(clean_db, owner=identity_id)
         client.patch("/api/me/settings", json={"hide_attribution": True})
-        rows = client.get("/api/custom-image/Rem").get_json()
+        rows = client.get("/api/custom-image/Rem").get_json()["rows"]
         assert all(r["owner"] for r in rows)
 
     def test_a_stranger_sees_no_owner(self, client, clean_db, identity_id):
@@ -100,7 +109,7 @@ class TestHiddenAttribution:
         client.patch("/api/me/settings", json={"hide_attribution": True})
 
         stranger = client.application.test_client()
-        rows = stranger.get("/api/custom-image/Rem").get_json()
+        rows = stranger.get("/api/custom-image/Rem").get_json()["rows"]
         assert [r["owner"] for r in rows] == [None, None]
         assert not any(r["is_mine"] for r in rows)
 
@@ -110,10 +119,10 @@ class TestHiddenAttribution:
         stranger = client.application.test_client()
 
         client.patch("/api/me/settings", json={"hide_attribution": True})
-        assert stranger.get("/api/custom-image/Rem").get_json()[0]["owner"] is None
+        assert stranger.get("/api/custom-image/Rem").get_json()["rows"][0]["owner"] is None
 
         client.patch("/api/me/settings", json={"hide_attribution": False})
-        assert stranger.get("/api/custom-image/Rem").get_json()[0]["owner"] is not None
+        assert stranger.get("/api/custom-image/Rem").get_json()["rows"][0]["owner"] is not None
 
 
 class TestHiddenFromLeaderboard:
@@ -136,7 +145,7 @@ class TestHiddenFromLeaderboard:
         client.patch("/api/me/settings", json={"hide_from_leaderboard": True})
 
         stranger = client.application.test_client()
-        assert stranger.get("/api/custom-image/Rem").get_json()[0]["owner"] == "Someone"
+        assert stranger.get("/api/custom-image/Rem").get_json()["rows"][0]["owner"] == "Someone"
 
 
 class TestGlobalLists:
@@ -146,7 +155,7 @@ class TestGlobalLists:
         """Hiding is otherwise reachable only from the page holding the image."""
         _seed(clean_db, char="Rem", owner=identity_id)
         _seed(clean_db, char="Emilia", owner=identity_id)
-        ids = [r["id"] for r in client.get("/api/custom-image/Emilia").get_json()]
+        ids = [r["id"] for r in client.get("/api/custom-image/Emilia").get_json()["rows"]]
         client.post("/api/hide-images", json={"image_ids": ids[:1]})
 
         hidden = client.get("/api/me/hidden").get_json()
@@ -164,7 +173,7 @@ class TestGlobalLists:
 
     def test_someone_else_s_hidden_images_are_not_yours(self, client, clean_db, identity_id):
         _seed(clean_db, owner=identity_id)
-        ids = [r["id"] for r in client.get("/api/custom-image/Rem").get_json()]
+        ids = [r["id"] for r in client.get("/api/custom-image/Rem").get_json()["rows"]]
         client.post("/api/hide-images", json={"image_ids": ids})
 
         stranger = client.application.test_client()

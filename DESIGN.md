@@ -167,11 +167,12 @@ artwork is the only saturated thing on screen.
 
 ### Primary
 
-- **Deep Harbour Teal** (`#0b7285` light / `#2fb3c4` dark): The only accent in the
+- **Deep Harbour Teal** (`#0b7285` light / `#2fb3c4` dark): The default accent in the
   system. It marks state and nothing else — focus rings, the selected segment, the active
   profile tab, a pressed toolbar mode, and at most one solid button per screen. It was
   chosen specifically to sit away from Bootstrap blue and away from the purple/violet
-  gradient that marks generated interfaces.
+  gradient that marks generated interfaces. On a character page it is replaced outright —
+  see **The Character Owns the Accent Rule** below.
 
 ### Neutral
 
@@ -199,7 +200,33 @@ for the *solid* fill, and pairing it with the tint produces white-on-near-white.
 **The Art Carries the Colour Rule.** The accent marks state and nothing else: focus,
 selection, the active tab, at most one solid button per screen. No coloured headers, no
 gradient surfaces, no tinted cards. The character artwork is the only saturated thing on
-screen.
+screen. Off a character page, this rule is absolute.
+
+**The Character Owns the Accent Rule.** On a character page, `--accent` and its `-hover`,
+`-subtle` and `-fg` companions are replaced by a colour derived from that character's own
+art — teal for Hatsune Miku, red for Reimu Hakurei, a blue-grey for 2B, who is genuinely
+black and white. The replacement is total and site-wide for the length of that page: the
+navbar's pressed states, the `$ai command` button, every focus ring. This is the one
+deliberate exception to the rule above, not a second accent living beside it — a character
+page has exactly one accent, and on that page it is the character's, not the system's. The
+hairlines take a quieter, 50%-mixed version of the same colour rather than the full accent,
+so the border reads as tinted instead of becoming a second coloured shape next to the
+artwork. About one character in fifteen declines to produce a confident colour at all (flat
+monochrome art, or two hues tied for dominance); that page renders with the plain system
+accent, exactly as if this rule did not exist.
+
+The colour is measured server-side (`accent_extract.py`) from the portrait and, when the
+character has one, the pooled gallery — one normalised hue histogram per image so that
+resolution and crop cannot bias the vote, decided once over the pool. The gallery outranks
+the portrait because communities draw some characters in a colour their reference art does
+not carry. A pale identity (a blue-white head of hair present in every image) outranks a
+weak saturated decision (scattered neon backgrounds), which is how Lucy reads as a soft
+blue instead of her backgrounds' loud one. The seed is stored on the character row against
+a fingerprint of the images it was measured from, so adding or removing gallery images
+recolours the page on the next visit with no cache anywhere to invalidate; the browser
+only turns the seed into contrast-fitted tokens (`useCharacterTheme`,
+`useApplyCharacterTheme`). See `tests/test_accent_extract.py` for the calibration panel of
+real characters these thresholds were set against.
 
 **The Tinted Neutral Rule.** No pure grey anywhere. Every neutral carries the ~222 hue
 cast. A `#888` in a diff is a bug.

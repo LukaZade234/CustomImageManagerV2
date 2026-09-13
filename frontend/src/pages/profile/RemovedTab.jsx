@@ -4,7 +4,7 @@ import { apiUrl } from '../../config'
 import { useStore } from '../../store/useStore'
 import CardGrid, { cardRatio } from './CardGrid'
 import ListTab from './ListTab'
-import { byDesc, byText, useFilteredList } from './useFilteredList'
+import { byAsc, byText, useFilteredList } from './useFilteredList'
 
 /**
  * Images you removed, across every character. All of them restorable, because
@@ -13,8 +13,8 @@ import { byDesc, byText, useFilteredList } from './useFilteredList'
  */
 
 const SORTS = {
-  recent: { label: 'Recently removed', compare: byDesc('removed_at') },
-  character: { label: 'Character (A–Z)', compare: byText('character') },
+  recent: { label: 'Recently removed', compare: byAsc('removed_at'), order: 'desc' },
+  character: { label: 'Character (A–Z)', compare: byText('character'), order: 'asc' },
 }
 const FIELDS = ['character', 'removed_reason']
 

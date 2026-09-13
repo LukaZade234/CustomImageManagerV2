@@ -6,9 +6,9 @@
  * right while downloading the whole library again, which is the regression this
  * change exists to prevent.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { listCustoms } = vi.hoisted(() => ({ listCustoms: vi.fn() }))
@@ -19,6 +19,7 @@ vi.mock('../api', () => ({
   apiClient: { listCustoms },
 }))
 
+import { useStore } from '../store/useStore'
 import CustomsPage from './CustomsPage'
 
 const page = (items, overrides = {}) => ({
@@ -42,6 +43,10 @@ const ITEM = {
 const lastCall = () => listCustoms.mock.calls.at(-1)[0]
 
 beforeEach(() => {
+  // The filters are remembered across visits now, so each test starts from the
+  // documented defaults rather than whatever the one before it chose.
+  localStorage.clear()
+  useStore.setState({ searchMode: 'name', customsSort: 'recent', customsOrder: 'desc' })
   listCustoms.mockReset()
   listCustoms.mockResolvedValue(page([ITEM]))
 })
@@ -50,6 +55,30 @@ const renderPage = () =>
   render(
     <MemoryRouter>
       <CustomsPage />
+    </MemoryRouter>,
+  )
+
+/** The current URL, plus a real "back" the way the browser would offer. */
+function LocationProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <span data-testid="location">{location.pathname + location.search}</span>
+      <button type="button" onClick={() => navigate(-1)}>
+        back
+      </button>
+    </>
+  )
+}
+
+const renderRouted = (entries = ['/customs']) =>
+  render(
+    <MemoryRouter initialEntries={entries}>
+      <CustomsPage />
+      <Routes>
+        <Route path="*" element={<LocationProbe />} />
+      </Routes>
     </MemoryRouter>,
   )
 
@@ -91,15 +120,26 @@ describe('server-driven listing', () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByText('Rem')
-    await user.click(screen.getByRole('radio', { name: 'Series' }))
+    await user.click(screen.getByRole('button', { name: /Filter/i }))
+    await user.click(
+      within(screen.getByRole('group', { name: 'Search by' })).getByRole('menuitemradio', {
+        name: 'Series',
+      }),
+    )
     await waitFor(() => expect(lastCall().by).toBe('series'))
   })
 
-  it('sends the sort key', async () => {
+  it('sends the sort key and direction the server understands', async () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByText('Rem')
-    await user.selectOptions(screen.getByLabelText(/sort by/i), 'count_desc')
+    await user.click(screen.getByRole('button', { name: /Filter/i }))
+    await user.click(
+      within(screen.getByRole('group', { name: 'Sort by' })).getByRole('menuitemradio', {
+        name: 'Image count',
+      }),
+    )
+    // Image count opens descending, which is the server's count_desc fragment.
     await waitFor(() => expect(lastCall().sort).toBe('count_desc'))
   })
 
@@ -110,6 +150,53 @@ describe('server-driven listing', () => {
     await screen.findByText('Rem')
     await user.click(screen.getByRole('button', { name: /next page/i }))
     await waitFor(() => expect(lastCall().page).toBe(2))
+  })
+
+  it('returns to the top of the new page', async () => {
+    const user = userEvent.setup()
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    listCustoms.mockResolvedValue(page([ITEM], { total: 60, total_pages: 3 }))
+    renderPage()
+    await screen.findByText('Rem')
+    await user.click(screen.getByRole('button', { name: /next page/i }))
+    await waitFor(() => expect(lastCall().page).toBe(2))
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    scrollTo.mockRestore()
+  })
+
+  it('puts the page in the URL, so back steps through pages instead of leaving', async () => {
+    const user = userEvent.setup()
+    listCustoms.mockResolvedValue(page([ITEM], { total: 60, total_pages: 3 }))
+    renderRouted()
+    await screen.findByText('Rem')
+    const location = () => screen.getByTestId('location').textContent
+    expect(location()).toBe('/customs')
+
+    await user.click(screen.getByRole('button', { name: /next page/i }))
+    await waitFor(() => expect(location()).toBe('/customs?page=2'))
+    await user.click(screen.getByRole('button', { name: /next page/i }))
+    await waitFor(() => expect(location()).toBe('/customs?page=3'))
+
+    // The browser back is the previous page of results, not the route before
+    // Browse Customs.
+    await user.click(screen.getByRole('button', { name: 'back' }))
+    await waitFor(() => expect(location()).toBe('/customs?page=2'))
+    await waitFor(() => expect(lastCall().page).toBe(2))
+  })
+
+  it('makes a typed search a history entry, so back clears the filter', async () => {
+    const user = userEvent.setup()
+    renderRouted()
+    await screen.findByText('Rem')
+    const location = () => screen.getByTestId('location').textContent
+
+    await user.type(screen.getByRole('searchbox'), 'rem')
+    await waitFor(() => expect(lastCall().q).toBe('rem'))
+    expect(location()).toBe('/customs?q=rem')
+
+    await user.click(screen.getByRole('button', { name: 'back' }))
+    await waitFor(() => expect(location()).toBe('/customs'))
+    await waitFor(() => expect(lastCall().q).toBe(''))
   })
 
   it('goes back to page one when the search changes', async () => {

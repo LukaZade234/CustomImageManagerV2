@@ -16,6 +16,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 
+import accent_extract
 import db
 import identity
 import logs
@@ -371,17 +372,35 @@ def get_custom_images(char_name):
     Each entry carries `is_mine` and `hidden` because both are per-viewer: the
     client cannot work either out on its own, and ownership must be decided
     server-side regardless.
+
+    The response also carries the character's accent seed. This endpoint is the
+    one request every character page makes after any gallery change, which
+    makes it the place where a stale seed gets noticed: `ensure_accent`
+    compares a fingerprint of the gallery against the one stored with the seed
+    and re-measures only when they disagree. Adding or removing images, or
+    setting a new portrait, therefore recolours the page on the next visit
+    with no cache to invalidate anywhere.
+
+    A visitor who turned character accents off in settings never pays for this:
+    the seed is neither returned nor measured, because reading pixels for a
+    colour they will not see is exactly the waste the preference promises to
+    avoid.
     """
     try:
         # Targeted query rather than loading every character's images and
         # discarding all but one, which is what the JSON-document layout forced.
         me = identity.current_identity()
-        return jsonify(
-            db.get_custom_image_rows(char_name, me.id, viewer_is_staff=me.is_moderator)
-        )
+        rows = db.get_custom_image_rows(char_name, me.id, viewer_is_staff=me.is_moderator)
+        accent_seed = None
+        if db.get_identity_settings(me.id)["character_accents"]:
+            try:
+                accent_seed = accent_extract.ensure_accent(char_name)
+            except Exception:
+                log.exception("customs.accent_failed", character=char_name)
+        return jsonify({"rows": rows, "accentSeed": accent_seed})
     except Exception:
         log.exception("customs.read_failed")
-    return jsonify([])
+    return jsonify({"rows": [], "accentSeed": None})
 
 
 @customs_bp.route("/api/reorder-custom-images", methods=["POST"])

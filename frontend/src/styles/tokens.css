@@ -250,3 +250,45 @@
 
   color-scheme: dark;
 }
+
+/* ---- Per-character accent -------------------------------------------------
+ * A deliberate, scoped exception to the Art Carries the Colour Rule above: on
+ * a character page, the accent itself becomes that character's own colour
+ * rather than the fixed teal, derived from their portrait (and, for the rare
+ * character the community consistently draws differently from their own
+ * reference art, their gallery) by useCharacterTheme. It reaches the $ai
+ * command button, the navbar's pressed and focus states, and everywhere else
+ * `--accent` is used — that reach is the point: the page should feel like it
+ * belongs to the character being viewed, not merely have a coloured border.
+ *
+ * `useApplyCharacterTheme` sets the eight `--char-*` custom properties below
+ * on `<html>` and toggles this class; both are absent for every other page,
+ * and for a character whose colour could not be confidently derived (roughly
+ * one in twenty), so this never overrides the system accent with a guess.
+ *
+ * `--accent-hover` and `--accent-subtle` are not literally the character's
+ * hover/subtle tokens by coincidence: `useCharacterTheme` derives all four
+ * roles from one OKLCH hue using the same lightness relationships measured
+ * off *this* file's own light- and dark-mode `--accent` family, so a
+ * character's theme keeps the same internal logic the system's own does.
+ */
+:root.has-character-theme {
+  --accent: var(--char-accent);
+  --accent-hover: var(--char-accent-hover);
+  --accent-subtle: var(--char-accent-subtle);
+  --accent-fg: var(--char-accent-fg);
+}
+@media (prefers-color-scheme: dark) {
+  :root.has-character-theme:not([data-theme="light"]) {
+    --accent: var(--char-accent-dark);
+    --accent-hover: var(--char-accent-hover-dark);
+    --accent-subtle: var(--char-accent-subtle-dark);
+    --accent-fg: var(--char-accent-fg-dark);
+  }
+}
+:root[data-theme="dark"].has-character-theme {
+  --accent: var(--char-accent-dark);
+  --accent-hover: var(--char-accent-hover-dark);
+  --accent-subtle: var(--char-accent-subtle-dark);
+  --accent-fg: var(--char-accent-fg-dark);
+}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-12T00:00:00Z",
+  "generatedAt": "2026-09-12T18:00:00Z",
   "title": "Design System: ImgManager",
   "extensions": {
     "colorMeta": {
@@ -149,7 +149,8 @@
       "4px spacing base, 34px controls, 44px touch targets"
     ],
     "rules": [
-      { "name": "The Art Carries the Colour Rule", "section": "colors", "body": "The accent marks state and nothing else: focus, selection, the active tab, at most one solid button per screen. No coloured headers, no gradient surfaces, no tinted cards. The character artwork is the only saturated thing on screen." },
+      { "name": "The Art Carries the Colour Rule", "section": "colors", "body": "The accent marks state and nothing else: focus, selection, the active tab, at most one solid button per screen. No coloured headers, no gradient surfaces, no tinted cards. Off a character page, this rule is absolute." },
+      { "name": "The Character Owns the Accent Rule", "section": "colors", "body": "On a character page, --accent and its -hover/-subtle/-fg companions are replaced site-wide by a colour derived from that character's own portrait (and, on strong gallery consensus, their fan art) -- the navbar, the $ai command button, every focus ring. Hairlines take a 50%-mixed, quieter version rather than the full accent. About one character in twenty declines to a confident colour and renders with the plain system accent instead." },
       { "name": "The Tinted Neutral Rule", "section": "colors", "body": "No pure grey anywhere. Every neutral carries the ~222 hue cast. A #888 in a diff is a bug." },
       { "name": "The Subtle-Tint Pairing Rule", "section": "colors", "body": "--accent-subtle takes --accent as its foreground; --accent-fg belongs only on solid --accent. A test enforces this, because the failure mode is invisible text rather than a crash." },
       { "name": "The Negative Tracking Rule", "section": "typography", "body": "Anything at title size or larger gets negative letter spacing. Default tracking on large type is the clearest tell of an unconsidered heading." },

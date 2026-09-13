@@ -1,28 +1,91 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
-import { Badge, Button, Card, EmptyState, Input, SegmentedControl, Select } from '../components/ui'
+import FilterBar from '../components/FilterBar'
+import { Badge, Button, Card, EmptyState } from '../components/ui'
+import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
 
 const SORT_OPTIONS = [
-  { value: 'recent', label: 'Most Recent' },
-  { value: 'rank_asc', label: 'Rank (High-Low)' },
-  { value: 'name_asc', label: 'Name (A-Z)' },
-  { value: 'name_desc', label: 'Name (Z-A)' },
-  { value: 'series_asc', label: 'Series (A-Z)' },
-  { value: 'count_desc', label: 'Most Images' },
-  { value: 'count_asc', label: 'Fewest Images' },
+  { value: 'recent', label: 'Most recent' },
+  { value: 'rank', label: 'Rank' },
+  { value: 'alphabet', label: 'Alphabet' },
+  { value: 'count', label: 'Image count' },
 ]
 
+/** Direction each sort reads best in when it is first chosen. */
+const SORT_DEFAULT_ORDER = { recent: 'desc', rank: 'asc', alphabet: 'asc', count: 'desc' }
+
+/** The server whitelists whole ORDER BY fragments, so build the key from them. */
+function customsSortKey(sort, order) {
+  if (sort === 'alphabet') return order === 'desc' ? 'name_desc' : 'name_asc'
+  if (sort === 'count') return order === 'desc' ? 'count_desc' : 'count_asc'
+  if (sort === 'rank') return order === 'desc' ? 'rank_desc' : 'rank_asc'
+  return order === 'asc' ? 'recent_asc' : 'recent'
+}
+
 export default function CustomsPage() {
-  const [search, setSearch] = useState('')
-  const [searchMode, setSearchMode] = useState('name')
-  const [sort, setSort] = useState('recent')
-  const [page, setPage] = useState(1)
+  // Remembered across visits, and shared with the navbar's search: both ask
+  // the same name-or-series question. The sort and direction are their own.
+  const searchMode = useStore((s) => s.searchMode)
+  const setSearchMode = useStore((s) => s.setSearchMode)
+  const sort = useStore((s) => s.customsSort)
+  const setSort = useStore((s) => s.setCustomsSort)
+  const order = useStore((s) => s.customsOrder)
+  const setOrder = useStore((s) => s.setCustomsOrder)
+  const sortKey = customsSortKey(sort, order)
+
+  // The query and the page live in the URL rather than in state: the back
+  // button then steps through what you actually looked at — the previous page,
+  // or the unfiltered list before a search — instead of leaving Browse Customs
+  // for whatever route came before it. It also makes both linkable.
+  const [params, setParams] = useSearchParams()
+  const search = params.get('q') ?? ''
+  const parsedPage = Number.parseInt(params.get('page') ?? '1', 10)
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
+  const changePage = useCallback(
+    (next, { replace = false } = {}) => {
+      setParams(
+        (prev) => {
+          const nextParams = new URLSearchParams(prev)
+          // Page one is the absence of the parameter, so the common URL stays
+          // /customs rather than /customs?page=1.
+          if (next <= 1) nextParams.delete('page')
+          else nextParams.set('page', String(next))
+          return nextParams
+        },
+        { replace },
+      )
+    },
+    [setParams],
+  )
+  const updateSearch = useCallback(
+    (value) => {
+      setParams(
+        (prev) => {
+          const nextParams = new URLSearchParams(prev)
+          if (value) nextParams.set('q', value)
+          else nextParams.delete('q')
+          // A different query is a different first page.
+          nextParams.delete('page')
+          return nextParams
+        },
+        // The first keystroke of a search is a place to come back to; refining
+        // it, or clearing it, is not — otherwise every letter would litter the
+        // history.
+        { replace: Boolean(params.get('q')) },
+      )
+    },
+    [setParams, params],
+  )
+
   const [pageJumpEditing, setPageJumpEditing] = useState(false)
   const [pageJumpValue, setPageJumpValue] = useState('1')
   const pageJumpInputRef = useRef(null)
+  // Bumped by "Try again" to refetch the same page without treating it as a
+  // page move (which would add a history entry for a retry).
+  const [reloadKey, setReloadKey] = useState(0)
 
   // Searching, sorting and paging all happen in SQL now. The page used to pull
   // the entire library into memory and do the work here, which cost ~475 KB on
@@ -31,18 +94,22 @@ export default function CustomsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Debounced so typing does not fire a request per keystroke.
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  // Debounced so typing does not fire a request per keystroke. Seeded from the
+  // URL query so arriving on a linked or restored search fetches it at once
+  // rather than flashing the unfiltered list first.
+  const [debouncedSearch, setDebouncedSearch] = useState(() => search.trim())
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250)
     return () => clearTimeout(timer)
   }, [search])
 
+  // `reloadKey` is a trigger, not an input: "Try again" refetches the same page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger, not an input
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     apiClient
-      .listCustoms({ page, perPage: PAGE_SIZE, q: debouncedSearch, by: searchMode, sort })
+      .listCustoms({ page, perPage: PAGE_SIZE, q: debouncedSearch, by: searchMode, sort: sortKey })
       .then((data) => {
         if (cancelled) return
         setResult(data)
@@ -57,7 +124,7 @@ export default function CustomsPage() {
     return () => {
       cancelled = true
     }
-  }, [page, debouncedSearch, searchMode, sort])
+  }, [page, debouncedSearch, searchMode, sortKey, reloadKey])
 
   const items = result?.items ?? []
   const total = result?.total ?? 0
@@ -68,10 +135,25 @@ export default function CustomsPage() {
   const emptySearchNoMatches = Boolean(result) && hasSearch && total === 0
   const totalGlobalEmpty = Boolean(result) && !hasSearch && total === 0
 
-  // A shrinking result set can leave you past the last page.
+  // A shrinking result set can leave you past the last page. Replaced rather
+  // than pushed: correcting an impossible page is not a place to go back to.
   useEffect(() => {
-    setPage((p) => Math.min(p, totalPages))
-  }, [totalPages])
+    if (page > totalPages) changePage(totalPages, { replace: true })
+  }, [page, totalPages, changePage])
+
+  // Every page move — by the arrows, the jump, or the browser's back button —
+  // starts the reader at the top of the new page rather than at the pager they
+  // left. Skipped on the first render so an arriving visitor is not scrolled.
+  const skipFirstScroll = useRef(true)
+  // The page is the trigger, not an input: the body scrolls on every change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger, not an input
+  useEffect(() => {
+    if (skipFirstScroll.current) {
+      skipFirstScroll.current = false
+      return
+    }
+    window.scrollTo(0, 0)
+  }, [page])
 
   // totalPages is the trigger, not an input. The click-to-jump input has to close
   // when the result set changes underneath it — a page number typed against the
@@ -87,12 +169,18 @@ export default function CustomsPage() {
     if (!pageJumpEditing) setPageJumpValue(String(page))
   }, [page, pageJumpEditing])
 
-  const resetToPage1 = () => setPage(1)
+  // A filter change is not a page the reader chose to visit, so it corrects the
+  // page in place rather than adding a history entry.
+  const resetToPage1 = useCallback(() => changePage(1, { replace: true }), [changePage])
 
-  const clearSearch = () => {
-    setSearch('')
-    resetToPage1()
-  }
+  const clearSearch = () => updateSearch('')
+
+  /**
+   * Move to another page of results. Pushed, not replaced, so the browser's
+   * back button steps through the pages you actually visited; the scroll to the
+   * top is handled by the effect on `page`, which covers the back button too.
+   */
+  const goToPage = (next) => changePage(next)
 
   const commitPageJump = () => {
     const raw = pageJumpValue.trim()
@@ -103,7 +191,7 @@ export default function CustomsPage() {
     }
     const n = parseInt(raw, 10)
     if (Number.isFinite(n) && n >= 1 && n <= totalPages) {
-      setPage(n)
+      goToPage(n)
     } else {
       setPageJumpValue(String(page))
     }
@@ -120,59 +208,36 @@ export default function CustomsPage() {
     <Card as="section" padding="lg">
       <h1 className="page-title">Browse Customs</h1>
       <div className="customs-controls">
-        <div className="search-field">
-          <Input
-            type="search"
-            aria-label={searchMode === 'name' ? 'Search by character name' : 'Search by series'}
-            placeholder={searchMode === 'name' ? 'Search by name...' : 'Search by series...'}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              resetToPage1()
-            }}
-            autoComplete="off"
-          />
-          <SegmentedControl
-            name="customs-search-mode"
-            label="Search by"
-            value={searchMode}
-            onChange={(v) => {
-              setSearchMode(v)
-              resetToPage1()
-            }}
-            options={[
-              { value: 'name', label: 'Name' },
-              { value: 'series', label: 'Series' },
-            ]}
-          />
-        </div>
-        <div className="customs-sort-field">
-          <label htmlFor="customsSort" className="customs-sort-label">
-            Sort by
-          </label>
-          <Select
-            id="customsSort"
-            className="customs-sort-select"
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value)
-              resetToPage1()
-            }}
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <FilterBar
+          query={search}
+          onQuery={updateSearch}
+          placeholder={searchMode === 'name' ? 'Search by name...' : 'Search by series...'}
+          ariaLabel={searchMode === 'name' ? 'Search by character name' : 'Search by series'}
+          mode={searchMode}
+          onMode={(value) => {
+            setSearchMode(value)
+            resetToPage1()
+          }}
+          sortOptions={SORT_OPTIONS}
+          sort={sort}
+          onSort={(value) => {
+            setSort(value)
+            setOrder(SORT_DEFAULT_ORDER[value] ?? 'asc')
+            resetToPage1()
+          }}
+          order={order}
+          onOrder={(value) => {
+            setOrder(value)
+            resetToPage1()
+          }}
+        />
       </div>
 
       {error && (
         <EmptyState
           title="Could not load the list"
           description={error}
-          action={<Button onClick={() => setPage((p) => p)}>Try again</Button>}
+          action={<Button onClick={() => setReloadKey((k) => k + 1)}>Try again</Button>}
         />
       )}
 
@@ -249,7 +314,7 @@ export default function CustomsPage() {
           <Button
             variant="secondary"
             aria-label="First page"
-            onClick={() => setPage(1)}
+            onClick={() => goToPage(1)}
             disabled={page <= 1}
           >
             «
@@ -257,7 +322,7 @@ export default function CustomsPage() {
           <Button
             variant="secondary"
             aria-label="Previous page"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => goToPage(Math.max(1, page - 1))}
             disabled={page <= 1}
           >
             ‹
@@ -300,7 +365,7 @@ export default function CustomsPage() {
           <Button
             variant="secondary"
             aria-label="Next page"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => goToPage(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages}
           >
             ›
@@ -308,7 +373,7 @@ export default function CustomsPage() {
           <Button
             variant="secondary"
             aria-label="Last page"
-            onClick={() => setPage(totalPages)}
+            onClick={() => goToPage(totalPages)}
             disabled={page >= totalPages}
           >
             »

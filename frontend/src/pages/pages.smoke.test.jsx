@@ -90,6 +90,17 @@ describe('page smoke tests', () => {
     expect(screen.queryByText('Ayanami Rei')).not.toBeInTheDocument()
   })
 
+  it('orders results by the chosen field and direction', () => {
+    const names = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+    useStore.setState({ searchSort: 'alphabet', searchOrder: 'asc' })
+    const { unmount } = renderAt(<SearchResultsPage />, '/search?q=a&by=name')
+    expect(names()).toEqual(['Ayanami Rei', 'Makise Kurisu'])
+    unmount()
+    useStore.setState({ searchOrder: 'desc' })
+    renderAt(<SearchResultsPage />, '/search?q=a&by=name')
+    expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
+  })
+
   it('renders a character page', () => {
     renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
   })
