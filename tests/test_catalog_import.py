@@ -165,6 +165,105 @@ class TestAccountMarkers:
         assert ci.strip_account_marker("Rem 🚫  (serverdisable)") == "Rem"
 
 
+class TestRealExtractQuirks:
+    def test_slash_names_are_kept(self):
+        # The filename rule rejects "/", but these are real Mudae disambiguators.
+        result = ci.parse_text(
+            "#1,242 - Rin Tohsaka (F/EX) · ($wa, $wg) - "
+            "https://mudae.net/uploads/1/aa~bb.png"
+        )
+        assert result.issues == []
+        assert result.characters[ci.name_key("Rin Tohsaka (F/EX)")].name == "Rin Tohsaka (F/EX)"
+
+    def test_double_slash_name_is_kept(self):
+        result = ci.parse_text(
+            "#4,742 - SP//dr (Peni Parker) · ($wa, $wg) - "
+            "https://mudae.net/uploads/1/aa~bb.png"
+        )
+        assert ci.name_key("SP//dr (Peni Parker)") in result.characters
+
+    def test_comma_in_series_totals(self):
+        result = ci.parse_text(
+            "Marvel - 12/1,018\n"
+            "#82 - Venom · ($wa) - https://mudae.net/uploads/1/aa~bb.png"
+        )
+        assert result.issues == []
+        series = result.series[ci.name_key("Marvel")]
+        assert (series.listed, series.total) == (12, 1018)
+        assert result.characters[ci.name_key("Venom")].series == "Marvel"
+
+    def test_trailing_asterisk_after_the_pool_list(self):
+        result = ci.parse_text(
+            "#11,913 - namirin  🚫  $wa  DISABLED ·($wa)* - "
+            "https://mudae.net/uploads/1/aa~bb.png"
+        )
+        assert result.issues == []
+        assert result.characters[ci.name_key("namirin")].pool == "wa"
+
+    def test_geometric_shape_name_is_not_eaten_by_the_marker(self):
+        # "▲" is U+25B2; an over-broad symbol class used to swallow the name.
+        result = ci.parse_text(
+            "#19,817 - ▲▲▲▲▲▲▲  🚫  $wg  DISABLED · ($wg, $hg) - "
+            "https://mudae.net/uploads/1/aa~bb.png"
+        )
+        shape = result.characters[ci.name_key("▲▲▲▲▲▲▲")]
+        assert shape.name == "▲▲▲▲▲▲▲"
+        assert shape.pool == "hg,wg"
+
+    def test_discord_chrome_is_ignored_not_an_issue(self):
+        result = ci.parse_text(
+            "🤔 - 1/1\n"
+            "#1 - Rem · ($wa) - https://mudae.net/uploads/1/aa~bb.png\n"
+            "Mudae\nAPP\n— 16:47\n"
+        )
+        assert result.issues == []
+        assert result.noise == 3
+        assert len(result.characters) == 1
+
+
+class TestGapAnalysis:
+    def _result(self, ranks):
+        lines = "\n".join(
+            f"#{r} - Char{r} · ($wa) - https://mudae.net/uploads/{r}/a~b.png" for r in ranks
+        )
+        return ci.parse_text(lines)
+
+    def test_rank_gaps_lists_missing_runs(self):
+        gaps = ci.rank_gaps(self._result([1, 2, 4, 5, 10]))
+        assert gaps["captured"] == 5
+        assert (gaps["min"], gaps["max"]) == (1, 10)
+        assert gaps["ranges"] == [[3, 3], [6, 9]]
+        assert gaps["missing"] == 5
+        assert gaps["first_missing"] == [3, 6, 7, 8, 9]
+
+    def test_rank_gaps_coverage_counts_from_one(self):
+        gaps = ci.rank_gaps(self._result([1, 2, 4, 5, 10]), ceilings=[5, 10])
+        assert gaps["coverage"] == [
+            {"ceiling": 5, "captured": 4, "missing": 1, "pct": 80.0},
+            {"ceiling": 10, "captured": 5, "missing": 5, "pct": 50.0},
+        ]
+
+    def test_rank_gaps_on_empty_result(self):
+        gaps = ci.rank_gaps(ci.parse_text(""))
+        assert gaps["captured"] == 0
+        assert gaps["ranges"] == []
+
+    def test_series_gaps_summarise_incomplete_series(self):
+        result = ci.parse_text(
+            "Marvel - 2/1,018\n"
+            "#1 - A · ($wa) - https://mudae.net/uploads/1/a~b.png\n"
+            "Complete - 1/1\n"
+            "#2 - B · ($wa) - https://mudae.net/uploads/2/a~b.png\n"
+        )
+        gaps = ci.series_gaps(result)
+        assert gaps["series"] == 2
+        assert gaps["listed"] == 3
+        assert gaps["total"] == 1019
+        assert gaps["missing"] == 1016
+        assert gaps["incomplete"][0]["series"] == "Marvel"
+        assert gaps["incomplete"][0]["missing"] == 1016
+
+
 class TestNameKey:
     def test_folds_nfd_nfc_fullwidth_and_nbsp(self):
         assert ci.name_key("Pokémon") == ci.name_key("Poke\u0301mon")
@@ -355,6 +454,91 @@ class TestCatalogDatabase:
             )
         }
         assert {"character_catalog", "catalog_series"} <= tables
+
+
+class TestAliases:
+    def _catalog(self, clean_db, name, series, rank):
+        clean_db.upsert_catalog_characters(
+            [
+                {
+                    "name": name,
+                    "name_key": ci.name_key(name),
+                    "series": series,
+                    "rank": rank,
+                    "mudae_image_url": f"https://mudae.net/uploads/{rank}/a~b.png",
+                    "pool": "wa",
+                    "is_waifu": True,
+                }
+            ],
+            scraped_at="2026-01-01T00:00:00Z",
+            source_batch="test",
+        )
+
+    def test_resolve_aliases_keys_and_flags(self):
+        resolved = ci.resolve_aliases(
+            {
+                "_comment": "ignored",
+                "Saber": {"catalog": "Artoria Pendragon"},
+                "angel-chan": {"catalog": "🎀OMGkawaii🎀Angel-chan", "rename": True},
+            }
+        )
+        assert resolved[ci.name_key("Saber")] == (ci.name_key("Artoria Pendragon"), False)
+        assert resolved[ci.name_key("angel-chan")] == (
+            ci.name_key("🎀OMGkawaii🎀Angel-chan"),
+            True,
+        )
+
+    def test_alias_enriches_a_renamed_character_without_renaming_it(self, clean_db):
+        clean_db.add_character("Saber", "Fate/stay night", "6", "Saber.png")
+        self._catalog(clean_db, "Artoria Pendragon", "Fate/stay night", "4")
+        aliases = {ci.name_key("Saber"): (ci.name_key("Artoria Pendragon"), False)}
+
+        result = clean_db.enrich_characters_from_catalog(aliases=aliases)
+
+        assert result["matched"] == 1
+        assert result["aliased"] == [{"name": "Saber", "catalog_name": "Artoria Pendragon"}]
+        assert result["renamed"] == []
+        row = clean_db.get_connection().execute(
+            "SELECT name, series, rank, main_image_url FROM characters WHERE name = 'Saber'"
+        ).fetchone()
+        assert row["name"] == "Saber"
+        assert (row["series"], row["rank"]) == ("Fate/stay night", "4")
+        assert row["main_image_url"].endswith("/4/a~b.png")
+
+    def test_alias_can_rename_a_character(self, clean_db):
+        clean_db.add_character("Angel-chan", "NEEDY GIRL OVERDOSE", "815", "Angel-chan.png")
+        new_name = "🎀OMGkawaii🎀Angel-chan"
+        self._catalog(clean_db, new_name, "NEEDY GIRL OVERDOSE", "345")
+        aliases = {ci.name_key("angel-chan"): (ci.name_key(new_name), True)}
+
+        result = clean_db.enrich_characters_from_catalog(aliases=aliases)
+
+        assert result["renamed"] == [{"from": "Angel-chan", "to": new_name}]
+        assert result["rename_conflicts"] == []
+        names = [
+            row["name"]
+            for row in clean_db.get_connection().execute("SELECT name FROM characters")
+        ]
+        assert names == [new_name]
+
+    def test_alias_rename_onto_a_taken_name_is_refused(self, clean_db):
+        clean_db.add_character("Angel-chan", "", "", "")
+        new_name = "🎀OMGkawaii🎀Angel-chan"
+        clean_db.add_character(new_name, "", "", "")
+        self._catalog(clean_db, new_name, "NEEDY GIRL OVERDOSE", "345")
+        aliases = {ci.name_key("angel-chan"): (ci.name_key(new_name), True)}
+
+        result = clean_db.enrich_characters_from_catalog(aliases=aliases)
+
+        assert result["renamed"] == []
+        assert result["rename_conflicts"] == [{"name": "Angel-chan", "to": new_name}]
+
+    def test_an_alias_whose_catalog_name_is_absent_does_nothing(self, clean_db):
+        clean_db.add_character("Saber", "Fate/stay night", "6", "Saber.png")
+        aliases = {ci.name_key("Saber"): (ci.name_key("Artoria Pendragon"), False)}
+        result = clean_db.enrich_characters_from_catalog(aliases=aliases)
+        assert result["matched"] == 0
+        assert result["unmatched"] == ["Saber"]
 
 
 def test_module_is_importable_without_the_database():

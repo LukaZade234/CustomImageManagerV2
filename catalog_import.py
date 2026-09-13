@@ -31,18 +31,22 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from validation import MAX_RANK_LENGTH, MAX_SERIES_LENGTH, validate_character_name
+from validation import MAX_CHAR_NAME_LENGTH, MAX_RANK_LENGTH, MAX_SERIES_LENGTH
 
 # The series header: "Series name - listed/total". Non-greedy so a series whose
-# own name contains a dash still matches at the final " - N/M".
-_SERIES_RE = re.compile(r"^(?P<series>.+?)\s*-\s*(?P<listed>\d+)\s*/\s*(?P<total>\d+)\s*$")
+# own name contains a dash still matches at the final " - N/M". Commas are
+# allowed in the counts; Mudae writes large totals as "1,018".
+_SERIES_RE = re.compile(
+    r"^(?P<series>.+?)\s*-\s*(?P<listed>[\d,]+)\s*/\s*(?P<total>[\d,]+)\s*$"
+)
 
 # A character line. The name is greedy so it splits on the *last* "· (" -- which
 # is what protects a name that itself contains a middle dot. The URL is anchored
-# to the end, so trailing whitespace and the pool list can vary freely.
+# to the end, so trailing whitespace and the pool list can vary freely. A stray
+# "*" sometimes trails the pool list ("·($wa)*"), so allow it.
 _CHAR_RE = re.compile(
     r"^#(?P<rank>[\d,]+)\s*-\s*(?P<name>.+)"
-    r"\s*[·•]\s*\((?P<pools>[^)]*)\)\s*-\s*"
+    r"\s*[·•]\s*\((?P<pools>[^)]*)\)\s*\**\s*-\s*"
     r"(?P<url>https://mudae\.net/uploads/\S+\.png)\s*$"
 )
 
@@ -50,16 +54,19 @@ _POOL_TOKEN_RE = re.compile(r"^\$([wh])([ag])$", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
 _APOSTROPHES = {"\u2018": "'", "\u2019": "'", "\u02bc": "'", "\u2032": "'"}
 
+# Lines that are neither a series header nor a character line and carry no data
+# at all: the paste picks up Discord's own chrome ("Mudae", "APP", "— 16:47").
+# Counted separately from real parse failures so the report is not noisy.
+_NOISE_RE = re.compile(r"^(?:Mudae|APP|—\s*\d{1,2}:\d{2}(?::\d{2})?)\s*$")
+
 # A character queried through a personal Mudae account can carry an
 # account-specific marker between the name and the "· ($pool)" separator:
 #   #11,203 - Yoriko Kichijouji  🚫  $wa  DISABLED · ($wa) - https://...
 #   #1,395 - Louise Françoise Le Blanc de La Vallière 🚫  ($serverdisable) · ($wa) - ...
-# The marker is noise, not part of the name: strip it. The emoji class spans the
-# pictograph/dingbat/symbol ranges plus the variation selector and ZWJ, so it
-# matches a lone 🚫 or a multi-codepoint symbol without ever eating a real word.
-_MARKER_SYMBOL = (
-    r"[\U0001F000-\U0001FAFF\u2190-\u2BFF\u2600-\u27BF\uFE0F\u200D\u20E3]"
-)
+# The marker is noise, not part of the name: strip it. The emoji class is kept
+# to the pictograph/dingbat/misc-symbol ranges (not U+2190-U+25FF) so it can
+# never eat a name made of geometric shapes such as "▲▲▲▲▲▲▲".
+_MARKER_SYMBOL = r"[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u20E3]"
 _MARKER_TAILS = (
     r"\(\s*\$?serverdisable\s*\)",  # ($serverdisable) / (serverdisable)
     r"\$serverdisable",  # $serverdisable
@@ -74,6 +81,29 @@ _DISABLED_MARKER_RE = re.compile(
 def strip_account_marker(name: str) -> str:
     """Drop a trailing account marker ("🚫 $wa DISABLED", "🚫 ($serverdisable)")."""
     return _DISABLED_MARKER_RE.sub("", name).strip()
+
+
+def validate_catalog_name(name: str) -> tuple[bool, str | None]:
+    """Length and control characters only, not the filename rules.
+
+    `validate_character_name` refuses "/" because a working character's name
+    becomes a filename and a URL segment. Catalog names are display data, and
+    real Mudae names carry slashes ("Rin Tohsaka (F/EX)", "SP//dr (Peni
+    Parker)"), so those are kept here; the filename rule applies later, only if
+    a catalog row is ever promoted to a working character.
+    """
+    if not name or not name.strip():
+        return False, "empty name"
+    if len(name) > MAX_CHAR_NAME_LENGTH:
+        return False, f"name too long (max {MAX_CHAR_NAME_LENGTH})"
+    if any(ord(ch) < 32 for ch in name):
+        return False, "control characters"
+    # "/" is allowed (real names carry it, e.g. "SP//dr"), but a path-traversal
+    # sequence is not. A bare ".." substring is not the test: real names contain
+    # it ("You're Bald...") -- only ".." next to a separator is.
+    if name in (".", "..") or re.search(r"\.\.[/\\]|[/\\]\.\.", name):
+        return False, "name contains a path traversal"
+    return True, None
 
 # An unranked or unparseable rank is treated as worse than every real rank, so a
 # duplicate that *does* have a rank always wins the merge.
@@ -137,6 +167,8 @@ class ParseResult:
     sources: list[str] = field(default_factory=list)
     lines_total: int = 0
     lines_parsed: int = 0
+    # Non-data lines (Discord chrome), reported separately from real failures.
+    noise: int = 0
     # A character seen again, unchanged. Expected in bulk: extracts overlap.
     duplicates: int = 0
     # A character seen again with different data; the better rank won.
@@ -224,7 +256,7 @@ def parse_into(result: ParseResult, text: str, *, source: str = "") -> ParseResu
                 )
                 continue
             name = strip_account_marker(match.group("name").strip())
-            ok, err = validate_character_name(name)
+            ok, err = validate_catalog_name(name)
             if not ok:
                 result.issues.append(ParseIssue(source, line_no, line, err or "invalid name"))
                 continue
@@ -259,6 +291,9 @@ def parse_into(result: ParseResult, text: str, *, source: str = "") -> ParseResu
 
         match = _SERIES_RE.match(line)
         if not match:
+            if _NOISE_RE.match(line):
+                result.noise += 1
+                continue
             result.issues.append(ParseIssue(source, line_no, line, "not a series header"))
             continue
         current_series = match.group("series").strip()
@@ -266,8 +301,8 @@ def parse_into(result: ParseResult, text: str, *, source: str = "") -> ParseResu
             result,
             CatalogSeries(
                 series=current_series,
-                listed=int(match.group("listed")),
-                total=int(match.group("total")),
+                listed=int(match.group("listed").replace(",", "")),
+                total=int(match.group("total").replace(",", "")),
             ),
         )
         result.lines_parsed += 1
@@ -323,10 +358,125 @@ def as_catalog_map(result: ParseResult) -> dict[str, dict]:
     """Shape merged characters as the enrichment preview map db expects."""
     return {
         key: {
+            "name": character.name,
             "series": character.series,
             "rank": character.rank,
             "mudae_image_url": character.image_url,
         }
         for key, character in result.characters.items()
     }
+
+
+def resolve_aliases(entries: dict) -> dict[str, tuple[str, bool]]:
+    """Turn a `mudae_aliases.json` mapping into `name_key -> (catalog_key, rename)`.
+
+    `entries` is `{old display name: {"catalog": new display name, "rename": bool}}`.
+    The match is keyed the same way everything else is, so the old name's
+    spelling in the file does not have to be exact.
+    """
+    resolved: dict[str, tuple[str, bool]] = {}
+    for old_name, value in (entries or {}).items():
+        if old_name.startswith("_") or not isinstance(value, dict):
+            continue
+        catalog_name = value.get("catalog")
+        if not catalog_name:
+            continue
+        resolved[name_key(old_name)] = (name_key(catalog_name), bool(value.get("rename")))
+    return resolved
+
+
+# Round ceilings the coverage table reports against, so "we have everything up
+# to N" is checkable rather than asserted.
+_COVERAGE_CEILINGS = (100, 250, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000)
+
+
+def rank_gaps(result: ParseResult, *, ceilings: list[int] | None = None) -> dict:
+    """Where the captured rank numbers are thin.
+
+    Mudae claim ranks are sequential, so a missing integer is a character the
+    extract did not capture. Reports the holes between the lowest and highest
+    captured rank as contiguous ranges (far more usable than 100k loose numbers),
+    plus coverage at round ceilings. Coverage counts ranks 1..ceiling because the
+    interesting question is "how complete is the top of the roster", not "how
+    many holes are there out to rank 115,000".
+    """
+    present = {int(c.rank) for c in result.characters.values() if c.rank.isdigit()}
+    if not present:
+        return {
+            "captured": 0,
+            "min": None,
+            "max": None,
+            "missing": 0,
+            "missing_pct": 0.0,
+            "ranges": [],
+            "largest_ranges": [],
+            "coverage": [],
+            "first_missing": [],
+        }
+
+    low = min(present)
+    high = max(present)
+    missing = [n for n in range(low, high + 1) if n not in present]
+    ranges: list[list[int]] = []
+    if missing:
+        start = prev = missing[0]
+        for n in missing[1:]:
+            if n == prev + 1:
+                prev = n
+            else:
+                ranges.append([start, prev])
+                start = prev = n
+        ranges.append([start, prev])
+
+    limits = ceilings or [c for c in _COVERAGE_CEILINGS if c <= high + 1] or [high]
+    coverage = []
+    for limit in limits:
+        captured = sum(1 for n in range(1, limit + 1) if n in present)
+        coverage.append(
+            {
+                "ceiling": limit,
+                "captured": captured,
+                "missing": limit - captured,
+                "pct": round(100 * captured / limit, 1),
+            }
+        )
+
+    span = high - low + 1
+    return {
+        "captured": len(present),
+        "min": low,
+        "max": high,
+        "missing": len(missing),
+        "missing_pct": round(100 * len(missing) / span, 1),
+        "ranges": ranges,
+        "largest_ranges": sorted(ranges, key=lambda r: r[1] - r[0], reverse=True)[:15],
+        "coverage": coverage,
+        "first_missing": missing[:100],
+    }
+
+
+def series_gaps(result: ParseResult, *, limit: int = 50) -> dict:
+    """Which captured series are partial, from the "listed/total" headers."""
+    rows = [
+        {
+            "series": s.series,
+            "listed": s.listed or 0,
+            "total": s.total or 0,
+            "missing": max(0, (s.total or 0) - (s.listed or 0)),
+        }
+        for s in result.series.values()
+    ]
+    incomplete = sorted(
+        (row for row in rows if row["missing"] > 0),
+        key=lambda row: row["missing"],
+        reverse=True,
+    )
+    return {
+        "series": len(rows),
+        "listed": sum(row["listed"] for row in rows),
+        "total": sum(row["total"] for row in rows),
+        "missing": sum(row["missing"] for row in rows),
+        "incomplete": incomplete[:limit],
+    }
+
 

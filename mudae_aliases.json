@@ -1,0 +1,7 @@
+{
+  "_comment": "Mudae sometimes renames a character; the old name is still accepted as an alias. During catalog enrichment a working character whose name is not in the catalog is matched through this map instead of being left unmatched. Entries without \"rename\" keep the working name and only refresh rank/series/portrait; \"rename\": true adopts the catalog's display name. See scripts/import_mudae_catalog.py --aliases.",
+  "Saber": { "catalog": "Artoria Pendragon" },
+  "Rider": { "catalog": "Medusa (F/SN)" },
+  "Asuka Langley Souryuu": { "catalog": "Asuka Langley Soryu" },
+  "angel-chan": { "catalog": "🎀OMGkawaii🎀Angel-chan", "rename": true }
+}
