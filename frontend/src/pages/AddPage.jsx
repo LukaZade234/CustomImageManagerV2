@@ -123,9 +123,16 @@ export default function AddPage() {
   const matchedExactly = Boolean(
     nameMatch && normalizeSeries(name) === normalizeSeries(nameMatch.name),
   )
-  const duplicateName = matchedExactly && Boolean(nameMatch.in_library)
+  // For the manual form the series must match as well: a name that merely
+  // coincides with another character's is not enough to offer that character.
+  const seriesMatchesKnown = Boolean(
+    matchedExactly &&
+      nameMatch?.series &&
+      normalizeSeries(series) === normalizeSeries(nameMatch.series),
+  )
+  const duplicateName = matchedExactly && Boolean(nameMatch.in_library) && seriesMatchesKnown
   const catalogImage =
-    matchedExactly && nameMatch && !nameMatch.in_library && !seriesMismatch
+    matchedExactly && nameMatch && !nameMatch.in_library && seriesMatchesKnown
       ? nameMatch.image || ''
       : ''
   // The lookup panel's card shows only while its own field still spells the

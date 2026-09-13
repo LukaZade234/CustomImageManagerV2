@@ -220,6 +220,29 @@ describe('AddPage catalog integration', () => {
     expect(screen.queryByRole('link', { name: /Rem/ })).toBeNull()
   })
 
+  it('hides the existing card when the series does not match', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({
+      found: true,
+      character: {
+        name: 'Rem',
+        series: 'Re:Zero',
+        rank: '3',
+        image: '',
+        in_library: true,
+      },
+    })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character Name'), 'Rem')
+    expect(await screen.findByRole('link', { name: /Rem/ })).toBeInTheDocument()
+
+    const seriesInput = screen.getByLabelText('Series')
+    await user.clear(seriesInput)
+    await user.type(seriesInput, 'Wrong Series')
+    expect(screen.queryByRole('link', { name: /Rem/ })).toBeNull()
+  })
+
   it('shows the existing card in the lookup panel', async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({
