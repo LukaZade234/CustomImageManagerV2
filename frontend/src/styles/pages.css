@@ -91,7 +91,12 @@
 .char-image-section img {
   max-width: 100%;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--accent);
+  /* Mudae frames every portrait with a 1px white line at the image edge. An
+     actual border would sit outside it and leave the white showing between the
+     two; a hairline outline pulled one pixel inward lands on the white line
+     and paints over it, so the accent reads as the portrait's own frame. */
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 /* Sized to identify, not to impress: the stored portraits are all 225x350, so
    a height cap is what actually binds and the width follows from it. */
