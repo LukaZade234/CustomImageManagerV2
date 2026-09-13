@@ -170,7 +170,7 @@ describe('AddPage catalog integration', () => {
     expect(document.querySelector('#addCharImage')).not.toBeNull()
   })
 
-  it('refuses to add a character that already exists', async () => {
+  it('offers a card instead of adding a character that already exists', async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({
       found: true,
@@ -185,13 +185,42 @@ describe('AddPage catalog integration', () => {
     renderPage()
 
     await user.type(screen.getByLabelText('Character Name'), 'Rem')
-    expect(await screen.findByText(/already exists/i)).toBeInTheDocument()
+    const card = await screen.findByRole('link', { name: /Rem/ })
+    expect(card).toHaveAttribute('href', '/character/Rem')
 
     await user.click(screen.getByRole('button', { name: /Add Character/ }))
     expect(api.addCharacter).not.toHaveBeenCalled()
   })
 
-  it('shows the already-exists message in the lookup panel', async () => {
+  it('hides the existing card as soon as the text stops matching', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockImplementation((value) =>
+      Promise.resolve(
+        value === 'Rem'
+          ? {
+              found: true,
+              character: {
+                name: 'Rem',
+                series: 'Re:Zero',
+                rank: '3',
+                image: '',
+                in_library: true,
+              },
+            }
+          : { found: false, character: null },
+      ),
+    )
+    renderPage()
+
+    const input = screen.getByLabelText('Character Name')
+    await user.type(input, 'Rem')
+    expect(await screen.findByRole('link', { name: /Rem/ })).toBeInTheDocument()
+
+    await user.type(input, 'x')
+    expect(screen.queryByRole('link', { name: /Rem/ })).toBeNull()
+  })
+
+  it('shows the existing card in the lookup panel', async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({
       found: true,
@@ -208,7 +237,10 @@ describe('AddPage catalog integration', () => {
     await user.type(screen.getByLabelText('Character name'), 'Rem')
     await user.click(screen.getByRole('button', { name: 'Lookup' }))
 
-    expect(await screen.findByText(/Character "Rem" already exists/i)).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Rem/ })).toHaveAttribute(
+      'href',
+      '/character/Rem',
+    )
     expect(api.mudaeLookupCharacter).not.toHaveBeenCalled()
   })
 })

@@ -921,6 +921,52 @@ body.reorder-touch-dragging {
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
 }
+/* A character the library already has, offered as a link from the Add form so
+   the visitor opens it instead of creating a duplicate. */
+.existing-character-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--duration) var(--ease);
+}
+.existing-character-card:hover {
+  border-color: var(--accent);
+}
+.existing-character-card__img {
+  width: 56px;
+  aspect-ratio: var(--main-image-ratio);
+  height: auto;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+.existing-character-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.existing-character-card__name {
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+.existing-character-card__series {
+  font-size: var(--type-meta);
+  color: var(--text-muted);
+}
+.existing-character-card__hint {
+  font-size: var(--type-micro);
+  color: var(--text-subtle);
+}
 .mudae-divider {
   margin: var(--space-6) 0;
   border: 0;

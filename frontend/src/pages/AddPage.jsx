@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
+import ExistingCharacterCard from '../components/ExistingCharacterCard'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
 import { Button, Card, Field, Input } from '../components/ui'
 import { useCatalogMatch, useCatalogSuggest } from '../hooks/useCatalogSuggest'
@@ -67,6 +68,8 @@ export default function AddPage() {
   const [rankTouched, setRankTouched] = useState(false)
   // A message shown inside the lookup panel, e.g. "already exists".
   const [mudaeError, setMudaeError] = useState(null)
+  // The character a lookup found already in the library, shown as a clickable card.
+  const [mudaeExisting, setMudaeExisting] = useState(null)
 
   const navigate = useNavigate()
   const loadCharacters = useStore((s) => s.loadCharacters)
@@ -115,9 +118,21 @@ export default function AddPage() {
 
   // A name already in the working set cannot be added again. Otherwise, when the
   // name is a catalog entry and the series agrees, its portrait is offered too.
-  const duplicateName = Boolean(nameMatch?.in_library)
+  // The match must be exact for the current text, so the moment the field
+  // diverges the card and portrait vanish rather than lagging the debounce.
+  const matchedExactly = Boolean(
+    nameMatch && normalizeSeries(name) === normalizeSeries(nameMatch.name),
+  )
+  const duplicateName = matchedExactly && Boolean(nameMatch.in_library)
   const catalogImage =
-    nameMatch && !nameMatch.in_library && !seriesMismatch ? nameMatch.image || '' : ''
+    matchedExactly && nameMatch && !nameMatch.in_library && !seriesMismatch
+      ? nameMatch.image || ''
+      : ''
+  // The lookup panel's card shows only while its own field still spells the
+  // found character exactly.
+  const panelExact = Boolean(
+    mudaeExisting && normalizeSeries(mudaeLookupName) === normalizeSeries(mudaeExisting.name),
+  )
 
   useEffect(() => {
     // Untouched: the library's series follows the name. Once the field is
@@ -219,15 +234,15 @@ export default function AddPage() {
     setMudaeCandidates([])
     setMudaePreview(null)
     setMudaeError(null)
+    setMudaeExisting(null)
     setStatus(null)
     try {
       // Library first: a name the catalog already knows costs no Mudae request.
       const local = await apiClient.findCatalogCharacter(q)
       if (local.found) {
         if (local.character.in_library) {
-          const message = `Character "${local.character.name}" already exists.`
-          setMudaeError(message)
-          addToast(message, 'error')
+          setMudaeExisting(local.character)
+          addToast(`Character "${local.character.name}" already exists`, 'error')
           return
         }
         applyMudaeCharacter(local.character)
@@ -273,16 +288,15 @@ export default function AddPage() {
     }
     setMudaeBusy(true)
     setMudaeError(null)
+    setMudaeExisting(null)
     setStatus(null)
     try {
       // Catalog first: adding a known character needs no Discord and no ImgChest.
       const local = await apiClient.findCatalogCharacter(q)
       if (local.found) {
         if (local.character.in_library) {
-          const message = `Character "${local.character.name}" already exists.`
-          setMudaeError(message)
-          addToast(message, 'error')
-          setStatus({ type: 'error', message })
+          setMudaeExisting(local.character)
+          addToast(`Character "${local.character.name}" already exists.`, 'error')
           return
         }
         const res = await apiClient.catalogAddCharacter(local.character.name)
@@ -506,6 +520,8 @@ export default function AddPage() {
             </Button>
           </div>
         </div>
+
+        {panelExact && <ExistingCharacterCard character={mudaeExisting} />}
 
         {mudaeError && (
           <p className="form-error" role="alert">
@@ -734,12 +750,7 @@ export default function AddPage() {
               required
             />
           </Field>
-          {duplicateName && (
-            <p className="form-error" role="alert">
-              Character &quot;{nameMatch.name}&quot; already exists — open it instead of adding it
-              again.
-            </p>
-          )}
+          {duplicateName && <ExistingCharacterCard character={nameMatch} />}
           <div className="edit-group full-width">
             <label htmlFor="addCharSeries">Series</label>
             <SeriesSuggestInput
