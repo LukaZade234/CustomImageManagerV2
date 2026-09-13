@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 /**
- * A text input with a filtered list of existing series.
+ * A text input with a filtered list of suggestions.
  *
  * Follows the ARIA combobox-with-listbox pattern, which matters here because the
  * list used to be selectable only with `onMouseDown`: there was no way to choose
@@ -12,28 +12,50 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
  * cursor and `aria-activedescendant` tells the screen reader which option it is
  * on, so the options themselves are deliberately not tabbable — making them
  * focusable would break the pattern rather than improve it.
+ *
+ * `suggestions` may be plain strings (series) or `{ value, label, meta }`
+ * objects (characters, where the name is inserted but the series is shown).
+ * `onPick` receives the whole item, which is how picking a character can fill
+ * both the name and its series.
  */
+
+function toItem(suggestion) {
+  if (typeof suggestion === 'string') return { value: suggestion, label: suggestion }
+  return {
+    ...suggestion,
+    value: suggestion.value ?? suggestion.label ?? '',
+    label: suggestion.label ?? suggestion.value ?? '',
+  }
+}
+
 export default function SeriesSuggestInput({
   id,
   value,
   onChange,
   suggestions = [],
+  onPick,
   placeholder,
   disabled,
   className = 'modern-input',
   wrapClassName = 'series-suggest-wrap',
   style,
+  ariaLabel = 'Suggestions',
+  ariaInvalid,
+  ariaDescribedBy,
+  required,
 }) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const wrapRef = useRef(null)
   const listId = useId()
 
+  const items = useMemo(() => suggestions.map(toItem), [suggestions])
+
   const filtered = useMemo(() => {
     const q = value.trim().toLowerCase()
-    const list = q ? suggestions.filter((s) => s.toLowerCase().includes(q)) : suggestions
+    const list = q ? items.filter((item) => item.label.toLowerCase().includes(q)) : items
     return list.slice(0, 25)
-  }, [value, suggestions])
+  }, [value, items])
 
   useEffect(() => {
     const close = (e) => {
@@ -55,8 +77,9 @@ export default function SeriesSuggestInput({
   const showList = open && !disabled && filtered.length > 0
   const optionId = (index) => `${listId}-option-${index}`
 
-  const pick = (s) => {
-    onChange({ target: { value: s } })
+  const pick = (item) => {
+    onChange({ target: { value: item.value } })
+    onPick?.(item)
     setOpen(false)
     setActiveIndex(-1)
   }
@@ -118,21 +141,19 @@ export default function SeriesSuggestInput({
         aria-expanded={showList}
         aria-controls={listId}
         aria-activedescendant={showList && activeIndex >= 0 ? optionId(activeIndex) : undefined}
+        aria-invalid={ariaInvalid || undefined}
+        aria-describedby={ariaDescribedBy}
+        required={required}
       />
       {showList && (
-        <div
-          className="autocomplete-items"
-          role="listbox"
-          id={listId}
-          aria-label="Series suggestions"
-        >
-          {filtered.map((s, index) => (
+        <div className="autocomplete-items" role="listbox" id={listId} aria-label={ariaLabel}>
+          {filtered.map((item, index) => (
             // Focus stays on the input in the combobox pattern; aria-activedescendant
             // above is what moves. Making an option tabbable would break the pattern
             // rather than help.
             // biome-ignore lint/a11y/useFocusableInteractive: virtual cursor, see above
             <div
-              key={s}
+              key={item.value}
               id={optionId(index)}
               className={`autocomplete-item${index === activeIndex ? ' is-active' : ''}`}
               role="option"
@@ -141,10 +162,11 @@ export default function SeriesSuggestInput({
               onMouseDown={(e) => {
                 // mousedown, not click: the input's blur would close the list first.
                 e.preventDefault()
-                pick(s)
+                pick(item)
               }}
             >
-              {s}
+              {item.label}
+              {item.meta && <span className="autocomplete-item__meta">{item.meta}</span>}
             </div>
           ))}
         </div>

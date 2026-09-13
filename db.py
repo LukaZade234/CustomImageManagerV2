@@ -374,6 +374,149 @@ def get_catalog_characters() -> list[dict]:
     ]
 
 
+def _like_escape(term: str) -> str:
+    """Escape a user term so % and _ are literals in a LIKE pattern."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def suggest_characters(term: str, *, limit: int = 10) -> list[dict]:
+    """Name suggestions, drawn from the working set and the full catalog.
+
+    The working set wins where a name exists in both: its series/rank may have
+    been edited by hand. A working row with no portrait borrows the catalog's.
+    Empty `term` returns the best-ranked names, so focusing the field is useful
+    on its own.
+    """
+    import catalog_import
+
+    conn = get_connection()
+    term = (term or "").strip()
+    like = f"%{_like_escape(term)}%"
+    rows: dict[str, dict] = {}
+
+    def take(name, series, rank, image, in_library):
+        key = catalog_import.name_key(name)
+        current = rows.get(key)
+        if current is None:
+            rows[key] = {
+                "name": name,
+                "series": series or "",
+                "rank": rank or "",
+                "image": image or "",
+                "in_library": in_library,
+            }
+            return
+        if in_library:
+            current["in_library"] = True
+            if series:
+                current["series"] = series
+            if rank:
+                current["rank"] = rank
+        if not current["image"] and image:
+            current["image"] = image
+        if not current["series"] and series:
+            current["series"] = series
+
+    working_sql = "SELECT name, series, rank, main_image_url AS image FROM characters"
+    catalog_sql = (
+        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog"
+    )
+    if term:
+        working_sql += " WHERE name COLLATE NOCASE LIKE ? ESCAPE '\\'"
+        catalog_sql += " WHERE name COLLATE NOCASE LIKE ? ESCAPE '\\'"
+        for row in conn.execute(working_sql, (like,)):
+            take(row["name"], row["series"], row["rank"], row["image"], True)
+        for row in conn.execute(catalog_sql, (like,)):
+            take(row["name"], row["series"], row["rank"], row["image"], False)
+    else:
+        for row in conn.execute(working_sql):
+            take(row["name"], row["series"], row["rank"], row["image"], True)
+        for row in conn.execute(catalog_sql):
+            take(row["name"], row["series"], row["rank"], row["image"], False)
+
+    term_key = catalog_import.name_key(term)
+
+    def order(item):
+        name_key = catalog_import.name_key(item["name"])
+        # Prefix matches first, then best rank, then alphabetical.
+        bucket = 0 if term_key and name_key.startswith(term_key) else 1
+        rank = int(item["rank"]) if item["rank"].isdigit() else 10**9
+        return (bucket, rank, name_key)
+
+    return sorted(rows.values(), key=order)[:limit]
+
+
+def suggest_series(term: str, *, limit: int = 20) -> list[str]:
+    """Series names from the working set and the catalog's series list.
+
+    Deduplicated case-insensitively, preferring the catalog's own spelling (the
+    working rows can differ only in case, e.g. "Zenless Zone Zero").
+    """
+    conn = get_connection()
+
+    names: dict[str, str] = {}
+
+    def add(value: str) -> None:
+        value = (value or "").strip()
+        if value:
+            names.setdefault(value.casefold(), value)
+
+    for row in conn.execute("SELECT series FROM catalog_series WHERE series <> ''"):
+        add(row[0])
+    for table in ("characters", "character_catalog"):
+        for row in conn.execute(f"SELECT DISTINCT series FROM {table} WHERE series <> ''"):
+            add(row[0])
+
+    values = list(names.values())
+    term = (term or "").strip()
+    if term:
+        needle = term.casefold()
+        values = [s for s in values if needle in s.casefold()]
+    return sorted(values, key=str.casefold)[:limit]
+
+
+def find_character(name: str) -> dict | None:
+    """The library's best knowledge of one character, or None.
+
+    The working set is checked first (it may carry hand-edited series/rank), then
+    the catalog. Matching is on the Unicode-folded key, so the accented and
+    pre-rename spellings still resolve.
+    """
+    import catalog_import
+
+    key = catalog_import.name_key(name)
+    if not key:
+        return None
+    conn = get_connection()
+    for row in conn.execute(
+        "SELECT name, series, rank, main_image_url AS image FROM characters"
+    ):
+        if catalog_import.name_key(row["name"]) == key:
+            return {
+                "name": row["name"],
+                "series": row["series"],
+                "rank": row["rank"],
+                "image": row["image"],
+                "pool": "",
+                "in_library": True,
+            }
+    row = conn.execute(
+        "SELECT name, series, rank, mudae_image_url AS image, pool"
+        "  FROM character_catalog WHERE name_key = ?",
+        (key,),
+    ).fetchone()
+    if row:
+        return {
+            "name": row["name"],
+            "series": row["series"],
+            "rank": row["rank"],
+            "image": row["image"],
+            "pool": row["pool"],
+            "in_library": False,
+        }
+    return None
+
+
 def enrich_characters_from_catalog(
     *,
     overwrite: bool = True,

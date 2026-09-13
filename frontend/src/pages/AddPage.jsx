@@ -3,20 +3,31 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
 import { Button, Card, Field, Input } from '../components/ui'
+import { useCatalogMatch, useCatalogSuggest } from '../hooks/useCatalogSuggest'
 import { useStore } from '../store/useStore'
 
-/** Discord/CDN images often fail as bare <img src>; preview via backend proxy. */
+/** Discord/CDN images often fail as bare <img src>; preview via backend proxy.
+ *  mudae.net portraits are hotlink-friendly (the app sends no Referer) and are
+ *  served directly rather than through the proxy. */
 function mudaePreviewSrc(imageUrl) {
   if (!imageUrl) return ''
-  if (
-    imageUrl.startsWith('http://') ||
-    imageUrl.startsWith('https://') ||
-    imageUrl.startsWith('//')
-  ) {
-    const absolute = imageUrl.startsWith('//') ? `https:${imageUrl}` : imageUrl
-    return `/api/mudae/proxy-image?url=${encodeURIComponent(absolute)}`
+  let url = imageUrl
+  if (url.startsWith('//')) url = `https:${url}`
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const host = new URL(url).hostname.toLowerCase()
+      if (host === 'mudae.net' || host.endsWith('.mudae.net')) return url
+    } catch {
+      /* fall through to the proxy */
+    }
+    return `/api/mudae/proxy-image?url=${encodeURIComponent(url)}`
   }
-  return getImageUrl(imageUrl)
+  return getImageUrl(url)
+}
+
+/** Case/space-insensitive comparison, matching the backend's folded name key. */
+function normalizeSeries(value) {
+  return (value || '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 function mudaeCandidatesFromResponse(res) {
@@ -49,10 +60,11 @@ export default function AddPage() {
   const [seriesCancelling, setSeriesCancelling] = useState(false)
   const [seriesResult, setSeriesResult] = useState(null)
   const [seriesProgress, setSeriesProgress] = useState(null)
+  // Once the series field is edited or chosen, the library's suggestion stops
+  // overwriting it -- the mismatch check is what speaks after that.
+  const [seriesTouched, setSeriesTouched] = useState(false)
 
   const navigate = useNavigate()
-  const characters = useStore((s) => s.characters)
-  const savedCharacters = useStore((s) => s.savedCharacters)
   const loadCharacters = useStore((s) => s.loadCharacters)
   const addToast = useStore((s) => s.addToast)
 
@@ -63,18 +75,63 @@ export default function AddPage() {
       .catch(() => setMudaeConfigured(false))
   }, [])
 
-  const seriesSuggestions = useMemo(() => {
-    const seen = new Set()
-    for (const c of [...characters, ...savedCharacters]) {
-      const s = (c.series || '').trim()
-      if (s) seen.add(s)
+  // Catalog-backed suggestions and the library's own record for the typed name.
+  const nameSuggestions = useCatalogSuggest(name, { kind: 'characters', limit: 8 })
+  const seriesSuggestions = useCatalogSuggest(series, { kind: 'series', limit: 20 })
+  const panelNameSuggestions = useCatalogSuggest(mudaeLookupName, { kind: 'characters', limit: 8 })
+  const bulkSeriesSuggestions = useCatalogSuggest(seriesBulkName, { kind: 'series', limit: 20 })
+  const nameMatch = useCatalogMatch(name)
+
+  const nameSuggestionItems = useMemo(
+    () =>
+      nameSuggestions.map((c) => ({
+        value: c.name,
+        label: c.name,
+        meta: c.series || undefined,
+        series: c.series || '',
+      })),
+    [nameSuggestions],
+  )
+  const panelNameItems = useMemo(
+    () =>
+      panelNameSuggestions.map((c) => ({
+        value: c.name,
+        label: c.name,
+        meta: c.series || undefined,
+      })),
+    [panelNameSuggestions],
+  )
+
+  // The library knows this character's series: offer it when the field is empty
+  // and still untouched, and flag it when a different one is typed.
+  const seriesMismatch =
+    Boolean(nameMatch?.series) &&
+    Boolean(series.trim()) &&
+    normalizeSeries(series) !== normalizeSeries(nameMatch.series)
+
+  useEffect(() => {
+    if (!nameMatch?.series || seriesTouched) return
+    if (!series.trim() && series !== nameMatch.series) {
+      setSeries(nameMatch.series)
     }
-    return [...seen].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-  }, [characters, savedCharacters])
+  }, [nameMatch, series, seriesTouched])
+
+  const handlePickName = (item) => {
+    if (item?.series) {
+      setSeries(item.series)
+      setSeriesTouched(true)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim()) return
+    if (seriesMismatch) {
+      const message = `Series doesn't match — "${nameMatch.name}" is in "${nameMatch.series}".`
+      setStatus({ type: 'error', message })
+      addToast(message, 'error')
+      return
+    }
     setLoading(true)
     setStatus(null)
     try {
@@ -90,6 +147,7 @@ export default function AddPage() {
       setSeries('')
       setRank('')
       setImageFile(null)
+      setSeriesTouched(false)
       setTimeout(() => navigate(`/character/${encodeURIComponent(name.trim())}`), 500)
     } catch (err) {
       setStatus({ type: 'error', message: err.message })
@@ -103,8 +161,14 @@ export default function AddPage() {
     if (!character) return
     setName(character.name || '')
     setSeries(character.series || '')
+    setSeriesTouched(true)
     setRank(character.rank || '')
-    setMudaePreview(character)
+    // Catalog results carry `image`; Mudae results carry `image_url`. Normalise
+    // so the preview and the panel render either.
+    setMudaePreview({
+      ...character,
+      image_url: character.image_url || character.image || '',
+    })
     setMudaeCandidates([])
     setImageFile(null)
   }
@@ -120,6 +184,18 @@ export default function AddPage() {
     setMudaePreview(null)
     setStatus(null)
     try {
+      // Library first: a name the catalog already knows costs no Mudae request.
+      const local = await apiClient.findCatalogCharacter(q)
+      if (local.found) {
+        applyMudaeCharacter(local.character)
+        setMudaeLookupName(local.character.name || q)
+        addToast(`Found "${local.character.name}" in the library`, 'success')
+        return
+      }
+      if (!mudaeConfigured) {
+        addToast('Not in the library, and Mudae lookup is not available', 'error')
+        return
+      }
       const res = await apiClient.mudaeLookupCharacter(q, false)
       if (res.type === 'candidates') {
         const matches = mudaeCandidatesFromResponse(res)
@@ -155,6 +231,29 @@ export default function AddPage() {
     setMudaeBusy(true)
     setStatus(null)
     try {
+      // Catalog first: adding a known character needs no Discord and no ImgChest.
+      const local = await apiClient.findCatalogCharacter(q)
+      if (local.found) {
+        if (local.character.in_library) {
+          const message = `Character "${local.character.name}" already exists`
+          addToast(message, 'error')
+          setStatus({ type: 'error', message })
+          return
+        }
+        const res = await apiClient.catalogAddCharacter(local.character.name)
+        const addedName = res.character?.name || local.character.name
+        await loadCharacters()
+        addToast(res.message || `Added "${addedName}"`, 'success')
+        setMudaePreview(null)
+        setMudaeCandidates([])
+        setMudaeLookupName('')
+        setTimeout(() => navigate(`/character/${encodeURIComponent(addedName)}`), 500)
+        return
+      }
+      if (!mudaeConfigured) {
+        addToast('Not in the library, and Mudae is not available', 'error')
+        return
+      }
       const res = await apiClient.mudaeLookupCharacter(q, true)
       if (res.type === 'candidates') {
         const matches = mudaeCandidatesFromResponse(res)
@@ -326,247 +425,261 @@ export default function AddPage() {
     <Card as="section" padding="lg">
       <h1 className="page-title">Add New Character</h1>
 
-      {mudaeConfigured === false && (
-        <p className="mudae-setup-hint">Mudae import is not available.</p>
-      )}
+      <div className="edit-form-container mudae-panel">
+        <h3 className="section-heading">Look up a character</h3>
+        <p className="mudae-note">
+          Checks the library first, then Mudae <code>$im</code> if the name is not known. Adding a
+          known character needs no Mudae request.
+        </p>
 
-      {mudaeConfigured && (
-        <div className="edit-form-container mudae-panel">
-          <h3 className="section-heading">From Mudae</h3>
-          <p className="mudae-note">
-            Looks up claim rank, series, and main image using Mudae <code>$im</code> and{' '}
-            <code>$ima</code>.
-          </p>
+        <div className="edit-group full-width">
+          <label htmlFor="mudaeCharName">Character name</label>
+          <div className="mudae-row">
+            <SeriesSuggestInput
+              id="mudaeCharName"
+              className="modern-input"
+              placeholder="e.g. Rem"
+              value={mudaeLookupName}
+              onChange={(e) => setMudaeLookupName(e.target.value)}
+              suggestions={panelNameItems}
+              ariaLabel="Character name suggestions"
+              disabled={mudaeBusy}
+            />
+            <Button
+              variant="secondary"
+              disabled={mudaeBusy || !mudaeLookupName.trim()}
+              onClick={() => handleMudaeLookup()}
+            >
+              {mudaeBusy ? 'Querying…' : 'Lookup'}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={mudaeBusy || !(mudaePreview?.name || mudaeLookupName.trim())}
+              onClick={handleMudaeAdd}
+            >
+              {mudaeBusy ? 'Working…' : 'Add'}
+            </Button>
+          </div>
+        </div>
 
-          <div className="edit-group full-width">
-            <label htmlFor="mudaeCharName">Character name</label>
-            <div className="mudae-row">
-              <input
-                id="mudaeCharName"
-                type="text"
-                className="modern-input"
-                placeholder="e.g. Rem"
-                value={mudaeLookupName}
-                onChange={(e) => setMudaeLookupName(e.target.value)}
-                disabled={mudaeBusy}
-              />
-              <Button
-                variant="secondary"
-                disabled={mudaeBusy || !mudaeLookupName.trim()}
-                onClick={() => handleMudaeLookup()}
-              >
-                {mudaeBusy ? 'Querying…' : 'Lookup'}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={mudaeBusy || !(mudaePreview?.name || mudaeLookupName.trim())}
-                onClick={handleMudaeAdd}
-              >
-                {mudaeBusy ? 'Working…' : 'Add from Mudae'}
-              </Button>
+        {mudaeCandidates.length > 0 && (
+          <div className="mudae-candidates">
+            <div className="mudae-candidates__label">Pick a match:</div>
+            <div className="mudae-chips">
+              {mudaeCandidates.map((c) => (
+                <Button
+                  variant="secondary"
+                  key={`${c.name}-${c.label}`}
+                  disabled={mudaeBusy}
+                  onClick={() => {
+                    setMudaeLookupName(c.name)
+                    handleMudaeLookup(c.name)
+                  }}
+                >
+                  {c.label}
+                </Button>
+              ))}
             </div>
           </div>
+        )}
 
-          {mudaeCandidates.length > 0 && (
-            <div className="mudae-candidates">
-              <div className="mudae-candidates__label">Pick a match:</div>
-              <div className="mudae-chips">
-                {mudaeCandidates.map((c) => (
-                  <Button
-                    variant="secondary"
-                    key={`${c.name}-${c.label}`}
-                    disabled={mudaeBusy}
-                    onClick={() => {
-                      setMudaeLookupName(c.name)
-                      handleMudaeLookup(c.name)
-                    }}
-                  >
-                    {c.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {mudaePreview && (
-            <div className="mudae-preview">
-              {mudaePreview.image_url && (
-                <img
-                  src={mudaePreviewSrc(mudaePreview.image_url)}
-                  alt={mudaePreview.name}
-                  className="mudae-preview__img"
-                />
-              )}
+        {mudaePreview && (
+          <div className="mudae-preview">
+            {mudaePreview.image_url && (
+              <img
+                src={mudaePreviewSrc(mudaePreview.image_url)}
+                alt={mudaePreview.name}
+                className="mudae-preview__img"
+              />
+            )}
+            <div>
               <div>
-                <div>
-                  <strong>{mudaePreview.name}</strong>
-                </div>
-                <div className="mudae-preview__meta">{mudaePreview.series || '—'}</div>
-                <div className="mudae-preview__meta">
-                  Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}
-                </div>
-                <p className="mudae-preview__hint">
-                  The manual form below was pre-filled, or use &quot;Add from Mudae&quot; to upload
-                  the image and save.
-                </p>
+                <strong>{mudaePreview.name}</strong>
               </div>
-            </div>
-          )}
-
-          <hr className="mudae-divider" />
-
-          <form onSubmit={handleSeriesBulk}>
-            <div className="edit-group full-width">
-              <label htmlFor="mudaeSeriesBulk">Bulk-add series</label>
-              <div className="mudae-row">
-                <SeriesSuggestInput
-                  id="mudaeSeriesBulk"
-                  placeholder="Exact series name"
-                  value={seriesBulkName}
-                  onChange={(e) => setSeriesBulkName(e.target.value)}
-                  suggestions={seriesSuggestions}
-                  disabled={seriesBusy || seriesResolving}
-                />
-                <Button
-                  variant="primary"
-                  type="submit"
-                  disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}
-                >
-                  {seriesResolving ? 'Checking…' : seriesBusy ? 'Importing…' : 'Add entire series'}
-                </Button>
-                {seriesBusy && (
-                  <Button
-                    variant="secondary"
-                    disabled={seriesCancelling}
-                    onClick={handleCancelSeries}
-                  >
-                    {seriesCancelling ? 'Cancelling…' : 'Cancel import'}
-                  </Button>
-                )}
+              <div className="mudae-preview__meta">{mudaePreview.series || '—'}</div>
+              <div className="mudae-preview__meta">
+                Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}
               </div>
               <p className="mudae-preview__hint">
-                Runs <code>$ima</code> then <code>$im</code> per character. Large series can take
-                several minutes; existing names are skipped.
+                The manual form below was pre-filled, or use &quot;Add&quot; to save it to the
+                library.
               </p>
-              {seriesCandidates.length > 0 && (
-                <div className="mudae-candidates">
-                  <div className="mudae-candidates__label">Pick a series:</div>
-                  <div className="mudae-chips">
-                    {seriesCandidates.map((c) => (
-                      <Button
-                        variant="secondary"
-                        key={`${c.name}-${c.label}`}
-                        disabled={seriesBusy || seriesResolving}
-                        onClick={() => handlePickSeriesCandidate(c.name)}
-                      >
-                        {c.label}
-                      </Button>
-                    ))}
-                  </div>
+            </div>
+          </div>
+        )}
+
+        {mudaeConfigured && (
+          <>
+            <hr className="mudae-divider" />
+
+            <form onSubmit={handleSeriesBulk}>
+              <div className="edit-group full-width">
+                <label htmlFor="mudaeSeriesBulk">Bulk-add series</label>
+                <div className="mudae-row">
+                  <SeriesSuggestInput
+                    id="mudaeSeriesBulk"
+                    placeholder="Exact series name"
+                    value={seriesBulkName}
+                    onChange={(e) => setSeriesBulkName(e.target.value)}
+                    suggestions={bulkSeriesSuggestions}
+                    disabled={seriesBusy || seriesResolving}
+                  />
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}
+                  >
+                    {seriesResolving
+                      ? 'Checking…'
+                      : seriesBusy
+                        ? 'Importing…'
+                        : 'Add entire series'}
+                  </Button>
+                  {seriesBusy && (
+                    <Button
+                      variant="secondary"
+                      disabled={seriesCancelling}
+                      onClick={handleCancelSeries}
+                    >
+                      {seriesCancelling ? 'Cancelling…' : 'Cancel import'}
+                    </Button>
+                  )}
                 </div>
-              )}
-            </div>
-          </form>
-
-          {seriesProgress && seriesBusy && (
-            <div className="mudae-progress">
-              <div className="mudae-progress__label">
-                {seriesProgress.phase === 'starting' && 'Querying Mudae for series list…'}
-                {seriesProgress.phase === 'delay' && (
-                  <>
-                    Found {seriesProgress.totalListed} character
-                    {seriesProgress.totalListed !== 1 ? 's' : ''} in &quot;{seriesProgress.series}
-                    &quot; — waiting before lookups…
-                  </>
+                <p className="mudae-preview__hint">
+                  Runs <code>$ima</code> then <code>$im</code> per character. Large series can take
+                  several minutes; existing names are skipped.
+                </p>
+                {seriesCandidates.length > 0 && (
+                  <div className="mudae-candidates">
+                    <div className="mudae-candidates__label">Pick a series:</div>
+                    <div className="mudae-chips">
+                      {seriesCandidates.map((c) => (
+                        <Button
+                          variant="secondary"
+                          key={`${c.name}-${c.label}`}
+                          disabled={seriesBusy || seriesResolving}
+                          onClick={() => handlePickSeriesCandidate(c.name)}
+                        >
+                          {c.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                {seriesProgress.phase === 'adding' && seriesProgress.current && (
-                  <>
-                    Adding: <strong>{seriesProgress.current}</strong> (
-                    {seriesProgress.added.length +
-                      seriesProgress.skipped.length +
-                      seriesProgress.failed.length}
-                    {seriesProgress.totalListed ? ` / ${seriesProgress.totalListed}` : ''})
-                  </>
-                )}
-                {seriesProgress.phase === 'retry' && 'Retrying failed characters…'}
-                {seriesProgress.phase === 'cancelled' && 'Stopping import…'}
               </div>
-              {seriesProgress.added.length > 0 && (
-                <ul className="mudae-scroll-list">
-                  {seriesProgress.added.map((c) => (
-                    <li key={c.name} className="mudae-item--ok">
-                      {c.name}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {seriesProgress.skipped.length > 0 && (
-                <details open>
-                  <summary>Skipped — already in library ({seriesProgress.skipped.length})</summary>
-                  <ul className="mudae-scroll-list">
-                    {seriesProgress.skipped.map((name) => (
-                      <li key={name} className="mudae-item--warn">
-                        {name}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
-          )}
+            </form>
 
-          {seriesResult && !seriesResult.error && !seriesBusy && (
-            <div className="mudae-result">
-              <div>{seriesResult.message}</div>
-              {Array.isArray(seriesResult.added) && seriesResult.added.length > 0 && (
-                <details open={seriesResult.cancelled}>
-                  <summary>Added ({seriesResult.added.length})</summary>
-                  <ul>
-                    {seriesResult.added.map((c) => (
-                      <li key={c.name}>{c.name}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {Array.isArray(seriesResult.skipped) && seriesResult.skipped.length > 0 && (
-                <details>
-                  <summary>Skipped — already in library ({seriesResult.skipped.length})</summary>
-                  <ul>
-                    {seriesResult.skipped.map((name) => (
-                      <li key={name}>{name}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {Array.isArray(seriesResult.failed) && seriesResult.failed.length > 0 && (
-                <details>
-                  <summary>Failed ({seriesResult.failed.length})</summary>
-                  <ul>
-                    {seriesResult.failed.map((f) => (
-                      <li key={f.name}>
-                        {f.name}: {f.error}
+            {seriesProgress && seriesBusy && (
+              <div className="mudae-progress">
+                <div className="mudae-progress__label">
+                  {seriesProgress.phase === 'starting' && 'Querying Mudae for series list…'}
+                  {seriesProgress.phase === 'delay' && (
+                    <>
+                      Found {seriesProgress.totalListed} character
+                      {seriesProgress.totalListed !== 1 ? 's' : ''} in &quot;{seriesProgress.series}
+                      &quot; — waiting before lookups…
+                    </>
+                  )}
+                  {seriesProgress.phase === 'adding' && seriesProgress.current && (
+                    <>
+                      Adding: <strong>{seriesProgress.current}</strong> (
+                      {seriesProgress.added.length +
+                        seriesProgress.skipped.length +
+                        seriesProgress.failed.length}
+                      {seriesProgress.totalListed ? ` / ${seriesProgress.totalListed}` : ''})
+                    </>
+                  )}
+                  {seriesProgress.phase === 'retry' && 'Retrying failed characters…'}
+                  {seriesProgress.phase === 'cancelled' && 'Stopping import…'}
+                </div>
+                {seriesProgress.added.length > 0 && (
+                  <ul className="mudae-scroll-list">
+                    {seriesProgress.added.map((c) => (
+                      <li key={c.name} className="mudae-item--ok">
+                        {c.name}
                       </li>
                     ))}
                   </ul>
-                </details>
-              )}
-            </div>
-          )}
-          {seriesResult?.error && <div className="form-error">{seriesResult.error}</div>}
-        </div>
-      )}
+                )}
+                {seriesProgress.skipped.length > 0 && (
+                  <details open>
+                    <summary>
+                      Skipped — already in library ({seriesProgress.skipped.length})
+                    </summary>
+                    <ul className="mudae-scroll-list">
+                      {seriesProgress.skipped.map((name) => (
+                        <li key={name} className="mudae-item--warn">
+                          {name}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+
+            {seriesResult && !seriesResult.error && !seriesBusy && (
+              <div className="mudae-result">
+                <div>{seriesResult.message}</div>
+                {Array.isArray(seriesResult.added) && seriesResult.added.length > 0 && (
+                  <details open={seriesResult.cancelled}>
+                    <summary>Added ({seriesResult.added.length})</summary>
+                    <ul>
+                      {seriesResult.added.map((c) => (
+                        <li key={c.name}>{c.name}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {Array.isArray(seriesResult.skipped) && seriesResult.skipped.length > 0 && (
+                  <details>
+                    <summary>Skipped — already in library ({seriesResult.skipped.length})</summary>
+                    <ul>
+                      {seriesResult.skipped.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {Array.isArray(seriesResult.failed) && seriesResult.failed.length > 0 && (
+                  <details>
+                    <summary>Failed ({seriesResult.failed.length})</summary>
+                    <ul>
+                      {seriesResult.failed.map((f) => (
+                        <li key={f.name}>
+                          {f.name}: {f.error}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+            {seriesResult?.error && <div className="form-error">{seriesResult.error}</div>}
+          </>
+        )}
+        {!mudaeConfigured && (
+          <p className="mudae-setup-hint">
+            Bulk series import needs Mudae, which is not configured. Lookup and add still work from
+            the library.
+          </p>
+        )}
+      </div>
 
       <div className="edit-form-container add-char-panel">
         <h3 className="section-heading">Manual add</h3>
         <form onSubmit={handleSubmit} className="add-char-form">
           <Field label="Character Name" htmlFor="addCharName" className="full-width">
-            <Input
+            <SeriesSuggestInput
               id="addCharName"
-              type="text"
+              className="ui-input"
               placeholder="e.g. Saber"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              aria-describedby={status?.type === 'error' ? 'addCharStatus' : undefined}
+              suggestions={nameSuggestionItems}
+              onPick={handlePickName}
+              ariaLabel="Character name suggestions"
+              ariaDescribedBy={status?.type === 'error' ? 'addCharStatus' : undefined}
               required
             />
           </Field>
@@ -574,11 +687,23 @@ export default function AddPage() {
             <label htmlFor="addCharSeries">Series</label>
             <SeriesSuggestInput
               id="addCharSeries"
+              className="ui-input"
               placeholder="Series Name"
               value={series}
-              onChange={(e) => setSeries(e.target.value)}
+              onChange={(e) => {
+                setSeries(e.target.value)
+                setSeriesTouched(true)
+              }}
               suggestions={seriesSuggestions}
+              ariaLabel="Series suggestions"
+              ariaInvalid={seriesMismatch}
             />
+            {seriesMismatch && (
+              <p className="form-error" role="alert">
+                Series doesn&apos;t match — &quot;{nameMatch.name}&quot; is in &quot;
+                {nameMatch.series}&quot;.
+              </p>
+            )}
           </div>
           <Field label="Rank (Optional)" htmlFor="addCharRank" className="full-width">
             <Input

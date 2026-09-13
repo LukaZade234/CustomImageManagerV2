@@ -64,6 +64,17 @@ export const apiClient = {
     if (q) params.set('q', q)
     return api(`/api/customs?${params}`)
   },
+  suggestCharacters: (q = '', limit = 10) =>
+    api(`/api/catalog/characters?q=${encodeURIComponent(q)}&limit=${limit}`),
+  suggestSeries: (q = '', limit = 20) =>
+    api(`/api/catalog/series?q=${encodeURIComponent(q)}&limit=${limit}`),
+  findCatalogCharacter: (name) => api(`/api/catalog/character?name=${encodeURIComponent(name)}`),
+  catalogAddCharacter: (name) =>
+    api('/api/catalog/add-character', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
   saveCharacter: (data) =>
     api('/api/saved', {
       method: 'POST',
