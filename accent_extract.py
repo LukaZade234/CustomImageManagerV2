@@ -51,7 +51,11 @@ from PIL import Image
 
 import logs
 import thumbnails
-from remote_images import MAX_FILE_SIZE, _allowed_image_proxy_url, _get_with_validated_redirects
+from remote_images import (
+    MAX_FILE_SIZE,
+    _allowed_portrait_url,
+    _get_with_validated_redirects,
+)
 
 log = logs.get(__name__)
 
@@ -482,7 +486,7 @@ def fetch_portrait_bytes(main_image_url: str) -> bytes | None:
             return path.read_bytes()
         except OSError:
             return None
-    if not _allowed_image_proxy_url(main_image_url):
+    if not _allowed_portrait_url(main_image_url):
         return None
     try:
         response = _get_with_validated_redirects(main_image_url, timeout=30, allow_redirects=False)

@@ -73,7 +73,7 @@ def _persist_mudae_character(info, *, overwrite_main=False):
     """
     if db.get_characters() is None:
         raise RuntimeError(
-            "Characters not migrated to DB yet. Run scripts/import_characters_to_db.py first."
+            "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
         )
 
     name = (info.name or "").strip()
@@ -241,7 +241,7 @@ def mudae_add_series():
         if db.get_characters() is None:
             return jsonify(
                 {
-                    "error": "Characters not migrated to DB yet. Run scripts/import_characters_to_db.py first."
+                    "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
                 }
             ), 500
 
@@ -415,7 +415,7 @@ def mudae_refresh_main_image():
         if db.get_characters() is None:
             return jsonify(
                 {
-                    "error": "Character data not loaded. Run scripts/import_characters_to_db.py first."
+                    "error": "Character data not loaded. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
                 }
             ), 503
 

@@ -608,10 +608,17 @@ relevant — the concurrency test is written first, before Phase 2:
 
 ## Deferred / future
 
+- **Mudae catalog follow-ups.** Phase 1 (the `character_catalog` importer that enriches the
+  working set) is in. Still open: mirror the `mudae.net` portraits to R2 as WebP and add
+  `characters.main_image_thumb`; move search/autocomplete onto the catalog so the whole roster
+  stops shipping to the client; point the self-bot at gap-filling and rank refresh only; add pool
+  filters and series pages. See `DECISIONS.md` §8, "The Mudae catalog".
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).
-- **Move the 1000 character PNGs to ImgChest** and drop them from the repo entirely.
+- **Retire the committed character PNGs.** The 1,000 `character_images/*.png` are ~149 MB and are
+  almost certainly the same 225×350 art the Mudae catalog now points at directly; replace them
+  with the catalog portraits (and their R2 WebP mirror) and drop them from the repo.
 - **Per-user saved selections and personal ordering.** Deliberately deferred; hide-for-me is the
   minimum that solves the actual problem.
 - **Revisit retirement policy with real take data.** Take counts are being logged from Phase 6

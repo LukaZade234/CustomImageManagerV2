@@ -490,6 +490,40 @@ into the zustand store on startup and filters client-side. At 1,000 that is ~150
 is 7–10 MB per page load, which is untenable — especially for the overseas users the hosting plan
 exists to serve. Server-side search with pagination must land before the roster grows.
 
+### The Mudae catalog: a working set plus a search corpus
+
+The scrape that was missing above is now in hand. Mudae's `$wa` / `$ima` listings can be copied out
+as text — series header, then `#rank - Name · ($pools) - https://mudae.net/uploads/...png` — and
+imported in bulk, which removes the self-bot from the *seeding* path entirely. Two facts made this
+worth acting on rather than filing away:
+
+- **`mudae.net` portraits are hotlinkable and already the right shape.** They are served with
+  `access-control-allow-origin: *` and no referrer gate, and the sampled ones are 225×350 — exactly
+  `--main-image-ratio`. The 1,000 committed PNGs are almost certainly these same images re-hosted.
+- **Portraits are not part of a `$ai` command.** The ImgChest-only rule is a constraint on custom
+  images, not on what a portrait may be. So `characters.main_image_url` can hold a `mudae.net` URL
+  with no ImgChest upload, which is what the Mudae import path used to do needlessly.
+
+The data model splits the two jobs, matching the "searchable names, pages on demand" idea above:
+
+- **`character_catalog`** is the scrape: name, series, rank, pool (parsed into waifu/husbando ×
+  anime/game booleans), the `mudae.net` portrait, and `scraped_at`. It is the searchable corpus.
+- **`characters`** stays the working set: names someone has saved, customised or added. A catalog
+  name does **not** become a working row until someone acts on it.
+- **`name_key`** (NFKC + casefold + collapsed whitespace) is the match key, because SQLite's
+  `COLLATE NOCASE` folds ASCII only and would miss `Pokémon`/`Pokemon` or an NFD spelling.
+
+The importer merges every extract by `name_key` before writing: extracts overlap heavily, identical
+repeats are dropped, and when two captures disagree the better (lower) rank wins. It is idempotent,
+dry-runnable, and never overwrites a working row's field it did not find in the catalog.
+
+**Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the
+PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring the
+self-bot to gap-filling and refreshes, and pool filters are all natural next phases. The catalog
+only *adds* a table, so none of them are blocked by this one. `remote_images._allowed_portrait_url`
+is deliberately separate from the user-facing download proxy's allowlist: the internal accent
+fetch may read Mudae, a visitor's "download this image" may not.
+
 ---
 
 ## 9. The visual design system

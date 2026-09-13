@@ -59,7 +59,7 @@ def get_characters():
             return jsonify(chars)
         return jsonify(
             {
-                "error": "Character data not loaded. Run scripts/import_characters_to_db.py with your CSV/mapping backup."
+                "error": "Character data not loaded. Seed it with scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py."
             }
         ), 503
     except Exception as e:
@@ -212,7 +212,7 @@ def add_character():
         if db.get_characters() is None:
             return jsonify(
                 {
-                    "error": "Characters not migrated to DB yet. Run scripts/import_characters_to_db.py first."
+                    "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
                 }
             ), 500
         if not db.add_character(name, series, rank, image_url):
@@ -263,7 +263,7 @@ def edit_character():
         if db.get_characters() is None:
             return jsonify(
                 {
-                    "error": "Characters not migrated to DB yet. Run scripts/import_characters_to_db.py first."
+                    "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
                 }
             ), 500
         if not db.update_character(orig_name, new_name, series, rank):
@@ -330,7 +330,7 @@ def set_main_image():
         if db.get_characters() is None:
             return jsonify(
                 {
-                    "error": "Character data not loaded. Run scripts/import_characters_to_db.py first."
+                    "error": "Character data not loaded. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
                 }
             ), 503
         if db.set_main_image(char_name, direct_link):
