@@ -59,6 +59,16 @@ class TestStats:
         assert large < 8000
 
 
+class TestCharactersPayload:
+    def test_reports_the_active_custom_count_per_character(self, client, clean_db, identity_id):
+        """Search sorts by image count, so the roster has to carry it."""
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 3), "Emilia": ("Re:Zero", "2", 2)}, owner=identity_id)
+        clean_db.remove_custom_images("Rem", ["https://cdn/Rem-0.png"], identity_id)
+        chars = {c["name"]: c for c in client.get("/api/characters").get_json()}
+        assert chars["Rem"]["custom_count"] == 2, "removed images must not count"
+        assert chars["Emilia"]["custom_count"] == 2
+
+
 class TestListing:
     def test_returns_counts_and_previews(self, client, clean_db):
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 5)})
@@ -139,6 +149,25 @@ class TestSort:
         _seed(clean_db, {"Ranked": ("S", "5", 1), "Unranked": ("S", "", 1)})
         names = [i["name"] for i in client.get("/api/customs?sort=rank_asc").get_json()["items"]]
         assert names == ["Ranked", "Unranked"]
+
+    def test_rank_descending_keeps_unranked_last(self, client, clean_db):
+        _seed(clean_db, {"First": ("S", "1", 1), "Second": ("S", "2", 1), "Unranked": ("S", "", 1)})
+        names = [i["name"] for i in client.get("/api/customs?sort=rank_desc").get_json()["items"]]
+        assert names == ["Second", "First", "Unranked"]
+
+    def test_recent_both_ways(self, client, clean_db):
+        _seed(clean_db, {"Older": ("S", "1", 1), "Newer": ("S", "2", 1)})
+        with clean_db.transaction() as conn:
+            conn.execute(
+                "UPDATE characters SET updated_at = '2026-01-01T00:00:00.000Z' WHERE name = 'Older'"
+            )
+            conn.execute(
+                "UPDATE characters SET updated_at = '2026-06-01T00:00:00.000Z' WHERE name = 'Newer'"
+            )
+        newest = [i["name"] for i in client.get("/api/customs?sort=recent").get_json()["items"]]
+        assert newest == ["Newer", "Older"]
+        oldest = [i["name"] for i in client.get("/api/customs?sort=recent_asc").get_json()["items"]]
+        assert oldest == ["Older", "Newer"]
 
     def test_an_unknown_sort_is_rejected_rather_than_interpolated(self, client, clean_db):
         _seed(clean_db, {"Rem": ("S", "1", 1)})

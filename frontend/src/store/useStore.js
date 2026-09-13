@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import { apiClient } from '../api'
 import { applyTheme, nextTheme, persistTheme, readStoredTheme, THEMES } from '../theme'
+import {
+  CUSTOMS_ORDER_KEY,
+  CUSTOMS_SORT_KEY,
+  readStored,
+  SEARCH_MODE_KEY,
+  SEARCH_ORDER_KEY,
+  SEARCH_SORT_KEY,
+  writeStored,
+} from '../utils/storedSetting'
 
 /** Transient browser / gateway failures worth retrying (not 4xx validation). */
 function shouldRetryFetchError(e) {
@@ -12,6 +21,27 @@ function shouldRetryFetchError(e) {
   return false
 }
 
+/** {name: accent_seed} from any character-shaped payload, skipping the unset. */
+function seedsByName(list) {
+  const out = {}
+  for (const c of list) {
+    if (c?.name && c.accent_seed) out[c.name] = c.accent_seed
+  }
+  return out
+}
+
+/** The remembered sort may predate the current option set; fall back to rank. */
+function readStoredSort() {
+  const value = readStored(SEARCH_SORT_KEY, 'rank')
+  return ['rank', 'alphabet', 'count'].includes(value) ? value : 'rank'
+}
+
+/** Customs once stored a composite key ("count_desc"); keep only the field now. */
+function readStoredCustomsSort() {
+  const value = readStored(CUSTOMS_SORT_KEY, 'recent')
+  return ['recent', 'rank', 'alphabet', 'count'].includes(value) ? value : 'recent'
+}
+
 export const useStore = create((set, get) => ({
   characters: [],
   savedCharacters: [],
@@ -19,6 +49,11 @@ export const useStore = create((set, get) => ({
   // the character page only. There is deliberately no library-wide image map any
   // more -- Home and Customs ask the server for what they need.
   characterImages: {},
+  // Per-character accent seed ("#aeb7d2"), from the character list, the saved
+  // list, or the gallery response -- whichever arrived last wins, and the
+  // gallery response is the freshest because the server re-measures on it.
+  // Null means the server looked and declined; absent means not loaded yet.
+  accentSeeds: {},
   stats: null,
   me: null,
   currentCharacter: null,
@@ -40,7 +75,12 @@ export const useStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const data = await apiClient.getCharacters()
-      set({ characters: data || [], loading: false })
+      const list = data || []
+      set((s) => ({
+        characters: list,
+        loading: false,
+        accentSeeds: { ...s.accentSeeds, ...seedsByName(list) },
+      }))
       return data
     } catch (e) {
       set({ error: e.message, loading: false })
@@ -52,7 +92,11 @@ export const useStore = create((set, get) => ({
     try {
       // Already ordered most-recently-updated first by the server, which knows
       // the timestamps without shipping a map of all ~700 characters.
-      set({ savedCharacters: (await apiClient.getSaved()) || [] })
+      const saved = (await apiClient.getSaved()) || []
+      set((s) => ({
+        savedCharacters: saved,
+        accentSeeds: { ...s.accentSeeds, ...seedsByName(saved) },
+      }))
     } catch {
       set({ savedCharacters: [] })
     }
@@ -77,6 +121,21 @@ export const useStore = create((set, get) => ({
   },
 
   /**
+   * Fold settings the server just accepted back into `me`, without a refetch.
+   *
+   * A preference that only took effect on the next page load is a preference
+   * that looks broken: the character-accent switch gates what a character page
+   * derives, and `me.settings` is where that page reads it from. The PATCH
+   * response is already the authoritative settings, so applying it directly
+   * makes the switch take effect on navigation, with no reload and no second
+   * round trip.
+   */
+  setMySettings: (settings) => {
+    if (!settings) return
+    set((s) => (s.me ? { me: { ...s.me, settings: { ...s.me.settings, ...settings } } } : s))
+  },
+
+  /**
    * Hand this browser a fresh anonymous identity.
    *
    * Not a delete: the account and everything it owns stays, and signing in
@@ -95,9 +154,20 @@ export const useStore = create((set, get) => ({
     const maxAttempts = 3
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const rows = await apiClient.getCustomImagesForChar(characterName)
-        const list = Array.isArray(rows) ? rows : []
-        set((s) => ({ characterImages: { ...s.characterImages, [characterName]: list } }))
+        const payload = await apiClient.getCustomImagesForChar(characterName)
+        // The endpoint returns {rows, accentSeed}; the bare-array shape is
+        // accepted so a cached or proxied old response degrades to no seed
+        // rather than an empty gallery.
+        const list = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.rows)
+            ? payload.rows
+            : []
+        const seed = Array.isArray(payload) ? null : (payload?.accentSeed ?? null)
+        set((s) => ({
+          characterImages: { ...s.characterImages, [characterName]: list },
+          accentSeeds: { ...s.accentSeeds, [characterName]: seed },
+        }))
         return
       } catch (e) {
         if (!shouldRetryFetchError(e) || attempt === maxAttempts - 1) break
@@ -156,7 +226,14 @@ export const useStore = create((set, get) => ({
         characterImages[newName] = characterImages[oldName]
         delete characterImages[oldName]
       }
-      return { characterImages }
+      // The seed travels with the rows: the server keys it by character id,
+      // and a rename must not drop the page back to the system accent.
+      const accentSeeds = { ...s.accentSeeds }
+      if (Object.hasOwn(accentSeeds, oldName)) {
+        accentSeeds[newName] = accentSeeds[oldName]
+        delete accentSeeds[oldName]
+      }
+      return { characterImages, accentSeeds }
     })
   },
 
@@ -175,10 +252,36 @@ export const useStore = create((set, get) => ({
 
   searchQuery: '',
   setSearchQuery: (q) => set({ searchQuery: q || '' }),
-  searchMode: 'name',
-  searchSort: 'rank',
-  setSearchMode: (m) => set({ searchMode: m }),
-  setSearchSort: (s) => set({ searchSort: s }),
+  // Search-by field and sort are remembered across visits, because they are
+  // choices rather than state: coming back to the search you last used should
+  // not mean re-picking "Series". Shared between the navbar's search and Browse
+  // Customs, which ask the same question. `customsSort` is separate because its
+  // options are a different set.
+  searchMode: readStored(SEARCH_MODE_KEY, 'name'),
+  searchSort: readStoredSort(),
+  searchOrder: readStored(SEARCH_ORDER_KEY, 'asc'),
+  customsSort: readStoredCustomsSort(),
+  customsOrder: readStored(CUSTOMS_ORDER_KEY, 'desc'),
+  setSearchMode: (m) => {
+    writeStored(SEARCH_MODE_KEY, m)
+    set({ searchMode: m })
+  },
+  setSearchSort: (s) => {
+    writeStored(SEARCH_SORT_KEY, s)
+    set({ searchSort: s })
+  },
+  setSearchOrder: (o) => {
+    writeStored(SEARCH_ORDER_KEY, o)
+    set({ searchOrder: o })
+  },
+  setCustomsSort: (s) => {
+    writeStored(CUSTOMS_SORT_KEY, s)
+    set({ customsSort: s })
+  },
+  setCustomsOrder: (o) => {
+    writeStored(CUSTOMS_ORDER_KEY, o)
+    set({ customsOrder: o })
+  },
 
   toasts: [],
   /**

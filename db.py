@@ -159,6 +159,22 @@ def _character_id(conn: sqlite3.Connection, name: str) -> int | None:
     return row["id"] if row else None
 
 
+def get_character_portrait(name: str) -> tuple[int, str] | None:
+    """(id, main_image_url) for a character, or None if it has neither.
+
+    Used by the accent extractor, which needs the URL to measure the portrait
+    and the id for logging — never an arbitrary URL a caller supplies, since
+    this is keyed by a name already in the database.
+    """
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id, main_image_url FROM characters WHERE name = ?", (name,)
+    ).fetchone()
+    if not row or not row["main_image_url"]:
+        return None
+    return int(row["id"]), row["main_image_url"]
+
+
 def _ensure_character(conn: sqlite3.Connection, name: str) -> int:
     """Return the id, creating a bare row if the character is unknown.
 
@@ -179,7 +195,13 @@ def get_characters() -> list | None:
     "the database is not ready" exactly as v1 did."""
     conn = get_connection()
     rows = conn.execute(
-        "SELECT name, series, rank, main_image_url FROM characters ORDER BY id"
+        "SELECT c.name, c.series, c.rank, c.main_image_url, c.accent_seed,"
+        "       COALESCE(SUM(CASE WHEN i.state = 'active' THEN 1 ELSE 0 END), 0)"
+        "         AS custom_count"
+        "  FROM characters c"
+        "  LEFT JOIN custom_images i ON i.character_id = c.id"
+        " GROUP BY c.id"
+        " ORDER BY c.id"
     ).fetchall()
     if not rows:
         return None
@@ -189,6 +211,11 @@ def get_characters() -> list | None:
             "series": r["series"],
             "rank": r["rank"],
             "image": r["main_image_url"],
+            # NULL until the accent backfill or a gallery visit has measured
+            # this character; the page then keeps the system accent.
+            "accent_seed": r["accent_seed"],
+            # Active customs only, matching the browse-customs count.
+            "custom_count": r["custom_count"],
         }
         for r in rows
     ]
@@ -296,11 +323,14 @@ def get_last_updated() -> dict:
 # fragment; a caller passes the key, not the SQL.
 _CUSTOMS_SORTS = {
     # NULL updated_at means "never modified"; SQLite sorts NULL lowest, so DESC
-    # already puts those last, which is what v1 did.
+    # already puts those last, which is what v1 did. The ascending key puts them
+    # first, which is where "oldest" belongs.
     "recent": "c.updated_at DESC, c.name COLLATE NOCASE ASC",
+    "recent_asc": "c.updated_at ASC, c.name COLLATE NOCASE ASC",
     # rank is TEXT and often empty, so unranked characters go last rather than
     # sorting as zero.
     "rank_asc": "CASE WHEN c.rank = '' THEN 1 ELSE 0 END, CAST(c.rank AS INTEGER) ASC",
+    "rank_desc": "CASE WHEN c.rank = '' THEN 1 ELSE 0 END, CAST(c.rank AS INTEGER) DESC",
     "name_asc": "c.name COLLATE NOCASE ASC",
     "name_desc": "c.name COLLATE NOCASE DESC",
     "series_asc": "c.series COLLATE NOCASE ASC, c.name COLLATE NOCASE ASC",
@@ -878,32 +908,40 @@ def get_most_viewed(days: int = 7, limit: int = 8) -> list[dict]:
 
 
 def get_identity_settings(identity_id: str) -> dict:
-    """The two display preferences, defaulted for an identity that has no row yet."""
+    """This identity's display preferences, defaulted for one with no row yet."""
     conn = get_connection()
     row = conn.execute(
-        "SELECT hide_from_leaderboard, hide_attribution, show_nsfw"
+        "SELECT hide_from_leaderboard, hide_attribution, show_nsfw, character_accents"
         "  FROM identities WHERE id = ?",
         (identity_id,),
     ).fetchone()
     if row is None:
-        return {"hide_from_leaderboard": False, "hide_attribution": False, "show_nsfw": False}
+        return {
+            "hide_from_leaderboard": False,
+            "hide_attribution": False,
+            "show_nsfw": False,
+            "character_accents": True,
+        }
     return {
         "hide_from_leaderboard": bool(row["hide_from_leaderboard"]),
         "hide_attribution": bool(row["hide_attribution"]),
         # Recorded but not yet read: no image carries a rating, so there is
         # nothing to filter. Stored now so the preference predates the filter.
         "show_nsfw": bool(row["show_nsfw"]),
+        # Read by the gallery route, which skips accent measurement entirely
+        # when this is off rather than measuring a colour nobody will apply.
+        "character_accents": bool(row["character_accents"]),
     }
 
 
 def update_identity_settings(identity_id: str, **settings) -> dict:
-    """Set either display preference. Returns the settings as they now stand.
+    """Set any display preference. Returns the settings as they now stand.
 
     Creates the identity row if this is the visitor's first act, which is the
     same lazy creation every other write path uses -- a preference is a perfectly
     good reason to start existing.
     """
-    allowed = ("hide_from_leaderboard", "hide_attribution", "show_nsfw")
+    allowed = ("hide_from_leaderboard", "hide_attribution", "show_nsfw", "character_accents")
     changes = {k: int(bool(v)) for k, v in settings.items() if k in allowed and v is not None}
     if not changes:
         return get_identity_settings(identity_id)
@@ -1288,7 +1326,8 @@ def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
     conn = get_connection()
     rows = conn.execute(
         "SELECT c.name AS name, c.series AS series, c.rank AS rank,"
-        "       c.main_image_url AS image, c.updated_at AS updated_at"
+        "       c.main_image_url AS image, c.updated_at AS updated_at,"
+        "       c.accent_seed AS accent_seed"
         "  FROM saved s JOIN characters c ON c.id = s.character_id"
         " WHERE s.identity_id = ?"
         " ORDER BY c.updated_at DESC, s.created_at DESC",

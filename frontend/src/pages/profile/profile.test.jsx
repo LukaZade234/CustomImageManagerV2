@@ -9,7 +9,7 @@
  * The other is that Saved moved here from its own page, so `/saved` has to keep
  * working for anyone who bookmarked it.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -120,18 +120,19 @@ describe('searching and sorting', () => {
   const ROWS = [
     { id: 1, url: 'a.png', character: 'Rem', hidden_at: '2026-09-01' },
     { id: 2, url: 'b.png', character: 'Emilia', hidden_at: '2026-09-05' },
+    { id: 3, url: 'c.png', character: 'Zelda', hidden_at: '2026-09-03' },
   ]
 
   it('filters by character and reports how many of how many', async () => {
     api.getMyHidden.mockResolvedValue(ROWS)
     at(<HiddenTab />)
     await screen.findByText('Rem')
-    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText(/Search by character/i), 'emi')
     await waitFor(() => expect(screen.queryByText('Rem')).not.toBeInTheDocument())
     expect(screen.getByText('Emilia')).toBeInTheDocument()
-    expect(screen.getByText('1 of 2')).toBeInTheDocument()
+    expect(screen.getByText('1 of 3')).toBeInTheDocument()
   })
 
   it('sorts newest-first by default and alphabetically on request', async () => {
@@ -144,10 +145,33 @@ describe('searching and sorting', () => {
         .getAllByRole('link')
         .map((a) => a.textContent)
         .filter(Boolean)
-    expect(names()).toEqual(['Emilia', 'Rem'])
+    expect(names()).toEqual(['Emilia', 'Zelda', 'Rem'])
 
-    await userEvent.selectOptions(screen.getByLabelText('Sort by'), 'character')
-    expect(names()).toEqual(['Emilia', 'Rem'])
+    await userEvent.click(screen.getByRole('button', { name: /Filter/i }))
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Sort by' })).getByRole('menuitemradio', {
+        name: 'Character (A–Z)',
+      }),
+    )
+    expect(names()).toEqual(['Emilia', 'Rem', 'Zelda'])
+  })
+
+  it('flips a sort with the order control', async () => {
+    api.getMyHidden.mockResolvedValue(ROWS)
+    at(<HiddenTab />)
+    await screen.findByText('Rem')
+
+    await userEvent.click(screen.getByRole('button', { name: /Filter/i }))
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Order' })).getByRole('menuitemradio', {
+        name: 'Ascending',
+      }),
+    )
+    const names = screen
+      .getAllByRole('link')
+      .map((a) => a.textContent)
+      .filter(Boolean)
+    expect(names).toEqual(['Rem', 'Zelda', 'Emilia'])
   })
 })
 
@@ -218,10 +242,29 @@ describe('settings', () => {
     expect(api.updateSettings).toHaveBeenCalledWith({ hide_from_leaderboard: true })
   })
 
+  it('defaults character accents on and records turning them off', async () => {
+    at(<SettingsTab />)
+    const toggle = screen.getByLabelText(/Use character-based accent colours/i)
+    expect(toggle).toBeChecked()
+    // The caveat is part of the control, not a footnote elsewhere.
+    expect(screen.getByText(/will not always be accurate/i)).toBeInTheDocument()
+    await userEvent.click(toggle)
+    expect(api.updateSettings).toHaveBeenCalledWith({ character_accents: false })
+    // Published to the store, so a character page visited afterwards reads the
+    // new value without the settings having to be refetched on a reload.
+    expect(useStore.getState().me.settings.character_accents).toBe(false)
+  })
+
+  it('shows character accents off when the account already turned them off', async () => {
+    useStore.setState((s) => ({ me: { ...s.me, settings: { character_accents: false } } }))
+    at(<SettingsTab />)
+    expect(screen.getByLabelText(/Use character-based accent colours/i)).not.toBeChecked()
+  })
+
   it('offers the theme as three states, which a cycling button could not show', async () => {
     at(<SettingsTab />)
-    expect(screen.getByLabelText('Follow system')).toBeChecked()
-    await userEvent.click(screen.getByLabelText('Dark'))
+    expect(screen.getByRole('radio', { name: 'Follow system' })).toBeChecked()
+    await userEvent.click(screen.getByRole('radio', { name: 'Dark' }))
     expect(useStore.getState().theme).toBe('dark')
   })
 })

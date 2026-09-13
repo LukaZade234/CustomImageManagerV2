@@ -19,6 +19,9 @@ export default function ListTab({
   total,
   emptyTitle,
   emptyBody,
+  mode,
+  onMode,
+  modeOptions,
   children,
 }) {
   const { items } = filter
@@ -35,7 +38,12 @@ export default function ListTab({
           onQuery={filter.setQuery}
           sort={filter.sort}
           onSort={filter.setSort}
+          order={filter.order}
+          onOrder={filter.setOrder}
           options={filter.options}
+          mode={mode}
+          onMode={onMode}
+          modeOptions={modeOptions}
           shown={items?.length ?? 0}
           total={total}
         />

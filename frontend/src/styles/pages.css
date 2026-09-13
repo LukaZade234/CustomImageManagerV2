@@ -15,6 +15,41 @@
   max-width: 1200px;
   margin: 0 auto;
 }
+
+/* ---- The character's own colour ----------------------------------------
+ * `--accent` itself is repointed at the character's colour site-wide while
+ * this page is mounted (see the "Per-character accent" block in tokens.css),
+ * which is what reaches the buttons and the navbar. This page's hairlines get
+ * a second, quieter application of the same colour: a 50% mix into the
+ * ordinary hairline rather than the full accent, so a border reads as tinted
+ * rather than as another coloured shape competing with the artwork.
+ *
+ * `--char-accent`/`--char-accent-dark` are only ever set (on `<html>`, by
+ * useApplyCharacterTheme) when a theme was actually derived, so both fall
+ * back to `--border` unmixed for a character whose portrait had no confident
+ * answer -- about one in twenty-five -- rendering exactly as this page did
+ * before either existed.
+ */
+.character-page {
+  --char-line: color-mix(in oklab, var(--char-accent, var(--border)) 50%, var(--border));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .character-page {
+    --char-line: color-mix(in oklab, var(--char-accent-dark, var(--border)) 50%, var(--border));
+  }
+}
+:root[data-theme="dark"] .character-page {
+  --char-line: color-mix(in oklab, var(--char-accent-dark, var(--border)) 50%, var(--border));
+}
+/* The colour arrives a frame or two after the portrait decodes, so it fades in
+   rather than snapping. Reduced-motion users get the jump; base.css turns every
+   transition off for them, and a border changing colour is not worth an
+   exception. The gallery's own hairline is set where that rule lives, below,
+   rather than overridden from here. */
+.character-page.ui-card {
+  border-color: var(--char-line);
+  transition: border-color var(--duration) var(--ease);
+}
 /* The identification band: portrait, identity, and the actions for both.
  *
  * It was a two-column layout carrying one column of content — 916px of text
@@ -441,37 +476,13 @@
 /* Customs Page */
 .customs-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin-bottom: var(--space-5);
 }
-.customs-sort-field {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-  margin-left: auto;
-}
-@media (min-width: 480px) {
-  .customs-sort-field {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-2);
-  }
-}
-.customs-sort-label {
-  font-size: var(--type-meta);
-  font-weight: var(--weight-medium);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-.customs-sort-select {
-  width: auto;
-  min-width: 160px;
-  min-height: var(--nav-control-min-h);
-  border-radius: var(--nav-control-radius);
+.customs-controls .filter-bar {
+  flex: 1 1 auto;
 }
 .customs-count-line {
   margin-bottom: 1.25rem;
@@ -486,22 +497,37 @@
   min-height: 100%;
   object-fit: cover;
 }
+/* A field of self-contained cards rather than a divided ribbon: each character
+   is its own surface, so a long list scans as a grid and a phone can read two
+   columns instead of one endless line. */
+.customs-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
 .customs-item-with-preview {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
   cursor: pointer;
-  transition: background-color var(--duration) var(--ease);
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
   text-decoration: none;
   color: inherit;
 }
 .customs-item-with-preview:hover {
-  background-color: var(--surface-sunken);
+  background-color: var(--surface-hover);
+  border-color: var(--border-strong);
 }
-.customs-item-with-preview:last-child {
-  border-bottom: none;
+@media (max-width: 480px) {
+  .customs-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .customs-item-top {
   display: flex;
@@ -950,60 +976,19 @@ body.reorder-touch-dragging {
   margin-bottom: var(--space-4);
 }
 /* ---- Search field --------------------------------------------------------
- * Shared by the navbar and the customs page. The Name/Series switch overlays
- * the right of the input, so the field reserves room for it.
+ * The field inside the filter bar. The bar owns the border and the focus ring,
+ * so the input itself is bare.
  */
 .search-field {
   position: relative;
   flex: 1 1 260px;
   /* Never narrower than a tappable pill, and never so wide it stops the bar
-     fitting. It used to fold away to a circle when anything else wanted the
-     room; giving ground is not the same as leaving. */
+     fitting. */
   min-width: 44px;
-  /* The switch inside is positioned rather than laid out, so it cannot be asked
-     to shrink. What it can be asked is to leave, and that depends on this
-     element's width rather than the window's. */
-  container-type: inline-size;
-  --search-toggle-width: 150px;
 }
 .search-field .ui-input {
   height: var(--nav-control-min-h);
-  padding-right: var(--search-toggle-width);
   border-radius: var(--radius-pill);
-}
-.search-field .ui-segmented {
-  position: absolute;
-  top: 50%;
-  right: var(--space-1);
-  transform: translateY(-50%);
-}
-/* The switch stays inside the field at every width — dropping it beneath cost a
-   whole row of a phone's first screen. It gets tighter instead: less padding
-   around each option and less room reserved for it. */
-@media (max-width: 480px) {
-  .search-field {
-    --search-toggle-width: 116px;
-  }
-  .search-field .ui-segmented__option {
-    padding: 0 var(--space-2);
-  }
-}
-/* Initials once there is something in the field. The switch is more than half
-   of a phone-width field, and what you are typing matters more than the two
-   words beside it. */
-.search-field.is-short {
-  --search-toggle-width: 74px;
-}
-/* And gone entirely once the field is down to a pill, where it would cover the
-   text rather than sit beside it. Name and Series are still reachable — the
-   field grows back the moment whatever borrowed the width gives it up. */
-@container (max-width: 160px) {
-  .search-field .ui-segmented {
-    display: none;
-  }
-  .search-field .ui-input {
-    padding-right: var(--space-3);
-  }
 }
 /* ---- Identity and moderation -------------------------------------------- */
 .navbar-handle {
@@ -1047,11 +1032,17 @@ body.reorder-touch-dragging {
   /* The wrapper already carries the image's own ratio, so this only guards
      against sub-pixel rounding leaving a hairline gap. */
   object-fit: cover;
-  border: 1px solid var(--border);
+  /* The gallery only ever renders inside .character-page, which is where
+     --char-line is defined, so this reads the character's colour directly
+     rather than being overridden from there. Falls back to the plain hairline
+     for a portrait with no confident colour. */
+  border: 1px solid var(--char-line, var(--border));
   border-radius: var(--radius-md);
   background-color: var(--surface-sunken);
   cursor: pointer;
-  transition: opacity var(--duration) var(--ease);
+  transition:
+    opacity var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
 }
 /* Selection indicator — one, for one selection mode.
 
@@ -1753,42 +1744,104 @@ a.home-ranked__item:hover {
   margin: var(--space-3) 0 0;
   color: var(--text-subtle);
 }
-/* Theme: a radio group, because the state is one of three and a cycling button
-   could not show which. It replaced the navbar's cycle toggle. */
-.profile-themes {
+/* Appearance: one setting per row, its label and consequence on the left and
+   its control on the right, so the labels scan down a single edge instead of
+   the controls interrupting them. The theme choice reuses the SegmentedControl
+   primitive; the accent preference is a switch, which reads as on/off at a
+   glance where a checkbox reads as "tick if applicable". */
+.appearance-list {
   display: flex;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  flex-wrap: wrap;
+  flex-direction: column;
 }
-.profile-theme {
-  display: flex;
+.appearance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+.appearance-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.appearance-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.appearance-label {
+  font-weight: var(--weight-medium);
+  color: var(--text);
+}
+.appearance-desc {
+  max-width: 52ch;
+  font-size: var(--type-meta);
+  line-height: var(--line-body);
+  color: var(--text-muted);
+}
+.appearance-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 12px 8px;
+  margin: -12px -8px;
   cursor: pointer;
 }
-.profile-theme:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
+.appearance-switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
-/* --accent on --accent-subtle, which is what every other tinted state uses
-   (.ui-btn[aria-pressed], .ui-badge--accent). --accent-fg is the foreground for
-   the *solid* accent fill -- white in light mode -- so putting it on the pale
-   tint made the selected label unreadable against its own background. */
-.profile-theme:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-subtle);
-  color: var(--accent);
-  font-weight: var(--weight-medium);
+.appearance-switch input:disabled {
+  cursor: not-allowed;
 }
-.profile-theme:has(input:focus-visible) {
+.appearance-switch__track {
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 24px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  transition: background-color var(--duration) var(--ease);
+}
+.appearance-switch__thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration) var(--ease);
+}
+.appearance-switch input:checked ~ .appearance-switch__track {
+  background: var(--accent);
+}
+.appearance-switch input:checked ~ .appearance-switch__track .appearance-switch__thumb {
+  transform: translateX(18px);
+}
+.appearance-switch input:focus-visible ~ .appearance-switch__track {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+.appearance-switch input:disabled ~ .appearance-switch__track {
+  opacity: 0.5;
+}
+@media (max-width: 768px) {
+  .appearance-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+  /* With one column the control would otherwise stretch the full width of the
+     row. It keeps its natural width under the label instead. */
+  .appearance-row > .ui-segmented,
+  .appearance-row > .appearance-switch {
+    justify-self: start;
+  }
 }
 .profile-toggle {
   display: flex;
@@ -1869,22 +1922,18 @@ a.home-ranked__item:hover {
   color: var(--text);
   border-bottom-color: var(--accent);
 }
-/* Search and sort above each list. */
+/* Search and sort above each list. One line at every width: the field is the
+   flexible one, so it gives up width rather than sending the sort control to a
+   row of its own. */
 .profile-controls {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
-.profile-controls__search {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-.profile-controls .ui-select {
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 170px;
+.profile-controls .filter-bar {
+  flex: 1 1 auto;
 }
 .profile-controls__count {
   flex-shrink: 0;
@@ -2028,6 +2077,30 @@ a.home-ranked__item:hover {
 @media (max-width: 768px) {
   .profile-grid {
     --card-height: 150px;
+  }
+  /* Hidden and removed follow the character gallery's phone rule: two
+     equal-width columns of unequal height, instead of justified rows that put
+     one portrait across a 390px screen. The gallery's grid does this with
+     JS-counted row spans, which works because its items are nothing but an
+     image of a known ratio; these cards carry a caption whose height a ratio
+     cannot express, so the columns are laid out by content instead — the
+     browser balances them, and `break-inside` keeps a card whole. */
+  .profile-grid:not(.profile-grid--uniform) {
+    display: block;
+    column-count: 2;
+    column-gap: var(--space-2);
+  }
+  .profile-grid:not(.profile-grid--uniform) .profile-card {
+    /* A column track is the width; padding has to come out of it, the opposite
+       of what the justified rows need. */
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: var(--space-2);
+    break-inside: avoid;
+  }
+  /* These absorb slack in the flex layout and have no meaning in columns. */
+  .profile-grid:not(.profile-grid--uniform) .profile-grid__filler {
+    display: none;
   }
 }
 

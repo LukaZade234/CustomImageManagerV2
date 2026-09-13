@@ -1,23 +1,39 @@
-import { useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 
 /**
- * The sort control on a narrow screen: an arrow that opens a list under it.
+ * The bar's filter control: an arrow that opens a list under it.
  *
  * A native `<select>` is the better control almost everywhere — it is what the
- * rest of the app uses, and on a phone it hands the job to the platform. But
- * the platform answers with a sheet in the middle of the screen, unattached to
- * the thing that opened it, and that is not what this bar wants: the list
- * belongs under the arrow, over the search field it is borrowing space from.
+ * rest of the app uses. But the bar wants one panel holding the search field,
+ * the sort and the direction, and a select cannot do that; the platform's own
+ * picker would also open as a sheet detached from the control that asked for
+ * it. So the list belongs under the arrow, over the search field it is
+ * borrowing space from.
  *
  * So this is the one hand-built menu in the app, and it owes the native control
  * everything the native control gave away: arrow keys, Escape, a click outside,
  * focus landing on the current choice and returning to the button afterwards.
  * They are written out here rather than assumed.
+ *
+ * `before` and `after` add further groups around the sort — the search field
+ * choice and the sort direction — so the bar has one filter control instead of
+ * a switch crammed into the field and a select beside it. The groups read as
+ * one panel because they share the surface, the rows and the dismissal.
  */
-export function SortMenu({ options, value, open, onOpenChange, onChange }) {
+export function SortMenu({
+  options,
+  value,
+  open,
+  onOpenChange,
+  onChange,
+  summary,
+  before = [],
+  after = [],
+}) {
   const wrap = useRef(null)
   const toggle = useRef(null)
   const current = options.find((option) => option.value === value)
+  const grouped = before.length > 0 || after.length > 0
 
   // A tap anywhere else is a decision not to choose anything.
   useEffect(() => {
@@ -55,6 +71,31 @@ export function SortMenu({ options, value, open, onOpenChange, onChange }) {
     items[(at + step + items.length) % items.length].focus()
   }
 
+  const item = (option, checked, onChoose) => (
+    <button
+      key={option.value}
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      className="sort-menu__item"
+      onClick={() => {
+        onChoose(option.value)
+        close(true)
+      }}
+    >
+      <span className="sort-menu__tick" aria-hidden="true">
+        {checked ? '✓' : ''}
+      </span>
+      {option.label}
+    </button>
+  )
+
+  const groups = [
+    ...before,
+    { label: grouped ? 'Sort by' : null, options, value, onChange },
+    ...after,
+  ]
+
   return (
     <div className={`sort-menu${open ? ' is-open' : ''}`} ref={wrap}>
       <button
@@ -64,12 +105,17 @@ export function SortMenu({ options, value, open, onOpenChange, onChange }) {
         className="ui-btn ui-btn--secondary ui-btn--md sort-menu__toggle"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Sort: ${current?.label ?? ''}. Change.`}
+        aria-label={grouped ? 'Filter. Change.' : `Sort: ${current?.label ?? ''}. Change.`}
         onClick={() => onOpenChange(!open)}
       >
-        {/* The label appears only while open: folded, this is an arrow, and the
-            answer it would show is the one already on screen in the results. */}
-        {open && <span className="sort-menu__current">{current?.label}</span>}
+        {/* A summary states the current filter on a wide bar; a plain sort menu
+            shows its label only while open. Narrowing hides the summary by CSS,
+            since an arrow and its answer do not both fit on a phone. */}
+        {summary ? (
+          <span className="sort-menu__current">{summary}</span>
+        ) : (
+          open && !grouped && <span className="sort-menu__current">{current?.label}</span>
+        )}
         <svg
           aria-hidden="true"
           width="18"
@@ -87,26 +133,25 @@ export function SortMenu({ options, value, open, onOpenChange, onChange }) {
         <div
           className="sort-menu__list"
           role="menu"
-          aria-label="Sort results"
+          aria-label={grouped ? 'Filter' : 'Sort results'}
           onKeyDown={onKeyDown}
         >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === value}
-              className="sort-menu__item"
-              onClick={() => {
-                onChange(option.value)
-                close(true)
-              }}
-            >
-              <span className="sort-menu__tick" aria-hidden="true">
-                {option.value === value ? '✓' : ''}
-              </span>
-              {option.label}
-            </button>
+          {groups.map((group, index) => (
+            <Fragment key={group.label ?? 'sort'}>
+              {index > 0 && <hr className="sort-menu__rule" />}
+              {group.label ? (
+                <fieldset className="sort-menu__group">
+                  <legend className="sort-menu__group-label">{group.label}</legend>
+                  {group.options.map((option) =>
+                    item(option, option.value === group.value, group.onChange),
+                  )}
+                </fieldset>
+              ) : (
+                group.options.map((option) =>
+                  item(option, option.value === group.value, group.onChange),
+                )
+              )}
+            </Fragment>
           ))}
         </div>
       )}

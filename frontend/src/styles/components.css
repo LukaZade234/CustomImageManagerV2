@@ -26,13 +26,6 @@
   border-bottom: 1px solid var(--border);
   background-color: var(--surface);
 }
-.navbar-inner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  min-width: 0;
-  padding: var(--space-3) var(--space-6);
-}
 .navbar-brand {
   display: flex;
   align-items: center;
@@ -70,6 +63,14 @@
   width: auto;
   padding: 0 var(--space-3);
 }
+/* The chevron turns over as the list drops, so the control shows its state and
+   not just its name. */
+.sort-menu__toggle svg {
+  transition: transform var(--duration) var(--ease);
+}
+.sort-menu.is-open .sort-menu__toggle svg {
+  transform: rotate(180deg);
+}
 .sort-menu__current {
   white-space: nowrap;
 }
@@ -87,11 +88,35 @@
   background: var(--surface);
   box-shadow: var(--shadow-overlay);
 }
+/* The search-by and sort choices share one panel, so each gets a quiet heading
+   rather than a second control beside the field. */
+.sort-menu__group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.sort-menu__group-label {
+  padding: var(--space-1) var(--space-3) 0;
+  color: var(--text-subtle);
+  font-size: var(--type-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.sort-menu__rule {
+  height: 1px;
+  margin: var(--space-1) 0;
+  border: 0;
+  background: var(--border);
+}
 .sort-menu__item {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: var(--nav-control-min-h);
+  min-height: 34px;
   padding: 0 var(--space-3);
   border: 0;
   border-radius: var(--radius-md);
@@ -125,21 +150,6 @@
   width: var(--nav-control-min-h);
   min-height: var(--nav-control-min-h);
 }
-.navbar-center {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  /* .container's content box: its max-width less its horizontal padding. The
-     auto margins centre the field in whatever the brand and actions leave, so
-     it tracks the cards on wide viewports and shrinks to fit on narrow ones. */
-  max-width: calc(var(--container-max) - var(--space-10));
-  margin: 0 auto;
-}
-/* Search + sort cluster: single child of navbar-center */
-.navbar-center.search-container {
-  display: block;
-  width: 100%;
-}
 .navbar-right {
   display: flex;
   align-items: center;
@@ -148,22 +158,140 @@
   gap: var(--nav-control-gap);
   min-width: 0;
 }
-/* Nav links: same rhythm as search pill (rounded, 44px min touch height) */
-/* Search field + sort: a row on wide viewports, wrapping on narrow ones. */
-.search-bar-cluster {
+/* The one filter bar: a pill holding the field and the filter control. It sits
+   in the navbar's centre, above Browse Customs, and above every profile list;
+   only the width it is given changes. */
+.filter-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
   width: 100%;
   min-width: 0;
-}
-.navbar-sort-select {
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 160px;
   height: var(--nav-control-min-h);
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
+  background: var(--surface);
+  transition: border-color var(--duration-fast) var(--ease);
+}
+.filter-bar:focus-within {
+  border-color: var(--accent);
+  /* The ring belongs to the whole bar, not the bare input inside it: the global
+     `:focus-visible` ring lands on the input with its own small radius and never
+     lines up with the pill. */
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.filter-bar .search-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.filter-bar .search-field .ui-input {
+  height: calc(var(--nav-control-min-h) - 2px);
+  min-height: calc(var(--nav-control-min-h) - 2px);
+  border: 0;
+  background: transparent;
+}
+.filter-bar .search-field .ui-input:focus-visible {
+  outline: none;
+  border-radius: var(--radius-pill);
+}
+/* The filter is the trailing section: a leading hairline, then the control. The
+   line is its own element so it can run the full height without a radius
+   curling its ends. */
+.filter-bar .sort-menu {
+  display: flex;
+  align-self: stretch;
+  min-width: 0;
+}
+.filter-bar .sort-menu::before {
+  content: "";
+  flex: 0 0 1px;
+  align-self: stretch;
+  background: var(--border-strong);
+}
+/* The control drops the chrome that made it a second pill sitting inside the
+   first. On a wide bar it carries the state of the filter as a short summary
+   beside the arrow; on a phone there is no room for both, so it is the chevron
+   alone. */
+.filter-bar .sort-menu .sort-menu__toggle {
+  width: auto;
+  min-height: 0;
+  height: auto;
+  align-self: stretch;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.filter-bar .sort-menu__current {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+/* No hover fill: a square of surface inside the pill is what showed through the
+   focus ring. The ring on the bar is the only feedback the toggle needs. */
+.filter-bar .sort-menu .sort-menu__toggle:focus-visible {
+  outline: none;
+}
+/* The command navbar: the search cluster is capped at the content measure and
+ * centred in whatever the rails leave. `--container-max` less the container's
+ * two 20px gutters is the width the page sections below occupy, so on wide
+ * viewports the field and the sort control start and stop on those same lines.
+ * The rails grow from an equal, empty basis, so when there is slack they end up
+ * the same width and the cluster sits dead centre; `max-content` keeps them
+ * from ever shrinking under the brand or the links, which is what turned the
+ * old `1fr` rails into an overlap. When the window is too narrow for both, the
+ * rails hold their content and the cluster gives ground and shifts aside. */
+.navbar-command {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-3) var(--space-6);
+}
+.navbar-command .navbar-command__rail {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: max-content;
+}
+.navbar-command .navbar-command__rail--start {
+  justify-content: flex-start;
+}
+.navbar-command .navbar-command__rail--end {
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.navbar-command .navbar-command__center {
+  flex: 1 1 auto;
+  max-width: calc(var(--container-max) - var(--space-10));
+  min-width: 0;
+  margin: 0 auto;
+}
+@media (max-width: 960px) {
+  /* The arrow is the whole control here; the summary would crowd the field. */
+  .filter-bar .sort-menu .sort-menu__toggle {
+    width: var(--nav-control-min-h);
+    padding: 0;
+  }
+  .navbar-command {
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+  }
+  /* Folded, the bar is a short brand, the field and the menu button: the rails
+     take their own width so the field keeps everything else. */
+  .navbar-command .navbar-command__rail {
+    flex: 0 0 auto;
+  }
+  .navbar-command .navbar-command__center {
+    max-width: none;
+    margin: 0;
+  }
+}
+@media (max-width: 768px) {
+  .navbar-command {
+    padding: var(--space-2) var(--space-3);
+  }
 }
 /* Responsive layout — nav, search, main */
 @media (max-width: 1200px) {
@@ -183,12 +311,6 @@
      The bar used to wrap to three rows here — wordmark and four icons, the
      field, then the sort — which is most of a phone's first screen spent on
      chrome. */
-  .navbar-inner {
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-  }
   .navbar-brand svg {
     width: 22px;
     height: 22px;
@@ -199,18 +321,8 @@
     gap: 4px;
     animation: nav-links-in var(--duration) var(--ease);
   }
-  .navbar-center {
-    width: auto;
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: none;
-    margin: 0;
-  }
   /* One line, always: the field gives up width, it does not send the sort
      control to a row of its own. */
-  .search-bar-cluster {
-    flex-wrap: nowrap;
-  }
   .search-field {
     flex: 1 1 auto;
   }

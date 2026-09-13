@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiClient, getImageUrl } from '../../api'
+import { MODE_OPTIONS } from '../../components/FilterBar'
+import { useStore } from '../../store/useStore'
 import CardGrid from './CardGrid'
 import ListTab from './ListTab'
-import { byDesc, byText, useFilteredList } from './useFilteredList'
+import { byAsc, byText, useFilteredList } from './useFilteredList'
 
 /**
  * Characters you have looked at, most recent first.
@@ -13,12 +15,12 @@ import { byDesc, byText, useFilteredList } from './useFilteredList'
  */
 
 const SORTS = {
-  recent: { label: 'Recently viewed', compare: byDesc('last_viewed') },
-  visits: { label: 'Most visited', compare: byDesc('visits') },
-  name: { label: 'Name (A–Z)', compare: byText('name') },
-  images: { label: 'Most images', compare: byDesc('images') },
+  viewed: { label: 'Recently viewed', compare: byAsc('last_viewed'), order: 'desc' },
+  visits: { label: 'Most visited', compare: byAsc('visits'), order: 'desc' },
+  alphabet: { label: 'Alphabet', compare: byText('name'), order: 'asc' },
+  images: { label: 'Image count', compare: byAsc('images'), order: 'desc' },
 }
-const FIELDS = ['name', 'series']
+const FIELDS = { name: ['name'], series: ['series'] }
 
 /** "3 days ago" reads better than a timestamp in a list you scan. */
 function relativeDay(iso) {
@@ -35,6 +37,8 @@ function relativeDay(iso) {
 
 export default function HistoryTab() {
   const [rows, setRows] = useState(null)
+  const mode = useStore((s) => s.searchMode)
+  const setMode = useStore((s) => s.setSearchMode)
 
   useEffect(() => {
     apiClient
@@ -43,7 +47,8 @@ export default function HistoryTab() {
       .catch(() => setRows([]))
   }, [])
 
-  const filter = useFilteredList(rows, FIELDS, SORTS)
+  const fields = useMemo(() => FIELDS[mode] ?? FIELDS.name, [mode])
+  const filter = useFilteredList(rows, fields, SORTS)
 
   return (
     <ListTab
@@ -52,6 +57,9 @@ export default function HistoryTab() {
       searchLabel="Search history"
       filter={filter}
       total={rows?.length ?? 0}
+      mode={mode}
+      onMode={setMode}
+      modeOptions={MODE_OPTIONS}
       emptyTitle="Nothing here yet"
       emptyBody="Characters you open will appear here so you can find your way back to them."
     >

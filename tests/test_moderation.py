@@ -29,7 +29,7 @@ def _seed_owned_by(db, char, urls, owner):
 
 
 def _active_urls(client, char):
-    return [row["url"] for row in client.get(f"/api/custom-image/{char}").get_json()]
+    return [row["url"] for row in client.get(f"/api/custom-image/{char}").get_json()["rows"]]
 
 
 class TestOwnershipOnRemove:
@@ -192,18 +192,18 @@ class TestNothingIsEverDestroyed:
 class TestHideForMe:
     def test_hiding_flags_the_image_for_you_only(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/theirs.png"], SOMEONE_ELSE)
-        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        image_id = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
 
         r = _post(client, "/api/hide-images", {"image_ids": [image_id]})
         assert r.get_json()["hidden"] == 1
 
-        rows = client.get("/api/custom-image/Rem").get_json()
+        rows = client.get("/api/custom-image/Rem").get_json()["rows"]
         assert rows[0]["hidden"] is True
 
     def test_hiding_has_no_effect_on_anyone_else(self, client, clean_db, identity_id):
         """The whole point: a hide is invisible to everyone but the hider."""
         _seed_owned_by(clean_db, "Rem", ["https://cdn/theirs.png"], SOMEONE_ELSE)
-        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        image_id = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
         _post(client, "/api/hide-images", {"image_ids": [image_id]})
 
         # A different viewer, i.e. no identity supplied.
@@ -212,14 +212,14 @@ class TestHideForMe:
 
     def test_hiding_does_not_remove(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/theirs.png"], SOMEONE_ELSE)
-        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        image_id = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
         _post(client, "/api/hide-images", {"image_ids": [image_id]})
         assert client.get("/api/removed/Rem").get_json() == []
         assert _active_urls(client, "Rem") == ["https://cdn/theirs.png"]
 
     def test_hiding_twice_is_idempotent(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/theirs.png"], SOMEONE_ELSE)
-        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        image_id = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
         _post(client, "/api/hide-images", {"image_ids": [image_id]})
         assert (
             _post(client, "/api/hide-images", {"image_ids": [image_id]}).get_json()["hidden"] == 0
@@ -227,13 +227,13 @@ class TestHideForMe:
 
     def test_unhiding_restores_it(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/theirs.png"], SOMEONE_ELSE)
-        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        image_id = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
         _post(client, "/api/hide-images", {"image_ids": [image_id]})
         assert (
             _post(client, "/api/unhide-images", {"image_ids": [image_id]}).get_json()["unhidden"]
             == 1
         )
-        assert client.get("/api/custom-image/Rem").get_json()[0]["hidden"] is False
+        assert client.get("/api/custom-image/Rem").get_json()["rows"][0]["hidden"] is False
 
     def test_image_ids_must_be_a_list_of_integers(self, client, clean_db, identity_id):
         assert _post(client, "/api/hide-images", {"image_ids": "nope"}).status_code == 400
@@ -243,24 +243,24 @@ class TestHideForMe:
 class TestOwnershipInTheReadPath:
     def test_your_own_image_is_marked_is_mine(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/mine.png"], identity_id)
-        assert client.get("/api/custom-image/Rem").get_json()[0]["is_mine"] is True
+        assert client.get("/api/custom-image/Rem").get_json()["rows"][0]["is_mine"] is True
 
     def test_someone_elses_is_not(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/theirs.png"], SOMEONE_ELSE)
-        row = client.get("/api/custom-image/Rem").get_json()[0]
+        row = client.get("/api/custom-image/Rem").get_json()["rows"][0]
         assert row["is_mine"] is False
         assert row["owner"] is not None
 
     def test_an_unowned_image_reports_no_owner(self, client, clean_db, identity_id):
         _seed_owned_by(clean_db, "Rem", ["https://cdn/legacy.png"], None)
-        row = client.get("/api/custom-image/Rem").get_json()[0]
+        row = client.get("/api/custom-image/Rem").get_json()["rows"][0]
         assert row["owner"] is None
         assert row["is_mine"] is False
 
     def test_the_raw_identity_id_is_never_returned(self, client, clean_db, identity_id):
         """Ownership is reported as a handle and a boolean, never as the id."""
         _seed_owned_by(clean_db, "Rem", ["https://cdn/mine.png"], identity_id)
-        row = client.get("/api/custom-image/Rem").get_json()[0]
+        row = client.get("/api/custom-image/Rem").get_json()["rows"][0]
         assert set(row) == {
             "id",
             "url",
@@ -290,7 +290,7 @@ class TestHidingUnknownImages:
     def test_a_mixed_request_hides_what_it_can(self, client, clean_db, identity_id):
         clean_db.add_character("Rem", "Re:Zero", "1", "")
         clean_db.add_custom_images("Rem", ["https://cdn/a.png"], added_by=identity_id)
-        real = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        real = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
 
         response = client.post("/api/hide-images", json={"image_ids": [real, 999999]})
         assert response.get_json()["hidden"] == 1
@@ -302,7 +302,7 @@ class TestHidingUnknownImages:
         """The race the in-statement filter exists for."""
         clean_db.add_character("Rem", "Re:Zero", "1", "")
         clean_db.add_custom_images("Rem", ["https://cdn/a.png"], added_by=identity_id)
-        image_id = client.get("/api/custom-image/Rem").get_json()[0]["id"]
+        image_id = client.get("/api/custom-image/Rem").get_json()["rows"][0]["id"]
 
         with clean_db.transaction() as conn:
             conn.execute("DELETE FROM custom_images WHERE id = ?", (image_id,))
