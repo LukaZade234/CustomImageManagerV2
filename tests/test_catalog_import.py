@@ -95,6 +95,54 @@ class TestParsing:
         assert result.issues
 
 
+ACCOUNT_MARKER_SAMPLE = """【OSHI NO KO】 - 2/27
+#11,203 - Yoriko Kichijouji  🚫  $wa  DISABLED · ($wa) - https://mudae.net/uploads/6785771/VuJlTLR~3Txc1Sb.png
+#11,321 - Koyuki Yoshidomi  🚫  $wa  DISABLED · ($wa) - https://mudae.net/uploads/7979188/-xj7UCg~l4necpbkw94.png
+
+100% Personal - 2/4
+#11,093 - Yi-Seul Choi  🚫  $wa  DISABLED · ($wa) - https://mudae.net/uploads/4893428/75e0yai~xBMd9qS.png
+#11,626 - Su-Ah Kang  🚫  $wa  DISABLED · ($wa) - https://mudae.net/uploads/6645446/fpTUccr~324nQO3.png
+
+3-gatsu no Lion - 1/34
+#10,543 - Hinata Kawamoto  🚫  $wa  DISABLED · ($wa) - https://mudae.net/uploads/7060800/zsE4Nyw~eybajea.png
+"""
+
+
+class TestAccountMarkers:
+    def test_disabled_marker_is_stripped_from_the_name(self):
+        result = ci.parse_text(ACCOUNT_MARKER_SAMPLE)
+        assert result.issues == []
+        yoriko = result.characters[ci.name_key("Yoriko Kichijouji")]
+        assert yoriko.name == "Yoriko Kichijouji"
+        assert yoriko.rank == "11203"
+        assert yoriko.pool == "wa"
+        assert yoriko.series == "【OSHI NO KO】"
+
+    def test_every_marked_line_parses_and_percent_series_works(self):
+        result = ci.parse_text(ACCOUNT_MARKER_SAMPLE)
+        assert len(result.characters) == 5
+        assert result.series[ci.name_key("100% Personal")].total == 4
+        assert result.characters[ci.name_key("Hinata Kawamoto")].series == "3-gatsu no Lion"
+
+    def test_marker_stripper_leaves_ordinary_names_alone(self):
+        assert ci.strip_account_marker("Ai Hoshino") == "Ai Hoshino"
+        assert ci.strip_account_marker("C.C.") == "C.C."
+        assert ci.strip_account_marker("Sung Jin-Woo") == "Sung Jin-Woo"
+
+    def test_marker_stripper_handles_marker_without_an_emoji(self):
+        assert ci.strip_account_marker("Rem  $wg  DISABLED") == "Rem"
+
+    def test_the_real_pool_comes_from_the_parentheses_not_the_marker(self):
+        # The marker's own "$wg" is account noise; the pool in "( )" is the data.
+        result = ci.parse_text(
+            "#1 - Rem  🚫  $wg  DISABLED · ($wa, $ha) - https://mudae.net/uploads/1/aa~bb.png"
+        )
+        rem = result.characters[ci.name_key("Rem")]
+        assert rem.name == "Rem"
+        assert rem.pool == "ha,wa"
+        assert rem.is_waifu and rem.is_husbando and rem.is_anime and not rem.is_game
+
+
 class TestNameKey:
     def test_folds_nfd_nfc_fullwidth_and_nbsp(self):
         assert ci.name_key("Pokémon") == ci.name_key("Poke\u0301mon")

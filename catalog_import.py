@@ -11,6 +11,10 @@ headed by `🤔`), CJK brackets (`【OSHI NO KO】`), braces and accents
 pools that list more than one tag (`$wa, $ha`). A single malformed line must be
 recorded and skipped, never abort the run.
 
+Extracts taken through a personal Mudae account also carry account-specific
+noise between the name and the `·` separator, e.g. `Yoriko Kichijouji  🚫  $wa
+DISABLED · ($wa)`. `strip_account_marker` removes it so it never lands in a name.
+
 The same character is re-captured by many extracts, so parsing is followed by a
 merge keyed on `name_key`, which folds every Unicode form SQLite's
 `COLLATE NOCASE` cannot (NFC/NFD, fullwidth, NBSP). When two rows collide, the
@@ -44,6 +48,26 @@ _CHAR_RE = re.compile(
 _POOL_TOKEN_RE = re.compile(r"^\$([wh])([ag])$", re.IGNORECASE)
 _WHITESPACE_RE = re.compile(r"\s+")
 _APOSTROPHES = {"\u2018": "'", "\u2019": "'", "\u02bc": "'", "\u2032": "'"}
+
+# A character queried through a personal Mudae account can carry a disabled
+# marker between the name and the "· ($pool)" separator, e.g.
+#   #11,203 - Yoriko Kichijouji  🚫  $wa  DISABLED · ($wa) - https://...
+# The marker is account-specific noise, not part of the name: strip it. The
+# emoji class spans the pictograph/dingbat/symbol ranges plus the variation
+# selector and ZWJ, so it matches a lone 🚫 or a multi-codepoint symbol without
+# ever eating a real word.
+_MARKER_SYMBOL = (
+    r"[\U0001F000-\U0001FAFF\u2190-\u2BFF\u2600-\u27BF\uFE0F\u200D\u20E3]"
+)
+_DISABLED_MARKER_RE = re.compile(
+    rf"\s*(?:{_MARKER_SYMBOL}+\s*)*\$[a-z]{{2}}\s+DISABLED\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_account_marker(name: str) -> str:
+    """Drop a trailing "🚫 $wa DISABLED" marker from a scraped character name."""
+    return _DISABLED_MARKER_RE.sub("", name).strip()
 
 # An unranked or unparseable rank is treated as worse than every real rank, so a
 # duplicate that *does* have a rank always wins the merge.
@@ -193,7 +217,7 @@ def parse_into(result: ParseResult, text: str, *, source: str = "") -> ParseResu
                     ParseIssue(source, line_no, line, "not a character line")
                 )
                 continue
-            name = match.group("name").strip()
+            name = strip_account_marker(match.group("name").strip())
             ok, err = validate_character_name(name)
             if not ok:
                 result.issues.append(ParseIssue(source, line_no, line, err or "invalid name"))
