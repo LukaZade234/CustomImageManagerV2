@@ -989,6 +989,64 @@ body.reorder-touch-dragging {
 .mudae-result summary {
   cursor: pointer;
 }
+/* The reviewed `$imartsmi-` extract: what the series adds vs. what it changes. */
+.mudae-extract {
+  margin-top: var(--space-4);
+  font-size: var(--type-meta);
+}
+.mudae-extract details {
+  margin-top: var(--space-2);
+}
+.mudae-extract summary {
+  cursor: pointer;
+}
+.mudae-extract__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.mudae-extract__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.mudae-extract__img {
+  width: 32px;
+  aspect-ratio: var(--main-image-ratio);
+  height: auto;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+.mudae-extract__img--empty {
+  display: block;
+}
+.mudae-extract__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mudae-extract__rank {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.mudae-extract__changes {
+  flex-shrink: 0;
+  font-size: var(--type-micro);
+  color: var(--text-subtle);
+}
+.mudae-extract__actions {
+  margin-top: var(--space-3);
+}
 .mudae-item--ok {
   color: var(--success);
 }

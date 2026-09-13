@@ -17,6 +17,9 @@ const api = vi.hoisted(() => ({
   findCatalogCharacter: vi.fn(),
   catalogAddCharacter: vi.fn(),
   mudaeLookupCharacter: vi.fn(),
+  mudaeLookupSeries: vi.fn(),
+  mudaeSeriesExtract: vi.fn(),
+  mudaeSeriesExtractApply: vi.fn(),
   addCharacter: vi.fn(),
   getCharacters: vi.fn(),
 }))
@@ -345,5 +348,89 @@ describe('AddPage catalog integration', () => {
       '/character/Rem',
     )
     expect(api.mudaeLookupCharacter).not.toHaveBeenCalled()
+  })
+
+  it('fetches a series, previews new vs existing, then applies it', async () => {
+    const user = userEvent.setup()
+    api.mudaeStatus.mockResolvedValue({ configured: true })
+    api.mudaeLookupSeries.mockResolvedValue({
+      type: 'series',
+      series_label: 'Lord of the Mysteries',
+    })
+    api.mudaeSeriesExtract.mockResolvedValue({
+      series: 'Lord of the Mysteries',
+      total: 3,
+      new_count: 2,
+      update_count: 1,
+      unchanged_count: 0,
+      items: [
+        {
+          name: 'Klein Moretti',
+          rank: '4252',
+          image_url: 'https://mudae.net/a.png',
+          in_library: false,
+          changes: ['create'],
+        },
+        {
+          name: 'Trissy',
+          rank: '10320',
+          image_url: 'https://mudae.net/b.png',
+          in_library: false,
+          changes: ['create'],
+        },
+        {
+          name: 'Audrey Hall',
+          rank: '8123',
+          image_url: 'https://mudae.net/c.png',
+          in_library: true,
+          changes: ['series', 'rank', 'image'],
+        },
+      ],
+    })
+    api.mudaeSeriesExtractApply.mockResolvedValue({
+      success: true,
+      message: 'Series "Lord of the Mysteries" — added 2, updated 1, unchanged 0',
+      created: 2,
+      updated: 1,
+      unchanged: 0,
+      rejected: [],
+    })
+    renderPage()
+
+    await user.type(await screen.findByLabelText('Bulk-add series'), 'Lord of the Mysteries')
+    await user.click(screen.getByRole('button', { name: 'Fetch series' }))
+
+    expect(api.mudaeLookupSeries).toHaveBeenCalledWith('Lord of the Mysteries')
+    expect(await screen.findByText('Not in the library (2)')).toBeInTheDocument()
+    expect(screen.getByText('Already in the library (1)')).toBeInTheDocument()
+    expect(screen.getByText('updates series, rank, image')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Apply — add 2, update 1' }))
+
+    await waitFor(() => expect(api.mudaeSeriesExtractApply).toHaveBeenCalled())
+    const [seriesArg, items] = api.mudaeSeriesExtractApply.mock.calls[0]
+    expect(seriesArg).toBe('Lord of the Mysteries')
+    expect(items).toHaveLength(3)
+    expect(items[0]).toMatchObject({ name: 'Klein Moretti', rank: '4252' })
+    expect(api.getCharacters).toHaveBeenCalled()
+  })
+
+  it('offers series candidates when the name is ambiguous', async () => {
+    const user = userEvent.setup()
+    api.mudaeStatus.mockResolvedValue({ configured: true })
+    api.mudaeLookupSeries.mockResolvedValue({
+      type: 'candidates',
+      candidate_matches: [
+        { name: 'Re:Zero', series: '', label: 'Re:Zero - 12' },
+        { name: 'Re:Zero kara Hajimeru', series: '', label: 'Re:Zero kara Hajimeru - 30' },
+      ],
+    })
+    renderPage()
+
+    await user.type(await screen.findByLabelText('Bulk-add series'), 'Re:Zero')
+    await user.click(screen.getByRole('button', { name: 'Fetch series' }))
+
+    expect(await screen.findByText('Pick a series:')).toBeInTheDocument()
+    expect(api.mudaeSeriesExtract).not.toHaveBeenCalled()
   })
 })

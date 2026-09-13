@@ -37,6 +37,12 @@ MAX_IMA_PAGES = 40
 CHARACTER_LOOKUP_RETRIES = 2  # 3 attempts total per character
 IMA_REACTION_WAIT_S = 10.0
 
+# `$imartsmi-` answers by DM, split across as many messages as the list needs.
+# The first part arrives after the command is sent; the rest follow immediately,
+# so a quiet gap this long means the series list is complete.
+DM_IDLE_TIMEOUT_S = 3.0
+DM_MAX_WAIT_S = 90.0
+
 
 class MudaeError(Exception):
     """User-facing Mudae / Discord client error."""
@@ -527,6 +533,24 @@ def _ima_reply_embed(msg: discord.Message, fallback: str):
     return _TextEmbed(text)
 
 
+def _dm_body(msg: discord.Message) -> str:
+    """The text of one DM part: message content, else the first embed's body."""
+    text = (msg.content or "").strip()
+    if text:
+        return text
+    if msg.embeds:
+        embed = msg.embeds[0]
+        parts = [embed.title or ""]
+        if embed.description:
+            parts.append(embed.description)
+        for field in getattr(embed, "fields", []) or []:
+            value = getattr(field, "value", None)
+            if value:
+                parts.append(str(value))
+        return "\n".join(part for part in parts if part).strip()
+    return ""
+
+
 def _ima_text_ready(text: str) -> bool:
     text = (text or "").strip()
     if not text:
@@ -872,6 +896,11 @@ class _MudaeSession:
         self._watch_reactions_msg_id: int | None = None
         self._reaction_notify: asyncio.Event | None = None
         self._reply_not_before: float | None = None
+        # `$imartsmi-` collects the series list from DMs, not the channel.
+        self._dm_parts: list[str] = []
+        self._dm_event: asyncio.Event | None = None
+        self._dm_active = False
+        self._dm_not_before = 0.0
 
     def _message_in_target_channel(self, message: discord.Message) -> bool:
         ch = message.channel
@@ -1098,6 +1127,7 @@ class _MudaeSession:
         @client.event
         async def on_message(message: discord.Message):
             await self._maybe_capture(message)
+            await self._maybe_capture_dm(message)
 
         @client.event
         async def on_message_edit(_before: discord.Message, after: discord.Message):
@@ -1161,6 +1191,90 @@ class _MudaeSession:
             return
         log.debug("mudae.reply_captured", message_id=message.id, embeds=len(message.embeds))
         self._pending.set_result(message)
+
+    async def _maybe_capture_dm(self, message: discord.Message) -> None:
+        """Collect one part of a `$imartsmi-` DM while a fetch is in flight."""
+        if not self._dm_active or self._dm_event is None:
+            return
+        if message.author.id != self._mudae_id:
+            return
+        # A DM has no guild; a same-author message in the channel is not it.
+        if getattr(message, "guild", None) is not None:
+            return
+        if message.created_at.timestamp() < self._dm_not_before:
+            return
+        body = _dm_body(message)
+        if not body:
+            return
+        self._dm_parts.append(body)
+        log.debug("mudae.dm_part_captured", message_id=message.id)
+        self._dm_event.set()
+
+    async def _next_dm_part(self, timeout: float) -> bool:
+        event = self._dm_event
+        if event is None:
+            return False
+        if event.is_set():
+            event.clear()
+            return True
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+        except TimeoutError:
+            return False
+        event.clear()
+        return True
+
+    async def fetch_series_extract_dm(self, series: str) -> str:
+        """Send `$imartsmi- <series>` and return the concatenated DM reply.
+
+        Mudae answers to the account's DMs and splits a long list across several
+        messages. Parts are collected until the header's total is reached or the
+        messages stop arriving, whichever comes first.
+        """
+        if self._channel is None:
+            raise MudaeError("Discord channel not available")
+        series = (series or "").strip()
+        if not series:
+            raise MudaeError("Series name is required")
+        _raise_if_series_cancelled()
+
+        await self._action_pause()
+        self._dm_parts = []
+        self._dm_event = asyncio.Event()
+        self._dm_active = True
+        self._dm_not_before = time.time() - 1.0
+        try:
+            await self._channel.send(f"$imartsmi- {series}")
+            return await self._collect_series_dm()
+        finally:
+            self._dm_active = False
+            self._dm_event = None
+
+    async def _collect_series_dm(self) -> str:
+        if not await self._next_dm_part(REPLY_TIMEOUT_S):
+            raise MudaeError("Mudae did not send the series list in a DM")
+
+        deadline = time.monotonic() + DM_MAX_WAIT_S
+        while time.monotonic() < deadline:
+            _raise_if_series_cancelled()
+            text = "\n".join(self._dm_parts)
+            # Local import keeps this module free of the catalog parser except
+            # for the completeness check it needs here.
+            import catalog_import
+
+            parsed = catalog_import.parse_series_extract(text)
+            if parsed.total and len(parsed.characters) >= parsed.total:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if not await self._next_dm_part(min(DM_IDLE_TIMEOUT_S, remaining)):
+                break
+
+        text = "\n".join(self._dm_parts)
+        if not text.strip():
+            raise MudaeError("Mudae did not send the series list in a DM")
+        return text
 
     async def _wait_for_pending_reply(self, timeout: float = REPLY_TIMEOUT_S) -> discord.Message:
         if self._pending is None:
@@ -1375,6 +1489,19 @@ def lookup_series(series: str) -> SeriesLookupResult:
         async def _inner():
             async with _MudaeSession() as session:
                 return await session.lookup_series(series)
+
+        return _run_async(_inner())
+
+    return with_discord_lock(_do)
+
+
+def fetch_series_extract(series: str) -> str:
+    """$imartsmi- a series and return the raw DM body for the caller to parse."""
+
+    def _do():
+        async def _inner():
+            async with _MudaeSession() as session:
+                return await session.fetch_series_extract_dm(series)
 
         return _run_async(_inner())
 

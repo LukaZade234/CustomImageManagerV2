@@ -270,6 +270,81 @@ def update_last_modified(char_name: str) -> None:
         conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
 
 
+def apply_series_characters(series: str, items: Iterable[dict]) -> dict:
+    """Create or refresh working characters from a reviewed series extract.
+
+    Every item is `{name, rank, image}`. A name already in the working set is
+    matched on the folded key (so a differently-cased or accented spelling is the
+    same character) and keeps its display name; only the fields that differ are
+    written, so re-running an unchanged series is a no-op rather than a write.
+    Returns counts plus a per-item action for the caller to report.
+    """
+    import catalog_import
+
+    series = (series or "").strip()
+    created = updated = unchanged = failed = 0
+    results: list[dict] = []
+    with transaction() as conn:
+        rows = conn.execute("SELECT id, name, series, rank, main_image_url FROM characters").fetchall()
+        by_key = {catalog_import.name_key(row["name"]): row for row in rows}
+        for item in items:
+            name = str(item.get("name") or "").strip()
+            key = catalog_import.name_key(name)
+            if not key:
+                failed += 1
+                results.append({"name": name, "action": "failed", "error": "empty name"})
+                continue
+            rank = str(item.get("rank") or "").strip()
+            image = str(item.get("image") or "").strip()
+            row = by_key.get(key)
+            if row is None:
+                cur = conn.execute(
+                    "INSERT INTO characters (name, series, rank, main_image_url)"
+                    " VALUES (?, ?, ?, ?) ON CONFLICT (name) DO NOTHING",
+                    (name, series, rank, image),
+                )
+                if cur.rowcount:
+                    created += 1
+                    results.append({"name": name, "action": "created"})
+                else:
+                    unchanged += 1
+                    results.append({"name": name, "action": "unchanged"})
+                continue
+
+            updates: dict[str, str] = {}
+            if series and row["series"] != series:
+                updates["series"] = series
+            if rank and row["rank"] != rank:
+                updates["rank"] = rank
+            if image and row["main_image_url"] != image:
+                updates["main_image_url"] = image
+            if updates:
+                assignments = ", ".join(f"{column} = ?" for column in updates)
+                conn.execute(
+                    f"UPDATE characters SET {assignments}, updated_at = ? WHERE id = ?",
+                    (*updates.values(), _now(), row["id"]),
+                )
+                updated += 1
+                results.append(
+                    {
+                        "name": row["name"],
+                        "action": "updated",
+                        "changes": sorted(updates),
+                    }
+                )
+            else:
+                unchanged += 1
+                results.append({"name": row["name"], "action": "unchanged"})
+
+    return {
+        "created": created,
+        "updated": updated,
+        "unchanged": unchanged,
+        "failed": failed,
+        "results": results,
+    }
+
+
 # --- Mudae catalog ------------------------------------------------------
 #
 # `characters` is the working set; `character_catalog` is the full scrape. The

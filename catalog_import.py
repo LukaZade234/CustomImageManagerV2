@@ -40,6 +40,30 @@ _SERIES_RE = re.compile(
     r"^(?P<series>.+?)\s*-\s*(?P<listed>[\d,]+)\s*/\s*(?P<total>[\d,]+)\s*$"
 )
 
+# The DM `$imartsmi- <series>` sends writes the header without the " - " the
+# pasted extracts use: "Lord of the Mysteries   0/55". An alias line never ends
+# in "digits/digits", so anchoring the pattern to the end keeps it unambiguous.
+_SERIES_DM_RE = re.compile(
+    r"^(?P<series>.+?)\s+(?P<listed>[\d,]+)\s*/\s*(?P<total>[\d,]+)\s*$"
+)
+
+# Mudae's DM is Discord markdown: the header and rank are bold (`**#4,252**`),
+# pools are italic (`*($ha)*`), and the portrait is wrapped in `<>` to suppress a
+# link preview. The paste extracts are plain, so only the DM path strips these.
+_DM_EMOJI_RE = re.compile(r"<a?:\w+:\d+>")
+# Only `*` and backticks: `~` and `_` occur inside mudae.net filenames and names
+# (`V40OZzn~uUp4hS7.png`), so stripping them would corrupt the portrait URL.
+_DM_MARKUP_RE = re.compile(r"[*`]+")
+_DM_ANGLE_RE = re.compile(r"[<>]")
+
+
+def _clean_dm_line(raw: str) -> str:
+    text = (raw or "").replace("\u200b", "")
+    text = _DM_EMOJI_RE.sub("", text)
+    text = _DM_ANGLE_RE.sub("", text)
+    text = _DM_MARKUP_RE.sub("", text)
+    return text.strip()
+
 # A character line. The name is greedy so it splits on the *last* "· (" -- which
 # is what protects a name that itself contains a middle dot. The URL is anchored
 # to the end, so trailing whitespace and the pool list can vary freely. A stray
@@ -182,6 +206,17 @@ class ParseResult:
     duplicates: int = 0
     # A character seen again with different data; the better rank won.
     conflicts: int = 0
+
+
+@dataclass
+class SeriesExtract:
+    """One `$imartsmi-` DM body: its series and the characters it lists."""
+
+    series: str = ""
+    listed: int | None = None
+    total: int | None = None
+    characters: list[CatalogCharacter] = field(default_factory=list)
+    issues: list[ParseIssue] = field(default_factory=list)
 
 
 def parse_pools(raw: str) -> tuple[str, bool, bool, bool, bool, list[str]]:
@@ -334,6 +369,93 @@ def parse_sources(sources: list[tuple[str, str]]) -> ParseResult:
     for name, text in sources:
         parse_into(result, text, source=name)
     return result
+
+
+def parse_series_header(line: str) -> CatalogSeries | None:
+    """The series + listed/total header, with or without the " - " separator."""
+    for pattern in (_SERIES_RE, _SERIES_DM_RE):
+        match = pattern.match(line)
+        if match:
+            return CatalogSeries(
+                series=match.group("series").strip(),
+                listed=int(match.group("listed").replace(",", "")),
+                total=int(match.group("total").replace(",", "")),
+            )
+    return None
+
+
+def parse_series_extract(text: str, *, source: str = "") -> SeriesExtract:
+    """Parse one `$imartsmi-` DM body into its series and character lines.
+
+    The DM surrounds the character lines with the series header, its aliases,
+    per-pool totals and value stats. Only the header and the `#rank - Name ·
+    ($pools) - url` lines carry data; every other line is ignored, so an alias
+    block or a new Mudae stat line never turns into a parse failure.
+    """
+    result = ParseResult()
+    if source:
+        result.sources.append(source)
+
+    text = text.lstrip("\ufeff")
+    series = ""
+    listed: int | None = None
+    total: int | None = None
+
+    for line_no, raw_line in enumerate(text.splitlines(), 1):
+        line = _clean_dm_line(raw_line)
+        if not line:
+            continue
+        if line.startswith("#"):
+            match = _CHAR_RE.match(line)
+            if not match:
+                result.issues.append(ParseIssue(source, line_no, line, "not a character line"))
+                continue
+            name = strip_account_marker(match.group("name").strip())
+            ok, err = validate_catalog_name(name)
+            if not ok:
+                result.issues.append(ParseIssue(source, line_no, line, err or "invalid name"))
+                continue
+            rank = match.group("rank").replace(",", "").strip()
+            if len(rank) > MAX_RANK_LENGTH:
+                result.issues.append(ParseIssue(source, line_no, line, "rank too long"))
+                continue
+            pool, waifu, husbando, anime, game, unknown = parse_pools(match.group("pools"))
+            if unknown:
+                result.issues.append(
+                    ParseIssue(source, line_no, line, f"unknown pool tag(s): {', '.join(unknown)}")
+                )
+            _store_character(
+                result,
+                CatalogCharacter(
+                    name=name,
+                    series=series[:MAX_SERIES_LENGTH],
+                    rank=rank,
+                    image_url=match.group("url"),
+                    pool=pool,
+                    is_waifu=waifu,
+                    is_husbando=husbando,
+                    is_anime=anime,
+                    is_game=game,
+                ),
+            )
+            continue
+
+        header = parse_series_header(line)
+        if header is not None:
+            series = header.series
+            listed, total = header.listed, header.total
+            _store_series(result, header)
+            continue
+        # Alias lines, pool totals, AVG/Top-10 stats and any other chrome are
+        # deliberately dropped rather than reported.
+
+    return SeriesExtract(
+        series=series,
+        listed=listed,
+        total=total,
+        characters=list(result.characters.values()),
+        issues=result.issues,
+    )
 
 
 def as_catalog_rows(result: ParseResult) -> list[dict]:

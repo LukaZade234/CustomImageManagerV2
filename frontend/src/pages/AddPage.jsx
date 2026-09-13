@@ -58,9 +58,9 @@ export default function AddPage() {
   const [seriesCandidates, setSeriesCandidates] = useState([])
   const [seriesResolving, setSeriesResolving] = useState(false)
   const [seriesBusy, setSeriesBusy] = useState(false)
-  const [seriesCancelling, setSeriesCancelling] = useState(false)
-  const [seriesResult, setSeriesResult] = useState(null)
-  const [seriesProgress, setSeriesProgress] = useState(null)
+  const [seriesPreview, setSeriesPreview] = useState(null)
+  const [seriesApplying, setSeriesApplying] = useState(false)
+  const [seriesApplyResult, setSeriesApplyResult] = useState(null)
   // The library fills the rank once the series is chosen, until the field is edited.
   const [rankTouched, setRankTouched] = useState(false)
   // A message shown inside the lookup panel, e.g. "already exists".
@@ -143,6 +143,8 @@ export default function AddPage() {
   const panelExact = Boolean(
     mudaeExisting && normalizeSeries(mudaeLookupName) === normalizeSeries(mudaeExisting.name),
   )
+  const previewNew = (seriesPreview?.items || []).filter((c) => !c.in_library)
+  const previewExisting = (seriesPreview?.items || []).filter((c) => c.in_library)
 
   useEffect(() => {
     // The library's portrait replaces any file chosen before the name resolved,
@@ -339,9 +341,12 @@ export default function AddPage() {
     if (!s) return
     setSeriesCandidates([])
     setSeriesResolving(true)
-    setSeriesResult(null)
+    setSeriesPreview(null)
+    setSeriesApplyResult(null)
     let importName = null
     try {
+      // $ima resolves the exact label (and offers candidates when ambiguous);
+      // the extract itself is one $imartsmi- call for the whole series.
       const resolved = await apiClient.mudaeLookupSeries(s)
       if (resolved.type === 'candidates') {
         const matches = mudaeCandidatesFromResponse(resolved)
@@ -357,124 +362,60 @@ export default function AddPage() {
       setSeriesBulkName(importName)
     } catch (err) {
       addToast(err.message, 'error')
-      setSeriesResult({ error: err.message })
+      setSeriesApplyResult({ error: err.message })
     } finally {
       setSeriesResolving(false)
     }
     if (importName) {
-      await runSeriesImport(importName)
+      await fetchSeriesPreview(importName)
     }
   }
 
-  const runSeriesImport = async (seriesName) => {
+  const fetchSeriesPreview = async (seriesName) => {
     const s = (seriesName || seriesBulkName).trim()
     if (!s) return
     setSeriesBusy(true)
-    setSeriesCancelling(false)
-    setSeriesResult(null)
     setSeriesCandidates([])
-    setSeriesProgress({
-      phase: 'starting',
-      series: s,
-      totalListed: 0,
-      current: null,
-      added: [],
-      failed: [],
-      skipped: [],
-    })
-    addToast(`Fetching series "${s}" from Mudae — this can take a while…`, 'info')
+    setSeriesPreview(null)
+    setSeriesApplyResult(null)
+    addToast(`Fetching "${s}" from Mudae — this can take a moment…`, 'info')
     try {
-      const res = await apiClient.mudaeAddSeriesStream(s, {
-        ima_complete: (d) => {
-          setSeriesProgress((p) => ({
-            ...p,
-            phase: 'delay',
-            series: d.series || s,
-            totalListed: d.total_listed || 0,
-            current: null,
-          }))
-        },
-        ima_delay_done: () => {
-          setSeriesProgress((p) => ({ ...p, phase: 'adding' }))
-        },
-        lookup_start: (d) => {
-          setSeriesProgress((p) => ({
-            ...p,
-            phase: d.retry ? 'retry' : 'adding',
-            current: d.name,
-          }))
-        },
-        added: (d) => {
-          setSeriesProgress((p) => ({
-            ...p,
-            added: [...p.added, d],
-            current: d.name,
-          }))
-        },
-        skipped: (d) => {
-          setSeriesProgress((p) => ({
-            ...p,
-            skipped: [...p.skipped, d.name],
-          }))
-        },
-        failed: (d) => {
-          setSeriesProgress((p) => ({
-            ...p,
-            failed: [...p.failed, d],
-          }))
-        },
-        retry_pass_start: () => {
-          setSeriesProgress((p) => ({ ...p, phase: 'retry' }))
-        },
-        cancelled: () => {
-          setSeriesCancelling(true)
-          setSeriesProgress((p) => (p ? { ...p, phase: 'cancelled' } : p))
-        },
-      })
-      setSeriesResult(res)
-      setSeriesProgress((p) => (p ? { ...p, phase: res?.cancelled ? 'cancelled' : 'done' } : p))
-      if (res?.cancelled) {
-        addToast(res?.message || 'Series import cancelled', 'info')
-      } else {
-        addToast(res?.message || 'Series import finished', 'success')
-      }
+      const res = await apiClient.mudaeSeriesExtract(s)
+      setSeriesPreview(res)
+      const found = res.items?.length || 0
+      addToast(
+        `Found ${found} character${found === 1 ? '' : 's'} in "${res.series || s}"`,
+        'success',
+      )
     } catch (err) {
-      if (err.candidateMatches?.length) {
-        const matches = mudaeCandidatesFromResponse({ candidate_matches: err.candidateMatches })
-        setSeriesCandidates(matches)
-        addToast(`Multiple series matches — pick one (${matches.length})`, 'info')
-        setSeriesResult(null)
-      } else {
-        addToast(err.message, 'error')
-        setSeriesResult({ error: err.message })
-      }
-      setSeriesProgress((p) => (p ? { ...p, phase: 'error' } : p))
+      addToast(err.message, 'error')
+      setSeriesApplyResult({ error: err.message })
     } finally {
       setSeriesBusy(false)
-      setSeriesCancelling(false)
-      try {
-        await loadCharacters()
-      } catch {
-        /* keep prior list if refresh fails */
-      }
     }
   }
 
   const handlePickSeriesCandidate = (name) => {
     setSeriesBulkName(name)
     setSeriesCandidates([])
-    runSeriesImport(name)
+    fetchSeriesPreview(name)
   }
 
-  const handleCancelSeries = async () => {
-    if (!seriesBusy || seriesCancelling) return
-    setSeriesCancelling(true)
+  const handleApplySeries = async () => {
+    if (!seriesPreview) return
+    setSeriesApplying(true)
+    setSeriesApplyResult(null)
     try {
-      await apiClient.mudaeCancelSeries()
-      addToast('Stopping import after the current step…', 'info')
+      const res = await apiClient.mudaeSeriesExtractApply(seriesPreview.series, seriesPreview.items)
+      setSeriesApplyResult(res)
+      setSeriesPreview(null)
+      await loadCharacters()
+      addToast(res.message || 'Series applied', 'success')
     } catch (err) {
       addToast(err.message, 'error')
-      setSeriesCancelling(false)
+      setSeriesApplyResult({ error: err.message })
+    } finally {
+      setSeriesApplying(false)
     }
   }
 
@@ -594,25 +535,12 @@ export default function AddPage() {
                     type="submit"
                     disabled={seriesBusy || seriesResolving || !seriesBulkName.trim()}
                   >
-                    {seriesResolving
-                      ? 'Checking…'
-                      : seriesBusy
-                        ? 'Importing…'
-                        : 'Add entire series'}
+                    {seriesResolving ? 'Checking…' : seriesBusy ? 'Fetching…' : 'Fetch series'}
                   </Button>
-                  {seriesBusy && (
-                    <Button
-                      variant="secondary"
-                      disabled={seriesCancelling}
-                      onClick={handleCancelSeries}
-                    >
-                      {seriesCancelling ? 'Cancelling…' : 'Cancel import'}
-                    </Button>
-                  )}
                 </div>
                 <p className="mudae-preview__hint">
-                  Runs <code>$ima</code> then <code>$im</code> per character. Large series can take
-                  several minutes; existing names are skipped.
+                  Runs <code>$imartsmi-</code> once for the whole series. You review what will be
+                  added and updated before anything is saved.
                 </p>
                 {seriesCandidates.length > 0 && (
                   <div className="mudae-candidates">
@@ -634,93 +562,123 @@ export default function AddPage() {
               </div>
             </form>
 
-            {seriesProgress && seriesBusy && (
+            {seriesBusy && (
               <div className="mudae-progress">
                 <div className="mudae-progress__label">
-                  {seriesProgress.phase === 'starting' && 'Querying Mudae for series list…'}
-                  {seriesProgress.phase === 'delay' && (
-                    <>
-                      Found {seriesProgress.totalListed} character
-                      {seriesProgress.totalListed !== 1 ? 's' : ''} in &quot;{seriesProgress.series}
-                      &quot; — waiting before lookups…
-                    </>
-                  )}
-                  {seriesProgress.phase === 'adding' && seriesProgress.current && (
-                    <>
-                      Adding: <strong>{seriesProgress.current}</strong> (
-                      {seriesProgress.added.length +
-                        seriesProgress.skipped.length +
-                        seriesProgress.failed.length}
-                      {seriesProgress.totalListed ? ` / ${seriesProgress.totalListed}` : ''})
-                    </>
-                  )}
-                  {seriesProgress.phase === 'retry' && 'Retrying failed characters…'}
-                  {seriesProgress.phase === 'cancelled' && 'Stopping import…'}
+                  Fetching the series from Mudae — this can take a moment…
                 </div>
-                {seriesProgress.added.length > 0 && (
-                  <ul className="mudae-scroll-list">
-                    {seriesProgress.added.map((c) => (
-                      <li key={c.name} className="mudae-item--ok">
-                        {c.name}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {seriesProgress.skipped.length > 0 && (
-                  <details open>
-                    <summary>
-                      Skipped — already in library ({seriesProgress.skipped.length})
-                    </summary>
-                    <ul className="mudae-scroll-list">
-                      {seriesProgress.skipped.map((name) => (
-                        <li key={name} className="mudae-item--warn">
-                          {name}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
               </div>
             )}
 
-            {seriesResult && !seriesResult.error && !seriesBusy && (
-              <div className="mudae-result">
-                <div>{seriesResult.message}</div>
-                {Array.isArray(seriesResult.added) && seriesResult.added.length > 0 && (
-                  <details open={seriesResult.cancelled}>
-                    <summary>Added ({seriesResult.added.length})</summary>
-                    <ul>
-                      {seriesResult.added.map((c) => (
-                        <li key={c.name}>{c.name}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-                {Array.isArray(seriesResult.skipped) && seriesResult.skipped.length > 0 && (
-                  <details>
-                    <summary>Skipped — already in library ({seriesResult.skipped.length})</summary>
-                    <ul>
-                      {seriesResult.skipped.map((name) => (
-                        <li key={name}>{name}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-                {Array.isArray(seriesResult.failed) && seriesResult.failed.length > 0 && (
-                  <details>
-                    <summary>Failed ({seriesResult.failed.length})</summary>
-                    <ul>
-                      {seriesResult.failed.map((f) => (
-                        <li key={f.name}>
-                          {f.name}: {f.error}
+            {seriesPreview && !seriesBusy && (
+              <div className="mudae-extract">
+                <div className="mudae-result">
+                  <div>
+                    <strong>{seriesPreview.series}</strong>
+                    {seriesPreview.total ? ` — ${seriesPreview.total} characters` : ''} (
+                    {seriesPreview.new_count} new, {seriesPreview.update_count} to update,{' '}
+                    {seriesPreview.unchanged_count} unchanged)
+                  </div>
+                </div>
+
+                {previewNew.length > 0 && (
+                  <details open>
+                    <summary>Not in the library ({previewNew.length})</summary>
+                    <ul className="mudae-extract__list">
+                      {previewNew.map((c) => (
+                        <li key={c.name} className="mudae-extract__item">
+                          {c.image_url ? (
+                            <img
+                              src={mudaePreviewSrc(c.image_url)}
+                              alt=""
+                              className="mudae-extract__img"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span
+                              className="mudae-extract__img mudae-extract__img--empty"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span className="mudae-extract__name">{c.name}</span>
+                          {c.rank && <span className="mudae-extract__rank">#{c.rank}</span>}
                         </li>
                       ))}
                     </ul>
                   </details>
                 )}
+
+                {previewExisting.length > 0 && (
+                  <details open>
+                    <summary>Already in the library ({previewExisting.length})</summary>
+                    <ul className="mudae-extract__list">
+                      {previewExisting.map((c) => (
+                        <li key={c.name} className="mudae-extract__item">
+                          {c.image_url ? (
+                            <img
+                              src={mudaePreviewSrc(c.image_url)}
+                              alt=""
+                              className="mudae-extract__img"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <span
+                              className="mudae-extract__img mudae-extract__img--empty"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <span className="mudae-extract__name">{c.name}</span>
+                          {c.rank && <span className="mudae-extract__rank">#{c.rank}</span>}
+                          <span className="mudae-extract__changes">
+                            {c.changes.length ? `updates ${c.changes.join(', ')}` : 'no change'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
+                <div className="mudae-row mudae-extract__actions">
+                  <Button variant="primary" disabled={seriesApplying} onClick={handleApplySeries}>
+                    {seriesApplying
+                      ? 'Saving…'
+                      : `Apply — add ${seriesPreview.new_count}, update ${seriesPreview.update_count}`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={seriesApplying}
+                    onClick={() => setSeriesPreview(null)}
+                  >
+                    Discard
+                  </Button>
+                </div>
               </div>
             )}
-            {seriesResult?.error && <div className="form-error">{seriesResult.error}</div>}
+
+            {seriesApplyResult && !seriesApplying && (
+              <div className="mudae-result">
+                {seriesApplyResult.error ? (
+                  <div className="form-error">{seriesApplyResult.error}</div>
+                ) : (
+                  <>
+                    <div>{seriesApplyResult.message}</div>
+                    {Array.isArray(seriesApplyResult.rejected) &&
+                      seriesApplyResult.rejected.length > 0 && (
+                        <details>
+                          <summary>Rejected ({seriesApplyResult.rejected.length})</summary>
+                          <ul className="mudae-scroll-list">
+                            {seriesApplyResult.rejected.map((f) => (
+                              <li key={f.name} className="mudae-item--warn">
+                                {f.name}: {f.error}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
         {!mudaeConfigured && (
