@@ -66,6 +66,21 @@ def _upload_remote_image_to_imgchest(image_url, character_name):
             os.remove(temp_path)
 
 
+def _mudae_main_image_url(image_url, character_name):
+    """The URL to store as a character's main image, given one from Mudae.
+
+    Mudae's own portrait hosts (`mudae.net`) are hotlinkable and are what the
+    catalog and the bulk extract store, so such a URL is kept as it came back.
+    A host we cannot rely on -- notably a Discord CDN link that expires -- is
+    downloaded and re-hosted on ImgChest instead.
+    """
+    if not image_url:
+        return ""
+    if _allowed_portrait_url(image_url):
+        return image_url
+    return _upload_remote_image_to_imgchest(image_url, character_name)
+
+
 def _persist_mudae_character(info, *, overwrite_main=False):
     """
     Add character from CharacterInfo, or update main image if already exists and overwrite_main.
@@ -83,9 +98,7 @@ def _persist_mudae_character(info, *, overwrite_main=False):
 
     series = (info.series or "").strip()[:MAX_SERIES_LENGTH]
     rank = (info.rank or "").strip()[:MAX_RANK_LENGTH]
-    image_url = ""
-    if info.image_url:
-        image_url = _upload_remote_image_to_imgchest(info.image_url, name)
+    image_url = _mudae_main_image_url(info.image_url, name)
 
     existing = [c for c in (db.get_characters() or []) if c.get("name") == name]
     if existing:
@@ -380,7 +393,7 @@ def mudae_refresh_main_image():
         if not info.image_url:
             return jsonify({"error": "Mudae reply had no image"}), 502
 
-        image_url = _upload_remote_image_to_imgchest(info.image_url, char_name)
+        image_url = _mudae_main_image_url(info.image_url, char_name)
         if not db.set_main_image(char_name, image_url):
             return jsonify({"error": "Character not found"}), 404
         db.update_last_modified(char_name)
