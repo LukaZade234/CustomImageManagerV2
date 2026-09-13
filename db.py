@@ -824,7 +824,7 @@ def get_custom_image_stats() -> dict:
     return {"custom_images": row["images"], "characters_with_customs": row["characters"]}
 
 
-def get_home_highlights(limit: int = 8) -> dict:
+def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
     """Everything the landing page shows besides the two totals.
 
     One function and one round trip, because these are four small queries that
@@ -856,14 +856,44 @@ def get_home_highlights(limit: int = 8) -> dict:
         )
     ]
 
+    # Each series also names the character that carries it: the one with the
+    # most active images, ties broken by name so the answer is stable between
+    # visits. The count travels with it because "who" without "how many" reads
+    # as an anecdote rather than a measurement.
     top_series = [
-        {"series": r["series"], "images": r["n"], "characters": r["chars"]}
+        {
+            "series": r["series"],
+            "images": r["n"],
+            "characters": r["chars"],
+            "top_character": r["top_name"],
+            "top_character_images": r["top_n"],
+            "top_character_image": r["top_image"],
+        }
         for r in conn.execute(
-            "SELECT c.series, COUNT(ci.id) AS n, COUNT(DISTINCT c.id) AS chars"
-            "  FROM characters c"
-            "  JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
-            "  WHERE c.series IS NOT NULL AND c.series != ''"
-            "  GROUP BY c.series ORDER BY n DESC, c.series LIMIT ?",
+            "WITH series_totals AS ("
+            "  SELECT c.series, COUNT(ci.id) AS n, COUNT(DISTINCT c.id) AS chars"
+            "    FROM characters c"
+            "    JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
+            "   WHERE c.series IS NOT NULL AND c.series != ''"
+            "   GROUP BY c.series"
+            "), character_totals AS ("
+            "  SELECT c.series, c.name, c.main_image_url, COUNT(ci.id) AS n"
+            "    FROM characters c"
+            "    JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
+            "   WHERE c.series IS NOT NULL AND c.series != ''"
+            "   GROUP BY c.id"
+            "), ranked AS ("
+            "  SELECT series, name, main_image_url, n,"
+            "         ROW_NUMBER() OVER ("
+            "           PARTITION BY series ORDER BY n DESC, name"
+            "         ) AS rn"
+            "    FROM character_totals"
+            ") "
+            "SELECT s.series, s.n, s.chars, r.name AS top_name, r.n AS top_n,"
+            "       r.main_image_url AS top_image"
+            "  FROM series_totals s"
+            "  JOIN ranked r ON r.series = s.series AND r.rn = 1"
+            " ORDER BY s.n DESC, s.series LIMIT ?",
             (limit,),
         )
     ]
@@ -904,7 +934,7 @@ def get_home_highlights(limit: int = 8) -> dict:
             "  JOIN custom_images ci ON ci.added_by = i.id AND ci.state = 'active'"
             " WHERE i.discord_id IS NOT NULL AND i.hide_from_leaderboard = 0"
             " GROUP BY i.id ORDER BY n DESC, i.handle LIMIT ?",
-            (limit,),
+            (contributor_limit,),
         )
     ]
 
@@ -919,6 +949,36 @@ def get_home_highlights(limit: int = 8) -> dict:
             " WHERE series IS NOT NULL AND series != ''"
         ).fetchone()["n"],
     }
+
+
+def get_contributor_standing(identity_id: str) -> dict | None:
+    """Where one visitor sits on the contributor board, or None if unranked.
+
+    The board itself is the top few; this is the "and you" line, which has to be
+    computed against every ranked contributor, not the returned page. The same
+    filters apply as the board -- Discord identities that have not hidden
+    themselves -- and an identity with no active images is not on the board at
+    all, so the answer is None rather than a rank of zero.
+    """
+    if not identity_id:
+        return None
+    conn = get_connection()
+    row = conn.execute(
+        "WITH counts AS ("
+        "  SELECT i.id, i.handle, COUNT(ci.id) AS n"
+        "    FROM identities i"
+        "    JOIN custom_images ci ON ci.added_by = i.id AND ci.state = 'active'"
+        "   WHERE i.discord_id IS NOT NULL AND i.hide_from_leaderboard = 0"
+        "   GROUP BY i.id"
+        "), ranked AS ("
+        "  SELECT id, handle, n, ROW_NUMBER() OVER (ORDER BY n DESC, handle) AS rank"
+        "    FROM counts"
+        ") SELECT rank, handle, n FROM ranked WHERE id = ?",
+        (identity_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"rank": row["rank"], "handle": row["handle"], "images": row["n"]}
 
 
 def list_characters_with_customs(

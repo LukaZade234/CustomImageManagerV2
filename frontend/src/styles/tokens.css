@@ -71,6 +71,19 @@
   --warning: #8a5a00;
   --warning-subtle: #fbf1de;
 
+  /* ---- Medals ------------------------------------------------------ */
+  /* The contributor leaderboard's top three. A scoped exception to the Art
+     Carries the Colour rule: gold, silver and bronze are the ranking's own
+     vocabulary, not a second accent competing with the teal. Each base metal
+     pairs with a pale tint, the same contract the status colours follow, so the
+     number reads as its metal on a medal. */
+  --medal-gold: #8a6a00;
+  --medal-gold-subtle: #fbf3d9;
+  --medal-silver: #55606f;
+  --medal-silver-subtle: #eef1f5;
+  --medal-bronze: #8a4b1f;
+  --medal-bronze-subtle: #f8e9df;
+
   /* ---- Focus ------------------------------------------------------- */
   --focus-ring: var(--accent);
   --focus-ring-offset: var(--bg);
@@ -218,6 +231,13 @@
     --warning: #e0b341;
     --warning-subtle: #33280f;
 
+    --medal-gold: #e8c24a;
+    --medal-gold-subtle: #33280f;
+    --medal-silver: #c3ccd9;
+    --medal-silver-subtle: #262c36;
+    --medal-bronze: #e0975f;
+    --medal-bronze-subtle: #33231a;
+
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.6);
     --scrim: rgb(0 0 0 / 0.7);
@@ -254,6 +274,13 @@
   --danger-subtle: #35191a;
   --warning: #e0b341;
   --warning-subtle: #33280f;
+
+  --medal-gold: #e8c24a;
+  --medal-gold-subtle: #33280f;
+  --medal-silver: #c3ccd9;
+  --medal-silver-subtle: #262c36;
+  --medal-bronze: #e0975f;
+  --medal-bronze-subtle: #33231a;
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.6);

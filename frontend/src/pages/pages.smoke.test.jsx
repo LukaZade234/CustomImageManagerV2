@@ -147,6 +147,11 @@ describe('character page loading states', () => {
 
     expect(screen.getByText(/Loading character/i)).toBeInTheDocument()
     expect(screen.queryByText(/not found/i)).not.toBeInTheDocument()
+    // The real page leads with the portrait; the skeleton must not put the
+    // identity in the narrow first column and the portrait beside it.
+    const top = document.querySelector('.character-top-section')
+    expect(top.firstElementChild).toHaveClass('char-image-section')
+    expect(document.querySelectorAll('.gallery-item-wrapper--skeleton').length).toBeGreaterThan(0)
   })
 
   it('only says not-found once the library has actually arrived', () => {

@@ -149,3 +149,21 @@ describe('layout', () => {
     }
   })
 })
+
+describe('loading', () => {
+  /**
+   * The bug this guards: while a character's images were still in flight the
+   * gallery fell through to its empty state and announced "No custom images
+   * yet" for a gallery that simply had not answered.
+   */
+  it('shows frames rather than the empty state while images load', () => {
+    setup({ rows: [], loading: true, empty: <p>No custom images yet</p> })
+    expect(document.querySelectorAll('.gallery-item-wrapper--skeleton')).toHaveLength(8)
+    expect(screen.queryByText('No custom images yet')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the empty state once the fetch has settled empty', () => {
+    setup({ rows: [], loading: false, empty: <p>No custom images yet</p> })
+    expect(screen.getByText('No custom images yet')).toBeInTheDocument()
+  })
+})

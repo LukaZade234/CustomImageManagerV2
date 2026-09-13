@@ -215,6 +215,7 @@ def get_stats():
         "recent": [],
         "contributors": [],
         "series_count": 0,
+        "you": None,
     }
     try:
         highlights = db.get_home_highlights()
@@ -224,6 +225,13 @@ def get_stats():
         ]
     except Exception:
         log.exception("stats.highlights_failed")
+
+    # The caller's own standing, separately guarded: it needs the request's
+    # identity and must not take the whole highlights block down with it.
+    try:
+        highlights["you"] = db.get_contributor_standing(identity.current_identity().id)
+    except Exception:
+        log.exception("stats.standing_failed")
 
     return jsonify({**totals, **highlights})
 

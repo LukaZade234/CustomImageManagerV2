@@ -49,6 +49,10 @@ export const useStore = create((set, get) => ({
   // the character page only. There is deliberately no library-wide image map any
   // more -- Home and Customs ask the server for what they need.
   characterImages: {},
+  // Which characters' rows are in flight. The gallery needs to tell "not
+  // fetched yet" from "fetched and genuinely empty", or it shows the
+  // no-images-yet state while the request is still out.
+  characterImagesLoading: {},
   // Per-character accent seed ("#aeb7d2"), from the character list, the saved
   // list, or the gallery response -- whichever arrived last wins, and the
   // gallery response is the freshest because the server re-measures on it.
@@ -151,30 +155,39 @@ export const useStore = create((set, get) => ({
   /** One character’s images from GET /api/custom-image/<name>, with ownership. */
   loadCustomImagesForCharacter: async (characterName) => {
     if (!characterName) return
-    const maxAttempts = 3
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        const payload = await apiClient.getCustomImagesForChar(characterName)
-        // The endpoint returns {rows, accentSeed}; the bare-array shape is
-        // accepted so a cached or proxied old response degrades to no seed
-        // rather than an empty gallery.
-        const list = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.rows)
-            ? payload.rows
-            : []
-        const seed = Array.isArray(payload) ? null : (payload?.accentSeed ?? null)
-        set((s) => ({
-          characterImages: { ...s.characterImages, [characterName]: list },
-          accentSeeds: { ...s.accentSeeds, [characterName]: seed },
-        }))
-        return
-      } catch (e) {
-        if (!shouldRetryFetchError(e) || attempt === maxAttempts - 1) break
-        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.random() * 200))
+    set((s) => ({
+      characterImagesLoading: { ...s.characterImagesLoading, [characterName]: true },
+    }))
+    try {
+      const maxAttempts = 3
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const payload = await apiClient.getCustomImagesForChar(characterName)
+          // The endpoint returns {rows, accentSeed}; the bare-array shape is
+          // accepted so a cached or proxied old response degrades to no seed
+          // rather than an empty gallery.
+          const list = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload?.rows)
+              ? payload.rows
+              : []
+          const seed = Array.isArray(payload) ? null : (payload?.accentSeed ?? null)
+          set((s) => ({
+            characterImages: { ...s.characterImages, [characterName]: list },
+            accentSeeds: { ...s.accentSeeds, [characterName]: seed },
+          }))
+          return
+        } catch (e) {
+          if (!shouldRetryFetchError(e) || attempt === maxAttempts - 1) break
+          await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.random() * 200))
+        }
       }
+      /* keep previous slice for this character */
+    } finally {
+      set((s) => ({
+        characterImagesLoading: { ...s.characterImagesLoading, [characterName]: false },
+      }))
     }
-    /* keep previous slice for this character */
   },
 
   /**

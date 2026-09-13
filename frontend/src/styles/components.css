@@ -950,6 +950,13 @@
   height: 12px;
   margin-bottom: var(--space-3);
 }
+/* The real hero's subtitle and figure rows span the column; the global
+   `.skeleton-line--body` width would leave them short. */
+.skeleton-hero__identity .skeleton-line,
+.skeleton-hero__figures .skeleton-line {
+  width: 100%;
+  margin: 0;
+}
 .skeleton-features {
   max-width: 700px;
   margin: 0 auto;
@@ -1001,9 +1008,12 @@
    portrait on one side, a gallery below -- so the frame does not jump when the
    library lands. */
 .skeleton-portrait {
-  width: 100%;
-  max-width: 280px;
+  /* Height-led like the real placeholder: the portrait column is `auto`, so a
+     width of 100% has nothing to resolve against and would collapse. */
   aspect-ratio: var(--main-image-ratio);
+  height: var(--portrait-max-h, 168px);
+  max-height: var(--portrait-max-h, 168px);
+  margin: 0 auto;
   border-radius: var(--radius-lg);
   background: linear-gradient(
     90deg,
@@ -1013,12 +1023,6 @@
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.2s var(--ease) infinite;
-}
-.skeleton-gallery {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-8);
 }
 .skeleton-tile {
   flex: var(--main-image-ratio) 1 calc(var(--main-image-ratio) * 220px);
@@ -1033,6 +1037,50 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.2s var(--ease) infinite;
 }
+/* Fixed-size stand-ins for the search and customs thumbnails, overriding the
+   strip tile's ratio-driven sizing. */
+.skeleton-thumb {
+  flex: 0 0 auto;
+  width: 160px;
+  height: 160px;
+  aspect-ratio: auto;
+}
+.skeleton-thumb--sm {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+}
+/* Home's placeholder rows: a strip of posters, and the stacked rows of a
+   ranking. After the tile rules so the overrides win by order, not just
+   specificity. */
+.skeleton-strip {
+  display: flex;
+  gap: var(--space-3);
+  overflow: hidden;
+}
+.skeleton-strip .skeleton-tile {
+  flex: 0 0 auto;
+  width: 150px;
+  height: 200px;
+  aspect-ratio: auto;
+}
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.skeleton-rows .skeleton-line {
+  width: 100%;
+  margin: 0;
+}
 .character-page .char-info-section .skeleton-line {
   margin-bottom: var(--space-3);
+}
+/* Stands in for the save button, which sits under the portrait in the real
+   layout rather than in the identity column. */
+.save-skeleton {
+  grid-column: 1;
+  width: 100%;
+  height: 34px;
+  margin: 0;
 }

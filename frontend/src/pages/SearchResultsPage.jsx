@@ -55,11 +55,11 @@ export default function SearchResultsPage() {
       <Card as="section" padding="lg" className="page-loading-shell" aria-busy="true">
         <h1 className="page-title">Search Results</h1>
         <p className="text-meta page-loading-lead search-skeleton-note">Fetching character list…</p>
-        <div className="search-skeleton-list" aria-hidden>
+        <div className="search-results-list" aria-hidden>
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="search-skeleton-row">
-              <div className="skeleton-circle search-skeleton-thumb" />
-              <div className="search-skeleton-text">
+            <div key={i} className="search-result-item">
+              <span className="skeleton-circle search-result-img" />
+              <div className="search-result-info">
                 <div className="skeleton-line skeleton-line--title" />
                 <div className="skeleton-line skeleton-line--body" />
               </div>

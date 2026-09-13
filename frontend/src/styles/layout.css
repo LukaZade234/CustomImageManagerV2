@@ -12,4 +12,12 @@
        nearly a third of its width to the space around the pictures. */
     padding: var(--space-4) var(--space-3) 0;
   }
+  /* The landing page's cards already carry their own breathing room, so the
+     frame's top and bottom margins on top of that read as slack rather than
+     space. Only the home route tightens; the rest keep the standard frame. */
+  .container:has(.home) {
+    margin-top: var(--space-4);
+    margin-bottom: var(--space-6);
+    padding-top: var(--space-2);
+  }
 }

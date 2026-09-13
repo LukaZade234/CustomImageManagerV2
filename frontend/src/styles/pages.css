@@ -813,35 +813,6 @@ body.reorder-touch-dragging {
     background-position: -200% 0;
   }
 }
-.search-skeleton-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.search-skeleton-row {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-.search-skeleton-row:last-child {
-  border-bottom: none;
-}
-.search-skeleton-thumb {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-lg);
-  flex-shrink: 0;
-}
-.search-skeleton-text {
-  flex: 1;
-  min-width: 0;
-}
 /* ---- Add page: the Mudae authoring panel --------------------------------
  * These classes replaced 42 inline style objects, four of which hardcoded hex
  * colours that had no dark-mode counterpart.
@@ -1393,13 +1364,10 @@ body.reorder-touch-dragging {
   min-width: 0;
 }
 /* Customs list ------------------------------------------------------------ */
-.customs-skeleton-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+/* The loading cards are the real card shape, so the grid keeps its rhythm; only
+   the pointer affordance goes, since there is nothing to open yet. */
+.customs-item--skeleton {
+  cursor: default;
 }
 /* The previous page stays readable while the next one loads, rather than the
    list blanking on every keystroke or page change. */
@@ -1478,6 +1446,19 @@ body.reorder-touch-dragging {
   min-width: 0;
   aspect-ratio: var(--ratio, 0.667);
   line-height: 0;
+}
+/* The prefetch frame: same ratio and row maths as a real item, so the gallery
+   keeps its height until the pixels arrive. */
+.custom-images-gallery .gallery-item-wrapper--skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-hover) 25%,
+    var(--surface-sunken) 50%,
+    var(--surface-hover) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s var(--ease) infinite;
+  border-radius: var(--radius-md);
 }
 /* Uniform columns on a phone, where uniform rows stop working.
 
@@ -1632,6 +1613,46 @@ body.reorder-touch-dragging {
   flex-direction: column;
   gap: var(--space-5);
 }
+/* The region under the hero: the library sections as the spine, plus the
+   contributor leaderboard beside them when there is a ranking to show. The
+   spine is slimmed only while the leaderboard is present, so a page without one
+   does not leave a hole on the right. */
+.home-lower__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+/* The cards carry their own padding, so the page's gaps can tighten on a phone
+   without the sections running together. */
+@media (max-width: 768px) {
+  .home,
+  .home-lower__main {
+    gap: var(--space-4);
+  }
+}
+.home-lower--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: var(--space-5);
+  align-items: stretch;
+}
+.home-lower__aside {
+  min-width: 0;
+}
+/* The ranking card takes the full height of the spine beside it rather than
+   floating short at the top. Its content stays pinned to the top of that
+   height; the card fills the column, the list does not stretch to fill it. */
+.home-leaderboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+@media (max-width: 960px) {
+  .home-lower--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .home-section__head {
   display: flex;
   align-items: baseline;
@@ -1657,23 +1678,32 @@ body.reorder-touch-dragging {
 /* Just added: a horizontal strip, because the newest images are the most direct
    evidence that the site is alive. Scrolls rather than wraps so it stays one
    line on any width. */
+/* The ticker viewport clips the track, which is twice as wide as one pass of
+   the cards and is moved by a composited transform rather than by scrolling, so
+   the drift and its slow-down stay sub-pixel smooth instead of stepping. */
+.home-recent-viewport {
+  overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+}
+.home-recent-viewport.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+/* Reduced motion (or no observers): one static set, scrolled natively. */
+.home-recent-viewport.is-static {
+  overflow-x: auto;
+  cursor: auto;
+  scrollbar-width: thin;
+}
 .home-recent {
   --recent-height: 240px;
+  position: relative;
   display: flex;
   gap: var(--space-3);
   margin: 0;
   padding: 0 0 var(--space-2);
   list-style: none;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  cursor: grab;
-}
-.home-recent.is-dragging {
-  cursor: grabbing;
-  /* The strip is being positioned directly; letting it also animate would
-     fight the pointer. */
-  scroll-behavior: auto;
-  user-select: none;
 }
 .home-recent > li {
   flex: 0 0 auto;
@@ -1715,6 +1745,22 @@ body.reorder-touch-dragging {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The "Just added" ticker: the component renders the list twice and translates
+   the track to the clone, so the strip drifts left and wraps with no seam. The
+   drag and the wheel are handled on the viewport and move the same offset. The
+   cards are cut clean at the box edge; there is deliberately no edge fade. */
+/* The drift is nonessential motion, so reduced-motion visitors (and engines
+   without the observers) get one static, natively scrollable set rather than a
+   doubled loop. The class is the JS fallback; the media query covers the frame
+   before it runs. */
+@media (prefers-reduced-motion: reduce) {
+  .home-recent__clone {
+    display: none;
+  }
+}
+.home-recent-viewport.is-static .home-recent__clone {
+  display: none;
 }
 @media (max-width: 768px) {
   .home-recent {
@@ -1804,138 +1850,232 @@ a.home-strip__item:hover .home-strip__shot {
     flex: 0 0 50%;
   }
 }
-.home-ranked {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
+/* The contributor leaderboard. It was a grid of sunken cells; beside the
+   library spine it reads better as a standings list — one column,
+   hairline-divided, each row a rank, a handle and a count. The top three carry
+   a gold, silver or bronze medal, the one place the page spends colour on the
+   ranking itself rather than on the artwork. */
+.home-leaderboard__head {
+  margin-bottom: var(--space-4);
+}
+.home-leaderboard__title {
+  margin: 0 0 var(--space-1);
+}
+.home-leaderboard__note {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+  line-height: var(--line-body);
+}
+.home-leaderboard__list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
-@media (max-width: 1200px) {
-  .home-ranked {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 480px) {
-  .home-ranked {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.home-ranked__item {
-  display: flex;
+.home-leaderboard__row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+.home-leaderboard__list > li:last-child {
+  border-bottom: 0;
+}
+.home-leaderboard__rank {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   background: var(--surface-sunken);
-  color: inherit;
-  text-decoration: none;
-  transition:
-    border-color var(--duration) var(--ease),
-    background-color var(--duration) var(--ease);
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
-a.home-ranked__item:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-hover);
+.home-leaderboard__rank--1 {
+  background: var(--medal-gold-subtle);
+  color: var(--medal-gold);
 }
-.home-ranked__rank {
-  flex-shrink: 0;
-  width: 1.5rem;
-  color: var(--text-subtle);
-  font-size: var(--type-meta);
-  text-align: right;
+.home-leaderboard__rank--2 {
+  background: var(--medal-silver-subtle);
+  color: var(--medal-silver);
 }
-.home-ranked__thumb {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  background: var(--surface-hover);
+.home-leaderboard__rank--3 {
+  background: var(--medal-bronze-subtle);
+  color: var(--medal-bronze);
 }
-.home-ranked__thumb--empty {
-  display: block;
-}
-.home-ranked__text {
-  display: flex;
-  flex-direction: column;
+.home-leaderboard__name {
   min-width: 0;
-  flex: 1 1 auto;
-}
-.home-ranked__title,
-.home-ranked__meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: var(--weight-medium);
 }
-.home-ranked__meta {
-  font-size: var(--type-micro);
-  color: var(--text-muted);
+.home-leaderboard__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
 }
-.home-ranked__count {
-  flex-shrink: 0;
-  padding-left: var(--space-2);
+/* The top three lead: a larger medal and a larger name, so the ranking has a
+   head instead of eight equal rows. */
+.home-leaderboard__row.is-lead {
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+}
+.home-leaderboard__row.is-lead .home-leaderboard__rank {
+  width: 36px;
+  height: 36px;
+  font-size: var(--type-meta);
+}
+.home-leaderboard__row.is-lead .home-leaderboard__name {
+  font-size: var(--type-section);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-title);
+}
+.home-leaderboard__row.is-lead .home-leaderboard__count {
+  font-size: var(--type-section);
+}
+/* The caller's own line: set apart from rows it is not part of, so a low rank
+   still reads as a standing rather than the list quietly ending in a name. */
+.home-leaderboard__you {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: var(--type-meta);
 }
-/* Series: the most under-used way into the library, so it gets real estate. */
-/* A fixed column count rather than auto-fill: with eight entries, auto-fill
-   packed five into the first row and left two empty cells trailing the second.
-   Four and two both divide eight, so every row is full at every width. */
-/* Most popular series: a row per series with a hairline bar showing its share.
+.home-leaderboard__you strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* Most popular series: one full-width ledger row per series.
 
-   It was eight bordered tiles of identical size — a card inside a card, and the
-   one shape that hides what "most popular" means. The bar measures characters
-   while the order measures images, so a series wide in one and narrow in the
-   other shows it.
+   It was inside the two-column region, as the third card in the spine, which
+   made the contributor leaderboard beside it stretch the height of three cards
+   to stay level. It is now a full-width band below that region, so the
+   leaderboard only ever spans the two cards it belongs to, and the freed right
+   side becomes a third column: the character carrying each series and how many
+   images that is.
 
-   `--share` is set per row against the largest character count, which is not
-   necessarily the first row: the list is ordered by images. */
-.home-series {
+   The hairline bar still measures a series against its peers while the order
+   measures images, so the two readings stay independent. `--share` is set per
+   row against the largest character count, which is not necessarily the first
+   row. */
+.home-series-ledger__head,
+.home-series-ledger__row {
   display: grid;
-  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1.7fr) minmax(88px, auto) minmax(0, 1.15fr);
+  align-items: center;
+  gap: var(--space-4);
+}
+/* Where the series card sits below the split region, it repeats that region's
+   columns so the "images · characters" column ends exactly where the cards
+   above it end, and "most represented" falls under the leaderboard. The grid is
+   inset by the card's own padding and border, so the third column is the
+   leaderboard column minus that inset -- that is what puts the second column's
+   edge, not merely its content, on the cards' edge. */
+@media (min-width: 960px) {
+  .home-series-ledger--split .home-series-ledger__head,
+  .home-series-ledger--split .home-series-ledger__row {
+    grid-template-columns:
+      minmax(0, 1fr) auto
+      minmax(calc(280px - var(--space-8) - 1px), calc(340px - var(--space-8) - 1px));
+    gap: var(--space-5);
+    padding-inline: 0;
+  }
+}
+.home-series-ledger__head {
+  padding: 0 var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.home-series-ledger__head > span:nth-child(2),
+.home-series-ledger__head > span:nth-child(3) {
+  text-align: right;
+}
+.home-series-ledger__list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.home-series__item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-3);
-  padding: var(--space-1) 0;
+.home-series-ledger__row {
+  padding: var(--space-1) var(--space-2);
   color: inherit;
   text-decoration: none;
+  transition: background-color var(--duration) var(--ease);
 }
-.home-series__name {
+.home-series-ledger__row:hover {
+  background: var(--surface-hover);
+}
+.home-series-ledger__series {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.home-series-ledger__name {
   font-weight: var(--weight-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.home-series__meta {
-  font-size: var(--type-micro);
-  color: var(--text-muted);
+.home-series-ledger__row:hover .home-series-ledger__name {
+  color: var(--accent);
 }
-.home-series__track {
-  grid-column: 1 / -1;
+.home-series-ledger__bar {
   height: 2px;
   background: var(--surface-sunken);
 }
-.home-series__fill {
+.home-series-ledger__fill {
   display: block;
   height: 100%;
   width: calc(var(--share, 0) * 100%);
   background: var(--border-strong);
   transition: background-color var(--duration) var(--ease);
 }
-.home-series__item:hover .home-series__fill {
+.home-series-ledger__row:hover .home-series-ledger__fill {
   background: var(--accent);
 }
-.home-series__item:hover .home-series__name {
-  color: var(--accent);
+.home-series-ledger__meta {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  text-align: right;
+}
+.home-series-ledger__lead {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.home-series-ledger__leadname {
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-series-ledger__leadcount {
+  color: var(--text-muted);
+  font-size: var(--type-micro);
+}
+@media (max-width: 768px) {
+  .home-series-ledger__head {
+    display: none;
+  }
+  .home-series-ledger__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  /* The series name and its counts are the whole row on a phone; the
+     most-represented character is one more thing to read than there is room
+     for, and it is already named on the series page. */
+  .home-series-ledger__lead {
+    display: none;
+  }
 }
 
 /* ---- Profile -------------------------------------------------------------
@@ -2262,6 +2402,20 @@ a.home-ranked__item:hover {
 }
 .profile-card__image--empty {
   aspect-ratio: var(--ratio, 0.643);
+}
+/* The loading placeholder is the same card as the loaded grid, so the page
+   keeps its shape while the rows are in flight. */
+.profile-card--skeleton {
+  min-height: 190px;
+  cursor: default;
+  background: linear-gradient(
+    90deg,
+    var(--surface-hover) 25%,
+    var(--surface-sunken) 50%,
+    var(--surface-hover) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s var(--ease) infinite;
 }
 .profile-card__body {
   display: flex;

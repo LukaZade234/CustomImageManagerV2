@@ -227,7 +227,14 @@ class TestHomeHighlights:
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 3), "Emilia": ("Re:Zero", "2", 2)})
         _seed(clean_db, {"Lucy": ("Edgerunners", "1", 4)})
         body = client.get("/api/stats").get_json()
-        assert body["top_series"][0] == {"series": "Re:Zero", "images": 5, "characters": 2}
+        assert body["top_series"][0] == {
+            "series": "Re:Zero",
+            "images": 5,
+            "characters": 2,
+            "top_character": "Rem",
+            "top_character_images": 3,
+            "top_character_image": "Rem.png",
+        }
         assert body["series_count"] == 2
 
     def test_a_character_with_no_series_is_not_a_series(self, client, clean_db):
@@ -278,6 +285,30 @@ class TestHomeHighlights:
         """8,547 of the library predates ownership and must not inflate anyone."""
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 4)}, owner=None)
         assert client.get("/api/stats").get_json()["contributors"] == []
+
+    def test_the_caller_is_told_their_own_standing(self, client, clean_db, identity_id):
+        """The board is the top few; the caller's line has to rank them against
+        everyone, so someone below the cut still learns where they stand."""
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 2)}, owner=identity_id)
+        clean_db.bind_discord_identity(identity_id, "discord-me", display_name="Me")
+        _seed(clean_db, {"Emilia": ("Re:Zero", "2", 5)}, owner="rival")
+        clean_db.bind_discord_identity("rival", "discord-rival", display_name="Rival")
+
+        body = client.get("/api/stats").get_json()
+        assert [(c["handle"], c["images"]) for c in body["contributors"]] == [
+            ("Rival", 5),
+            ("Me", 2),
+        ]
+        assert body["you"] == {"rank": 2, "handle": "Me", "images": 2}
+
+    def test_a_visitor_who_is_not_ranked_has_no_standing(self, client, clean_db, identity_id):
+        _seed(clean_db, {"Rem": ("Re:Zero", "1", 3)}, owner=identity_id)
+        # No Discord binding yet, so the pseudonym is not on the board at all.
+        assert client.get("/api/stats").get_json()["you"] is None
+
+        clean_db.update_identity_settings(identity_id, hide_from_leaderboard=True)
+        clean_db.bind_discord_identity(identity_id, "discord-me", display_name="Me")
+        assert client.get("/api/stats").get_json()["you"] is None
 
     def test_the_totals_survive_a_broken_highlights_query(self, client, clean_db, monkeypatch):
         """A landing page showing two numbers beats one showing an error."""
