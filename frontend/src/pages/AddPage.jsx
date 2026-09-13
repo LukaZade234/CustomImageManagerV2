@@ -124,6 +124,12 @@ export default function AddPage() {
     }
   }, [nameMatch, series, seriesTouched])
 
+  useEffect(() => {
+    // The library's portrait replaces any file chosen before the name resolved,
+    // so a stale selection cannot ride along.
+    if (catalogImage) setImageFile(null)
+  }, [catalogImage])
+
   const handlePickName = (item) => {
     if (item?.series) {
       setSeries(item.series)
@@ -153,9 +159,10 @@ export default function AddPage() {
       formData.append('name', name.trim())
       formData.append('series', series.trim())
       formData.append('rank', rank.trim())
-      // A file wins; otherwise a matched catalog portrait rides along as a URL.
-      if (imageFile) formData.append('image', imageFile)
-      else if (catalogImage) formData.append('image_url', catalogImage)
+      // The matched library portrait is authoritative; a file is only for
+      // characters the library does not know.
+      if (catalogImage) formData.append('image_url', catalogImage)
+      else if (imageFile) formData.append('image', imageFile)
       await apiClient.addCharacter(formData)
       await loadCharacters()
       addToast(`Added "${name}"`, 'success')
@@ -738,51 +745,48 @@ export default function AddPage() {
           </Field>
           <div className="edit-group full-width">
             <label htmlFor="addCharImage">Main Photo (Optional)</label>
-            {catalogImage && !imageFile && (
+            {catalogImage ? (
               <div className="add-char-image-preview">
                 <img src={catalogImage} alt="" className="add-char-image-preview__img" />
                 <p className="mudae-preview__hint">
-                  Filled from the library. Choose a file below to replace it.
+                  The library&apos;s main image is used automatically and cannot be replaced.
                 </p>
               </div>
+            ) : (
+              /*
+                A <label> for the file input rather than a div pretending to be a
+                button. Clicking a label activates its control, so the picker opens
+                with no JavaScript at all, and the input below is hidden with
+                .sr-only rather than display:none -- which keeps it in the tab
+                order, so the keyboard gets the same thing the mouse does.
+              */
+              <label className="file-upload-box" htmlFor="addCharImage">
+                <svg
+                  aria-hidden="true"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="file-upload-icon"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+                <span id="addCharImageLabel" className="file-upload-hint">
+                  {imageFile ? imageFile.name : 'Click to select image (can be added later)'}
+                </span>
+                <input
+                  id="addCharImage"
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                />
+              </label>
             )}
-            {/*
-              A <label> for the file input rather than a div pretending to be a
-              button. Clicking a label activates its control, so the picker opens
-              with no JavaScript at all, and the input below is hidden with
-              .sr-only rather than display:none -- which keeps it in the tab
-              order, so the keyboard gets the same thing the mouse does.
-            */}
-            <label className="file-upload-box" htmlFor="addCharImage">
-              <svg
-                aria-hidden="true"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="file-upload-icon"
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span id="addCharImageLabel" className="file-upload-hint">
-                {imageFile
-                  ? imageFile.name
-                  : catalogImage
-                    ? 'Click to replace with your own image'
-                    : 'Click to select image (can be added later)'}
-              </span>
-              <input
-                id="addCharImage"
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-              />
-            </label>
           </div>
           <div className="edit-actions add-char-actions">
             <Button variant="primary" type="submit" disabled={loading}>

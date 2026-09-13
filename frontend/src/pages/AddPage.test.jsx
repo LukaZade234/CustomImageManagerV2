@@ -149,6 +149,8 @@ describe('AddPage catalog integration', () => {
         'https://mudae.net/uploads/8363458/x.png',
       ),
     )
+    // The library portrait is authoritative: no upload option is offered.
+    expect(document.querySelector('#addCharImage')).toBeNull()
 
     await user.click(screen.getByRole('button', { name: /Add Character/ }))
     await waitFor(() => expect(api.addCharacter).toHaveBeenCalled())
@@ -156,6 +158,14 @@ describe('AddPage catalog integration', () => {
     expect(formData.get('name')).toBe('Saber')
     expect(formData.get('series')).toBe('Fate/stay night')
     expect(formData.get('image_url')).toBe('https://mudae.net/uploads/8363458/x.png')
+  })
+
+  it('offers an upload for a character the library does not know', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.type(screen.getByLabelText('Character Name'), 'Totally Unknown')
+    await waitFor(() => expect(api.findCatalogCharacter).toHaveBeenCalled())
+    expect(document.querySelector('#addCharImage')).not.toBeNull()
   })
 
   it('refuses to add a character that already exists', async () => {
