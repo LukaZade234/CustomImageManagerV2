@@ -376,13 +376,6 @@
 /* One row for the gallery's four controls. At 360px the labels alone are about
    270px of the 336 available, so the icons are what has to go — they decorate a
    word that is already the whole meaning. */
-@media (max-width: 768px) {
-  .char-custom-toolbar-actions .ui-btn {
-    /* Touch still needs a real target, but 44px made a wrapped row of four
-       controls taller than the images below it. */
-    min-height: 36px;
-  }
-}
 @media (max-width: 480px) {
   .char-custom-toolbar-actions {
     gap: var(--space-1);
