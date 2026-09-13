@@ -46,7 +46,6 @@ EXPECTED_ROUTES = {
     ("/api/health", "GET"),
     ("/api/hide-images", "POST"),
     ("/api/import-custom-images-from-urls", "POST"),
-    ("/api/last-updated", "GET"),
     ("/api/me", "GET"),
     ("/api/me/contributions", "GET"),
     ("/api/me/hidden", "GET"),

@@ -1,8 +1,8 @@
 -- v2 initial schema.
 --
 -- Timestamps are ISO-8601 UTC text: sortable as strings, readable when you open
--- the file in a GUI. `/api/last-updated` converts to the Unix seconds the
--- frontend already sorts on.
+-- the file in a GUI. `/api/saved` returns `updated_at` in this form and the
+-- frontend sorts on the string directly.
 --
 -- Note that SQLite does NOT enforce foreign keys unless `PRAGMA foreign_keys=ON`
 -- is set on every connection. db.py does that; without it these REFERENCES

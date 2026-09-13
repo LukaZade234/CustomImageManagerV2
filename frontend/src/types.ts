@@ -1,13 +1,11 @@
 /**
  * Shapes returned by the Flask API.
  *
- * These describe the CURRENT (v1) contract. Phase 3 of the rework replaces
- * `CustomImageMap` with records carrying id / added_by / state, so this file is
- * the first place to update when the data model lands — and the reason
- * TypeScript was adopted: the frontend and backend are about to disagree about
- * these shapes, and nothing else would catch it.
- *
- * See docs/ROADMAP.md Phase 3 and docs/DECISIONS.md section 6.
+ * A few API shapes, kept as the seed for the incremental TypeScript adoption
+ * (allowJs/checkJs). Nothing imports the file yet, so it is a record rather than
+ * a contract; when a file is converted to `.ts`/`.tsx` these are the shapes to
+ * type against. `Character` and `ApiError` are current; the two endpoint types
+ * below are historical.
  */
 
 /** `GET /api/characters` */
@@ -23,12 +21,17 @@ export interface Character {
 /**
  * `GET /custom_images.json` — every character's images in one payload.
  *
- * Note this is the endpoint Phase 9 replaces: HomePage downloads the entire map
- * just to compute two summary numbers.
+ * Historical: the endpoint was retired in favour of `/api/stats` and
+ * `/api/customs`, and has since been deleted. Nothing returns this shape.
  */
 export type CustomImageMap = Record<string, string[]>
 
-/** `GET /api/last-updated` — character name to Unix timestamp (seconds, float). */
+/**
+ * `GET /api/last-updated` — character name to Unix timestamp (seconds, float).
+ *
+ * Historical: superseded by `/api/saved`, which returns each row's `updated_at`.
+ * The endpoint has since been deleted.
+ */
 export type LastUpdatedMap = Record<string, number>
 
 /** `GET /api/mudae/status` */

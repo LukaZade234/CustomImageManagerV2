@@ -236,64 +236,6 @@ def get_stats():
     return jsonify({**totals, **highlights})
 
 
-@app.route("/api/last-updated", methods=["GET"])
-def get_last_updated():
-    try:
-        return jsonify(db.get_last_updated())
-    except db.DatabaseConfigurationError:
-        raise
-    except Exception:
-        log.exception("last_updated.read_failed")
-    return jsonify({})
-
-
-
-
-
-
-
-
-
-
-
-# ... existing code ...
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--web":
         # Run web server

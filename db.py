@@ -768,23 +768,6 @@ def check_health() -> dict:
     return {"ok": True, "detail": "ok", "characters": int(row["n"]) if row else 0}
 
 
-def get_last_updated() -> dict:
-    """{name: unix_seconds}. Converted here because the frontend sorts numerically."""
-    conn = get_connection()
-    out = {}
-    # NULL updated_at means never modified: omitted, exactly as v1 omitted such
-    # names from the document, so the frontend keeps sorting them last.
-    for row in conn.execute("SELECT name, updated_at FROM characters WHERE updated_at IS NOT NULL"):
-        try:
-            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(
-                tzinfo=UTC
-            )
-            out[row["name"]] = stamp.timestamp()
-        except (ValueError, TypeError):
-            out[row["name"]] = 0.0
-    return out
-
-
 # --- Custom images ------------------------------------------------------
 
 

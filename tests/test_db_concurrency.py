@@ -115,4 +115,12 @@ def test_concurrent_writes_across_tables_do_not_deadlock(clean_db):
     )
     assert not errors, f"worker raised: {errors}"
     assert len(db.get_custom_images_for("Rem")) == 10
-    assert len(db.get_last_updated()) >= 10
+    # `update_last_modified` wrote a timestamp to each character; the column is
+    # the observable proof, and reading it directly is what replaced the removed
+    # `/api/last-updated` reader.
+    stamp_count = (
+        db.get_connection()
+        .execute("SELECT COUNT(*) FROM characters WHERE updated_at IS NOT NULL")
+        .fetchone()[0]
+    )
+    assert stamp_count >= 10
