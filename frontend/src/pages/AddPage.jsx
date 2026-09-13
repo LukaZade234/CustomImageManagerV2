@@ -61,10 +61,7 @@ export default function AddPage() {
   const [seriesCancelling, setSeriesCancelling] = useState(false)
   const [seriesResult, setSeriesResult] = useState(null)
   const [seriesProgress, setSeriesProgress] = useState(null)
-  // Once the series field is edited or chosen, the library's suggestion stops
-  // overwriting it -- the mismatch check is what speaks after that.
-  const [seriesTouched, setSeriesTouched] = useState(false)
-  // Same for rank: the library fills it until the field is edited.
+  // The library fills the rank once the series is chosen, until the field is edited.
   const [rankTouched, setRankTouched] = useState(false)
   // A message shown inside the lookup panel, e.g. "already exists".
   const [mudaeError, setMudaeError] = useState(null)
@@ -148,34 +145,18 @@ export default function AddPage() {
   )
 
   useEffect(() => {
-    // Untouched: the library's series follows the name. Once the field is
-    // edited or chosen, it stops and the mismatch check takes over.
-    if (!nameMatch?.series || seriesTouched) return
-    if (series !== nameMatch.series) {
-      setSeries(nameMatch.series)
-    }
-  }, [nameMatch, series, seriesTouched])
-
-  useEffect(() => {
     // The library's portrait replaces any file chosen before the name resolved,
     // so a stale selection cannot ride along.
     if (catalogImage) setImageFile(null)
   }, [catalogImage])
 
   useEffect(() => {
-    // The library's rank follows the name while the field is untouched and the
-    // series agrees, so a matched character arrives fully described.
-    if (!nameMatch || rankTouched || seriesMismatch) return
+    // The rank follows once the name and series both match, so a matched
+    // character arrives fully described without the series being forced in.
+    if (!seriesMatchesKnown || !nameMatch || rankTouched) return
     const expected = nameMatch.rank || ''
     if (rank !== expected) setRank(expected)
-  }, [nameMatch, rank, rankTouched, seriesMismatch])
-
-  const handlePickName = (item) => {
-    if (item?.series) {
-      setSeries(item.series)
-      setSeriesTouched(true)
-    }
-  }
+  }, [seriesMatchesKnown, nameMatch, rank, rankTouched])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -210,7 +191,6 @@ export default function AddPage() {
       setSeries('')
       setRank('')
       setImageFile(null)
-      setSeriesTouched(false)
       setRankTouched(false)
       setTimeout(() => navigate(`/character/${encodeURIComponent(name.trim())}`), 500)
     } catch (err) {
@@ -225,7 +205,6 @@ export default function AddPage() {
     if (!character) return
     setName(character.name || '')
     setSeries(character.series || '')
-    setSeriesTouched(true)
     setRank(character.rank || '')
     // Catalog results carry `image`; Mudae results carry `image_url`. Normalise
     // so the preview and the panel render either.
@@ -757,7 +736,6 @@ export default function AddPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               suggestions={nameSuggestionItems}
-              onPick={handlePickName}
               ariaLabel="Character name suggestions"
               ariaDescribedBy={status?.type === 'error' ? 'addCharStatus' : undefined}
               required
@@ -771,10 +749,7 @@ export default function AddPage() {
               className="ui-input"
               placeholder="Series Name"
               value={series}
-              onChange={(e) => {
-                setSeries(e.target.value)
-                setSeriesTouched(true)
-              }}
+              onChange={(e) => setSeries(e.target.value)}
               suggestions={seriesSuggestionValues}
               ariaLabel="Series suggestions"
               ariaInvalid={seriesMismatch}

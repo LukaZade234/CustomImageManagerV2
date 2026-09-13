@@ -37,6 +37,12 @@ function renderPage() {
   )
 }
 
+/** Open the empty series field and choose its connected suggestion. */
+async function pickSeries(user, label) {
+  await user.click(screen.getByLabelText('Series'))
+  await user.click(await screen.findByRole('option', { name: label }))
+}
+
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset()
   api.mudaeStatus.mockResolvedValue({ configured: false })
@@ -56,11 +62,13 @@ describe('AddPage catalog integration', () => {
     renderPage()
 
     await user.type(screen.getByLabelText('Character Name'), 'Saber')
-    const seriesInput = await screen.findByDisplayValue('Fate/stay night')
-    expect(seriesInput).toBe(screen.getByLabelText('Series'))
+    // The series is not filled in; it is offered once the field is opened.
+    expect(screen.getByLabelText('Series')).toHaveValue('')
+    await pickSeries(user, 'Fate/stay night')
+    expect(screen.getByLabelText('Series')).toHaveValue('Fate/stay night')
 
-    await user.clear(seriesInput)
-    await user.type(seriesInput, 'Wrong Series')
+    await user.clear(screen.getByLabelText('Series'))
+    await user.type(screen.getByLabelText('Series'), 'Wrong Series')
     expect(await screen.findByText(/Series doesn't match/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Add Character/ }))
@@ -142,8 +150,8 @@ describe('AddPage catalog integration', () => {
     renderPage()
 
     await user.type(screen.getByLabelText('Character Name'), 'Saber')
-    await screen.findByDisplayValue('Fate/stay night')
-    // The rank follows the name too.
+    await pickSeries(user, 'Fate/stay night')
+    // The rank follows once the name and series match.
     await waitFor(() => expect(screen.getByLabelText('Rank (Optional)')).toHaveValue(4))
     await waitFor(() =>
       expect(document.querySelector('.add-char-image-preview__img')).toHaveAttribute(
@@ -185,6 +193,7 @@ describe('AddPage catalog integration', () => {
     renderPage()
 
     await user.type(screen.getByLabelText('Character Name'), 'Rem')
+    await pickSeries(user, 'Re:Zero')
     const card = await screen.findByRole('link', { name: /Rem/ })
     expect(card).toHaveAttribute('href', '/character/Rem')
 
@@ -214,6 +223,7 @@ describe('AddPage catalog integration', () => {
 
     const input = screen.getByLabelText('Character Name')
     await user.type(input, 'Rem')
+    await pickSeries(user, 'Re:Zero')
     expect(await screen.findByRole('link', { name: /Rem/ })).toBeInTheDocument()
 
     await user.type(input, 'x')
@@ -235,6 +245,7 @@ describe('AddPage catalog integration', () => {
     renderPage()
 
     await user.type(screen.getByLabelText('Character Name'), 'Rem')
+    await pickSeries(user, 'Re:Zero')
     expect(await screen.findByRole('link', { name: /Rem/ })).toBeInTheDocument()
 
     const seriesInput = screen.getByLabelText('Series')
@@ -285,9 +296,9 @@ describe('AddPage catalog integration', () => {
     renderPage()
 
     await user.type(screen.getByLabelText('Character Name'), 'Saber')
-    const seriesInput = await screen.findByDisplayValue('Fate/stay night')
-    await user.clear(seriesInput)
-    await user.click(seriesInput)
+    // Not auto-filled; offered only once the field is opened.
+    expect(screen.getByLabelText('Series')).toHaveValue('')
+    await user.click(screen.getByLabelText('Series'))
 
     await waitFor(() => {
       const options = screen.getAllByRole('option')
