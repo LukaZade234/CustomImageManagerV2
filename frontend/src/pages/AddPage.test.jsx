@@ -20,7 +20,6 @@ const api = vi.hoisted(() => ({
   mudaeSeriesExtract: vi.fn(),
   mudaeSeriesExtractApply: vi.fn(),
   addCharacter: vi.fn(),
-  getCharacters: vi.fn(),
 }))
 
 vi.mock('../api', () => ({
@@ -51,7 +50,6 @@ beforeEach(() => {
   api.suggestCharacters.mockResolvedValue({ items: [] })
   api.suggestSeries.mockResolvedValue({ items: [] })
   api.findCatalogCharacter.mockResolvedValue({ found: false, character: null })
-  api.getCharacters.mockResolvedValue([])
 })
 
 describe('AddPage catalog integration', () => {

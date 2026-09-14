@@ -56,7 +56,6 @@ async function api(path, options = {}) {
 }
 
 export const apiClient = {
-  getCharacters: () => api('/api/characters'),
   getSaved: () => api('/api/saved'),
   getStats: () => api('/api/stats'),
   listCustoms: ({ page = 1, perPage = 20, q = '', by = 'name', sort = 'recent' } = {}) => {
