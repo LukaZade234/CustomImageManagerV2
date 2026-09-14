@@ -502,7 +502,10 @@ every character, around 475 KB — in order to display two integers. It is now o
 `/api/stats` call returning a fixed summary, and `tests/test_customs_listing.py`
 asserts the payload does not grow with the library.
 
-The same rule now applies throughout: the customs list is searched, sorted and
+The same rule now applies throughout: search and autocomplete are matched, sorted
+and paged on the server over the catalog (`/api/catalog/search`,
+`/api/catalog/characters`), so the roster is never downloaded and the character
+page fetches the one record it shows; the customs list is searched, sorted and
 paginated on the server; a character's gallery renders 600px WebP thumbnails
 rather than the 1.9 MB PNGs ImgChest holds; and the profile's lists are the only
 ones filtered in the browser, because they are bounded by what one person has
