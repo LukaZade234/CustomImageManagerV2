@@ -1076,16 +1076,16 @@ body.reorder-touch-dragging {
    name suggestions but never have to be set. Toggle chips: a pressed one is the
    accent tint the shared button style already gives aria-pressed. */
 .pool-filter {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   padding: 0;
   border: 0;
 }
 .pool-filter__legend {
   padding: 0;
   margin-bottom: var(--space-2);
-  font-size: var(--type-meta);
+  font-size: var(--type-micro);
   font-weight: var(--weight-medium);
-  color: var(--text);
+  color: var(--text-muted);
 }
 .pool-filter__options {
   display: flex;

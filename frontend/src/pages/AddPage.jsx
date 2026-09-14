@@ -709,8 +709,6 @@ export default function AddPage() {
             </p>
           )}
         </Field>
-        {/* Optional, like Rank and Main Photo: it narrows the name suggestions
-            above but never has to be set to add the character. */}
         <fieldset className="pool-filter">
           <legend className="pool-filter__legend">Gender And Roulette Pools (Optional)</legend>
           <div className="pool-filter__options">
