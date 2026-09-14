@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { useStore } from '../store/useStore'
+import { useMe } from '../queries/me'
 import SearchBar from './SearchBar'
 import { Button } from './ui'
 
@@ -9,7 +9,7 @@ import { Button } from './ui'
 const COMPACT = '(max-width: 960px)'
 
 export default function Navbar() {
-  const me = useStore((s) => s.me)
+  const { data: me } = useMe()
   const compact = useMediaQuery(COMPACT)
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()

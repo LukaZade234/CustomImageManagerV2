@@ -6,7 +6,7 @@
  * the page, in front of a user. A render is the cheapest thing that catches it,
  * and it also guards the migration onto the shared primitives.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -36,6 +36,7 @@ vi.mock('../api', () => ({
 }))
 
 import { useStore } from '../store/useStore'
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import AddPage from './AddPage'
 import CharacterPage from './CharacterPage'
 import CustomsPage from './CustomsPage'
@@ -76,8 +77,19 @@ beforeEach(() => {
   })
 })
 
+// Components read `me`, `saved` and `stats` from react-query now; the tests
+// still describe them by seeding the store, so hand those values to the query
+// cache at render time.
+const storeSeeds = () => [
+  [['me'], useStore.getState().me],
+  [['saved'], useStore.getState().savedCharacters],
+  [['stats'], useStore.getState().stats],
+]
+
 function renderAt(ui, route = '/') {
-  return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>)
+  return renderWithQueryClient(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>, {
+    queries: storeSeeds(),
+  })
 }
 
 describe('page smoke tests', () => {
@@ -243,17 +255,17 @@ describe('an empty gallery', () => {
    */
   /** The other tests here render the page bare; these need the :name param. */
   function renderCharacter() {
-    return render(
+    return renderWithQueryClient(
       <MemoryRouter initialEntries={['/character/Ayanami%20Rei']}>
         <Routes>
           <Route path="/character/:name" element={<CharacterPage />} />
         </Routes>
       </MemoryRouter>,
+      { queries: storeSeeds() },
     )
   }
 
   it('says there is nothing here yet, and offers the way to add one', async () => {
-    useStore.setState({ characterImages: { 'Ayanami Rei': [] } })
     renderCharacter()
 
     expect(await screen.findByText(/No custom images yet/i)).toBeInTheDocument()
@@ -267,7 +279,6 @@ describe('an empty gallery', () => {
     const hidden = [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }]
     // The page refetches on mount, so what the mock serves is what is shown.
     api.apiClient.getCustomImagesForChar.mockResolvedValue({ rows: hidden })
-    useStore.setState({ characterImages: { 'Ayanami Rei': hidden } })
     renderCharacter()
 
     expect(await screen.findByText(/The only image here is one you hid/i)).toBeInTheDocument()

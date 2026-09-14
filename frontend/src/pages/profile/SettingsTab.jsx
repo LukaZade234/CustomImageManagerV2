@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { apiClient } from '../../api'
 import { Button, Card, SegmentedControl } from '../../components/ui'
 import { signInUrl } from '../../config'
+import { useMe, useSignOut, useUpdateSettings } from '../../queries/me'
 import { useStore } from '../../store/useStore'
 
 /**
@@ -37,11 +37,11 @@ function Toggle({ id, checked, onChange, disabled, label, hint }) {
 }
 
 export default function SettingsTab() {
-  const me = useStore((s) => s.me)
-  const loadMe = useStore((s) => s.loadMe)
+  const { data: me } = useMe()
+  const updateSettings = useUpdateSettings()
+  const signOut = useSignOut()
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
-  const setMySettings = useStore((s) => s.setMySettings)
   const addToast = useStore((s) => s.addToast)
 
   const [settings, setSettings] = useState(null)
@@ -58,12 +58,10 @@ export default function SettingsTab() {
     setSettings({ ...settings, ...change })
     setSaving(true)
     try {
-      const result = await apiClient.updateSettings(change)
+      // The mutation folds the server's reply back into the `me` cache, so the
+      // character-accent switch is read by a character page without a reload.
+      const result = await updateSettings.mutateAsync(change)
       setSettings(result.settings)
-      // Publish to the store as well: the character-accent switch is read from
-      // `me.settings` by hook, so leaving it local would make it look like it
-      // needed a page reload to take effect.
-      setMySettings(result.settings)
     } catch (e) {
       setSettings(before)
       addToast(e.message || 'Could not save that setting', 'error')
@@ -89,8 +87,7 @@ export default function SettingsTab() {
             <Button
               variant="secondary"
               onClick={async () => {
-                await apiClient.logout()
-                await loadMe()
+                await signOut()
                 addToast('Signed out of this browser', 'info')
               }}
             >

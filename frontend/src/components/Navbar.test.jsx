@@ -8,7 +8,7 @@
  * moment there was more than one of them — so the navbar's job is reduced to
  * naming you and offering the way there. ProfilePage.test.jsx covers the rest.
  */
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,13 +25,17 @@ vi.mock('../api', () => ({
 }))
 
 import { useStore } from '../store/useStore'
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import Navbar from './Navbar'
 
+// The navbar reads `me` from react-query now; the tests still describe it by
+// seeding the store, so hand that value to the query cache at render time.
 const renderNav = (route = '/') =>
-  render(
+  renderWithQueryClient(
     <MemoryRouter initialEntries={[route]}>
       <Navbar />
     </MemoryRouter>,
+    { queries: [[['me'], useStore.getState().me]] },
   )
 
 beforeEach(() => {

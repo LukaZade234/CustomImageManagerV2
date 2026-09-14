@@ -5,7 +5,7 @@ import HomeLoadingState from '../components/HomeLoadingState'
 import { Card } from '../components/ui'
 import { apiUrl } from '../config'
 import { useDragScroll } from '../hooks/useDragScroll'
-import { useStore } from '../store/useStore'
+import { useStats } from '../queries/stats'
 
 /**
  * The landing page.
@@ -311,19 +311,14 @@ function RecentTicker({ recent }) {
 }
 
 export default function HomePage() {
-  const stats = useStore((s) => s.stats)
-  const loading = useStore((s) => s.loading)
-  const error = useStore((s) => s.error)
-  const loadStats = useStore((s) => s.loadStats)
+  const { data: stats, isPending, isError, error } = useStats()
   // Above the early returns: hooks must run in the same order every render.
   const dragScroll = useDragScroll()
 
-  useEffect(() => {
-    loadStats()
-  }, [loadStats])
-
-  if (loading) return <HomeLoadingState />
-  if (error) return <div className="loading loading-error">Failed to load: {error}</div>
+  // The home page is the only reader; a failed load is worth showing rather
+  // than rendering a page of zeros that looks like an empty library.
+  if (isPending) return <HomeLoadingState />
+  if (isError) return <div className="loading loading-error">Failed to load: {error?.message}</div>
 
   const images = stats?.custom_images ?? 0
   const characters = stats?.characters_with_customs ?? 0

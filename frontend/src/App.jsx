@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Toast from './components/Toast'
@@ -14,7 +14,6 @@ import RemovedTab from './pages/profile/RemovedTab'
 import SavedTab from './pages/profile/SavedTab'
 import SettingsTab from './pages/profile/SettingsTab'
 import SearchResultsPage from './pages/SearchResultsPage'
-import { useStore } from './store/useStore'
 
 /** Prevents a blank screen if a child throws (e.g. browser API quirks). */
 class AppErrorBoundary extends React.Component {
@@ -47,14 +46,6 @@ class AppErrorBoundary extends React.Component {
 }
 
 function App() {
-  const loadSaved = useStore((s) => s.loadSaved)
-  const loadMe = useStore((s) => s.loadMe)
-
-  useEffect(() => {
-    loadSaved()
-    loadMe()
-  }, [loadSaved, loadMe])
-
   return (
     <>
       <a className="skip-link" href="#main-content">

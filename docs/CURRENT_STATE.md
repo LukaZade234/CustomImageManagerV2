@@ -477,11 +477,13 @@ across 106 files (14,062 including tests).
 with five nested tab routes. `/saved` redirects into the profile, where the list
 now lives.
 
-**State:** one flat zustand store — saved, the current character's customs, `me`,
-theme, toasts. The full roster is no longer held: search and autocomplete run on
-the server (`/api/catalog/search`, `/api/catalog/characters`) and the character
-page fetches the one record it shows. No react-query yet (Phase 9). Retry and
-backoff are hand-written in `useStore.js` and `api.js`.
+**State:** zustand holds UI state only — theme, toasts, the current character, and the
+search/sort preferences remembered across visits. All server state is react-query
+(`queries/`): a character's gallery, the catalog lookups (search, suggest, match), and
+`saved` / `stats` / `me`, sharing one retry/backoff policy (`queries/queryClient.js`,
+`utils/retry.js`). The full roster is not held: search and autocomplete run on the server
+(`/api/catalog/search`, `/api/catalog/characters`) and the character page fetches the one
+record it shows.
 
 **Styling:** a token layer plus primitives, loaded in order by
 `styles/index.css`: tokens → base → layout → ui → components → pages. `ui` must
@@ -561,8 +563,6 @@ genuinely does not:
 - **A moderation queue.** Reports remove an image at two distinct reporters and
   that is the whole mechanism; there is no review screen and no appeal.
 - **Server-side sessions.** Identity is a signed cookie and nothing else.
-- **react-query or any normalised cache** (Phase 9). Retry and backoff are
-  hand-written in two places.
 - **A second origin.** One box serves everything; Cloudflare caches in front of
   it, and Litestream is the only redundancy.
 

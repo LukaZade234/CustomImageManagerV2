@@ -1,4 +1,5 @@
 import { API_BASE, CREDENTIALS, imageUrl } from './config'
+import { backoffDelay, isTransientError } from './utils/retry'
 
 /** @param {Response} res @param {string} text @param {Record<string, unknown>} parsed */
 function messageFromFailedResponse(res, text, parsed) {
@@ -140,12 +141,8 @@ export const apiClient = {
         return await attemptOnce()
       } catch (e) {
         lastErr = e
-        const msg = e?.message || ''
-        const transient =
-          msg.startsWith('Network error:') || /could not complete the request/i.test(msg)
-        if (!transient || attempt === maxAttempts - 1) throw e
-        const delayMs = 450 * 2 ** attempt + Math.random() * 300
-        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        if (!isTransientError(e) || attempt === maxAttempts - 1) throw e
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay(attempt, 450)))
       }
     }
     throw lastErr

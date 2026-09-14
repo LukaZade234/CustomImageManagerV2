@@ -460,11 +460,18 @@ them. There are no v2 users yet, so this costs nothing now.
       `$ai` command, download and lightbox uses, because Mudae accepts nothing else. Only the grid
       renders WebP. Two tests pin that. GIFs are not thumbnailed — the animation is usually why the
       image was chosen.
-- [ ] **Adopt `@tanstack/react-query`.** Retry, backoff, and cache invalidation are currently
-      hand-rolled in the store. Less pressing now that the two heavy fetches are gone.
-- [ ] **Serve character images from the CDN**, not from Flask off local disk (follows from R2).
-      Generated thumbnails could move to R2 by the same route, which would also make them a
-      backup rather than derived data the origin has to hold.
+- [x] **Adopt `@tanstack/react-query`.** One `QueryClient` with a shared
+      retry/backoff policy (`queries/queryClient.js`, `utils/retry.js`) replaces the hand-rolled
+      loops. All server state moved: the character gallery (`queries/characterImages.js` — the
+      query cache also absorbs `setCustomImageOrder`'s optimistic reorder), the catalog hooks
+      (search via `useInfiniteQuery`, suggest/match), and `saved` / `stats` / `me`
+      (`queries/saved.js`, `queries/stats.js`, `queries/me.js`). Signing out invalidates
+      everything, since identity changes what `is_mine`, saved and the profile lists mean. zustand
+      keeps only UI state: theme, toasts, current character, search/sort preferences.
+- [x] **Serve character images from the CDN.** Long since live: `VITE_IMAGE_BASE_URL` points at
+      `images.lukazade.dev` (R2) and `config.js` appends `/character_images/`; the bucket serves
+      with `immutable`. Still open: generated thumbnails could move to R2 by the same route, which
+      would also make them a backup rather than derived data the origin has to hold.
 - [x] **Reconsidered gzip, and dropped it** (`5c62b9c`). `flask-compress` ran on the origin; with
       Cloudflare in front the edge compresses instead, and does it better.
 

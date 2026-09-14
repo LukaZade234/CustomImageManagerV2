@@ -374,9 +374,14 @@ what the database actually does.
 ### react-query *and* zustand, not one or the other
 
 These look redundant and are not. `@tanstack/react-query` owns **server** state — fetching,
-caching, retry, invalidation — replacing retry and backoff logic currently hand-rolled and
+caching, retry, invalidation — replacing retry and backoff logic that had been hand-rolled and
 duplicated across `useStore.js` and `api.js`. zustand keeps owning **UI** state: dark mode, toasts,
 selection. Its per-character caching is also what makes killing the full-map fetch practical.
+
+Adopted in Phase 9. The gallery query and the catalog hooks (search, suggest, match) came first
+because they were where the duplication lived; `saved`, `stats` and `me` followed, and the store is
+now UI state only. Signing out invalidates every query, because an identity change is exactly a
+change in what the server is answering.
 
 ### Dependencies dropped, and one deliberately kept
 

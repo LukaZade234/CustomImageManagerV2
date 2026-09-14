@@ -12,7 +12,7 @@
  * jsdom has no layout, so `elementFromPoint` cannot resolve a drop target, but
  * the arrow keys run the same `applyReorder` path.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +48,7 @@ vi.mock('../api', () => ({
 }))
 
 import { useStore } from '../store/useStore'
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import CharacterPage from './CharacterPage'
 
 const ROWS = ['a', 'b', 'c'].map((id, i) => ({
@@ -63,7 +64,6 @@ beforeEach(() => {
   getCustomImagesForChar.mockReset().mockResolvedValue(ROWS)
   useStore.setState({
     savedCharacters: [],
-    characterImages: { Rei: ROWS },
     loading: false,
     toasts: [],
   })
@@ -71,7 +71,7 @@ beforeEach(() => {
 
 /** Render and wait for the record to load; the toolbar is not there before it. */
 async function renderPage() {
-  const view = render(
+  const view = renderWithQueryClient(
     <MemoryRouter initialEntries={['/character/Rei']}>
       <Routes>
         <Route path="/character/:name" element={<CharacterPage />} />
@@ -97,7 +97,7 @@ const toastMessages = () => useStore.getState().toasts.map((t) => t.msg)
 describe('a reorder session', () => {
   it('saves each move without a toast or a refetch, then confirms once on Done', async () => {
     const user = userEvent.setup()
-    await renderPage()
+    const { client } = await renderPage()
     const initialFetches = getCustomImagesForChar.mock.calls.length
 
     await moveFirstImage(user, 2)
@@ -108,7 +108,8 @@ describe('a reorder session', () => {
 
     // The gallery has to show the new order even though nothing was refetched:
     // the first image walked to the end.
-    expect(useStore.getState().characterImages.Rei.map((r) => r.id)).toEqual([2, 3, 1])
+    const cached = client.getQueryData(['character-images', 'Rei'])
+    expect(cached.rows.map((r) => r.id)).toEqual([2, 3, 1])
 
     await user.click(screen.getByRole('button', { name: /^Done$/i }))
     await waitFor(() => expect(toastMessages()).toEqual(['New order saved']))

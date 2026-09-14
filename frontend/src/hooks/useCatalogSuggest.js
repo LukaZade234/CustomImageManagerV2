@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../api'
+import { useDebouncedValue } from './useDebouncedValue'
 
 /**
  * Debounced catalog lookups for the Add flow.
  *
  * Both hooks read the imported catalog (plus the working set) over the API,
  * never Discord, so typing in the form costs no Mudae requests. The debounce is
- * what keeps a fast typist to a handful of calls rather than one per keystroke.
+ * what keeps a fast typist to a handful of calls rather than one per keystroke,
+ * and react-query caches each settled query so a repeated prefix is free.
  */
 
 /**
@@ -25,71 +27,43 @@ export function useCatalogSuggest(
   query,
   { kind = 'characters', limit = 10, delay = 250, series = '', pools = [] } = {},
 ) {
-  const [items, setItems] = useState([])
-  // Joined so the effect depends on the contents rather than a new array each
+  const q = (query || '').trim()
+  const debouncedQuery = useDebouncedValue(q, delay)
+  // Joined so the key depends on the contents rather than a new array each
   // render.
   const poolsKey = pools.join(',')
+  const poolList = poolsKey ? poolsKey.split(',') : []
+  const seriesHint = debouncedQuery || kind !== 'characters' ? '' : (series || '').trim()
 
-  useEffect(() => {
-    const q = (query || '').trim()
-    const poolList = poolsKey ? poolsKey.split(',') : []
-    const seriesHint = q || kind !== 'characters' ? '' : (series || '').trim()
-    let cancelled = false
-    const timer = setTimeout(() => {
-      const run = async () => {
-        if (seriesHint) {
-          const filtered = await apiClient.suggestCharacters('', limit, seriesHint, poolList)
-          if (filtered?.items?.length) return filtered.items
-        }
-        const response =
-          kind === 'series'
-            ? await apiClient.suggestSeries(q, limit)
-            : await apiClient.suggestCharacters(q, limit, seriesHint, poolList)
-        return response?.items || []
+  const { data } = useQuery({
+    queryKey: [
+      'catalog-suggest',
+      { kind, query: debouncedQuery, limit, series: seriesHint, pools: poolsKey },
+    ],
+    queryFn: async () => {
+      if (seriesHint) {
+        const filtered = await apiClient.suggestCharacters('', limit, seriesHint, poolList)
+        if (filtered?.items?.length) return filtered.items
       }
-      run()
-        .then((next) => {
-          if (!cancelled) setItems(next)
-        })
-        .catch(() => {
-          if (!cancelled) setItems([])
-        })
-    }, delay)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [query, kind, limit, delay, series, poolsKey])
+      const response =
+        kind === 'series'
+          ? await apiClient.suggestSeries(debouncedQuery, limit)
+          : await apiClient.suggestCharacters(debouncedQuery, limit, seriesHint, poolList)
+      return response?.items || []
+    },
+  })
 
-  return items
+  return data ?? []
 }
 
 /** The library's record for a typed name, or null. Used to offer/validate its series. */
 export function useCatalogMatch(name, delay = 300) {
-  const [match, setMatch] = useState(null)
-
-  useEffect(() => {
-    const q = (name || '').trim()
-    if (!q) {
-      setMatch(null)
-      return undefined
-    }
-    let cancelled = false
-    const timer = setTimeout(() => {
-      apiClient
-        .findCatalogCharacter(q)
-        .then((res) => {
-          if (!cancelled) setMatch(res?.found ? res.character : null)
-        })
-        .catch(() => {
-          if (!cancelled) setMatch(null)
-        })
-    }, delay)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [name, delay])
-
-  return match
+  const q = (name || '').trim()
+  const debouncedName = useDebouncedValue(q, delay)
+  const { data } = useQuery({
+    queryKey: ['catalog-match', debouncedName],
+    queryFn: () => apiClient.findCatalogCharacter(debouncedName),
+    enabled: Boolean(debouncedName),
+  })
+  return data?.found ? data.character : null
 }

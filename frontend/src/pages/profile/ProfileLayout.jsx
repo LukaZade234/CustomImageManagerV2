@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Card } from '../../components/ui'
-import { useStore } from '../../store/useStore'
+import { useMe } from '../../queries/me'
 
 /**
  * Everything that belongs to you, behind one set of tabs.
@@ -24,7 +24,7 @@ const TABS = [
 ]
 
 export default function ProfileLayout() {
-  const me = useStore((s) => s.me)
+  const { data: me } = useMe()
 
   return (
     <div className="profile">
