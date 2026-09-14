@@ -491,7 +491,10 @@ zustand store on startup and filter client-side. At 1,000 that was ~150 KB; at 5
 7–10 MB per page load, which is untenable — especially for the overseas users the hosting plan
 exists to serve. Search and autocomplete now run on the server (`GET /api/catalog/search` and
 `/api/catalog/characters`) over the catalog and the working set, and the character page fetches the
-one record it shows, so nothing scales with the roster before it grows.
+one record it shows, so nothing scales with the roster before it grows. The working set stores the
+same folded `name_key` the catalog does (migration 011), so a name lookup is one indexed row rather
+than a scan folding every character in Python. The client-only `GET /api/characters` was retired with
+it.
 
 ### The Mudae catalog: a working set plus a search corpus
 

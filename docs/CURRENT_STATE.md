@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the ten migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the eleven migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -158,7 +158,7 @@ because that had to stop being true.
 | Table | Rows (prod) | What it holds |
 |---|---|---|
 | `custom_images` | 8,560 | The library. Id, url, content hash, position, owner, state, dimensions |
-| `characters` | 1,705 | Name, series, rank, main image, gender, pools, timestamps |
+| `characters` | 1,705 | Name, folded name key, series, rank, main image, gender, pools, timestamps |
 | `image_takes` | 271 | `copy_command` / `download` events, per image |
 | `rate_limit_hits` | — | Fixed-window counters, swept after a day |
 | `character_views` | — | One row per person per character per hour |
@@ -168,7 +168,7 @@ because that had to stop being true.
 | `image_reports` | — | Two distinct reporters remove an image |
 | `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
-| `schema_migrations` | 10 | Which migrations have run |
+| `schema_migrations` | 11 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),

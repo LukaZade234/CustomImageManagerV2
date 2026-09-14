@@ -174,6 +174,42 @@ class TestFindCharacter:
         seed_catalog(clean_db, [_catalog_row("Hange Zoe\u0308", "AOT", "42")])
         assert clean_db.find_character("Hange Zoë")["series"] == "AOT"
 
+    def test_a_working_row_is_matched_by_its_stored_key(self, clean_db):
+        # NFD stored, NFC looked up. The stored name_key is what makes this one
+        # indexed lookup rather than a scan folding every row in Python.
+        clean_db.add_character("Hange Zoe\u0308", "AOT", "42", "")
+        found = clean_db.find_character("Hange Zoë")
+        assert found["in_library"] is True
+        assert found["name"] == "Hange Zoe\u0308"
+
+    def test_a_lazily_created_row_is_findable(self, clean_db):
+        # Custom images can attach to a name with no character row; that insert
+        # has to write the key too.
+        clean_db.add_custom_images("Lazy One", ["https://cdn/x.png"])
+        assert clean_db.find_character("lazy one")["in_library"] is True
+
+    def test_rename_updates_the_key(self, clean_db):
+        clean_db.add_character("Old Name", "S", "1", "")
+        assert clean_db.update_character("Old Name", "New Name", "S", "1") is True
+        assert clean_db.find_character("old name") is None
+        assert clean_db.find_character("new name")["in_library"] is True
+
+    def test_backfill_fills_rows_that_predate_the_column(self, clean_db):
+        conn = clean_db.get_connection()
+        conn.execute("INSERT INTO characters (name, name_key) VALUES ('Late Addition', '')")
+        conn.commit()
+        clean_db._backfill_character_name_keys(conn)
+        assert clean_db.find_character("late addition")["in_library"] is True
+
+    def test_stored_key_is_the_folded_name(self, clean_db):
+        clean_db.add_character("Hange Zoë", "AOT", "42", "")
+        row = (
+            clean_db.get_connection()
+            .execute("SELECT name_key FROM characters WHERE name = 'Hange Zoë'")
+            .fetchone()
+        )
+        assert row["name_key"] == catalog_import.name_key("Hange Zoë")
+
     def test_found_character_carries_facets(self, clean_db):
         seed_catalog(clean_db, [_catalog_row("Artoria Pendragon", "Fate/stay night", "4")])
         found = clean_db.find_character("Artoria Pendragon")
