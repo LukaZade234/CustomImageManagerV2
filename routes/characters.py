@@ -50,23 +50,6 @@ def record_view(name):
     return jsonify({"success": bool(known)}), (200 if known else 404)
 
 
-@characters_bp.route("/characters")
-@characters_bp.route("/api/characters")
-def get_characters():
-    try:
-        chars = db.get_characters()
-        if chars is not None:
-            return jsonify(chars)
-        return jsonify(
-            {
-                "error": "Character data not loaded. Seed it with scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py."
-            }
-        ), 503
-    except Exception as e:
-        log.exception("characters.list_failed")
-        return jsonify({"error": str(e)}), 500
-
-
 @characters_bp.route("/upload", methods=["POST"])
 def upload():
     if "file" not in request.files:

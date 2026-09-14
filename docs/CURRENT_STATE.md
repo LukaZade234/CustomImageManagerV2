@@ -327,14 +327,12 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/add-character` | Add a new character. |
-| GET | `/api/characters` | — |
 | POST | `/api/characters/<path:name>/view` | Note that the caller looked at this character. |
 | POST | `/api/edit-character` | — |
 | GET | `/api/saved` | — |
 | POST | `/api/saved` | — |
 | DELETE | `/api/saved/<path:name>` | — |
 | POST | `/api/set-main-image` | — |
-| GET | `/characters` | — |
 | POST | `/upload` | — |
 
 **`customs`**

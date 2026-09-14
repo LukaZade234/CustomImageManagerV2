@@ -140,7 +140,7 @@ class TestLazyRowCreation:
     def test_browsing_alone_creates_no_identity_row(self, client, clean_db):
         """A crawler touching the site must not put a row in the table."""
         client.get("/api/me")
-        client.get("/api/characters")
+        client.get("/api/stats")
         conn = clean_db.get_connection()
         assert conn.execute("SELECT COUNT(*) FROM identities").fetchone()[0] == 0
 
