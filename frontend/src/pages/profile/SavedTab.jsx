@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { getImageUrl } from '../../api'
+import { getPortraitUrl } from '../../api'
 import { MODE_OPTIONS } from '../../components/FilterBar'
+import { useRemoveSaved, useSavedCharacters } from '../../queries/saved'
 import { useStore } from '../../store/useStore'
 import CardGrid from './CardGrid'
 import ListTab from './ListTab'
@@ -18,8 +19,8 @@ const SORTS = {
 const FIELDS = { name: ['name'], series: ['series'] }
 
 export default function SavedTab() {
-  const savedCharacters = useStore((s) => s.savedCharacters)
-  const removeSaved = useStore((s) => s.removeSaved)
+  const { data: savedCharacters = [] } = useSavedCharacters()
+  const removeSaved = useRemoveSaved()
   const addToast = useStore((s) => s.addToast)
   const mode = useStore((s) => s.searchMode)
   const setMode = useStore((s) => s.setSearchMode)
@@ -31,6 +32,7 @@ export default function SavedTab() {
     name: saved.name,
     series: saved.series ?? '',
     image: saved.image ?? '',
+    image_thumb: saved.image_thumb ?? '',
     updated_at: saved.updated_at ?? '',
   }))
 
@@ -40,7 +42,7 @@ export default function SavedTab() {
   const unsave = async (name) => {
     setBusy(name)
     try {
-      await removeSaved(name)
+      await removeSaved.mutateAsync(name)
       addToast('Removed from saved', 'success')
     } catch (err) {
       addToast(err.message, 'error')
@@ -68,7 +70,7 @@ export default function SavedTab() {
           items={items.map((char) => ({
             key: char.name,
             href: `/character/${encodeURIComponent(char.name)}`,
-            image: char.image ? getImageUrl(char.image) : '',
+            image: char.image ? getPortraitUrl(char.image, char.image_thumb) : '',
             title: char.name,
             subtitle: char.series,
             action: 'Unsave',

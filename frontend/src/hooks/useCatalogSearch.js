@@ -1,77 +1,57 @@
-import { useEffect, useState } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiClient } from '../api'
+import { useDebouncedValue } from './useDebouncedValue'
 
 /**
  * Server-side search with paging.
  *
  * The roster is no longer downloaded, so the page asks the server for one page
- * at a time. Typing is debounced; moving to the next page is not. Results
- * accumulate across pages, and a change to the query, mode, sort or order
- * starts again from page one.
+ * at a time, and "Show more" walks the pages with `useInfiniteQuery` — each
+ * page is cached by the inputs that produced it, so returning to a query you
+ * already ran is instant. Typing is debounced; paging is not.
  */
 const PAGE_SIZE = 60
 
 export { PAGE_SIZE as SEARCH_PAGE_SIZE }
 
 export function useCatalogSearch({ query, mode, sort, order, delay = 250 }) {
-  const [state, setState] = useState({ items: [], total: 0, loading: false })
-  // Keyed by the inputs, so changing any of them resets to page one during the
-  // render rather than in an effect that would race the fetch.
-  const key = `${query}\u0000${mode}\u0000${sort}\u0000${order}`
-  const [page, setPage] = useState({ key, n: 1 })
-  if (page.key !== key) setPage({ key, n: 1 })
-  const pageNumber = page.n
+  const q = (query || '').trim()
+  const debouncedQuery = useDebouncedValue(q, delay)
+  // Rank 1 is the best rank, so the direction that reads best-first is the
+  // descending one; the server sorts literally. The customs list makes the
+  // same swap, so both read the same way.
+  const apiOrder = sort === 'rank' ? (order === 'desc' ? 'asc' : 'desc') : order
 
-  useEffect(() => {
-    const q = (query || '').trim()
-    if (!q) {
-      setState({ items: [], total: 0, loading: false })
-      return undefined
-    }
-    let cancelled = false
-    setState((s) => ({ ...s, loading: true }))
-    // Rank 1 is the best rank, so the direction that reads best-first is the
-    // descending one; the server sorts literally. The customs list makes the
-    // same swap, so both read the same way.
-    const apiOrder = sort === 'rank' ? (order === 'desc' ? 'asc' : 'desc') : order
-    const run = async () => {
-      try {
-        const res = await apiClient.searchCharacters({
-          q,
-          by: mode,
-          sort,
-          order: apiOrder,
-          page: pageNumber,
-          perPage: PAGE_SIZE,
-        })
-        if (cancelled) return
-        const items = res?.items || []
-        setState((s) => ({
-          items: pageNumber === 1 ? items : [...s.items, ...items],
-          total: res?.total ?? 0,
-          loading: false,
-        }))
-      } catch {
-        if (!cancelled) {
-          setState((s) =>
-            pageNumber === 1 ? { items: [], total: 0, loading: false } : { ...s, loading: false },
-          )
-        }
-      }
-    }
-    // Debounce typing on page one; a "Show more" request is immediate.
-    const timer = setTimeout(run, pageNumber === 1 ? delay : 0)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [query, mode, sort, order, pageNumber, delay])
+  const { data, isPending, isFetching, fetchNextPage, hasNextPage } = useInfiniteQuery({
+    queryKey: ['catalog-search', { query: debouncedQuery, mode, sort, order: apiOrder }],
+    queryFn: ({ pageParam }) =>
+      apiClient.searchCharacters({
+        q: debouncedQuery,
+        by: mode,
+        sort,
+        order: apiOrder,
+        page: pageParam,
+        perPage: PAGE_SIZE,
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, page) => n + (page?.items?.length ?? 0), 0)
+      const total = lastPage?.total ?? 0
+      return loaded < total ? allPages.length + 1 : undefined
+    },
+    enabled: Boolean(debouncedQuery),
+  })
+
+  const items = data?.pages.flatMap((page) => page?.items ?? []) ?? []
+  const total = data?.pages[0]?.total ?? 0
 
   return {
-    items: state.items,
-    total: state.total,
-    loading: state.loading,
-    showMore: () => setPage((p) => ({ ...p, n: p.n + 1 })),
-    hasMore: state.items.length < state.total,
+    items,
+    total,
+    loading: Boolean(debouncedQuery) && (isPending || isFetching),
+    showMore: () => {
+      if (hasNextPage) fetchNextPage()
+    },
+    hasMore: Boolean(hasNextPage),
   }
 }

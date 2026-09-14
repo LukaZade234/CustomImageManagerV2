@@ -477,11 +477,13 @@ across 106 files (14,062 including tests).
 with five nested tab routes. `/saved` redirects into the profile, where the list
 now lives.
 
-**State:** one flat zustand store — saved, the current character's customs, `me`,
-theme, toasts. The full roster is no longer held: search and autocomplete run on
-the server (`/api/catalog/search`, `/api/catalog/characters`) and the character
-page fetches the one record it shows. No react-query yet (Phase 9). Retry and
-backoff are hand-written in `useStore.js` and `api.js`.
+**State:** zustand holds UI state only — theme, toasts, the current character, and the
+search/sort preferences remembered across visits. All server state is react-query
+(`queries/`): a character's gallery, the catalog lookups (search, suggest, match), and
+`saved` / `stats` / `me`, sharing one retry/backoff policy (`queries/queryClient.js`,
+`utils/retry.js`). The full roster is not held: search and autocomplete run on the server
+(`/api/catalog/search`, `/api/catalog/characters`) and the character page fetches the one
+record it shows.
 
 **Styling:** a token layer plus primitives, loaded in order by
 `styles/index.css`: tokens → base → layout → ui → components → pages. `ui` must
@@ -508,6 +510,13 @@ paginated on the server; a character's gallery renders 600px WebP thumbnails
 rather than the 1.9 MB PNGs ImgChest holds; and the profile's lists are the only
 ones filtered in the browser, because they are bounded by what one person has
 done rather than by the size of the library.
+
+**Portraits.** A catalog portrait is a `mudae.net` hotlink. It is mirrored to R2
+as WebP by `scripts/mirror_portraits_to_r2.py`, and the object key is stored in
+`characters.main_image_thumb` / `character_catalog.mudae_image_thumb` (migration
+012). Every character-shaped payload carries `image_thumb`, and the frontend
+prefers it via `portraitUrl` — falling back to the original URL, which is also
+what a development build does, where the mirror has no host.
 
 One character page went from **488 MB** to **548 KB** across those changes.
 
@@ -561,8 +570,6 @@ genuinely does not:
 - **A moderation queue.** Reports remove an image at two distinct reporters and
   that is the whole mechanism; there is no review screen and no appeal.
 - **Server-side sessions.** Identity is a signed cookie and nothing else.
-- **react-query or any normalised cache** (Phase 9). Retry and backoff are
-  hand-written in two places.
 - **A second origin.** One box serves everything; Cloudflare caches in front of
   it, and Litestream is the only redundancy.
 

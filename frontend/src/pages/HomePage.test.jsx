@@ -6,14 +6,20 @@
  * that renders "Top contributors" above a list of one name, or an empty "Just
  * added" strip, looks worse than a page that simply omits them.
  */
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../api', () => ({ getImageUrl: (p) => p || '', apiClient: {} }))
+const api = vi.hoisted(() => ({ getStats: vi.fn() }))
+
+vi.mock('../api', () => ({
+  getImageUrl: (p) => p || '',
+  getPortraitUrl: (p) => p || '',
+  apiClient: api,
+}))
 vi.mock('../config', () => ({ apiUrl: (p) => p }))
 
-import { useStore } from '../store/useStore'
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import HomePage from './HomePage'
 
 const FULL = {
@@ -42,17 +48,16 @@ const FULL = {
   ],
 }
 
-const show = (stats) => {
-  useStore.setState({ stats, loading: false, error: null, loadStats: vi.fn() })
-  render(
+const show = (stats) =>
+  renderWithQueryClient(
     <MemoryRouter>
       <HomePage />
     </MemoryRouter>,
+    { queries: [[['stats'], stats]] },
   )
-}
 
 beforeEach(() => {
-  useStore.setState({ stats: null, loading: false, error: null })
+  api.getStats.mockReset()
 })
 
 describe('HomePage', () => {
@@ -163,8 +168,9 @@ describe('HomePage', () => {
   })
 
   it('shows a home-shaped skeleton while the library loads', () => {
-    useStore.setState({ stats: null, loading: true, error: null, loadStats: vi.fn() })
-    render(
+    // A request that never resolves stands in for the fetch being in flight.
+    api.getStats.mockReturnValue(new Promise(() => {}))
+    renderWithQueryClient(
       <MemoryRouter>
         <HomePage />
       </MemoryRouter>,

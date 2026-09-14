@@ -234,6 +234,7 @@ class TestHomeHighlights:
             "top_character": "Rem",
             "top_character_images": 3,
             "top_character_image": "Rem.png",
+            "top_character_thumb": "",
         }
         assert body["series_count"] == 2
 

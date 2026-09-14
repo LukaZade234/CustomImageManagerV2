@@ -374,9 +374,14 @@ what the database actually does.
 ### react-query *and* zustand, not one or the other
 
 These look redundant and are not. `@tanstack/react-query` owns **server** state — fetching,
-caching, retry, invalidation — replacing retry and backoff logic currently hand-rolled and
+caching, retry, invalidation — replacing retry and backoff logic that had been hand-rolled and
 duplicated across `useStore.js` and `api.js`. zustand keeps owning **UI** state: dark mode, toasts,
 selection. Its per-character caching is also what makes killing the full-map fetch practical.
+
+Adopted in Phase 9. The gallery query and the catalog hooks (search, suggest, match) came first
+because they were where the duplication lived; `saved`, `stats` and `me` followed, and the store is
+now UI state only. Signing out invalidates every query, because an identity change is exactly a
+change in what the server is answering.
 
 ### Dependencies dropped, and one deliberately kept
 
@@ -523,11 +528,14 @@ The importer merges every extract by `name_key` before writing: extracts overlap
 repeats are dropped, and when two captures disagree the better (lower) rank wins. It is idempotent,
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
-**Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than
-the PNGs, and free-egress), retiring the self-bot to gap-filling and refreshes, and series pages are
-all natural next phases. Server-side catalog search and pool filters, once on this list, have since
-landed: `/api/catalog/search` replaces the full-roster fetch, and the catalog's four booleans back a
-`pool=` parameter on the suggestions API and the facet chips in the Add form. The catalog only *adds*
+**Deferred, not rejected.** Retiring the self-bot to gap-filling and refreshes, and series pages, are
+natural next phases. Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the PNGs,
+free egress) has since landed: `scripts/mirror_portraits_to_r2.py` fetches each `mudae.net` portrait,
+encodes WebP, uploads to R2 and records the key in `characters.main_image_thumb` /
+`character_catalog.mudae_image_thumb`, and the frontend prefers it via `portraitUrl`. Server-side
+catalog search and pool filters, once on this list, have landed too: `/api/catalog/search` replaces
+the full-roster fetch, and the catalog's four booleans back a `pool=` parameter on the suggestions
+API and the facet chips in the Add form. The catalog only *adds*
 a table, so none of them are blocked by this one. `remote_images._allowed_portrait_url` is
 deliberately separate from the user-facing download proxy's allowlist: the internal accent fetch may
 read Mudae, a visitor's "download this image" may not.

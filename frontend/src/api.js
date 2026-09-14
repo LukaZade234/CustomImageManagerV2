@@ -1,4 +1,5 @@
-import { API_BASE, CREDENTIALS, imageUrl } from './config'
+import { API_BASE, CREDENTIALS, imageUrl, portraitUrl } from './config'
+import { backoffDelay, isTransientError } from './utils/retry'
 
 /** @param {Response} res @param {string} text @param {Record<string, unknown>} parsed */
 function messageFromFailedResponse(res, text, parsed) {
@@ -44,6 +45,9 @@ function toNetworkError(err) {
 
 /** Re-exported so existing imports keep working; the logic lives in config.js. */
 const getImageUrl = imageUrl
+
+/** Re-exported alongside it; a portrait prefers the mirrored WebP when present. */
+const getPortraitUrl = portraitUrl
 
 async function api(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...options, credentials: CREDENTIALS })
@@ -140,12 +144,8 @@ export const apiClient = {
         return await attemptOnce()
       } catch (e) {
         lastErr = e
-        const msg = e?.message || ''
-        const transient =
-          msg.startsWith('Network error:') || /could not complete the request/i.test(msg)
-        if (!transient || attempt === maxAttempts - 1) throw e
-        const delayMs = 450 * 2 ** attempt + Math.random() * 300
-        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        if (!isTransientError(e) || attempt === maxAttempts - 1) throw e
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay(attempt, 450)))
       }
     }
     throw lastErr
@@ -313,4 +313,4 @@ export const apiClient = {
     }),
 }
 
-export { getImageUrl }
+export { getImageUrl, getPortraitUrl }

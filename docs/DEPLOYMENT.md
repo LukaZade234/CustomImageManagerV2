@@ -69,7 +69,17 @@ nothing responds until the app is running.
    curl -I https://images.<yourdomain>/character_images/Zero_Two.png   # expect 200
    ```
 
-5. **Create a second bucket for backups**, e.g. `imgmanager-backups`. Keep it
+5. Mirror the catalog portraits. This needs the catalog imported first (the
+   data step below), and `rclone` configured for the R2 bucket. It fetches each
+   `mudae.net` portrait, encodes WebP, uploads under `portraits/` and records the
+   key, so the app stops hotlinking Mudae:
+
+   ```bash
+   R2_BUCKET=imgmanager-assets uv run python scripts/mirror_portraits_to_r2.py --dry-run
+   R2_BUCKET=imgmanager-assets uv run python scripts/mirror_portraits_to_r2.py
+   ```
+
+6. **Create a second bucket for backups**, e.g. `imgmanager-backups`. Keep it
    private — it holds your whole database.
 
 ## 2. Cloudflare: Tunnel to the origin

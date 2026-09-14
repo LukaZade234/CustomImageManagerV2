@@ -5,7 +5,7 @@
  * Hide, and a mixed selection has to show both counts rather than silently
  * doing one of them. DECISIONS.md section 1.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -28,6 +28,7 @@ const { hideImages, deleteCustomImages, served } = vi.hoisted(() => ({
 
 vi.mock('../api', () => ({
   getImageUrl: (p) => p || '',
+  getPortraitUrl: (p) => p || '',
   apiUrl: (p) => p,
   apiClient: new Proxy(
     {
@@ -47,10 +48,11 @@ vi.mock('../api', () => ({
 }))
 
 import { useStore } from '../store/useStore'
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import CharacterPage from './CharacterPage'
 
 function renderPage() {
-  return render(
+  return renderWithQueryClient(
     <MemoryRouter initialEntries={['/character/Rem']}>
       <Routes>
         <Route path="/character/:name" element={<CharacterPage />} />
@@ -66,7 +68,6 @@ beforeEach(() => {
   useStore.setState({
     characters: [{ name: 'Rem', series: 'Re:Zero', rank: '1', image: 'rem.png' }],
     savedCharacters: [],
-    characterImages: { Rem: ROWS },
     customImages: { Rem: ROWS.map((r) => r.url) },
     lastUpdated: {},
     loading: false,

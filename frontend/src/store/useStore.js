@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { apiClient } from '../api'
 import { applyTheme, nextTheme, persistTheme, readStoredTheme, THEMES } from '../theme'
 import {
   CUSTOMS_ORDER_KEY,
@@ -11,24 +10,14 @@ import {
   writeStored,
 } from '../utils/storedSetting'
 
-/** Transient browser / gateway failures worth retrying (not 4xx validation). */
-function shouldRetryFetchError(e) {
-  if (e instanceof TypeError) return true
-  const m = e?.message || ''
-  if (m.startsWith('Network error:')) return true
-  if (/could not complete the request/i.test(m)) return true
-  if (/Gateway|502|503|504/i.test(m)) return true
-  return false
-}
-
-/** {name: accent_seed} from any character-shaped payload, skipping the unset. */
-function seedsByName(list) {
-  const out = {}
-  for (const c of list) {
-    if (c?.name && c.accent_seed) out[c.name] = c.accent_seed
-  }
-  return out
-}
+/**
+ * Client state only.
+ *
+ * Server state — the gallery, the catalog lookups, saved, stats and `me` — lives
+ * in react-query (see `queries/`), which owns its cache, retry and invalidation.
+ * What stays here is what the browser owns: theme, toasts, the current
+ * character, and the search/sort choices remembered across visits.
+ */
 
 /** The remembered sort may predate the current option set; fall back to rank. */
 function readStoredSort() {
@@ -43,25 +32,7 @@ function readStoredCustomsSort() {
 }
 
 export const useStore = create((set, get) => ({
-  savedCharacters: [],
-  // Per-character rows: id, url, owner, is_mine, hidden. Loaded on demand for
-  // the character page only. There is deliberately no library-wide image map any
-  // more -- Home and Customs ask the server for what they need.
-  characterImages: {},
-  // Which characters' rows are in flight. The gallery needs to tell "not
-  // fetched yet" from "fetched and genuinely empty", or it shows the
-  // no-images-yet state while the request is still out.
-  characterImagesLoading: {},
-  // Per-character accent seed ("#aeb7d2"), from the character list, the saved
-  // list, or the gallery response -- whichever arrived last wins, and the
-  // gallery response is the freshest because the server re-measures on it.
-  // Null means the server looked and declined; absent means not loaded yet.
-  accentSeeds: {},
-  stats: null,
-  me: null,
   currentCharacter: null,
-  loading: false,
-  error: null,
   theme: readStoredTheme(),
 
   setTheme: (theme) => {
@@ -72,177 +43,6 @@ export const useStore = create((set, get) => ({
   },
   cycleTheme: () => {
     get().setTheme(nextTheme(get().theme))
-  },
-
-  loadSaved: async () => {
-    try {
-      // Already ordered most-recently-updated first by the server, which knows
-      // the timestamps without shipping a map of all ~700 characters.
-      const saved = (await apiClient.getSaved()) || []
-      set((s) => ({
-        savedCharacters: saved,
-        accentSeeds: { ...s.accentSeeds, ...seedsByName(saved) },
-      }))
-    } catch {
-      set({ savedCharacters: [] })
-    }
-  },
-
-  /** Two integers for the landing page, in place of the whole library. */
-  loadStats: async () => {
-    set({ loading: true, error: null })
-    try {
-      set({ stats: await apiClient.getStats(), loading: false })
-    } catch (e) {
-      // The home page is the only reader; a failed load is worth showing rather
-      // than rendering a page of zeros that looks like an empty library.
-      set({ error: e.message, loading: false })
-    }
-  },
-
-  /** Who the server thinks we are. Handle, role, sign-in state — never the id. */
-  loadMe: async () => {
-    try {
-      set({ me: await apiClient.getMe() })
-    } catch {
-      /* identity is best-effort; the page works without knowing the handle */
-    }
-  },
-
-  /**
-   * Fold settings the server just accepted back into `me`, without a refetch.
-   *
-   * A preference that only took effect on the next page load is a preference
-   * that looks broken: the character-accent switch gates what a character page
-   * derives, and `me.settings` is where that page reads it from. The PATCH
-   * response is already the authoritative settings, so applying it directly
-   * makes the switch take effect on navigation, with no reload and no second
-   * round trip.
-   */
-  setMySettings: (settings) => {
-    if (!settings) return
-    set((s) => (s.me ? { me: { ...s.me, settings: { ...s.me.settings, ...settings } } } : s))
-  },
-
-  /**
-   * Hand this browser a fresh anonymous identity.
-   *
-   * Not a delete: the account and everything it owns stays, and signing in
-   * again reaches it. Saved characters are per identity, so they have to be
-   * reloaded rather than left showing the previous person's list.
-   */
-  signOut: async () => {
-    await apiClient.logout()
-    await get().loadMe()
-    await get().loadSaved()
-  },
-
-  /** One character’s images from GET /api/custom-image/<name>, with ownership. */
-  loadCustomImagesForCharacter: async (characterName) => {
-    if (!characterName) return
-    set((s) => ({
-      characterImagesLoading: { ...s.characterImagesLoading, [characterName]: true },
-    }))
-    try {
-      const maxAttempts = 3
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-          const payload = await apiClient.getCustomImagesForChar(characterName)
-          // The endpoint returns {rows, accentSeed}; the bare-array shape is
-          // accepted so a cached or proxied old response degrades to no seed
-          // rather than an empty gallery.
-          const list = Array.isArray(payload)
-            ? payload
-            : Array.isArray(payload?.rows)
-              ? payload.rows
-              : []
-          const seed = Array.isArray(payload) ? null : (payload?.accentSeed ?? null)
-          set((s) => ({
-            characterImages: { ...s.characterImages, [characterName]: list },
-            accentSeeds: { ...s.accentSeeds, [characterName]: seed },
-          }))
-          return
-        } catch (e) {
-          if (!shouldRetryFetchError(e) || attempt === maxAttempts - 1) break
-          await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.random() * 200))
-        }
-      }
-      /* keep previous slice for this character */
-    } finally {
-      set((s) => ({
-        characterImagesLoading: { ...s.characterImagesLoading, [characterName]: false },
-      }))
-    }
-  },
-
-  /**
-   * Refresh a character after a successful upload or import.
-   *
-   * Refetches rather than appending the URLs it was handed: the rows need real
-   * ids from the server before Hide or Report can act on them, and inventing
-   * placeholder entries would make those actions fail on exactly the images
-   * someone just added.
-   */
-  appendCustomImageUrls: async (characterName, urls) => {
-    if (!characterName || !urls?.length) return
-    await get().loadCustomImagesForCharacter(characterName)
-  },
-
-  /**
-   * Apply a new order to the cached rows, without waiting for the server.
-   *
-   * Reordering used to refetch the whole character after every single drop, so
-   * moving a dozen images meant a dozen round trips and a dozen identical
-   * toasts over the gallery being edited. The gallery renders from this cache,
-   * so writing the order here is what makes a drop land at all; the POST that
-   * follows is only persistence.
-   *
-   * Rows the caller did not mention — hidden ones, or anything uploaded while
-   * the page was open — keep their relative order at the end, which is exactly
-   * what `db.reorder_custom_images` does with the same list. Getting that rule
-   * wrong here would show an order the next reload does not reproduce.
-   */
-  setCustomImageOrder: (characterName, urls) => {
-    if (!characterName || !Array.isArray(urls)) return
-    set((s) => {
-      const rows = s.characterImages[characterName]
-      if (!rows) return {}
-      const byUrl = new Map(rows.map((row) => [row.url, row]))
-      const ordered = urls.map((url) => byUrl.get(url)).filter(Boolean)
-      const placed = new Set(ordered.map((row) => row.url))
-      ordered.push(...rows.filter((row) => !placed.has(row.url)))
-      return { characterImages: { ...s.characterImages, [characterName]: ordered } }
-    })
-  },
-
-  /** After a server-side rename, move the character's cached rows to the new key. */
-  renameCustomCharacterData: (oldName, newName) => {
-    if (!oldName || !newName || oldName === newName) return
-    set((s) => {
-      const characterImages = { ...s.characterImages }
-      if (Object.hasOwn(characterImages, oldName)) {
-        characterImages[newName] = characterImages[oldName]
-        delete characterImages[oldName]
-      }
-      // The seed travels with the rows: the server keys it by character id,
-      // and a rename must not drop the page back to the system accent.
-      const accentSeeds = { ...s.accentSeeds }
-      if (Object.hasOwn(accentSeeds, oldName)) {
-        accentSeeds[newName] = accentSeeds[oldName]
-        delete accentSeeds[oldName]
-      }
-      return { characterImages, accentSeeds }
-    })
-  },
-
-  saveCharacter: async (char) => {
-    await apiClient.saveCharacter(char)
-    await get().loadSaved()
-  },
-
-  removeSaved: async (name) => {
-    await apiClient.removeSaved(name)
-    await get().loadSaved()
   },
 
   setCurrentCharacter: (char) => set({ currentCharacter: char }),

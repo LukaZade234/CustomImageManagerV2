@@ -9,7 +9,7 @@
  * The other is that Saved moved here from its own page, so `/saved` has to keep
  * working for anyone who bookmarked it.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,18 +24,30 @@ const api = vi.hoisted(() => ({
   logout: vi.fn().mockResolvedValue({}),
 }))
 
-vi.mock('../../api', () => ({ apiClient: api, getImageUrl: (p) => p || '' }))
+vi.mock('../../api', () => ({
+  apiClient: api,
+  getImageUrl: (p) => p || '',
+  getPortraitUrl: (p) => p || '',
+}))
 vi.mock('../../config', () => ({ apiUrl: (p) => p, signInUrl: (n) => `/start?next=${n}` }))
 
 import { useStore } from '../../store/useStore'
+import { renderWithQueryClient } from '../../test/renderWithQueryClient'
 import HiddenTab from './HiddenTab'
 import HistoryTab from './HistoryTab'
 import ProfileLayout from './ProfileLayout'
 import SavedTab from './SavedTab'
 import SettingsTab from './SettingsTab'
 
+// `me` and `saved` are react-query data now; the tests still describe them by
+// seeding the store, so hand those values to the query cache at render time.
 const at = (ui, route = '/profile') =>
-  render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>)
+  renderWithQueryClient(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>, {
+    queries: [
+      [['me'], useStore.getState().me],
+      [['saved'], useStore.getState().savedCharacters],
+    ],
+  })
 
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockClear?.()
@@ -241,16 +253,16 @@ describe('settings', () => {
   })
 
   it('defaults character accents on and records turning them off', async () => {
-    at(<SettingsTab />)
+    const { client } = at(<SettingsTab />)
     const toggle = screen.getByLabelText(/Use character-based accent colours/i)
     expect(toggle).toBeChecked()
     // The caveat is part of the control, not a footnote elsewhere.
     expect(screen.getByText(/will not always be accurate/i)).toBeInTheDocument()
     await userEvent.click(toggle)
     expect(api.updateSettings).toHaveBeenCalledWith({ character_accents: false })
-    // Published to the store, so a character page visited afterwards reads the
-    // new value without the settings having to be refetched on a reload.
-    expect(useStore.getState().me.settings.character_accents).toBe(false)
+    // Published to the `me` cache, so a character page visited afterwards reads
+    // the new value without the settings having to be refetched on a reload.
+    await waitFor(() => expect(client.getQueryData(['me']).settings.character_accents).toBe(false))
   })
 
   it('shows character accents off when the account already turned them off', async () => {

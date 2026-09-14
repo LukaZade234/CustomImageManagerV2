@@ -5,7 +5,7 @@
  * it, a known name offers its series, a mismatched series is refused, and a
  * lookup/add that the catalog can answer never reaches Discord.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,14 +24,16 @@ const api = vi.hoisted(() => ({
 
 vi.mock('../api', () => ({
   getImageUrl: (p) => p || '',
+  getPortraitUrl: (p) => p || '',
   apiUrl: (p) => p,
   apiClient: api,
 }))
 
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import AddPage from './AddPage'
 
 function renderPage() {
-  return render(
+  return renderWithQueryClient(
     <MemoryRouter>
       <AddPage />
     </MemoryRouter>,
@@ -39,7 +41,7 @@ function renderPage() {
 }
 
 function renderPageAt(route) {
-  return render(
+  return renderWithQueryClient(
     <MemoryRouter initialEntries={[route]}>
       <AddPage />
     </MemoryRouter>,

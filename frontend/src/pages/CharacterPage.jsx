@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
@@ -17,6 +18,13 @@ import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import {
+  applyOrderToCache,
+  characterImagesKey,
+  useCharacterImages,
+} from '../queries/characterImages'
+import { useMe } from '../queries/me'
+import { savedKey, useRemoveSaved, useSaveCharacter, useSavedCharacters } from '../queries/saved'
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
@@ -44,17 +52,23 @@ export default function CharacterPage() {
   const { name } = useParams()
   const navigate = useNavigate()
   const isNarrow = useMediaQuery(NARROW)
-  const savedCharacters = useStore((s) => s.savedCharacters)
-  const characterImages = useStore((s) => s.characterImages)
-  const characterImagesLoading = useStore((s) => s.characterImagesLoading)
-  const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
-  const appendCustomImageUrls = useStore((s) => s.appendCustomImageUrls)
-  const setCustomImageOrder = useStore((s) => s.setCustomImageOrder)
-  const loadSaved = useStore((s) => s.loadSaved)
-  const renameCustomCharacterData = useStore((s) => s.renameCustomCharacterData)
-  const saveCharacter = useStore((s) => s.saveCharacter)
-  const removeSaved = useStore((s) => s.removeSaved)
+  const { data: savedCharacters = [] } = useSavedCharacters()
+  const saveCharacter = useSaveCharacter()
+  const removeSaved = useRemoveSaved()
+  const { data: me } = useMe()
   const addToast = useStore((s) => s.addToast)
+  const queryClient = useQueryClient()
+  // The gallery is server state, cached and invalidated by key rather than kept
+  // in the store and refetched by hand after every mutation. The first fetch is
+  // still settling only while the query is pending with no data; a cached slice
+  // is served immediately, empty or not.
+  const { data: imagesData, isPending: imagesPending } = useCharacterImages(name)
+  const allRows = imagesData?.rows ?? []
+  const galleryLoading = Boolean(name) && imagesPending
+  const refreshImages = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: characterImagesKey(name) }),
+    [queryClient, name],
+  )
 
   // The roster is no longer downloaded, so the page fetches the one character
   // it is showing. A catalog-only name (never added) is treated as not found;
@@ -66,12 +80,6 @@ export default function CharacterPage() {
   const isSaved = savedCharacters.some((s) => s.name === name)
 
   const [showHidden, setShowHidden] = useState(false)
-  const allRows = characterImages[name] || []
-  // The first fetch for this character has not settled yet, so the gallery is
-  // loading rather than empty. A slice that exists is loaded even if it is
-  // empty; only an absent one under an in-flight request is a skeleton.
-  const galleryLoading =
-    characterImages[name] === undefined && Boolean(characterImagesLoading[name])
   const hiddenCount = allRows.filter((row) => row.hidden).length
   // Hidden images drop out of the gallery entirely unless you ask for them.
   // That is the whole value of hide-for-me: it has to actually get them out of
@@ -85,14 +93,21 @@ export default function CharacterPage() {
   const [editSeries, setEditSeries] = useState('')
   const [editRank, setEditRank] = useState('')
   const [mainImage, setMainImage] = useState('')
+  // The catalog's mirrored portrait applies only while the main image is still
+  // the catalog's own; an upload or an edit replaces it and has no mirror.
+  const mainThumb = char && mainImage === char.image ? char.image_thumb : ''
   // Above the early returns: hooks must run in the same order every render.
   // The seed is the server-measured accent (see useCharacterTheme); the
   // character list carries it, and the gallery response refreshes it after
   // any change to the images it was measured from. Turning character accents
   // off in settings discards it here as well as on the server, so a row that
   // already carries a seed is never applied against the viewer's choice.
-  const characterAccents = useStore((s) => s.me?.settings?.character_accents !== false)
-  const seededAccent = useStore((s) => s.accentSeeds[name]) ?? char?.accent_seed ?? null
+  const characterAccents = me?.settings?.character_accents !== false
+  // The gallery response is freshest: the server re-measures the seed from the
+  // images that response carried. The saved row's seed covers the moment before
+  // the gallery has arrived.
+  const savedSeed = savedCharacters.find((s) => s.name === name)?.accent_seed
+  const seededAccent = imagesData?.accentSeed ?? savedSeed ?? char?.accent_seed ?? null
   const theme = useCharacterTheme(name, characterAccents ? seededAccent : null)
   useApplyCharacterTheme(theme)
   const [loading, setLoading] = useState(false)
@@ -182,10 +197,6 @@ export default function CharacterPage() {
       .catch(() => setMudaeConfigured(false))
   }, [])
 
-  useEffect(() => {
-    loadCustomImagesForCharacter(name)
-  }, [name, loadCustomImagesForCharacter])
-
   // Counted at most once per person per character per hour on the server, so
   // this firing again on a remount costs nothing.
   useEffect(() => {
@@ -266,13 +277,13 @@ export default function CharacterPage() {
         ...allRows.map((row) => row.url).filter((url) => !inBaseline.has(url)),
       ]
       await apiClient.reorderCustomImages(name, order)
-      setCustomImageOrder(name, order)
+      applyOrderToCache(queryClient, name, order)
       addToast('Order reverted to before you started reordering.', 'info')
     } catch (e) {
       addToast(e.message || 'Could not revert order', 'error')
-      await loadCustomImagesForCharacter(name)
+      await refreshImages()
     }
-  }, [allRows, exitReorderMode, name, setCustomImageOrder, loadCustomImagesForCharacter, addToast])
+  }, [allRows, exitReorderMode, name, queryClient, refreshImages, addToast])
 
   /**
    * Leaving reorder mode by the Discard button.
@@ -316,7 +327,9 @@ export default function CharacterPage() {
 
   const upload = useCustomImageUpload({
     characterName: name,
-    onUploaded: appendCustomImageUrls,
+    // The upload hands back the new URLs; the gallery refetches rather than
+    // appending them, because Hide and Report need the server-assigned row ids.
+    onUploaded: refreshImages,
     addToast,
     fileInputRef: customInputRef,
   })
@@ -330,10 +343,10 @@ export default function CharacterPage() {
 
   const applyReorder = useCallback(
     (newOrder) => {
-      // The gallery renders from the store, so writing the order there is what
-      // makes the drop land. It used to wait for a refetch of the whole
+      // The gallery renders from the query cache, so writing the order there is
+      // what makes the drop land. It used to wait for a refetch of the whole
       // character before the image appeared in its new place.
-      setCustomImageOrder(name, newOrder)
+      applyOrderToCache(queryClient, name, newOrder)
       const session = reorderSessionRef.current
       if (!session) return
       session.dirty = true
@@ -344,10 +357,10 @@ export default function CharacterPage() {
           // is now displaying an order that was never saved.
           if (!session.failed) addToast(err.message || 'Could not save the new order', 'error')
           session.failed = true
-          await loadCustomImagesForCharacter(name)
+          await refreshImages()
         })
     },
-    [name, setCustomImageOrder, loadCustomImagesForCharacter, addToast],
+    [name, queryClient, refreshImages, addToast],
   )
 
   // Three states, not two. `char` is absent both while the record is being
@@ -380,10 +393,13 @@ export default function CharacterPage() {
         series: editSeries,
         rank: editRank,
       })
-      await loadSaved()
+      await queryClient.invalidateQueries({ queryKey: savedKey })
       reloadChar()
       if (name !== editName) {
-        renameCustomCharacterData(name, editName)
+        // The rows are keyed by name, so the renamed character fetches under
+        // its new key. Drop the old entry rather than leaving a stale gallery
+        // behind the old name.
+        queryClient.removeQueries({ queryKey: characterImagesKey(name) })
       }
       addToast('Character updated', 'success')
       setEditMode(false)
@@ -398,10 +414,10 @@ export default function CharacterPage() {
   const handleToggleSave = async () => {
     try {
       if (isSaved) {
-        await removeSaved(name)
+        await removeSaved.mutateAsync(name)
         addToast('Removed from saved', 'success')
       } else {
-        await saveCharacter(char)
+        await saveCharacter.mutateAsync(char)
         addToast('Saved character', 'success')
       }
     } catch (err) {
@@ -504,7 +520,7 @@ export default function CharacterPage() {
     if (!urls.length) return
     try {
       const result = await apiClient.deleteCustomImages(name, urls)
-      await loadCustomImagesForCharacter(name)
+      await refreshImages()
       const removed = result?.removed?.length ?? urls.length
       addToast(`${removed} image${removed === 1 ? '' : 's'} removed`, 'success', {
         onUndo: async () => {
@@ -512,7 +528,7 @@ export default function CharacterPage() {
           // reorderCustomImages, which clobbered anyone else's concurrent edits
           // and could not bring a removed image back at all.
           await apiClient.restoreImages(name, urls)
-          await loadCustomImagesForCharacter(name)
+          await refreshImages()
           addToast('Images restored', 'info')
         },
       })
@@ -532,11 +548,11 @@ export default function CharacterPage() {
     if (!ids.length) return
     try {
       await apiClient.hideImages(ids)
-      await loadCustomImagesForCharacter(name)
+      await refreshImages()
       addToast(`${ids.length} image${ids.length === 1 ? '' : 's'} hidden for you`, 'success', {
         onUndo: async () => {
           await apiClient.unhideImages(ids)
-          await loadCustomImagesForCharacter(name)
+          await refreshImages()
           addToast('Images shown again', 'info')
         },
       })
@@ -551,7 +567,7 @@ export default function CharacterPage() {
     if (!ids.length) return
     try {
       await apiClient.unhideImages(ids)
-      await loadCustomImagesForCharacter(name)
+      await refreshImages()
       addToast('Hidden images restored to your view', 'success')
     } catch (err) {
       addToast(err.message, 'error')
@@ -593,7 +609,7 @@ export default function CharacterPage() {
     setReportTarget(null)
     try {
       const result = await apiClient.reportImage(imageId, reason)
-      await loadCustomImagesForCharacter(name)
+      await refreshImages()
       if (result.removed) {
         addToast('Reported. That was the second report, so the image was removed.', 'success')
       } else if (result.already_reported) {
@@ -699,6 +715,7 @@ export default function CharacterPage() {
       <CharacterHeader
         char={char}
         mainImage={mainImage}
+        mainThumb={mainThumb}
         mainInputRef={mainInputRef}
         loading={loading}
         dragOver={dragOver}
@@ -959,7 +976,7 @@ export default function CharacterPage() {
           items={removedDrawer}
           onRestore={async (url) => {
             await apiClient.restoreImages(name, [url])
-            await loadCustomImagesForCharacter(name)
+            await refreshImages()
             addToast('Image restored', 'success')
           }}
           onClose={() => setRemovedDrawer(null)}

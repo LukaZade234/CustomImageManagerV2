@@ -1,4 +1,4 @@
-import { getImageUrl } from '../api'
+import { getPortraitUrl } from '../api'
 import { GenderMarks } from './GenderMarks'
 import { Button, Field, Input } from './ui'
 
@@ -14,6 +14,7 @@ import { Button, Field, Input } from './ui'
 export function CharacterHeader({
   char,
   mainImage,
+  mainThumb,
   mainInputRef,
   loading,
   dragOver,
@@ -37,7 +38,11 @@ export function CharacterHeader({
         onChange={onMainImageChange}
       />
       {mainImage ? (
-        <img src={getImageUrl(mainImage)} alt={char.name} className="char-main-image-full" />
+        <img
+          src={getPortraitUrl(mainImage, mainThumb)}
+          alt={char.name}
+          className="char-main-image-full"
+        />
       ) : (
         <div className="char-main-placeholder">No image</div>
       )}

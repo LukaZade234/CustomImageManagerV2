@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { apiClient, getImageUrl } from '../../api'
+import { apiClient, getPortraitUrl } from '../../api'
 import { MODE_OPTIONS } from '../../components/FilterBar'
 import { useStore } from '../../store/useStore'
 import CardGrid from './CardGrid'
@@ -69,7 +69,7 @@ export default function HistoryTab() {
           items={items.map((row) => ({
             key: row.name,
             href: `/character/${encodeURIComponent(row.name)}`,
-            image: row.image ? getImageUrl(row.image) : '',
+            image: row.image ? getPortraitUrl(row.image, row.image_thumb) : '',
             title: row.name,
             subtitle: `${relativeDay(row.last_viewed)} · ${row.images} images`,
           }))}
