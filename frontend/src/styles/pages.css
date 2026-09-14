@@ -1069,6 +1069,16 @@ body.reorder-touch-dragging {
 .add-char-form {
   max-width: 100%;
 }
+/* The pool facets the name suggestions must all match. Toggle chips: a pressed
+   one is the accent tint the shared button style already gives aria-pressed. */
+.pool-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  border: 0;
+}
 .file-upload-box .file-upload-icon {
   display: block;
   margin-bottom: var(--space-2);

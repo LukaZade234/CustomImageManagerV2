@@ -280,7 +280,22 @@ describe('AddPage catalog integration', () => {
       expect(texts.some((text) => text.includes('Rem'))).toBe(true)
       expect(texts.some((text) => text.includes('Emilia'))).toBe(true)
     })
-    expect(api.suggestCharacters).toHaveBeenCalledWith('', 8, 'Re:Zero')
+    expect(api.suggestCharacters).toHaveBeenCalledWith('', 8, 'Re:Zero', [])
+  })
+
+  it('narrows the name suggestions by the chosen pool facets', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const waifu = screen.getByRole('button', { name: 'Waifu' })
+    expect(waifu).toHaveAttribute('aria-pressed', 'false')
+    await user.click(waifu)
+    expect(waifu).toHaveAttribute('aria-pressed', 'true')
+
+    await user.type(screen.getByLabelText('Character Name'), 'rem')
+    await waitFor(() => {
+      expect(api.suggestCharacters).toHaveBeenCalledWith('rem', 8, '', ['waifu'])
+    })
   })
 
   it("offers the matched name's series as the only series suggestion", async () => {

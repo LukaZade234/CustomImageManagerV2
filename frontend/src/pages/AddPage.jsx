@@ -42,6 +42,13 @@ function mudaeCandidatesFromResponse(res) {
   return (res?.candidates || []).map((n) => ({ name: n, label: n }))
 }
 
+const POOL_FILTERS = [
+  { key: 'waifu', label: 'Waifu' },
+  { key: 'husbando', label: 'Husbando' },
+  { key: 'anime', label: 'Anime' },
+  { key: 'game', label: 'Game' },
+]
+
 export default function AddPage() {
   const [name, setName] = useState('')
   const [series, setSeries] = useState('')
@@ -49,6 +56,8 @@ export default function AddPage() {
   const [imageFile, setImageFile] = useState(null)
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(false)
+  // Pool facets the name suggestions must all match; empty is no filter.
+  const [poolFilter, setPoolFilter] = useState([])
 
   const [mudaeConfigured, setMudaeConfigured] = useState(null)
   const [mudaeLookupName, setMudaeLookupName] = useState('')
@@ -81,11 +90,19 @@ export default function AddPage() {
   // Catalog-backed suggestions and the library's own record for the typed name.
   // The name combobox gets the typed series as a hint, so a named series offers
   // its characters until the visitor starts typing a name of their own.
-  const nameSuggestions = useCatalogSuggest(name, { kind: 'characters', limit: 8, series })
+  const nameSuggestions = useCatalogSuggest(name, {
+    kind: 'characters',
+    limit: 8,
+    series,
+    pools: poolFilter,
+  })
   const seriesSuggestions = useCatalogSuggest(series, { kind: 'series', limit: 20 })
   const panelNameSuggestions = useCatalogSuggest(mudaeLookupName, { kind: 'characters', limit: 8 })
   const bulkSeriesSuggestions = useCatalogSuggest(seriesBulkName, { kind: 'series', limit: 20 })
   const nameMatch = useCatalogMatch(name)
+
+  const togglePool = (key) =>
+    setPoolFilter((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]))
 
   const nameSuggestionItems = useMemo(
     () =>
@@ -656,6 +673,19 @@ export default function AddPage() {
             required
           />
         </Field>
+        <fieldset className="pool-filter" aria-label="Filter suggestions by pool">
+          {POOL_FILTERS.map(({ key, label }) => (
+            <Button
+              key={key}
+              variant="secondary"
+              size="sm"
+              aria-pressed={poolFilter.includes(key)}
+              onClick={() => togglePool(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </fieldset>
         {duplicateName && <ExistingCharacterCard character={nameMatch} />}
         <Field label="Series" htmlFor="addCharSeries" className="full-width">
           <SeriesSuggestInput
