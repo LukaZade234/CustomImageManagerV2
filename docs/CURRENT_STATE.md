@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the ten migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the eleven migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -158,7 +158,7 @@ because that had to stop being true.
 | Table | Rows (prod) | What it holds |
 |---|---|---|
 | `custom_images` | 8,560 | The library. Id, url, content hash, position, owner, state, dimensions |
-| `characters` | 1,705 | Name, series, rank, main image, gender, pools, timestamps |
+| `characters` | 1,705 | Name, folded name key, series, rank, main image, gender, pools, timestamps |
 | `image_takes` | 271 | `copy_command` / `download` events, per image |
 | `rate_limit_hits` | — | Fixed-window counters, swept after a day |
 | `character_views` | — | One row per person per character per hour |
@@ -168,7 +168,7 @@ because that had to stop being true.
 | `image_reports` | — | Two distinct reporters remove an image |
 | `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
-| `schema_migrations` | 10 | Which migrations have run |
+| `schema_migrations` | 11 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),
@@ -327,14 +327,12 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/add-character` | Add a new character. |
-| GET | `/api/characters` | — |
 | POST | `/api/characters/<path:name>/view` | Note that the caller looked at this character. |
 | POST | `/api/edit-character` | — |
 | GET | `/api/saved` | — |
 | POST | `/api/saved` | — |
 | DELETE | `/api/saved/<path:name>` | — |
 | POST | `/api/set-main-image` | — |
-| GET | `/characters` | — |
 | POST | `/upload` | — |
 
 **`customs`**
@@ -380,6 +378,7 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/catalog/characters` | Name suggestions from the catalog and the working set; `series` and `pool` narrow them. |
+| GET | `/api/catalog/search` | One page of a catalog search (name or series, sorted, paginated) plus a total. |
 | GET | `/api/catalog/character` | One catalog entry by name. |
 | GET | `/api/catalog/series` | Series names for autocomplete. |
 | POST | `/api/catalog/add-character` | Promote a catalog entry into the working set. |
@@ -478,9 +477,11 @@ across 106 files (14,062 including tests).
 with five nested tab routes. `/saved` redirects into the profile, where the list
 now lives.
 
-**State:** one flat zustand store — characters, saved, the current character's
-customs, `me`, theme, toasts. No react-query yet (Phase 9). Retry and backoff are
-hand-written in `useStore.js` and `api.js`.
+**State:** one flat zustand store — saved, the current character's customs, `me`,
+theme, toasts. The full roster is no longer held: search and autocomplete run on
+the server (`/api/catalog/search`, `/api/catalog/characters`) and the character
+page fetches the one record it shows. No react-query yet (Phase 9). Retry and
+backoff are hand-written in `useStore.js` and `api.js`.
 
 **Styling:** a token layer plus primitives, loaded in order by
 `styles/index.css`: tokens → base → layout → ui → components → pages. `ui` must
@@ -499,7 +500,10 @@ every character, around 475 KB — in order to display two integers. It is now o
 `/api/stats` call returning a fixed summary, and `tests/test_customs_listing.py`
 asserts the payload does not grow with the library.
 
-The same rule now applies throughout: the customs list is searched, sorted and
+The same rule now applies throughout: search and autocomplete are matched, sorted
+and paged on the server over the catalog (`/api/catalog/search`,
+`/api/catalog/characters`), so the roster is never downloaded and the character
+page fetches the one record it shows; the customs list is searched, sorted and
 paginated on the server; a character's gallery renders 600px WebP thumbnails
 rather than the 1.9 MB PNGs ImgChest holds; and the profile's lists are the only
 ones filtered in the browser, because they are bounded by what one person has

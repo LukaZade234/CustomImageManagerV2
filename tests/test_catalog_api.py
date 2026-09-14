@@ -174,6 +174,42 @@ class TestFindCharacter:
         seed_catalog(clean_db, [_catalog_row("Hange Zoe\u0308", "AOT", "42")])
         assert clean_db.find_character("Hange Zoë")["series"] == "AOT"
 
+    def test_a_working_row_is_matched_by_its_stored_key(self, clean_db):
+        # NFD stored, NFC looked up. The stored name_key is what makes this one
+        # indexed lookup rather than a scan folding every row in Python.
+        clean_db.add_character("Hange Zoe\u0308", "AOT", "42", "")
+        found = clean_db.find_character("Hange Zoë")
+        assert found["in_library"] is True
+        assert found["name"] == "Hange Zoe\u0308"
+
+    def test_a_lazily_created_row_is_findable(self, clean_db):
+        # Custom images can attach to a name with no character row; that insert
+        # has to write the key too.
+        clean_db.add_custom_images("Lazy One", ["https://cdn/x.png"])
+        assert clean_db.find_character("lazy one")["in_library"] is True
+
+    def test_rename_updates_the_key(self, clean_db):
+        clean_db.add_character("Old Name", "S", "1", "")
+        assert clean_db.update_character("Old Name", "New Name", "S", "1") is True
+        assert clean_db.find_character("old name") is None
+        assert clean_db.find_character("new name")["in_library"] is True
+
+    def test_backfill_fills_rows_that_predate_the_column(self, clean_db):
+        conn = clean_db.get_connection()
+        conn.execute("INSERT INTO characters (name, name_key) VALUES ('Late Addition', '')")
+        conn.commit()
+        clean_db._backfill_character_name_keys(conn)
+        assert clean_db.find_character("late addition")["in_library"] is True
+
+    def test_stored_key_is_the_folded_name(self, clean_db):
+        clean_db.add_character("Hange Zoë", "AOT", "42", "")
+        row = (
+            clean_db.get_connection()
+            .execute("SELECT name_key FROM characters WHERE name = 'Hange Zoë'")
+            .fetchone()
+        )
+        assert row["name_key"] == catalog_import.name_key("Hange Zoë")
+
     def test_found_character_carries_facets(self, clean_db):
         seed_catalog(clean_db, [_catalog_row("Artoria Pendragon", "Fate/stay night", "4")])
         found = clean_db.find_character("Artoria Pendragon")
@@ -181,6 +217,61 @@ class TestFindCharacter:
 
     def test_unknown_is_none(self, clean_db):
         assert clean_db.find_character("Nobody Here") is None
+
+
+class TestSearch:
+    def _seed(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Rem", "Re:Zero", "3"),
+                _catalog_row("Emilia", "Re:Zero", "2"),
+                _catalog_row("Saber", "Fate/stay night", "4"),
+            ],
+        )
+
+    def test_blank_query_returns_nothing(self, clean_db):
+        self._seed(clean_db)
+        assert clean_db.search_catalog("") == {"items": [], "total": 0}
+
+    def test_rank_sort_is_best_first_and_paginates(self, clean_db):
+        self._seed(clean_db)
+        result = clean_db.search_catalog("e", sort="rank", order="asc", per_page=2)
+        assert result["total"] == 3
+        assert [i["name"] for i in result["items"]] == ["Emilia", "Rem"]  # rank 2, 3
+        page2 = clean_db.search_catalog("e", sort="rank", order="asc", page=2, per_page=2)
+        assert [i["name"] for i in page2["items"]] == ["Saber"]
+
+    def test_series_mode_and_alphabet_sort(self, clean_db):
+        self._seed(clean_db)
+        result = clean_db.search_catalog("re:zero", mode="series", sort="alphabet")
+        assert [i["name"] for i in result["items"]] == ["Emilia", "Rem"]
+
+    def test_marks_library_rows_and_counts_their_images(self, clean_db):
+        self._seed(clean_db)
+        clean_db.add_character("Rem", "Hand Edited", "3", "")
+        clean_db.add_custom_images("Rem", ["https://cdn/rem-1.png", "https://cdn/rem-2.png"])
+        item = clean_db.search_catalog("rem")["items"][0]
+        assert item["in_library"] is True
+        assert item["series"] == "Hand Edited"
+        assert item["custom_count"] == 2
+
+    def test_catalog_only_row_is_not_in_library(self, clean_db):
+        self._seed(clean_db)
+        item = clean_db.search_catalog("saber")["items"][0]
+        assert item["in_library"] is False
+        assert item["custom_count"] == 0
+
+    def test_count_sort_puts_the_fullest_first(self, clean_db):
+        self._seed(clean_db)
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        clean_db.add_character("Emilia", "Re:Zero", "2", "")
+        clean_db.add_custom_images("Rem", ["https://cdn/rem-1.png", "https://cdn/rem-2.png"])
+        clean_db.add_custom_images("Emilia", ["https://cdn/emilia-1.png"])
+        names = [
+            i["name"] for i in clean_db.search_catalog("e", sort="count", order="desc")["items"]
+        ]
+        assert names == ["Rem", "Emilia", "Saber"]
 
 
 class TestCatalogRoutes:
@@ -211,6 +302,12 @@ class TestCatalogRoutes:
         )
         body = client.get("/api/catalog/characters?pool=husbando").get_json()
         assert [i["name"] for i in body["items"]] == ["Husbando"]
+
+    def test_search_endpoint(self, client, clean_db):
+        self._seed(clean_db)
+        body = client.get("/api/catalog/search?q=r&sort=rank&order=asc").get_json()
+        assert [i["name"] for i in body["items"]] == ["Rem", "Artoria Pendragon"]
+        assert body["total"] == 2
 
     def test_series_endpoint(self, client, clean_db):
         self._seed(clean_db)

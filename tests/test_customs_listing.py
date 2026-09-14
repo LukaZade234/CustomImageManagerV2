@@ -64,7 +64,7 @@ class TestCharactersPayload:
         """Search sorts by image count, so the roster has to carry it."""
         _seed(clean_db, {"Rem": ("Re:Zero", "1", 3), "Emilia": ("Re:Zero", "2", 2)}, owner=identity_id)
         clean_db.remove_custom_images("Rem", ["https://cdn/Rem-0.png"], identity_id)
-        chars = {c["name"]: c for c in client.get("/api/characters").get_json()}
+        chars = {c["name"]: c for c in clean_db.get_characters()}
         assert chars["Rem"]["custom_count"] == 2, "removed images must not count"
         assert chars["Emilia"]["custom_count"] == 2
 

@@ -7,7 +7,7 @@
  * type against.
  */
 
-/** `GET /api/characters` */
+/** One character, as the catalog search and `find_character` return it. */
 export interface Character {
   name: string
   series: string

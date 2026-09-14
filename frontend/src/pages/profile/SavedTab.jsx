@@ -19,24 +19,20 @@ const FIELDS = { name: ['name'], series: ['series'] }
 
 export default function SavedTab() {
   const savedCharacters = useStore((s) => s.savedCharacters)
-  const characters = useStore((s) => s.characters)
   const removeSaved = useStore((s) => s.removeSaved)
   const addToast = useStore((s) => s.addToast)
   const mode = useStore((s) => s.searchMode)
   const setMode = useStore((s) => s.setSearchMode)
   const [busy, setBusy] = useState(null)
 
-  // The saved list holds names; the series, portrait and recency come from the
-  // library row the server joined in.
-  const rows = savedCharacters.map((saved) => {
-    const full = characters.find((c) => c.name === saved.name)
-    return {
-      name: saved.name,
-      series: full?.series ?? saved.series ?? '',
-      image: full?.image ?? saved.image ?? '',
-      updated_at: saved.updated_at ?? '',
-    }
-  })
+  // The server joins the library row into /api/saved, so the series, portrait
+  // and recency arrive with the bookmark rather than from a downloaded roster.
+  const rows = savedCharacters.map((saved) => ({
+    name: saved.name,
+    series: saved.series ?? '',
+    image: saved.image ?? '',
+    updated_at: saved.updated_at ?? '',
+  }))
 
   const fields = useMemo(() => FIELDS[mode] ?? FIELDS.name, [mode])
   const filter = useFilteredList(rows, fields, SORTS)

@@ -48,6 +48,29 @@ def catalog_characters():
     )
 
 
+@catalog_bp.route("/api/catalog/search", methods=["GET"])
+@rate_limited("suggest")
+def catalog_search():
+    """One page of a catalog search, for the search results page.
+
+    `by` is name or series, `sort` is rank/alphabet/count, and the page size is
+    capped so a client cannot ask for the whole catalog in one request.
+    """
+    mode = request.args.get("by")
+    sort = request.args.get("sort")
+    order = request.args.get("order")
+    return jsonify(
+        db.search_catalog(
+            request.args.get("q", ""),
+            mode="series" if mode == "series" else "name",
+            sort=sort if sort in ("rank", "alphabet", "count") else "rank",
+            order="desc" if order == "desc" else "asc",
+            page=_int_arg("page", 1, 100_000),
+            per_page=_int_arg("per_page", 60, 100),
+        )
+    )
+
+
 @catalog_bp.route("/api/catalog/series", methods=["GET"])
 @rate_limited("suggest")
 def catalog_series():

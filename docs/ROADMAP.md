@@ -615,14 +615,14 @@ relevant — the concurrency test is written first, before Phase 2:
 
 ## Deferred / future
 
-- **Mudae catalog follow-ups.** The `character_catalog` importer is in, and catalog search is now
-  wired into the Add page (`routes/catalog.py`: characters, character, series, add-character) as
-  is the one-DM `$imartsmi-` bulk series add. Still open: mirror the `mudae.net` portraits to R2 as
-  WebP and add `characters.main_image_thumb`; move search/autocomplete fully onto the catalog so
-  the whole roster stops shipping to the client (the SPA still loads every character into the
-  store on startup); point the self-bot at gap-filling and rank refresh only; add series pages.
-  Pool filters are in: the suggestions API takes `pool=` and the Add form carries the facet
-  chips. See `DECISIONS.md` §8, "The Mudae catalog".
+- **Mudae catalog follow-ups.** The `character_catalog` importer is in, and catalog search now
+  backs both the Add autocomplete and the navbar search (`routes/catalog.py`: characters, search,
+  character, series, add-character) as is the one-DM `$imartsmi-` bulk series add. The roster is
+  no longer shipped: search pages and sorts in SQL, and the character page fetches its own record.
+  Still open: mirror the `mudae.net` portraits to R2 as WebP and add
+  `characters.main_image_thumb`; point the self-bot at gap-filling and rank refresh only; add
+  series pages. Pool filters are in: the suggestions API takes `pool=` and the Add form carries
+  the facet chips. See `DECISIONS.md` §8, "The Mudae catalog".
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).

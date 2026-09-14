@@ -90,6 +90,22 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.commit()
 
 
+def _backfill_character_name_keys(conn: sqlite3.Connection) -> None:
+    """Fill `name_key` for rows that predate the column. Runs on first connect.
+
+    A fresh database has nothing to do; an upgraded one folds each existing name
+    once. Every write maintains the column from here on.
+    """
+    rows = conn.execute("SELECT id, name FROM characters WHERE name_key = ''").fetchall()
+    if not rows:
+        return
+    conn.executemany(
+        "UPDATE characters SET name_key = ? WHERE id = ?",
+        [(_name_key(row["name"]), row["id"]) for row in rows],
+    )
+    conn.commit()
+
+
 def _connect() -> sqlite3.Connection:
     global _initialised
     path = database_path()
@@ -105,6 +121,7 @@ def _connect() -> sqlite3.Connection:
             # Persistent, stored in the file itself; only needs setting once.
             conn.execute("PRAGMA journal_mode = WAL")
             _apply_migrations(conn)
+            _backfill_character_name_keys(conn)
             _initialised = True
     return conn
 
@@ -175,6 +192,13 @@ def get_character_portrait(name: str) -> tuple[int, str] | None:
     return int(row["id"]), row["main_image_url"]
 
 
+def _name_key(name: str) -> str:
+    """The folded match key. `catalog_import` owns the folding rules."""
+    import catalog_import
+
+    return catalog_import.name_key(name)
+
+
 def _ensure_character(conn: sqlite3.Connection, name: str) -> int:
     """Return the id, creating a bare row if the character is unknown.
 
@@ -185,7 +209,10 @@ def _ensure_character(conn: sqlite3.Connection, name: str) -> int:
     # two threads both see the name missing, both insert, and one fails on the
     # UNIQUE constraint. This is the same read-modify-write hazard Phase 2
     # removed from the document layout, and it is easy to reintroduce here.
-    conn.execute("INSERT INTO characters (name) VALUES (?) ON CONFLICT (name) DO NOTHING", (name,))
+    conn.execute(
+        "INSERT INTO characters (name, name_key) VALUES (?, ?) ON CONFLICT (name) DO NOTHING",
+        (name, _name_key(name)),
+    )
     row = conn.execute("SELECT id FROM characters WHERE name = ?", (name,)).fetchone()
     return int(row["id"])
 
@@ -242,11 +269,12 @@ def add_character(
         # racing another writer between the check and the insert.
         cur = conn.execute(
             "INSERT INTO characters"
-            " (name, series, rank, main_image_url, is_female, is_male, pools)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)"
+            " (name, name_key, series, rank, main_image_url, is_female, is_male, pools)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT (name) DO NOTHING",
             (
                 name,
+                _name_key(name),
                 series,
                 rank,
                 main_image_url,
@@ -331,8 +359,10 @@ def update_character(orig_name: str, new_name: str, series: str, rank: str) -> b
         if char_id is None:
             return False
         conn.execute(
-            "UPDATE characters SET name = ?, series = ?, rank = ?, updated_at = ? WHERE id = ?",
-            (new_name, series, rank, _now(), char_id),
+            "UPDATE characters"
+            "   SET name = ?, name_key = ?, series = ?, rank = ?, updated_at = ?"
+            " WHERE id = ?",
+            (new_name, _name_key(new_name), series, rank, _now(), char_id),
         )
         return True
 
@@ -384,9 +414,9 @@ def apply_series_characters(series: str, items: Iterable[dict]) -> dict:
             row = by_key.get(key)
             if row is None:
                 cur = conn.execute(
-                    "INSERT INTO characters (name, series, rank, main_image_url)"
-                    " VALUES (?, ?, ?, ?) ON CONFLICT (name) DO NOTHING",
-                    (name, series, rank, image),
+                    "INSERT INTO characters (name, name_key, series, rank, main_image_url)"
+                    " VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING",
+                    (name, key, series, rank, image),
                 )
                 if cur.rowcount:
                     created += 1
@@ -688,6 +718,89 @@ def suggest_characters(
     return result
 
 
+def search_catalog(
+    term: str,
+    *,
+    mode: str = "name",
+    sort: str = "rank",
+    order: str = "asc",
+    page: int = 1,
+    per_page: int = 60,
+) -> dict:
+    """One page of a search over the working set and the catalog together.
+
+    Returns `{"items": [...], "total": n}`. Each item is name, series, rank,
+    image, in_library and custom_count. A name in both tables appears once, as
+    the working row -- it may carry hand-edited fields and a real image count --
+    while a catalog-only row is `in_library: False` with zero images.
+
+    Matching is the same folded `LIKE` the suggestions use, so accented and NFD
+    spellings behave the same in both. Sorting and pagination happen here, which
+    is what lets the client stop downloading the roster.
+    """
+    import catalog_import
+
+    term = (term or "").strip()
+    if not term:
+        return {"items": [], "total": 0}
+    column = "series" if mode == "series" else "name"
+    like = f"%{_like_escape(term)}%"
+    conn = get_connection()
+
+    rows: dict[str, dict] = {}
+
+    working_sql = (
+        "SELECT c.name, c.series, c.rank, c.main_image_url AS image,"
+        "       COALESCE(SUM(CASE WHEN ci.state = 'active' THEN 1 ELSE 0 END), 0)"
+        "         AS custom_count"
+        "  FROM characters c"
+        "  LEFT JOIN custom_images ci ON ci.character_id = c.id"
+        f" WHERE c.{column} COLLATE NOCASE LIKE ? ESCAPE '\\'"
+        "  GROUP BY c.id"
+    )
+    for row in conn.execute(working_sql, (like,)):
+        rows[catalog_import.name_key(row["name"])] = {
+            "name": row["name"],
+            "series": row["series"],
+            "rank": row["rank"],
+            "image": row["image"],
+            "custom_count": row["custom_count"],
+            "in_library": True,
+        }
+
+    catalog_sql = (
+        "SELECT name, series, rank, mudae_image_url AS image"
+        "  FROM character_catalog"
+        f" WHERE {column} COLLATE NOCASE LIKE ? ESCAPE '\\'"
+    )
+    for row in conn.execute(catalog_sql, (like,)):
+        key = catalog_import.name_key(row["name"])
+        if key in rows:
+            continue
+        rows[key] = {
+            "name": row["name"],
+            "series": row["series"],
+            "rank": row["rank"],
+            "image": row["image"],
+            "custom_count": 0,
+            "in_library": False,
+        }
+
+    def sort_key(item):
+        if sort == "alphabet":
+            return item["name"].casefold()
+        if sort == "count":
+            return item["custom_count"]
+        # Best rank first when ascending; an unranked name sorts last.
+        return int(item["rank"]) if str(item["rank"]).isdigit() else 10**9
+
+    items = list(rows.values())
+    items.sort(key=sort_key, reverse=(order == "desc"))
+    total = len(items)
+    start = max(0, (page - 1) * per_page)
+    return {"items": items[start : start + per_page], "total": total}
+
+
 def suggest_series(term: str, *, limit: int = 20) -> list[str]:
     """Series names from the working set and the catalog's series list.
 
@@ -721,12 +834,11 @@ def find_character(name: str) -> dict | None:
     """The library's best knowledge of one character, or None.
 
     The working set is checked first (it may carry hand-edited series/rank), then
-    the catalog. Matching is on the Unicode-folded key, so the accented and
-    pre-rename spellings still resolve.
+    the catalog. Matching is on the stored folded key, so the accented and
+    pre-rename spellings still resolve, and it is one indexed lookup rather than
+    a scan of every character.
     """
-    import catalog_import
-
-    key = catalog_import.name_key(name)
+    key = _name_key(name)
     if not key:
         return None
     conn = get_connection()
@@ -737,23 +849,26 @@ def find_character(name: str) -> dict | None:
             (key,),
         ).fetchone()
     )
-    for row in conn.execute(
-        "SELECT name, series, rank, main_image_url AS image, is_female, is_male, pools"
-        "  FROM characters"
-    ):
-        if catalog_import.name_key(row["name"]) == key:
-            return {
-                "name": row["name"],
-                "series": row["series"],
-                "rank": row["rank"],
-                "image": row["image"],
-                "pool": "",
-                "is_female": bool(row["is_female"]),
-                "is_male": bool(row["is_male"]),
-                "pools": row["pools"],
-                "facets": facets,
-                "in_library": True,
-            }
+    row = conn.execute(
+        "SELECT name, series, rank, main_image_url AS image, accent_seed,"
+        "       is_female, is_male, pools"
+        "  FROM characters WHERE name_key = ?",
+        (key,),
+    ).fetchone()
+    if row:
+        return {
+            "name": row["name"],
+            "series": row["series"],
+            "rank": row["rank"],
+            "image": row["image"],
+            "accent_seed": row["accent_seed"],
+            "pool": "",
+            "is_female": bool(row["is_female"]),
+            "is_male": bool(row["is_male"]),
+            "pools": row["pools"],
+            "facets": facets,
+            "in_library": True,
+        }
     row = conn.execute(
         "SELECT name, series, rank, mudae_image_url AS image, pool"
         "  FROM character_catalog WHERE name_key = ?",
@@ -824,7 +939,7 @@ def enrich_characters_from_catalog(
 
     conn = get_connection()
     rows = conn.execute(
-        "SELECT id, name, series, rank, main_image_url FROM characters"
+        "SELECT id, name, name_key, series, rank, main_image_url FROM characters"
     ).fetchall()
     # Every working name key, to refuse a rename onto a name already taken.
     taken = {catalog_import.name_key(row["name"]): row["id"] for row in rows}
@@ -870,6 +985,7 @@ def enrich_characters_from_catalog(
                     rename_conflicts.append({"name": row["name"], "to": new_name})
                 elif new_name and new_name != row["name"]:
                     fields["name"] = new_name
+                    fields["name_key"] = new_key
                     renamed.append({"from": row["name"], "to": new_name})
 
         if not fields:

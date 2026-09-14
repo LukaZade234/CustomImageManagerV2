@@ -10,11 +10,11 @@ const SORT_OPTIONS = [
 ]
 
 /**
- * The direction each sort opens in when it is chosen. Rank and image count read
- * best from the top down, so they default to descending; A–Z reads upward.
- * Rank is inverted because 1 is the top rank (see SearchResultsPage).
+ * The direction each sort opens in when it is chosen. Rank ascending is best
+ * rank first (1, 2, 3); alphabet reads upward; image count reads best from the
+ * top down, so it opens descending.
  */
-const SORT_DEFAULT_ORDER = { rank: 'desc', alphabet: 'asc', count: 'desc' }
+const SORT_DEFAULT_ORDER = { rank: 'asc', alphabet: 'asc', count: 'desc' }
 
 export function searchPath(query, mode) {
   return `/search?q=${encodeURIComponent(query)}&by=${mode}`

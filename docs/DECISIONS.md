@@ -486,10 +486,15 @@ which is already in hand). No ready-made 50k dataset was found; `mudae.net` is t
 but would need scraping. The schema is therefore built to *support* 50k, while seeding continues
 from the existing ~1,700.
 
-**Blocking prerequisite before any such seeding.** The frontend currently loads *every* character
-into the zustand store on startup and filters client-side. At 1,000 that is ~150 KB; at 50,000 it
-is 7–10 MB per page load, which is untenable — especially for the overseas users the hosting plan
-exists to serve. Server-side search with pagination must land before the roster grows.
+**The blocking prerequisite, now met.** The frontend used to load *every* character into the
+zustand store on startup and filter client-side. At 1,000 that was ~150 KB; at 50,000 it would be
+7–10 MB per page load, which is untenable — especially for the overseas users the hosting plan
+exists to serve. Search and autocomplete now run on the server (`GET /api/catalog/search` and
+`/api/catalog/characters`) over the catalog and the working set, and the character page fetches the
+one record it shows, so nothing scales with the roster before it grows. The working set stores the
+same folded `name_key` the catalog does (migration 011), so a name lookup is one indexed row rather
+than a scan folding every character in Python. The client-only `GET /api/characters` was retired with
+it.
 
 ### The Mudae catalog: a working set plus a search corpus
 
@@ -519,13 +524,13 @@ repeats are dropped, and when two captures disagree the better (lower) rank wins
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
 **Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than
-the PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring
-the self-bot to gap-filling and refreshes, and series pages are all natural next phases. Pool
-filters, once on this list, have since landed: the catalog's four booleans back a `pool=` parameter
-on the suggestions API and the facet chips in the Add form. The catalog only *adds* a table, so none
-of them are blocked by this one. `remote_images._allowed_portrait_url` is deliberately separate from
-the user-facing download proxy's allowlist: the internal accent fetch may read Mudae, a visitor's
-"download this image" may not.
+the PNGs, and free-egress), retiring the self-bot to gap-filling and refreshes, and series pages are
+all natural next phases. Server-side catalog search and pool filters, once on this list, have since
+landed: `/api/catalog/search` replaces the full-roster fetch, and the catalog's four booleans back a
+`pool=` parameter on the suggestions API and the facet chips in the Add form. The catalog only *adds*
+a table, so none of them are blocked by this one. `remote_images._allowed_portrait_url` is
+deliberately separate from the user-facing download proxy's allowlist: the internal accent fetch may
+read Mudae, a visitor's "download this image" may not.
 
 ### The `$im` card's gender and pools
 

@@ -29,6 +29,18 @@ vi.mock('../api', () => ({
       get: (_target, prop) => {
         if (prop === 'reorderCustomImages') return reorderCustomImages
         if (prop === 'getCustomImagesForChar') return getCustomImagesForChar
+        if (prop === 'findCatalogCharacter') {
+          return vi.fn().mockResolvedValue({
+            found: true,
+            character: {
+              name: 'Rei',
+              series: 'Evangelion',
+              rank: 1,
+              image: 'rei.png',
+              in_library: true,
+            },
+          })
+        }
         return vi.fn().mockResolvedValue({})
       },
     },
@@ -50,7 +62,6 @@ beforeEach(() => {
   reorderCustomImages.mockReset().mockResolvedValue({})
   getCustomImagesForChar.mockReset().mockResolvedValue(ROWS)
   useStore.setState({
-    characters: [{ name: 'Rei', series: 'Evangelion', rank: 1, image: 'rei.png' }],
     savedCharacters: [],
     characterImages: { Rei: ROWS },
     loading: false,
@@ -58,14 +69,17 @@ beforeEach(() => {
   })
 })
 
-function renderPage() {
-  return render(
+/** Render and wait for the record to load; the toolbar is not there before it. */
+async function renderPage() {
+  const view = render(
     <MemoryRouter initialEntries={['/character/Rei']}>
       <Routes>
         <Route path="/character/:name" element={<CharacterPage />} />
       </Routes>
     </MemoryRouter>,
   )
+  await screen.findByRole('heading', { name: 'Rei' })
+  return view
 }
 
 /** Open reorder mode and move the first image one place to the right, `times` times. */
@@ -83,7 +97,7 @@ const toastMessages = () => useStore.getState().toasts.map((t) => t.msg)
 describe('a reorder session', () => {
   it('saves each move without a toast or a refetch, then confirms once on Done', async () => {
     const user = userEvent.setup()
-    renderPage()
+    await renderPage()
     const initialFetches = getCustomImagesForChar.mock.calls.length
 
     await moveFirstImage(user, 2)
@@ -106,7 +120,7 @@ describe('a reorder session', () => {
     reorderCustomImages.mockImplementation(
       () => new Promise((resolve) => settle.push(() => resolve({}))),
     )
-    renderPage()
+    await renderPage()
 
     await moveFirstImage(user, 2)
 
@@ -119,7 +133,7 @@ describe('a reorder session', () => {
   it('says so once when a save fails, and shows what the server actually holds', async () => {
     const user = userEvent.setup()
     reorderCustomImages.mockRejectedValue(new Error('Order rejected'))
-    renderPage()
+    await renderPage()
     const initialFetches = getCustomImagesForChar.mock.calls.length
 
     await moveFirstImage(user, 2)
@@ -134,7 +148,7 @@ describe('a reorder session', () => {
 
   it('leaves quietly when Discard is pressed without having moved anything', async () => {
     const user = userEvent.setup()
-    renderPage()
+    await renderPage()
 
     await user.click(screen.getByRole('button', { name: /^Reorder$/i }))
     await user.click(screen.getByRole('button', { name: /^Discard changes$/i }))
@@ -148,7 +162,7 @@ describe('a reorder session', () => {
 
   it('asks before discarding real moves, and restores the order it opened on', async () => {
     const user = userEvent.setup()
-    renderPage()
+    await renderPage()
 
     await moveFirstImage(user, 1)
     await waitFor(() => expect(reorderCustomImages).toHaveBeenCalledTimes(1))

@@ -6,15 +6,33 @@
  * the page, in front of a user. A render is the cheapest thing that catches it,
  * and it also guards the migration onto the shared primitives.
  */
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// A memoizing proxy so the same vi.fn is returned for a given method across
+// calls, which lets a test stub the one it cares about while every other call
+// resolves to `{}`. Without the cache each access made a fresh mock and stubs
+// could never be asserted on.
+const api = vi.hoisted(() => {
+  const cache = new Map()
+  const apiClient = new Proxy(
+    {},
+    {
+      get: (_target, prop) => {
+        if (!cache.has(prop)) cache.set(prop, vi.fn().mockResolvedValue({}))
+        return cache.get(prop)
+      },
+    },
+  )
+  return { apiClient }
+})
+
 vi.mock('../api', () => ({
   getImageUrl: (p) => (p ? `/images/${p}` : ''),
   apiUrl: (p) => p,
-  apiClient: new Proxy({}, { get: () => vi.fn().mockResolvedValue({}) }),
+  apiClient: api.apiClient,
 }))
 
 import { useStore } from '../store/useStore'
@@ -31,9 +49,23 @@ const CHARACTERS = [
 ]
 
 beforeEach(() => {
+  api.apiClient.searchCharacters.mockReset()
+  api.apiClient.searchCharacters.mockResolvedValue({ items: [], total: 0 })
+  // The character page fetches its own record now; serve it from CHARACTERS so
+  // a known name resolves and an unknown one is genuinely not found.
+  api.apiClient.findCatalogCharacter.mockReset()
+  api.apiClient.findCatalogCharacter.mockImplementation((name) => {
+    const character = CHARACTERS.find((c) => c.name === name)
+    return Promise.resolve(
+      character
+        ? { found: true, character: { ...character, in_library: true } }
+        : { found: false, character: null },
+    )
+  })
+  api.apiClient.getCustomImagesForChar.mockReset()
+  api.apiClient.getCustomImagesForChar.mockResolvedValue({})
   useStore.setState({
-    characters: CHARACTERS,
-    savedCharacters: [{ name: 'Ayanami Rei' }],
+    savedCharacters: [{ name: 'Ayanami Rei', series: 'Neon Genesis Evangelion', image: 'rei.png' }],
     customImages: { 'Ayanami Rei': ['https://cdn.example/a.png'] },
     lastUpdated: {},
     currentCharacter: null,
@@ -49,9 +81,11 @@ function renderAt(ui, route = '/') {
 }
 
 describe('page smoke tests', () => {
-  it('renders the home page with its counts', () => {
+  it('renders the home page with its counts', async () => {
     renderAt(<HomePage />)
-    expect(screen.getByRole('heading', { level: 1, name: /imgmanager/i })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /imgmanager/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders the saved list with a saved character', () => {
@@ -78,55 +112,70 @@ describe('page smoke tests', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
-  it('renders search results from the URL, not from store state', () => {
+  it('renders server search results from the URL', async () => {
+    api.apiClient.searchCharacters.mockImplementation(({ q, by }) => {
+      const needle = q.toLowerCase()
+      const items = CHARACTERS.filter((c) =>
+        (by === 'series' ? c.series : c.name).toLowerCase().includes(needle),
+      ).map((c) => ({ ...c, in_library: true }))
+      return Promise.resolve({ items, total: items.length })
+    })
     renderAt(<SearchResultsPage />, '/search?q=rei&by=name')
-    expect(screen.getByRole('heading', { level: 1, name: /search results/i })).toBeInTheDocument()
-    expect(screen.getByText('Ayanami Rei')).toBeInTheDocument()
+    expect(await screen.findByText('Ayanami Rei')).toBeInTheDocument()
     expect(screen.queryByText('Makise Kurisu')).not.toBeInTheDocument()
   })
 
-  it('searches series when the URL says so', () => {
+  it('searches series when the URL says so', async () => {
+    api.apiClient.searchCharacters.mockImplementation(({ q, by }) => {
+      const needle = q.toLowerCase()
+      const items = CHARACTERS.filter((c) =>
+        (by === 'series' ? c.series : c.name).toLowerCase().includes(needle),
+      ).map((c) => ({ ...c, in_library: true }))
+      return Promise.resolve({ items, total: items.length })
+    })
     renderAt(<SearchResultsPage />, '/search?q=steins&by=series')
-    expect(screen.getByText('Makise Kurisu')).toBeInTheDocument()
+    expect(await screen.findByText('Makise Kurisu')).toBeInTheDocument()
     expect(screen.queryByText('Ayanami Rei')).not.toBeInTheDocument()
   })
 
-  it('orders results by the chosen field and direction', () => {
-    const names = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+  it('asks the server for the chosen sort and order', async () => {
     useStore.setState({ searchSort: 'alphabet', searchOrder: 'asc' })
-    const { unmount } = renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Ayanami Rei', 'Makise Kurisu'])
-    unmount()
-    useStore.setState({ searchOrder: 'desc' })
     renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
+    await waitFor(() =>
+      expect(api.apiClient.searchCharacters).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'a', by: 'name', sort: 'alphabet', order: 'asc', page: 1 }),
+      ),
+    )
   })
 
-  it('caps the rendered results behind a Show more button', async () => {
+  it('pages the results behind a Show more button', async () => {
     const many = Array.from({ length: 75 }, (_, i) => ({
       name: `Char ${String(i).padStart(2, '0')}`,
       series: 'S',
       rank: i + 1,
       image: `${i}.png`,
+      in_library: true,
     }))
-    useStore.setState({ characters: many })
+    api.apiClient.searchCharacters.mockImplementation(({ page, perPage }) => {
+      const start = (page - 1) * perPage
+      return Promise.resolve({ items: many.slice(start, start + perPage), total: many.length })
+    })
     renderAt(<SearchResultsPage />, '/search?q=char&by=name')
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(60)
+    await waitFor(() => expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(60))
     await userEvent.click(screen.getByRole('button', { name: /show 15 more/i }))
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(75)
+    await waitFor(() => expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(75))
   })
 
-  it('reads rank as top-first, matching the character page', () => {
-    const names = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
-    // Ayanami Rei is rank 12, Makise Kurisu rank 4 — so rank 4 is the better
-    // rank and descending shows it first.
-    useStore.setState({ searchSort: 'rank', searchOrder: 'desc' })
-    const { unmount } = renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
-    unmount()
-    useStore.setState({ searchOrder: 'asc' })
-    renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Ayanami Rei', 'Makise Kurisu'])
+  it('sends a catalog-only result to the Add form', async () => {
+    api.apiClient.searchCharacters.mockResolvedValue({
+      items: [
+        { name: 'Saber', series: 'Fate/stay night', rank: '4', image: '', in_library: false },
+      ],
+      total: 1,
+    })
+    renderAt(<SearchResultsPage />, '/search?q=saber&by=name')
+    const link = await screen.findByRole('link', { name: /Saber/ })
+    expect(link).toHaveAttribute('href', '/add?name=Saber')
   })
 
   it('renders a character page', () => {
@@ -141,8 +190,9 @@ describe('character page loading states', () => {
    * refresh, bookmark and link pasted into Discord therefore opened on an error
    * claiming the character did not exist.
    */
-  it('shows a skeleton while the library is still loading, not an error', () => {
-    useStore.setState({ characters: [], loading: true })
+  it('shows a skeleton while the record is still loading, not an error', () => {
+    // A record that never resolves stands in for the request being in flight.
+    api.apiClient.findCatalogCharacter.mockReturnValue(new Promise(() => {}))
     renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
 
     expect(screen.getByText(/Loading character/i)).toBeInTheDocument()
@@ -154,20 +204,21 @@ describe('character page loading states', () => {
     expect(document.querySelectorAll('.gallery-item-wrapper--skeleton').length).toBeGreaterThan(0)
   })
 
-  it('only says not-found once the library has actually arrived', () => {
-    useStore.setState({ characters: CHARACTERS, loading: false })
+  it('only says not-found once the record has actually arrived', async () => {
     renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
 
     expect(
-      screen.getByRole('heading', { level: 1, name: /Character not found/i }),
+      await screen.findByRole('heading', { level: 1, name: /Character not found/i }),
     ).toBeInTheDocument()
     expect(screen.getByText(/Nothing here called/i)).toBeInTheDocument()
   })
 
-  it('offers a way back rather than stranding you', () => {
-    useStore.setState({ characters: CHARACTERS, loading: false })
+  it('offers a way back rather than stranding you', async () => {
     renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
-    expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/')
+    expect(await screen.findByRole('link', { name: /Back to search/i })).toHaveAttribute(
+      'href',
+      '/',
+    )
   })
 })
 
@@ -189,26 +240,25 @@ describe('an empty gallery', () => {
     )
   }
 
-  it('says there is nothing here yet, and offers the way to add one', () => {
+  it('says there is nothing here yet, and offers the way to add one', async () => {
     useStore.setState({ characterImages: { 'Ayanami Rei': [] } })
     renderCharacter()
 
-    expect(screen.getByText(/No custom images yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No custom images yet/i)).toBeInTheDocument()
     // Its own button, inside the gallery, rather than only the toolbar's — the
     // point is that the way out sits where the missing images would be.
     const gallery = within(document.querySelector('.custom-images-gallery'))
     expect(gallery.getByRole('button', { name: /^Add image$/i })).toBeInTheDocument()
   })
 
-  it('distinguishes an empty gallery from one you have hidden all of', () => {
-    useStore.setState({
-      characterImages: {
-        'Ayanami Rei': [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }],
-      },
-    })
+  it('distinguishes an empty gallery from one you have hidden all of', async () => {
+    const hidden = [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }]
+    // The page refetches on mount, so what the mock serves is what is shown.
+    api.apiClient.getCustomImagesForChar.mockResolvedValue({ rows: hidden })
+    useStore.setState({ characterImages: { 'Ayanami Rei': hidden } })
     renderCharacter()
 
-    expect(screen.getByText(/The only image here is one you hid/i)).toBeInTheDocument()
+    expect(await screen.findByText(/The only image here is one you hid/i)).toBeInTheDocument()
     expect(screen.queryByText(/No custom images yet/i)).not.toBeInTheDocument()
   })
 })
