@@ -298,30 +298,6 @@ describe('AddPage catalog integration', () => {
     })
   })
 
-  it('selects the pools of a character chosen from the suggestions', async () => {
-    const user = userEvent.setup()
-    api.findCatalogCharacter.mockResolvedValue({ found: false, character: null })
-    api.suggestCharacters.mockResolvedValue({
-      items: [
-        {
-          name: '9S',
-          series: 'NieR: Automata',
-          rank: '622',
-          image: '',
-          facets: ['husbando', 'game'],
-        },
-      ],
-    })
-    renderPage()
-
-    await user.type(screen.getByLabelText('Character Name'), '9S')
-    await user.click(await screen.findByRole('option', { name: /9S/ }))
-
-    expect(screen.getByRole('button', { name: 'Husbando' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Game' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Waifu' })).toHaveAttribute('aria-pressed', 'false')
-  })
-
   it("offers the matched name's series as the only series suggestion", async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({

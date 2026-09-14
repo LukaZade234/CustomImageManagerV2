@@ -150,10 +150,12 @@
   align-items: center;
   gap: var(--space-1);
   margin-left: var(--space-2);
+  /* Nudged down so the marks read on the series rather than floating above it. */
+  vertical-align: -0.2em;
 }
 .char-gender__mark {
-  width: 1em;
-  height: 1em;
+  width: 1.25em;
+  height: 1.25em;
   object-fit: contain;
 }
 .custom-images-header-row {

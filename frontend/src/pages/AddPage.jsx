@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import ExistingCharacterCard from '../components/ExistingCharacterCard'
@@ -56,11 +56,9 @@ export default function AddPage() {
   const [imageFile, setImageFile] = useState(null)
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(false)
-  // Pool facets the name suggestions must all match; empty is no filter.
+  // Pool facets the name suggestions must all match; empty is no filter. The
+  // filter is optional: it is never applied unless the visitor sets it.
   const [poolFilter, setPoolFilter] = useState([])
-  // The character whose pools were last auto-selected, so a match does not
-  // clobber the visitor's own toggles on every render.
-  const autoPoolName = useRef(null)
 
   const [mudaeConfigured, setMudaeConfigured] = useState(null)
   const [mudaeLookupName, setMudaeLookupName] = useState('')
@@ -114,7 +112,6 @@ export default function AddPage() {
         label: c.name,
         meta: c.series || undefined,
         series: c.series || '',
-        facets: c.facets || [],
       })),
     [nameSuggestions],
   )
@@ -124,7 +121,6 @@ export default function AddPage() {
         value: c.name,
         label: c.name,
         meta: c.series || undefined,
-        facets: c.facets || [],
       })),
     [panelNameSuggestions],
   )
@@ -181,22 +177,10 @@ export default function AddPage() {
     if (rank !== expected) setRank(expected)
   }, [seriesMatchesKnown, nameMatch, rank, rankTouched])
 
-  useEffect(() => {
-    // A matched character selects its own pools, so the facets follow the name
-    // you are adding instead of having to be set by hand.
-    if (!matchedExactly || !nameMatch || autoPoolName.current === nameMatch.name) return
-    autoPoolName.current = nameMatch.name
-    setPoolFilter(nameMatch.facets || [])
-  }, [matchedExactly, nameMatch])
-
   // Choosing a suggestion is a deliberate pick, and the suggestion showed the
   // series, so fill it. Typing a name without choosing does not.
   const handlePickName = (item) => {
     if (item?.series) setSeries(item.series)
-    if (item?.facets?.length) {
-      setPoolFilter(item.facets)
-      autoPoolName.current = item.value
-    }
   }
 
   const handleSubmit = async (e) => {
@@ -690,19 +674,6 @@ export default function AddPage() {
             required
           />
         </Field>
-        <fieldset className="pool-filter" aria-label="Filter suggestions by pool">
-          {POOL_FILTERS.map(({ key, label }) => (
-            <Button
-              key={key}
-              variant="secondary"
-              size="sm"
-              aria-pressed={poolFilter.includes(key)}
-              onClick={() => togglePool(key)}
-            >
-              {label}
-            </Button>
-          ))}
-        </fieldset>
         {duplicateName && <ExistingCharacterCard character={nameMatch} />}
         <Field label="Series" htmlFor="addCharSeries" className="full-width">
           <SeriesSuggestInput
@@ -722,6 +693,21 @@ export default function AddPage() {
             </p>
           )}
         </Field>
+        {/* Optional: narrows the name suggestions above; left empty it does
+            nothing. */}
+        <fieldset className="pool-filter" aria-label="Filter suggestions by pool">
+          {POOL_FILTERS.map(({ key, label }) => (
+            <Button
+              key={key}
+              variant="secondary"
+              size="sm"
+              aria-pressed={poolFilter.includes(key)}
+              onClick={() => togglePool(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </fieldset>
         <Field label="Rank (Optional)" htmlFor="addCharRank" className="full-width">
           <Input
             id="addCharRank"
