@@ -1,28 +1,6 @@
 import { getImageUrl } from '../api'
+import { GenderMarks } from './GenderMarks'
 import { Button, Field, Input } from './ui'
-
-/**
- * The gender Mudae prints beside a character's series. A character can be in
- * both pools, so both signs can show. Each glyph carries an aria-label rather
- * than being read as "female sign".
- */
-function GenderMarks({ isFemale, isMale }) {
-  if (!isFemale && !isMale) return null
-  return (
-    <span className="char-gender">
-      {isFemale && (
-        <span className="char-gender__mark" role="img" aria-label="Female" title="Female">
-          {'\u2640'}
-        </span>
-      )}
-      {isMale && (
-        <span className="char-gender__mark" role="img" aria-label="Male" title="Male">
-          {'\u2642'}
-        </span>
-      )}
-    </span>
-  )
-}
 
 /**
  * The portrait, the character's details, and the form that edits them.

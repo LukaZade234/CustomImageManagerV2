@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import ExistingCharacterCard from '../components/ExistingCharacterCard'
+import { GenderMarks } from '../components/GenderMarks'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
 import { Button, Card, Field, Input } from '../components/ui'
 import { useCatalogMatch, useCatalogSuggest } from '../hooks/useCatalogSuggest'
@@ -462,7 +463,11 @@ export default function AddPage() {
             <div>
               <strong>{mudaePreview.name}</strong>
             </div>
-            <div className="mudae-preview__meta">{mudaePreview.series || '—'}</div>
+            <div className="mudae-preview__meta">
+              {mudaePreview.series || '—'}
+              <GenderMarks isFemale={mudaePreview.is_female} isMale={mudaePreview.is_male} />
+            </div>
+            {mudaePreview.pools && <div className="mudae-preview__meta">{mudaePreview.pools}</div>}
             <div className="mudae-preview__meta">
               Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}
             </div>
