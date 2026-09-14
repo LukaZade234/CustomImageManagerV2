@@ -287,6 +287,38 @@ def set_character_traits(
         return True
 
 
+def apply_character_traits(traits: Iterable[tuple[str, bool, bool, str]]) -> int:
+    """Set the card traits on named rows in one transaction.
+
+    `(name, is_female, is_male, pools)` per row. `updated_at` is deliberately
+    left alone: deriving traits from the catalog is not a user edit, and
+    stamping every enriched row would reorder "recently updated" by the order
+    this ran in. Returns the number of rows that actually changed.
+    """
+    changed = 0
+    with transaction() as conn:
+        for name, is_female, is_male, pools in traits:
+            char_id = _character_id(conn, name)
+            if char_id is None:
+                continue
+            cur = conn.execute(
+                "UPDATE characters SET is_female = ?, is_male = ?, pools = ?"
+                " WHERE id = ?"
+                "   AND (is_female <> ? OR is_male <> ? OR pools <> ?)",
+                (
+                    int(bool(is_female)),
+                    int(bool(is_male)),
+                    pools,
+                    char_id,
+                    int(bool(is_female)),
+                    int(bool(is_male)),
+                    pools,
+                ),
+            )
+            changed += cur.rowcount
+    return changed
+
+
 def update_character(orig_name: str, new_name: str, series: str, rank: str) -> bool:
     """Rename and re-describe. False if orig_name is unknown.
 

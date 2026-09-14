@@ -542,6 +542,13 @@ Mudae prints it, not the catalog's tag codes: it is a caption for the character 
 catalog's own booleans remain what filtering reads. A lookup that comes back without a gender never
 clears a stored one — a sparse card is not evidence the character changed.
 
+The catalog carries the same two things in its pool codes, so most characters have them without a
+lookup at all: `w`/`h` is the gender (waifu/husbando) and the second letter the roulette (`a`
+Animanga, `g` Game), so `wa` is a woman in the Animanga pool and `hg` a man in the Game one.
+`scripts/backfill_character_traits.py` derives both from the catalog, idempotently and without
+touching `updated_at` (it is not a user edit); a `$im` lookup remains the authority where the two
+disagree.
+
 ### Bulk-adding a series: one DM, then review
 
 Bulk-adding used to run `$ima` for the series and then one `$im` per character, which is both slow

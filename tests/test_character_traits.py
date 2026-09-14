@@ -72,6 +72,31 @@ class TestStorage:
         clean_db.add_character("Seed", "S", "1", "")
         assert not clean_db.set_character_traits("Nobody", is_female=True, is_male=False, pools="X")
 
+    def test_apply_character_traits_is_a_bulk_no_timestamp_update(self, clean_db):
+        clean_db.add_character("9S", "NieR: Automata", "622", "")
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        changed = clean_db.apply_character_traits(
+            [
+                ("9S", False, True, "Game & Animanga"),
+                ("Rem", True, False, "Animanga"),
+                ("Nobody", True, False, "X"),
+            ]
+        )
+        assert changed == 2
+        row = _row(clean_db, "9S")
+        assert row["is_male"] is True
+        assert row["pools"] == "Game & Animanga"
+        # Enriching from the catalog is not a user edit, so it must not stamp
+        # the row into "recently updated".
+        stamp = (
+            clean_db.get_connection()
+            .execute("SELECT updated_at FROM characters WHERE name = '9S'")
+            .fetchone()[0]
+        )
+        assert stamp is None
+        # Re-running is a no-op.
+        assert clean_db.apply_character_traits([("9S", False, True, "Game & Animanga")]) == 0
+
 
 class TestLookupRoute:
     def _patch_lookup(self, monkeypatch, info):
