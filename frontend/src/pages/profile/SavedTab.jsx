@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { getImageUrl } from '../../api'
+import { getPortraitUrl } from '../../api'
 import { MODE_OPTIONS } from '../../components/FilterBar'
 import { useRemoveSaved, useSavedCharacters } from '../../queries/saved'
 import { useStore } from '../../store/useStore'
@@ -32,6 +32,7 @@ export default function SavedTab() {
     name: saved.name,
     series: saved.series ?? '',
     image: saved.image ?? '',
+    image_thumb: saved.image_thumb ?? '',
     updated_at: saved.updated_at ?? '',
   }))
 
@@ -69,7 +70,7 @@ export default function SavedTab() {
           items={items.map((char) => ({
             key: char.name,
             href: `/character/${encodeURIComponent(char.name)}`,
-            image: char.image ? getImageUrl(char.image) : '',
+            image: char.image ? getPortraitUrl(char.image, char.image_thumb) : '',
             title: char.name,
             subtitle: char.series,
             action: 'Unsave',

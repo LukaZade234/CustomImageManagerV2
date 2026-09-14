@@ -22,6 +22,7 @@ const getCustomImagesForChar = vi.fn()
 
 vi.mock('../api', () => ({
   getImageUrl: (p) => (p ? `/images/${p}` : ''),
+  getPortraitUrl: (p) => (p ? `/images/${p}` : ''),
   apiUrl: (p) => p,
   apiClient: new Proxy(
     {},

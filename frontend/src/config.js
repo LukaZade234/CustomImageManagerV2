@@ -51,6 +51,21 @@ export function imageUrl(imagePath) {
 }
 
 /**
+ * Where to show a character portrait: the mirrored WebP on the CDN when the
+ * server says one exists, otherwise the stored original.
+ *
+ * The original may be a Mudae hotlink, an ImgChest upload, or a committed file;
+ * `imageUrl` already handles all three. The mirror only applies where an image
+ * base is configured — a production build. In development the mirror key has no
+ * host to resolve on, so the original is used and the app keeps working against
+ * the local library.
+ */
+export function portraitUrl(imagePath, thumbPath) {
+  if (thumbPath && IMAGE_BASE) return `${IMAGE_BASE}/${thumbPath.replace(/^\/+/, '')}`
+  return imageUrl(imagePath)
+}
+
+/**
  * Discord sign-in is a full-page redirect, not a fetch: the browser has to visit
  * Discord and be sent back. `next` returns you to the page you left, and the
  * server restricts it to a path on this site.

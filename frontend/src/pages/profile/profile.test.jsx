@@ -24,7 +24,11 @@ const api = vi.hoisted(() => ({
   logout: vi.fn().mockResolvedValue({}),
 }))
 
-vi.mock('../../api', () => ({ apiClient: api, getImageUrl: (p) => p || '' }))
+vi.mock('../../api', () => ({
+  apiClient: api,
+  getImageUrl: (p) => p || '',
+  getPortraitUrl: (p) => p || '',
+}))
 vi.mock('../../config', () => ({ apiUrl: (p) => p, signInUrl: (n) => `/start?next=${n}` }))
 
 import { useStore } from '../../store/useStore'

@@ -511,6 +511,13 @@ rather than the 1.9 MB PNGs ImgChest holds; and the profile's lists are the only
 ones filtered in the browser, because they are bounded by what one person has
 done rather than by the size of the library.
 
+**Portraits.** A catalog portrait is a `mudae.net` hotlink. It is mirrored to R2
+as WebP by `scripts/mirror_portraits_to_r2.py`, and the object key is stored in
+`characters.main_image_thumb` / `character_catalog.mudae_image_thumb` (migration
+012). Every character-shaped payload carries `image_thumb`, and the frontend
+prefers it via `portraitUrl` — falling back to the original URL, which is also
+what a development build does, where the mirror has no host.
+
 One character page went from **488 MB** to **548 KB** across those changes.
 
 ---

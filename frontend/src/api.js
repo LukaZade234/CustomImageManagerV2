@@ -1,4 +1,4 @@
-import { API_BASE, CREDENTIALS, imageUrl } from './config'
+import { API_BASE, CREDENTIALS, imageUrl, portraitUrl } from './config'
 import { backoffDelay, isTransientError } from './utils/retry'
 
 /** @param {Response} res @param {string} text @param {Record<string, unknown>} parsed */
@@ -45,6 +45,9 @@ function toNetworkError(err) {
 
 /** Re-exported so existing imports keep working; the logic lives in config.js. */
 const getImageUrl = imageUrl
+
+/** Re-exported alongside it; a portrait prefers the mirrored WebP when present. */
+const getPortraitUrl = portraitUrl
 
 async function api(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...options, credentials: CREDENTIALS })
@@ -310,4 +313,4 @@ export const apiClient = {
     }),
 }
 
-export { getImageUrl }
+export { getImageUrl, getPortraitUrl }

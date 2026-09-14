@@ -66,3 +66,33 @@ describe('imageUrl', () => {
     expect(imageUrl(undefined)).toBe('')
   })
 })
+
+describe('portraitUrl', () => {
+  it('prefers the mirrored WebP under the configured image origin', async () => {
+    const { portraitUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: 'https://img.example.com' })
+    expect(portraitUrl('https://mudae.net/a.png', 'portraits/42-abc.webp')).toBe(
+      'https://img.example.com/portraits/42-abc.webp',
+    )
+  })
+
+  it('tolerates a leading slash on the stored key', async () => {
+    const { portraitUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: 'https://img.example.com' })
+    expect(portraitUrl('https://mudae.net/a.png', '/portraits/42-abc.webp')).toBe(
+      'https://img.example.com/portraits/42-abc.webp',
+    )
+  })
+
+  it('falls back to the original portrait when there is no mirror', async () => {
+    const { portraitUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: 'https://img.example.com' })
+    expect(portraitUrl('https://mudae.net/a.png', '')).toBe('https://mudae.net/a.png')
+  })
+
+  it('ignores the mirror when no image origin is configured (dev)', async () => {
+    // A production-only mirror key has no host to resolve on in dev, so the
+    // original URL is what keeps the app working.
+    const { portraitUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: '' })
+    expect(portraitUrl('Zero_Two.png', 'portraits/42-abc.webp')).toBe(
+      '/character_images/Zero_Two.png',
+    )
+  })
+})

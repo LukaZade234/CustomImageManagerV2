@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { apiClient, getImageUrl } from '../api'
+import { apiClient, getImageUrl, getPortraitUrl } from '../api'
 import ExistingCharacterCard from '../components/ExistingCharacterCard'
 import { GenderMarks } from '../components/GenderMarks'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
@@ -182,6 +182,10 @@ export default function AddPage() {
     matchedExactly && nameMatch && !nameMatch.in_library && seriesMatchesKnown
       ? nameMatch.image || ''
       : ''
+  // The preview shows the mirrored portrait when the catalog has one; the form
+  // still submits the canonical URL, so the working row keeps pointing at the
+  // catalog's own portrait rather than a copy of it.
+  const catalogImageSrc = catalogImage ? getPortraitUrl(catalogImage, nameMatch?.image_thumb) : ''
   // While the series field is empty, a matched name offers its series as the
   // only suggestion. Typing switches to the normal series list.
   const seriesSuggestionValues =
@@ -763,7 +767,7 @@ export default function AddPage() {
         <Field label="Main Photo (Optional)" htmlFor="addCharImage" className="full-width">
           {catalogImage ? (
             <div className="add-char-image-preview">
-              <img src={catalogImage} alt="" className="add-char-image-preview__img" />
+              <img src={catalogImageSrc} alt="" className="add-char-image-preview__img" />
               <p className="mudae-preview__hint">
                 The library&apos;s main image is used automatically and cannot be replaced.
               </p>

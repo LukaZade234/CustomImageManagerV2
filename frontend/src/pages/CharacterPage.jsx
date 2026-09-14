@@ -93,6 +93,9 @@ export default function CharacterPage() {
   const [editSeries, setEditSeries] = useState('')
   const [editRank, setEditRank] = useState('')
   const [mainImage, setMainImage] = useState('')
+  // The catalog's mirrored portrait applies only while the main image is still
+  // the catalog's own; an upload or an edit replaces it and has no mirror.
+  const mainThumb = char && mainImage === char.image ? char.image_thumb : ''
   // Above the early returns: hooks must run in the same order every render.
   // The seed is the server-measured accent (see useCharacterTheme); the
   // character list carries it, and the gallery response refreshes it after
@@ -712,6 +715,7 @@ export default function CharacterPage() {
       <CharacterHeader
         char={char}
         mainImage={mainImage}
+        mainThumb={mainThumb}
         mainInputRef={mainInputRef}
         loading={loading}
         dragOver={dragOver}

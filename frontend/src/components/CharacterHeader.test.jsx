@@ -10,7 +10,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../api', () => ({ getImageUrl: (p) => p || '' }))
+vi.mock('../api', () => ({ getImageUrl: (p) => p || '', getPortraitUrl: (p) => p || '' }))
 
 import { CharacterHeader } from './CharacterHeader'
 

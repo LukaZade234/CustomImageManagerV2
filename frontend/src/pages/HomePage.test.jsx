@@ -12,7 +12,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({ getStats: vi.fn() }))
 
-vi.mock('../api', () => ({ getImageUrl: (p) => p || '', apiClient: api }))
+vi.mock('../api', () => ({
+  getImageUrl: (p) => p || '',
+  getPortraitUrl: (p) => p || '',
+  apiClient: api,
+}))
 vi.mock('../config', () => ({ apiUrl: (p) => p }))
 
 import { renderWithQueryClient } from '../test/renderWithQueryClient'

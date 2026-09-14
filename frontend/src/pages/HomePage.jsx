@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { getImageUrl } from '../api'
+import { getImageUrl, getPortraitUrl } from '../api'
 import HomeLoadingState from '../components/HomeLoadingState'
 import { Card } from '../components/ui'
 import { apiUrl } from '../config'
@@ -420,7 +420,7 @@ export default function HomePage() {
                         {c.image ? (
                           <img
                             className="home-strip__shot"
-                            src={getImageUrl(c.image)}
+                            src={getPortraitUrl(c.image, c.image_thumb)}
                             alt=""
                             loading="lazy"
                             decoding="async"
@@ -451,7 +451,7 @@ export default function HomePage() {
                         {c.image ? (
                           <img
                             className="home-strip__shot"
-                            src={getImageUrl(c.image)}
+                            src={getPortraitUrl(c.image, c.image_thumb)}
                             alt=""
                             loading="lazy"
                             decoding="async"

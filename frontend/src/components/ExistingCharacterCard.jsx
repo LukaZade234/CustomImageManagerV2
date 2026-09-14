@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { getImageUrl } from '../api'
+import { getPortraitUrl } from '../api'
 
 /**
  * A compact, clickable card for a character the library already has.
@@ -16,7 +16,7 @@ export default function ExistingCharacterCard({ character }) {
       className="existing-character-card"
     >
       <img
-        src={getImageUrl(character.image)}
+        src={getPortraitUrl(character.image, character.image_thumb)}
         alt=""
         className="existing-character-card__img"
         width="56"

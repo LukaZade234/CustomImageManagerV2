@@ -222,7 +222,7 @@ def get_characters() -> list | None:
     "the database is not ready" exactly as v1 did."""
     conn = get_connection()
     rows = conn.execute(
-        "SELECT c.name, c.series, c.rank, c.main_image_url, c.accent_seed,"
+        "SELECT c.name, c.series, c.rank, c.main_image_url, c.main_image_thumb, c.accent_seed,"
         "       c.is_female, c.is_male, c.pools,"
         "       COALESCE(SUM(CASE WHEN i.state = 'active' THEN 1 ELSE 0 END), 0)"
         "         AS custom_count"
@@ -239,6 +239,9 @@ def get_characters() -> list | None:
             "series": r["series"],
             "rank": r["rank"],
             "image": r["main_image_url"],
+            # The mirrored WebP key, empty until the portrait is mirrored; the
+            # frontend falls back to `image` when it is.
+            "image_thumb": r["main_image_thumb"],
             # NULL until the accent backfill or a gallery visit has measured
             # this character; the page then keeps the system accent.
             "accent_seed": r["accent_seed"],
@@ -400,7 +403,9 @@ def apply_series_characters(series: str, items: Iterable[dict]) -> dict:
     created = updated = unchanged = failed = 0
     results: list[dict] = []
     with transaction() as conn:
-        rows = conn.execute("SELECT id, name, series, rank, main_image_url FROM characters").fetchall()
+        rows = conn.execute(
+            "SELECT id, name, series, rank, main_image_url FROM characters"
+        ).fetchall()
         by_key = {catalog_import.name_key(row["name"]): row for row in rows}
         for item in items:
             name = str(item.get("name") or "").strip()
@@ -610,7 +615,6 @@ def _attach_catalog_facets(conn, items: list[dict]) -> None:
         item["facets"] = found.get(catalog_import.name_key(item["name"]), [])
 
 
-
 def suggest_characters(
     term: str,
     *,
@@ -642,7 +646,7 @@ def suggest_characters(
     like = f"%{_like_escape(term)}%"
     rows: dict[str, dict] = {}
 
-    def take(name, series_value, rank, image, in_library):
+    def take(name, series_value, rank, image, image_thumb, in_library):
         key = catalog_import.name_key(name)
         current = rows.get(key)
         if current is None:
@@ -651,6 +655,7 @@ def suggest_characters(
                 "series": series_value or "",
                 "rank": rank or "",
                 "image": image or "",
+                "image_thumb": image_thumb or "",
                 "in_library": in_library,
             }
             return
@@ -662,6 +667,8 @@ def suggest_characters(
                 current["rank"] = rank
         if not current["image"] and image:
             current["image"] = image
+        if not current["image_thumb"] and image_thumb:
+            current["image_thumb"] = image_thumb
         if not current["series"] and series_value:
             current["series"] = series_value
 
@@ -687,22 +694,25 @@ def suggest_characters(
             for row in conn.execute(f"SELECT name_key FROM character_catalog WHERE {predicate}")
         }
 
-    working_sql = "SELECT name, series, rank, main_image_url AS image FROM characters" + clause
+    working_sql = (
+        "SELECT name, series, rank, main_image_url AS image,"
+        "       main_image_thumb AS image_thumb FROM characters" + clause
+    )
     catalog_clause = clause
     if requested:
         pool_predicate = " AND ".join(f"{_POOL_FACETS[f]} = 1" for f in requested)
         catalog_clause = f"{clause} AND {pool_predicate}" if clause else f" WHERE {pool_predicate}"
     catalog_sql = (
-        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog"
-        + catalog_clause
+        "SELECT name, series, rank, mudae_image_url AS image,"
+        "       mudae_image_thumb AS image_thumb FROM character_catalog" + catalog_clause
     )
 
     for row in conn.execute(working_sql, params):
         if allowed_keys is not None and catalog_import.name_key(row["name"]) not in allowed_keys:
             continue
-        take(row["name"], row["series"], row["rank"], row["image"], True)
+        take(row["name"], row["series"], row["rank"], row["image"], row["image_thumb"], True)
     for row in conn.execute(catalog_sql, params):
-        take(row["name"], row["series"], row["rank"], row["image"], False)
+        take(row["name"], row["series"], row["rank"], row["image"], row["image_thumb"], False)
 
     term_key = catalog_import.name_key(term)
 
@@ -751,6 +761,7 @@ def search_catalog(
 
     working_sql = (
         "SELECT c.name, c.series, c.rank, c.main_image_url AS image,"
+        "       c.main_image_thumb AS image_thumb,"
         "       COALESCE(SUM(CASE WHEN ci.state = 'active' THEN 1 ELSE 0 END), 0)"
         "         AS custom_count"
         "  FROM characters c"
@@ -764,12 +775,14 @@ def search_catalog(
             "series": row["series"],
             "rank": row["rank"],
             "image": row["image"],
+            "image_thumb": row["image_thumb"],
             "custom_count": row["custom_count"],
             "in_library": True,
         }
 
     catalog_sql = (
-        "SELECT name, series, rank, mudae_image_url AS image"
+        "SELECT name, series, rank, mudae_image_url AS image,"
+        "       mudae_image_thumb AS image_thumb"
         "  FROM character_catalog"
         f" WHERE {column} COLLATE NOCASE LIKE ? ESCAPE '\\'"
     )
@@ -782,6 +795,7 @@ def search_catalog(
             "series": row["series"],
             "rank": row["rank"],
             "image": row["image"],
+            "image_thumb": row["image_thumb"],
             "custom_count": 0,
             "in_library": False,
         }
@@ -850,7 +864,8 @@ def find_character(name: str) -> dict | None:
         ).fetchone()
     )
     row = conn.execute(
-        "SELECT name, series, rank, main_image_url AS image, accent_seed,"
+        "SELECT name, series, rank, main_image_url AS image,"
+        "       main_image_thumb AS image_thumb, accent_seed,"
         "       is_female, is_male, pools"
         "  FROM characters WHERE name_key = ?",
         (key,),
@@ -861,6 +876,7 @@ def find_character(name: str) -> dict | None:
             "series": row["series"],
             "rank": row["rank"],
             "image": row["image"],
+            "image_thumb": row["image_thumb"],
             "accent_seed": row["accent_seed"],
             "pool": "",
             "is_female": bool(row["is_female"]),
@@ -870,7 +886,8 @@ def find_character(name: str) -> dict | None:
             "in_library": True,
         }
     row = conn.execute(
-        "SELECT name, series, rank, mudae_image_url AS image, pool"
+        "SELECT name, series, rank, mudae_image_url AS image,"
+        "       mudae_image_thumb AS image_thumb, pool"
         "  FROM character_catalog WHERE name_key = ?",
         (key,),
     ).fetchone()
@@ -880,6 +897,7 @@ def find_character(name: str) -> dict | None:
             "series": row["series"],
             "rank": row["rank"],
             "image": row["image"],
+            "image_thumb": row["image_thumb"],
             "pool": row["pool"],
             "facets": facets,
             "in_library": False,
@@ -925,9 +943,11 @@ def enrich_characters_from_catalog(
                 "series": row["series"],
                 "rank": row["rank"],
                 "mudae_image_url": row["mudae_image_url"],
+                "mudae_image_thumb": row["mudae_image_thumb"],
             }
             for row in conn.execute(
-                "SELECT name_key, name, series, rank, mudae_image_url FROM character_catalog"
+                "SELECT name_key, name, series, rank, mudae_image_url, mudae_image_thumb"
+                "  FROM character_catalog"
             )
         }
 
@@ -939,7 +959,7 @@ def enrich_characters_from_catalog(
 
     conn = get_connection()
     rows = conn.execute(
-        "SELECT id, name, name_key, series, rank, main_image_url FROM characters"
+        "SELECT id, name, name_key, series, rank, main_image_url, main_image_thumb FROM characters"
     ).fetchall()
     # Every working name key, to refuse a rename onto a name already taken.
     taken = {catalog_import.name_key(row["name"]): row["id"] for row in rows}
@@ -971,9 +991,13 @@ def enrich_characters_from_catalog(
             ("series", "series"),
             ("rank", "rank"),
             ("main_image_url", "mudae_image_url"),
+            ("main_image_thumb", "mudae_image_thumb"),
         ):
-            if choose(entry[source_key], row[column]):
-                fields[column] = (entry[source_key] or "").strip()
+            # A parsed batch (not read from the table) may not carry the mirror
+            # key at all, so `.get`; the catalogue row always does.
+            value = entry.get(source_key, "")
+            if choose(value, row[column]):
+                fields[column] = (value or "").strip()
 
         if alias is not None:
             aliased.append({"name": row["name"], "catalog_name": alias["catalog_name"]})
@@ -1023,6 +1047,56 @@ def enrich_characters_from_catalog(
         "rename_conflicts": rename_conflicts,
         "changes": changes,
     }
+
+
+def catalog_portraits_to_mirror(*, limit: int = 0, redo: bool = False) -> list[dict]:
+    """Catalog rows whose Mudae portrait still needs mirroring to the CDN.
+
+    Only rows whose portrait is hosted by `mudae.net` are candidates: an ImgChest
+    portrait is not a hotlink to a third party, and the point of the mirror is to
+    stop leaning on someone else's host. `redo` re-mirrors everything with a URL,
+    for when the object format or key scheme changes -- the file hash makes the
+    new upload a new object rather than an overwrite of one the edge has cached
+    immutably.
+    """
+    conn = get_connection()
+    sql = (
+        "SELECT id, name_key, name, mudae_image_url FROM character_catalog"
+        " WHERE mudae_image_url LIKE 'https://mudae.net/%'"
+    )
+    if not redo:
+        sql += " AND (mudae_image_thumb IS NULL OR mudae_image_thumb = '')"
+    sql += " ORDER BY id"
+    if limit:
+        return [dict(r) for r in conn.execute(sql + " LIMIT ?", (limit,))]
+    return [dict(r) for r in conn.execute(sql)]
+
+
+def record_catalog_portrait_mirrors(mirrors: Iterable[tuple[str, str]]) -> int:
+    """Store the mirrored object key on catalog rows, and on the working rows that share the portrait.
+
+    `mirrors` is (name_key, object_key). Returns the number of catalog rows
+    changed. A working character only inherits the mirror when its
+    `main_image_url` still equals that catalog row's Mudae URL, so a
+    hand-uploaded main image (ImgChest) is never given a portrait it does not
+    have.
+    """
+    written = 0
+    with transaction() as conn:
+        for name_key, thumb in mirrors:
+            cur = conn.execute(
+                "UPDATE character_catalog SET mudae_image_thumb = ?"
+                " WHERE name_key = ? AND mudae_image_thumb != ?",
+                (thumb, name_key, thumb),
+            )
+            written += cur.rowcount
+            conn.execute(
+                "UPDATE characters SET main_image_thumb = ?"
+                " WHERE name_key = ? AND main_image_url ="
+                "       (SELECT mudae_image_url FROM character_catalog WHERE name_key = ?)",
+                (thumb, name_key, name_key),
+            )
+    return written
 
 
 def check_health() -> dict:
@@ -1116,9 +1190,16 @@ def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
     conn = get_connection()
 
     best_covered = [
-        {"name": r["name"], "series": r["series"], "images": r["n"], "image": r["main_image_url"]}
+        {
+            "name": r["name"],
+            "series": r["series"],
+            "images": r["n"],
+            "image": r["main_image_url"],
+            "image_thumb": r["image_thumb"],
+        }
         for r in conn.execute(
-            "SELECT c.name, c.series, c.main_image_url, COUNT(ci.id) AS n"
+            "SELECT c.name, c.series, c.main_image_url, c.main_image_thumb AS image_thumb,"
+            "       COUNT(ci.id) AS n"
             "  FROM characters c"
             "  JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
             "  GROUP BY c.id ORDER BY n DESC, c.name LIMIT ?",
@@ -1138,6 +1219,7 @@ def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
             "top_character": r["top_name"],
             "top_character_images": r["top_n"],
             "top_character_image": r["top_image"],
+            "top_character_thumb": r["top_thumb"],
         }
         for r in conn.execute(
             "WITH series_totals AS ("
@@ -1147,20 +1229,21 @@ def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
             "   WHERE c.series IS NOT NULL AND c.series != ''"
             "   GROUP BY c.series"
             "), character_totals AS ("
-            "  SELECT c.series, c.name, c.main_image_url, COUNT(ci.id) AS n"
+            "  SELECT c.series, c.name, c.main_image_url, c.main_image_thumb,"
+            "         COUNT(ci.id) AS n"
             "    FROM characters c"
             "    JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
             "   WHERE c.series IS NOT NULL AND c.series != ''"
             "   GROUP BY c.id"
             "), ranked AS ("
-            "  SELECT series, name, main_image_url, n,"
+            "  SELECT series, name, main_image_url, main_image_thumb, n,"
             "         ROW_NUMBER() OVER ("
             "           PARTITION BY series ORDER BY n DESC, name"
             "         ) AS rn"
             "    FROM character_totals"
             ") "
             "SELECT s.series, s.n, s.chars, r.name AS top_name, r.n AS top_n,"
-            "       r.main_image_url AS top_image"
+            "       r.main_image_url AS top_image, r.main_image_thumb AS top_thumb"
             "  FROM series_totals s"
             "  JOIN ranked r ON r.series = s.series AND r.rn = 1"
             " ORDER BY s.n DESC, s.series LIMIT ?",
@@ -1293,7 +1376,8 @@ def list_characters_with_customs(
 
     rows = conn.execute(
         "SELECT c.id AS id, c.name AS name, c.series AS series, c.rank AS rank,"
-        "       c.main_image_url AS image, COUNT(i.id) AS image_count"
+        "       c.main_image_url AS image, c.main_image_thumb AS image_thumb,"
+        "       COUNT(i.id) AS image_count"
         "  FROM characters c"
         "  JOIN custom_images i ON i.character_id = c.id"
         f" WHERE {where}"
@@ -1309,6 +1393,7 @@ def list_characters_with_customs(
             "series": r["series"],
             "rank": r["rank"],
             "image": r["image"],
+            "image_thumb": r["image_thumb"],
             "count": r["image_count"],
             "previews": [],
         }
@@ -1654,7 +1739,8 @@ def get_view_history(identity_id: str, limit: int = 100) -> list[dict]:
     """Characters this visitor has looked at, most recent first, once each."""
     conn = get_connection()
     rows = conn.execute(
-        "SELECT c.name, c.series, c.main_image_url, MAX(v.viewed_at) AS last_viewed,"
+        "SELECT c.name, c.series, c.main_image_url, c.main_image_thumb,"
+        "       MAX(v.viewed_at) AS last_viewed,"
         "       COUNT(*) AS visits,"
         "       (SELECT COUNT(*) FROM custom_images ci"
         "         WHERE ci.character_id = c.id AND ci.state = 'active') AS images"
@@ -1671,6 +1757,7 @@ def get_view_history(identity_id: str, limit: int = 100) -> list[dict]:
             "name": r["name"],
             "series": r["series"],
             "image": r["main_image_url"],
+            "image_thumb": r["main_image_thumb"],
             "images": r["images"],
             "last_viewed": r["last_viewed"],
             "visits": r["visits"],
@@ -1690,7 +1777,7 @@ def get_most_viewed(days: int = 7, limit: int = 8) -> list[dict]:
     conn = get_connection()
     cutoff = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     rows = conn.execute(
-        "SELECT c.name, c.series, c.main_image_url,"
+        "SELECT c.name, c.series, c.main_image_url, c.main_image_thumb,"
         "       COUNT(DISTINCT v.identity_id) AS viewers,"
         "       (SELECT COUNT(*) FROM custom_images ci"
         "         WHERE ci.character_id = c.id AND ci.state = 'active') AS images"
@@ -1707,6 +1794,7 @@ def get_most_viewed(days: int = 7, limit: int = 8) -> list[dict]:
             "name": r["name"],
             "series": r["series"],
             "image": r["main_image_url"],
+            "image_thumb": r["main_image_thumb"],
             "images": r["images"],
             "viewers": r["viewers"],
         }
@@ -2133,8 +2221,8 @@ def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
     conn = get_connection()
     rows = conn.execute(
         "SELECT c.name AS name, c.series AS series, c.rank AS rank,"
-        "       c.main_image_url AS image, c.updated_at AS updated_at,"
-        "       c.accent_seed AS accent_seed"
+        "       c.main_image_url AS image, c.main_image_thumb AS image_thumb,"
+        "       c.updated_at AS updated_at, c.accent_seed AS accent_seed"
         "  FROM saved s JOIN characters c ON c.id = s.character_id"
         " WHERE s.identity_id = ?"
         " ORDER BY c.updated_at DESC, s.created_at DESC",

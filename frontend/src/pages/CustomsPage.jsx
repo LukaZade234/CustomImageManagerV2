@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { apiClient, getImageUrl } from '../api'
+import { apiClient, getImageUrl, getPortraitUrl } from '../api'
 import FilterBar from '../components/FilterBar'
 import { Badge, Button, Card, EmptyState } from '../components/ui'
 import { apiUrl } from '../config'
@@ -304,7 +304,11 @@ export default function CustomsPage() {
                 className="customs-item-with-preview"
               >
                 <div className="customs-item-top">
-                  <img src={getImageUrl(c.image)} alt="" className="search-result-img" />
+                  <img
+                    src={getPortraitUrl(c.image, c.image_thumb)}
+                    alt=""
+                    className="search-result-img"
+                  />
                   <div className="search-result-info">
                     <h3>{c.name}</h3>
                     {c.series && <p>{c.series}</p>}

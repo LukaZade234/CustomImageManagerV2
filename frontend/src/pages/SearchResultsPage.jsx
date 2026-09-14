@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom'
-import { getImageUrl } from '../api'
+import { getPortraitUrl } from '../api'
 import { Button, Card } from '../components/ui'
 import { SEARCH_PAGE_SIZE, useCatalogSearch } from '../hooks/useCatalogSearch'
 import { useStore } from '../store/useStore'
@@ -74,7 +74,7 @@ export default function SearchResultsPage() {
             }
           >
             <img
-              src={getImageUrl(c.image)}
+              src={getPortraitUrl(c.image, c.image_thumb)}
               alt=""
               className="search-result-img"
               width="80"

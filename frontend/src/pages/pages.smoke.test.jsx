@@ -31,6 +31,7 @@ const api = vi.hoisted(() => {
 
 vi.mock('../api', () => ({
   getImageUrl: (p) => (p ? `/images/${p}` : ''),
+  getPortraitUrl: (p) => (p ? `/images/${p}` : ''),
   apiUrl: (p) => p,
   apiClient: api.apiClient,
 }))
