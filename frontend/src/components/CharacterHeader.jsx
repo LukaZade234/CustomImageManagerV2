@@ -2,6 +2,29 @@ import { getImageUrl } from '../api'
 import { Button, Field, Input } from './ui'
 
 /**
+ * The gender Mudae prints beside a character's series. A character can be in
+ * both pools, so both signs can show. Each glyph carries an aria-label rather
+ * than being read as "female sign".
+ */
+function GenderMarks({ isFemale, isMale }) {
+  if (!isFemale && !isMale) return null
+  return (
+    <span className="char-gender">
+      {isFemale && (
+        <span className="char-gender__mark" role="img" aria-label="Female" title="Female">
+          {'\u2640'}
+        </span>
+      )}
+      {isMale && (
+        <span className="char-gender__mark" role="img" aria-label="Male" title="Male">
+          {'\u2642'}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
  * The portrait, the character's details, and the form that edits them.
  *
  * The edit form's state stays in CharacterPage rather than moving here: saving
@@ -85,7 +108,11 @@ export function CharacterHeader({
         {!edit.active ? (
           <div>
             <h1 className="display-title">{char.name}</h1>
-            <p className="text-body">{char.series || '\u2014'}</p>
+            <p className="text-body">
+              {char.series || '\u2014'}
+              <GenderMarks isFemale={char.is_female} isMale={char.is_male} />
+            </p>
+            {char.pools && <p className="text-meta char-pools">{char.pools}</p>}
             <p className="text-meta">Rank: {char.rank || '\u2014'}</p>
           </div>
         ) : (
