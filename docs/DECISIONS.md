@@ -395,8 +395,8 @@ selection. Its per-character caching is also what makes killing the full-map fet
 
 `@types/react` and `@types/react-dom` are installed although the project contains no TypeScript.
 The decision is deliberately left open, but the timing is not: adopting TS is cheapest immediately
-before the 1178-line `CharacterPage.jsx` and 617-line `AddPage.jsx` get split, and considerably
-more expensive after. Either commit then, or remove the unused type packages.
+before `AddPage.jsx` (745 lines, not yet split) is restructured, and considerably more expensive
+after. Either commit then, or remove the unused type packages.
 
 The same timing argument applies to the frontend major upgrades (React 18→19, react-router 6→7,
 zustand 4→5, Vite 5→8, which also clear 5 npm vulnerabilities): do them while the components are
@@ -411,10 +411,11 @@ still whole and a test harness exists to catch regressions.
 Neon is being dropped for cost, and the replacement is **SQLite in a single file**, continuously
 replicated to Cloudflare R2 by Litestream.
 
-The deciding facts are about size and write pattern, not about the database. There are ~1,000
-characters today and perhaps 50,000 if the full Mudae roster is ever seeded; custom images are URL
-strings. That is **tens of megabytes at the outside**, and writes are human-paced — someone adding
-an image, bookmarking, or hiding something. Nothing here needs a database server.
+The deciding facts are about size and write pattern, not about the database. There are ~1,700
+characters in the working set today and perhaps 50,000 if the full Mudae roster is ever seeded;
+custom images are URL strings. That is **tens of megabytes at the outside**, and writes are
+human-paced — someone adding an image, bookmarking, or hiding something. Nothing here needs a
+database server.
 
 What SQLite buys:
 
@@ -483,7 +484,7 @@ and the Discord bot stops being needed for name and series lookup.
 (series-bundle notes in Markdown, not a character list) and `marsn3/mudaetracker` (the Top 1000,
 which is already in hand). No ready-made 50k dataset was found; `mudae.net` is the likelier source
 but would need scraping. The schema is therefore built to *support* 50k, while seeding continues
-from the existing ~1,000.
+from the existing ~1,700.
 
 **Blocking prerequisite before any such seeding.** The frontend currently loads *every* character
 into the zustand store on startup and filters client-side. At 1,000 that is ~150 KB; at 50,000 it
@@ -518,11 +519,35 @@ repeats are dropped, and when two captures disagree the better (lower) rank wins
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
 **Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than
-the PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring the
-self-bot to gap-filling and refreshes, and pool filters are all natural next phases. The catalog
-only *adds* a table, so none of them are blocked by this one. `remote_images._allowed_portrait_url`
-is deliberately separate from the user-facing download proxy's allowlist: the internal accent
-fetch may read Mudae, a visitor's "download this image" may not.
+the PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring
+the self-bot to gap-filling and refreshes, and series pages are all natural next phases. Pool
+filters, once on this list, have since landed: the catalog's four booleans back a `pool=` parameter
+on the suggestions API and the facet chips in the Add form. The catalog only *adds* a table, so none
+of them are blocked by this one. `remote_images._allowed_portrait_url` is deliberately separate from
+the user-facing download proxy's allowlist: the internal accent fetch may read Mudae, a visitor's
+"download this image" may not.
+
+### The `$im` card's gender and pools
+
+`$im` shows more than a name and a rank: the gender beside the series (`NieR: Automata :male:`) and
+the pools the character belongs to underneath (`Game & Animanga · 201`). Both were being parsed past
+and thrown away. They are now read off the card and stored on the working row (`is_female`,
+`is_male`, `pools`), because the alternative is a second Mudae request later to recover what the
+first reply already said.
+
+The gender arrives as a custom Discord emoji, which `_strip_md` removes before the series is read,
+so it is parsed from the raw description; the shortcode and Unicode forms are accepted too. A
+character can be in both gender pools, so the two flags are independent. `pools` is the label as
+Mudae prints it, not the catalog's tag codes: it is a caption for the character page, and the
+catalog's own booleans remain what filtering reads. A lookup that comes back without a gender never
+clears a stored one — a sparse card is not evidence the character changed.
+
+The catalog carries the same two things in its pool codes, so most characters have them without a
+lookup at all: `w`/`h` is the gender (waifu/husbando) and the second letter the roulette (`a`
+Animanga, `g` Game), so `wa` is a woman in the Animanga pool and `hg` a man in the Game one.
+`scripts/backfill_character_traits.py` derives both from the catalog, idempotently and without
+touching `updated_at` (it is not a user edit); a `$im` lookup remains the authority where the two
+disagree.
 
 ### Bulk-adding a series: one DM, then review
 
@@ -576,21 +601,24 @@ alternative — keeping light canonical and deriving dark from it — was reject
 exactly how the site ended up with 144 hand-written `body.dark-mode` override selectors: dark as an
 afterthought applied on top rather than a peer of light.
 
-**Impeccable was evaluated and skipped.** `impeccable.style` is a design skill pack for AI coding
-agents — 23 commands, an anti-pattern list, and 61 deterministic detector rules; genuine, widely
-adopted, Apache-2.0. It was not adopted, for one reason: its leverage is highest when there is a
-design system for it to align things to, and there was none. Running its polish commands against
-2874 lines of ID-selectored legacy CSS would have produced scattered local improvements that
-immediately drifted apart again. It is worth revisiting now that a system exists — `critique`,
-`audit` and `polish` have something to work against. If it is adopted, prefer the hooks-free
-install (the plugin, or copying `dist/claude-code/.claude`) over `npx impeccable install`, which
+**Impeccable was evaluated, skipped, and later adopted.** `impeccable.style` is a design skill
+pack for AI coding agents — 23 commands, an anti-pattern list, and 61 deterministic detector
+rules; genuine, widely adopted, Apache-2.0. It was initially not adopted, for one reason: its
+leverage is highest when there is a design system for it to align things to, and there was none.
+Running its polish commands against 2874 lines of ID-selectored legacy CSS would have produced
+scattered local improvements that immediately drifted apart again.
+
+It was revisited once the system existed, exactly as anticipated, and is now installed as a
+hooks-free skill under `.claude/skills/impeccable` (the `critique` output it produced is kept in
+`.impeccable/critique/`). The install deliberately avoids `npx impeccable install`, which
 downloads a binary into `~/.impeccable/bin/` and installs hooks that run on every file edit.
 
 **Sequencing: foundation before Phase 6, surface after.** The token layer and the primitives are a
 pure refactor with no rework risk, and they make Phase 6's new controls — ownership badges,
-hide-for-me, report — cheap to build correctly. But the CharacterPage gallery and the home page
-information architecture are deliberately **not** done yet: Phase 6 changes what each gallery item
-must show, so restructuring the gallery now means restructuring it twice.
+hide-for-me, report — cheap to build correctly. The CharacterPage gallery and the home page
+information architecture waited until Phase 6 had settled what each gallery item must show, and
+both have since been rebuilt (ROADMAP Phase 11) — the gallery as justified rows with three modes,
+the home page as a set of library-drawn sections.
 
 ---
 
@@ -600,9 +628,10 @@ must show, so restructuring the gallery now means restructuring it twice.
   characters by rank, not custom images users take away, so their value is low. They move to R2
   and eventually to ImgChest, but not as a blocker for the rework.
 - **The new repository is created by the operator**, not generated here.
-- **The commit-`dist` CI workflow gets deleted** once the frontend moves to Cloudflare Pages. It
-  exists solely because the DigitalOcean Python buildpack cannot build a frontend, and that
-  constraint disappears with DigitalOcean.
+- **The commit-`dist` CI workflow is deleted** _(done)_ once the frontend moved to Cloudflare
+  Pages. It existed solely because the DigitalOcean Python buildpack could not build a frontend,
+  and that constraint disappeared with DigitalOcean. `.github/workflows/` is gone and `dist/` is
+  no longer committed.
 - **Mudae parsing stays as-is.** It is fragile reverse-engineering of embed output, but there is no
   alternative interface — Mudae has no API. The realistic mitigation is good error reporting when
   parsing breaks, not a better parser.

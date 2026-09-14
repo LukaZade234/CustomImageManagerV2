@@ -49,6 +49,7 @@ export default function CharacterPage() {
   const libraryLoading = useStore((s) => s.loading)
   const savedCharacters = useStore((s) => s.savedCharacters)
   const characterImages = useStore((s) => s.characterImages)
+  const characterImagesLoading = useStore((s) => s.characterImagesLoading)
   const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
   const appendCustomImageUrls = useStore((s) => s.appendCustomImageUrls)
   const setCustomImageOrder = useStore((s) => s.setCustomImageOrder)
@@ -65,6 +66,11 @@ export default function CharacterPage() {
 
   const [showHidden, setShowHidden] = useState(false)
   const allRows = characterImages[name] || []
+  // The first fetch for this character has not settled yet, so the gallery is
+  // loading rather than empty. A slice that exists is loaded even if it is
+  // empty; only an absent one under an in-flight request is a skeleton.
+  const galleryLoading =
+    characterImages[name] === undefined && Boolean(characterImagesLoading[name])
   const hiddenCount = allRows.filter((row) => row.hidden).length
   // Hidden images drop out of the gallery entirely unless you ask for them.
   // That is the whole value of hide-for-me: it has to actually get them out of
@@ -807,6 +813,7 @@ export default function CharacterPage() {
         <CustomImageGallery
           rows={rows}
           ratios={ratios}
+          loading={galleryLoading}
           modes={{ select: selectMode, reorder: reorderMode }}
           selectedUrls={selectedUrls}
           reorder={reorder}

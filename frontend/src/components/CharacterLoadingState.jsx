@@ -1,3 +1,4 @@
+import { GallerySkeleton } from './CustomImageGallery'
 import { Card } from './ui'
 
 /**
@@ -10,8 +11,9 @@ import { Card } from './ui'
  * links are a primary way people arrive here, and that was the first thing they
  * saw.
  *
- * The shape mirrors the real page — portrait on the right, title and actions on
- * the left, a gallery below — so the frame does not jump when the data lands.
+ * The shape mirrors the real page exactly -- portrait beside the title, the
+ * save button under the picture, the actions under the identity, and the same
+ * gallery grid below -- so nothing moves when the data lands.
  */
 export default function CharacterLoadingState() {
   return (
@@ -20,23 +22,25 @@ export default function CharacterLoadingState() {
         Loading character…
       </p>
       <div className="character-top-section" aria-hidden>
+        <div className="char-image-section">
+          <div className="skeleton-portrait" />
+        </div>
         <div className="char-info-section">
           <div className="skeleton-line skeleton-line--lg" style={{ maxWidth: '14rem' }} />
           <div className="skeleton-line skeleton-line--body" style={{ maxWidth: '9rem' }} />
           <div className="skeleton-line skeleton-line--sm" style={{ maxWidth: '5rem' }} />
-          <div className="char-page-actions">
-            <div className="skeleton-line skeleton-line--body" style={{ maxWidth: '11rem' }} />
-            <div className="skeleton-line skeleton-line--body" style={{ maxWidth: '11rem' }} />
-          </div>
         </div>
-        <div className="char-image-section">
-          <div className="skeleton-portrait" />
+        <div className="skeleton-line skeleton-line--body save-skeleton" />
+        <div className="char-page-actions">
+          <div className="skeleton-line skeleton-line--body" style={{ maxWidth: '11rem' }} />
+          <div className="skeleton-line skeleton-line--body" style={{ maxWidth: '11rem' }} />
         </div>
       </div>
-      <div className="skeleton-gallery" aria-hidden>
-        {['a', 'b', 'c', 'd', 'e', 'f'].map((id) => (
-          <div key={id} className="skeleton-tile" />
-        ))}
+      <div className="custom-images-section" aria-hidden>
+        <div className="skeleton-line skeleton-line--title" />
+        <div className="custom-images-gallery">
+          <GallerySkeleton />
+        </div>
       </div>
     </Card>
   )

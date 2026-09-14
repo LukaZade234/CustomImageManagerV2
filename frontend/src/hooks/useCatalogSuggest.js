@@ -17,27 +17,34 @@ import { apiClient } from '../api'
  * list. If the series matches nothing, it falls back to the generic list so an
  * unrecognised series still gives useful suggestions. Once the visitor types,
  * the series hint is dropped and the query is what drives the list.
+ *
+ * `pools` (characters only) narrows to characters carrying every named pool
+ * facet; empty means no filter.
  */
 export function useCatalogSuggest(
   query,
-  { kind = 'characters', limit = 10, delay = 250, series = '' } = {},
+  { kind = 'characters', limit = 10, delay = 250, series = '', pools = [] } = {},
 ) {
   const [items, setItems] = useState([])
+  // Joined so the effect depends on the contents rather than a new array each
+  // render.
+  const poolsKey = pools.join(',')
 
   useEffect(() => {
     const q = (query || '').trim()
+    const poolList = poolsKey ? poolsKey.split(',') : []
     const seriesHint = q || kind !== 'characters' ? '' : (series || '').trim()
     let cancelled = false
     const timer = setTimeout(() => {
       const run = async () => {
         if (seriesHint) {
-          const filtered = await apiClient.suggestCharacters('', limit, seriesHint)
+          const filtered = await apiClient.suggestCharacters('', limit, seriesHint, poolList)
           if (filtered?.items?.length) return filtered.items
         }
         const response =
           kind === 'series'
             ? await apiClient.suggestSeries(q, limit)
-            : await apiClient.suggestCharacters(q, limit, seriesHint)
+            : await apiClient.suggestCharacters(q, limit, seriesHint, poolList)
         return response?.items || []
       }
       run()
@@ -52,7 +59,7 @@ export function useCatalogSuggest(
       cancelled = true
       clearTimeout(timer)
     }
-  }, [query, kind, limit, delay, series])
+  }, [query, kind, limit, delay, series, poolsKey])
 
   return items
 }

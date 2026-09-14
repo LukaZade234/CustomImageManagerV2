@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, getImageUrl } from '../api'
 import ExistingCharacterCard from '../components/ExistingCharacterCard'
+import { GenderMarks } from '../components/GenderMarks'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
 import { Button, Card, Field, Input } from '../components/ui'
 import { useCatalogMatch, useCatalogSuggest } from '../hooks/useCatalogSuggest'
@@ -41,6 +42,13 @@ function mudaeCandidatesFromResponse(res) {
   return (res?.candidates || []).map((n) => ({ name: n, label: n }))
 }
 
+const POOL_FILTERS = [
+  { key: 'waifu', label: 'Waifu' },
+  { key: 'husbando', label: 'Husbando' },
+  { key: 'anime', label: 'Anime' },
+  { key: 'game', label: 'Game' },
+]
+
 export default function AddPage() {
   const [name, setName] = useState('')
   const [series, setSeries] = useState('')
@@ -48,6 +56,12 @@ export default function AddPage() {
   const [imageFile, setImageFile] = useState(null)
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(false)
+  // Gender and roulette pools, used to narrow the name suggestions. Optional:
+  // adding a character never requires them, exactly like Rank and Main Photo.
+  const [poolFilter, setPoolFilter] = useState([])
+  // The character whose pools were last auto-selected, so a match does not
+  // clobber the visitor's own toggles on every render.
+  const autoPoolName = useRef(null)
 
   const [mudaeConfigured, setMudaeConfigured] = useState(null)
   const [mudaeLookupName, setMudaeLookupName] = useState('')
@@ -80,11 +94,19 @@ export default function AddPage() {
   // Catalog-backed suggestions and the library's own record for the typed name.
   // The name combobox gets the typed series as a hint, so a named series offers
   // its characters until the visitor starts typing a name of their own.
-  const nameSuggestions = useCatalogSuggest(name, { kind: 'characters', limit: 8, series })
+  const nameSuggestions = useCatalogSuggest(name, {
+    kind: 'characters',
+    limit: 8,
+    series,
+    pools: poolFilter,
+  })
   const seriesSuggestions = useCatalogSuggest(series, { kind: 'series', limit: 20 })
   const panelNameSuggestions = useCatalogSuggest(mudaeLookupName, { kind: 'characters', limit: 8 })
   const bulkSeriesSuggestions = useCatalogSuggest(seriesBulkName, { kind: 'series', limit: 20 })
   const nameMatch = useCatalogMatch(name)
+
+  const togglePool = (key) =>
+    setPoolFilter((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]))
 
   const nameSuggestionItems = useMemo(
     () =>
@@ -93,6 +115,7 @@ export default function AddPage() {
         label: c.name,
         meta: c.series || undefined,
         series: c.series || '',
+        facets: c.facets || [],
       })),
     [nameSuggestions],
   )
@@ -158,10 +181,22 @@ export default function AddPage() {
     if (rank !== expected) setRank(expected)
   }, [seriesMatchesKnown, nameMatch, rank, rankTouched])
 
+  useEffect(() => {
+    // A matched character selects its own gender and roulette pools. It is only
+    // a suggestion -- the visitor can clear it -- so this never blocks adding.
+    if (!matchedExactly || !nameMatch || autoPoolName.current === nameMatch.name) return
+    autoPoolName.current = nameMatch.name
+    setPoolFilter(nameMatch.facets || [])
+  }, [matchedExactly, nameMatch])
+
   // Choosing a suggestion is a deliberate pick, and the suggestion showed the
   // series, so fill it. Typing a name without choosing does not.
   const handlePickName = (item) => {
     if (item?.series) setSeries(item.series)
+    if (item?.facets?.length) {
+      setPoolFilter(item.facets)
+      autoPoolName.current = item.value
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -462,7 +497,11 @@ export default function AddPage() {
             <div>
               <strong>{mudaePreview.name}</strong>
             </div>
-            <div className="mudae-preview__meta">{mudaePreview.series || '—'}</div>
+            <div className="mudae-preview__meta">
+              {mudaePreview.series || '—'}
+              <GenderMarks isFemale={mudaePreview.is_female} isMale={mudaePreview.is_male} />
+            </div>
+            {mudaePreview.pools && <div className="mudae-preview__meta">{mudaePreview.pools}</div>}
             <div className="mudae-preview__meta">
               Claim rank: {mudaePreview.rank ? `#${mudaePreview.rank}` : '—'}
             </div>
@@ -670,6 +709,22 @@ export default function AddPage() {
             </p>
           )}
         </Field>
+        <fieldset className="pool-filter">
+          <legend className="pool-filter__legend">Gender And Roulette Pools (Optional)</legend>
+          <div className="pool-filter__options">
+            {POOL_FILTERS.map(({ key, label }) => (
+              <Button
+                key={key}
+                variant="secondary"
+                size="sm"
+                aria-pressed={poolFilter.includes(key)}
+                onClick={() => togglePool(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
         <Field label="Rank (Optional)" htmlFor="addCharRank" className="full-width">
           <Input
             id="addCharRank"

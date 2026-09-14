@@ -80,15 +80,17 @@
   color: var(--text);
 }
 .ui-btn--secondary:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .ui-btn--ghost {
   color: var(--text-muted);
 }
 .ui-btn--ghost:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text);
+  background: var(--accent-subtle);
+  color: var(--accent);
 }
 
 .ui-btn--danger {

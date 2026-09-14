@@ -7,6 +7,9 @@ import { FILLERS, ratioFor } from '../utils/galleryRatios'
 /** Below this, uniform columns beat uniform rows. See useMasonryColumns. */
 const NARROW = '(max-width: 768px)'
 
+/** Stable keys for the loading frames, which have no data of their own. */
+const SKELETON_KEYS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
 /**
  * The grid of a character's custom images.
  *
@@ -33,6 +36,26 @@ function labelFor(row, index, selecting) {
   return selecting ? `Select ${what}` : `Open ${what}`
 }
 
+/**
+ * The gallery's own loading shape: empty frames at the same ratio and in the
+ * same justified rows the real images will take, so the section keeps its
+ * height and the pictures do not shove it around when they arrive.
+ */
+export function GallerySkeleton({ count = 8 }) {
+  return (
+    <>
+      {SKELETON_KEYS.slice(0, count).map((key) => (
+        <span
+          key={key}
+          className="gallery-item-wrapper gallery-item-wrapper--skeleton"
+          style={{ '--ratio': 0.643 }}
+          aria-hidden
+        />
+      ))}
+    </>
+  )
+}
+
 export default function CustomImageGallery({
   rows,
   ratios,
@@ -44,6 +67,7 @@ export default function CustomImageGallery({
   onImageLoad,
   onDragOver,
   empty,
+  loading = false,
 }) {
   const { select, reorder: reordering } = modes
   const selecting = select || reordering
@@ -59,6 +83,9 @@ export default function CustomImageGallery({
   */
   const masonry = useMediaQuery(NARROW) && rows.length > 0
   const columns = useMasonryColumns(masonry)
+  // Only the first load gets the skeleton; a refetch of images already shown
+  // leaves them in place rather than flashing frames.
+  const showSkeleton = loading && rows.length === 0
 
   return (
     // A drop target for files dragged in from outside the page, which has no
@@ -75,8 +102,10 @@ export default function CustomImageGallery({
         .filter(Boolean)
         .join(' ')}
       onDragOver={onDragOver}
+      aria-busy={showSkeleton || undefined}
     >
-      {rows.length === 0 && empty}
+      {showSkeleton && <GallerySkeleton />}
+      {rows.length === 0 && !showSkeleton && empty}
       {rows.map((row, index) => {
         const isDropTarget = reordering && reorder.dropTargetIndex === index
         const isDragSource = reordering && reorder.dragIndices?.includes(index)
@@ -186,7 +215,7 @@ export default function CustomImageGallery({
         </>
       )}
       {!masonry &&
-        rows.length > 0 &&
+        (rows.length > 0 || showSkeleton) &&
         FILLERS.map((id) => (
           <span key={`filler-${id}`} className="gallery-filler" aria-hidden="true" />
         ))}

@@ -7,8 +7,8 @@ to its series, and adding a known character needs no Discord or ImgChest call.
 import catalog_import
 
 
-def _catalog_row(name, series, rank, image=None):
-    return {
+def _catalog_row(name, series, rank, image=None, **facets):
+    row = {
         "name": name,
         "name_key": catalog_import.name_key(name),
         "series": series,
@@ -16,7 +16,10 @@ def _catalog_row(name, series, rank, image=None):
         "mudae_image_url": image or f"https://mudae.net/uploads/{rank}/a~b.png",
         "pool": "wa",
         "is_waifu": True,
+        "is_anime": True,
     }
+    row.update(facets)
+    return row
 
 
 def seed_catalog(clean_db, rows):
@@ -73,6 +76,64 @@ class TestSuggestCharacters:
         assert names == ["Emilia", "Rem"]
         assert clean_db.suggest_characters("", series="Nope") == []
 
+    def test_items_carry_their_pool_facets(self, clean_db):
+        # So the Add form can select the character's pools the moment it is
+        # picked, without a second request.
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        item = clean_db.suggest_characters("Rem", limit=1)[0]
+        assert item["facets"] == ["waifu", "anime"]
+
+    def test_a_working_row_carries_its_catalog_facets(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        item = clean_db.suggest_characters("Rem", limit=1)[0]
+        assert item["in_library"] is True
+        assert item["facets"] == ["waifu", "anime"]
+
+
+class TestPoolFilters:
+    def test_keeps_only_catalog_rows_with_the_named_facet(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Waifu", "S", "1"),
+                _catalog_row(
+                    "Husbando", "S", "2", is_waifu=False, is_anime=False, is_husbando=True
+                ),
+            ],
+        )
+        names = [i["name"] for i in clean_db.suggest_characters("", pools=["husbando"])]
+        assert names == ["Husbando"]
+
+    def test_every_named_facet_must_hold(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Waifu Anime", "S", "1"),
+                _catalog_row("Waifu Game", "S", "2", is_anime=False, is_game=True),
+            ],
+        )
+        names = [i["name"] for i in clean_db.suggest_characters("", pools=["waifu", "game"])]
+        assert names == ["Waifu Game"]
+
+    def test_working_rows_without_a_catalog_match_are_excluded(self, clean_db):
+        clean_db.add_character("Homegrown", "S", "1", "")
+        seed_catalog(clean_db, [_catalog_row("Rem", "S", "2")])
+        unfiltered = {i["name"] for i in clean_db.suggest_characters("")}
+        assert unfiltered == {"Homegrown", "Rem"}
+        assert [i["name"] for i in clean_db.suggest_characters("", pools=["waifu"])] == ["Rem"]
+
+    def test_a_working_row_survives_when_its_catalog_match_filters(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        clean_db.add_character("Rem", "Hand Edited", "999", "")
+        items = clean_db.suggest_characters("Rem", pools=["waifu"])
+        assert [i["name"] for i in items] == ["Rem"]
+        assert items[0]["in_library"] is True
+
+    def test_an_unknown_facet_is_ignored(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "S", "3")])
+        assert [i["name"] for i in clean_db.suggest_characters("", pools=["nonsense"])] == ["Rem"]
+
 
 class TestSuggestSeries:
     def test_unions_catalog_and_working_series(self, clean_db):
@@ -113,6 +174,11 @@ class TestFindCharacter:
         seed_catalog(clean_db, [_catalog_row("Hange Zoe\u0308", "AOT", "42")])
         assert clean_db.find_character("Hange Zoë")["series"] == "AOT"
 
+    def test_found_character_carries_facets(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Artoria Pendragon", "Fate/stay night", "4")])
+        found = clean_db.find_character("Artoria Pendragon")
+        assert found["facets"] == ["waifu", "anime"]
+
     def test_unknown_is_none(self, clean_db):
         assert clean_db.find_character("Nobody Here") is None
 
@@ -132,6 +198,19 @@ class TestCatalogRoutes:
         body = client.get("/api/catalog/characters?q=art").get_json()
         assert body["items"][0]["name"] == "Artoria Pendragon"
         assert body["items"][0]["series"] == "Fate/stay night"
+
+    def test_suggestions_endpoint_filters_by_pool(self, client, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Waifu", "S", "1"),
+                _catalog_row(
+                    "Husbando", "S", "2", is_waifu=False, is_anime=False, is_husbando=True
+                ),
+            ],
+        )
+        body = client.get("/api/catalog/characters?pool=husbando").get_json()
+        assert [i["name"] for i in body["items"]] == ["Husbando"]
 
     def test_series_endpoint(self, client, clean_db):
         self._seed(clean_db)
@@ -153,9 +232,11 @@ class TestCatalogRoutes:
         body = res.get_json()
         assert body["success"] is True
         assert body["source"] == "catalog"
-        row = clean_db.get_connection().execute(
-            "SELECT series, rank, main_image_url FROM characters WHERE name = 'Rem'"
-        ).fetchone()
+        row = (
+            clean_db.get_connection()
+            .execute("SELECT series, rank, main_image_url FROM characters WHERE name = 'Rem'")
+            .fetchone()
+        )
         assert row["series"] == "Re:Zero"
         assert row["main_image_url"].startswith("https://mudae.net/")
 
@@ -190,9 +271,11 @@ class TestManualAdd:
             },
         )
         assert res.status_code == 200
-        row = clean_db.get_connection().execute(
-            "SELECT main_image_url FROM characters WHERE name = 'Newcomer'"
-        ).fetchone()
+        row = (
+            clean_db.get_connection()
+            .execute("SELECT main_image_url FROM characters WHERE name = 'Newcomer'")
+            .fetchone()
+        )
         assert row["main_image_url"] == "https://mudae.net/uploads/1/a~b.png"
 
     def test_refuses_a_portrait_url_from_an_unexpected_host(self, client, clean_db):

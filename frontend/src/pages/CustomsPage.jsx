@@ -256,9 +256,19 @@ export default function CustomsPage() {
         <div className="customs-list" aria-busy="true" aria-live="polite">
           <p className="sr-only">Loading customs…</p>
           {Array.from({ length: 6 }, (_, i) => i).map((i) => (
-            <div key={i} className="customs-skeleton-row">
-              <div className="skeleton-line skeleton-line--title" />
-              <div className="skeleton-line skeleton-line--body" />
+            <div key={i} className="customs-item-with-preview customs-item--skeleton" aria-hidden>
+              <div className="customs-item-top">
+                <span className="skeleton-tile skeleton-thumb" />
+                <div className="search-result-info">
+                  <div className="skeleton-line skeleton-line--title" />
+                  <div className="skeleton-line skeleton-line--body" />
+                </div>
+              </div>
+              <div className="customs-preview-row">
+                {[0, 1, 2].map((j) => (
+                  <span key={j} className="skeleton-tile skeleton-thumb skeleton-thumb--sm" />
+                ))}
+              </div>
             </div>
           ))}
         </div>

@@ -76,12 +76,13 @@ def _thumbnail_response(path):
 
 
 @media_bp.route("/images/<filename>")
-def get_image(filename):
-    return send_from_directory("character_images", filename)
-
-
 @media_bp.route("/character_images/<path:filename>")
 def get_character_image(filename):
+    """The default portraits off local disk.
+
+    `/images/<filename>` is the older single-segment spelling, kept as an alias;
+    both resolve to the same files.
+    """
     return send_from_directory("character_images", filename)
 
 

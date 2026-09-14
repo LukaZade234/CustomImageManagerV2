@@ -196,6 +196,7 @@ def get_characters() -> list | None:
     conn = get_connection()
     rows = conn.execute(
         "SELECT c.name, c.series, c.rank, c.main_image_url, c.accent_seed,"
+        "       c.is_female, c.is_male, c.pools,"
         "       COALESCE(SUM(CASE WHEN i.state = 'active' THEN 1 ELSE 0 END), 0)"
         "         AS custom_count"
         "  FROM characters c"
@@ -214,6 +215,10 @@ def get_characters() -> list | None:
             # NULL until the accent backfill or a gallery visit has measured
             # this character; the page then keeps the system accent.
             "accent_seed": r["accent_seed"],
+            # From the Mudae card; both zero and "" when it did not say.
+            "is_female": bool(r["is_female"]),
+            "is_male": bool(r["is_male"]),
+            "pools": r["pools"],
             # Active customs only, matching the browse-customs count.
             "custom_count": r["custom_count"],
         }
@@ -221,17 +226,97 @@ def get_characters() -> list | None:
     ]
 
 
-def add_character(name: str, series: str, rank: str, main_image_url: str = "") -> bool:
+def add_character(
+    name: str,
+    series: str,
+    rank: str,
+    main_image_url: str = "",
+    *,
+    is_female: bool = False,
+    is_male: bool = False,
+    pools: str = "",
+) -> bool:
     """False if the name is already taken."""
     with transaction() as conn:
         # Let the UNIQUE constraint decide, rather than checking first and
         # racing another writer between the check and the insert.
         cur = conn.execute(
-            "INSERT INTO characters (name, series, rank, main_image_url) VALUES (?, ?, ?, ?)"
+            "INSERT INTO characters"
+            " (name, series, rank, main_image_url, is_female, is_male, pools)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT (name) DO NOTHING",
-            (name, series, rank, main_image_url),
+            (
+                name,
+                series,
+                rank,
+                main_image_url,
+                int(bool(is_female)),
+                int(bool(is_male)),
+                pools,
+            ),
         )
         return bool(cur.rowcount)
+
+
+def set_character_traits(
+    name: str,
+    *,
+    is_female: bool,
+    is_male: bool,
+    pools: str,
+) -> bool:
+    """Refresh the Mudae-card traits on an existing character. False if unknown.
+
+    Traits are never cleared to make an existing value disappear: a lookup that
+    came back without a gender leaves what is stored alone, because a card
+    missing the emoji is not evidence the character stopped having one.
+    """
+    with transaction() as conn:
+        char_id = _character_id(conn, name)
+        if char_id is None:
+            return False
+        conn.execute(
+            "UPDATE characters"
+            "   SET is_female = CASE WHEN ? THEN 1 ELSE is_female END,"
+            "       is_male = CASE WHEN ? THEN 1 ELSE is_male END,"
+            "       pools = CASE WHEN ? <> '' THEN ? ELSE pools END,"
+            "       updated_at = ?"
+            " WHERE id = ?",
+            (int(bool(is_female)), int(bool(is_male)), pools, pools, _now(), char_id),
+        )
+        return True
+
+
+def apply_character_traits(traits: Iterable[tuple[str, bool, bool, str]]) -> int:
+    """Set the card traits on named rows in one transaction.
+
+    `(name, is_female, is_male, pools)` per row. `updated_at` is deliberately
+    left alone: deriving traits from the catalog is not a user edit, and
+    stamping every enriched row would reorder "recently updated" by the order
+    this ran in. Returns the number of rows that actually changed.
+    """
+    changed = 0
+    with transaction() as conn:
+        for name, is_female, is_male, pools in traits:
+            char_id = _character_id(conn, name)
+            if char_id is None:
+                continue
+            cur = conn.execute(
+                "UPDATE characters SET is_female = ?, is_male = ?, pools = ?"
+                " WHERE id = ?"
+                "   AND (is_female <> ? OR is_male <> ? OR pools <> ?)",
+                (
+                    int(bool(is_female)),
+                    int(bool(is_male)),
+                    pools,
+                    char_id,
+                    int(bool(is_female)),
+                    int(bool(is_male)),
+                    pools,
+                ),
+            )
+            changed += cur.rowcount
+    return changed
 
 
 def update_character(orig_name: str, new_name: str, series: str, rank: str) -> bool:
@@ -454,8 +539,54 @@ def _like_escape(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+# The catalog's four pool facets, mapped to the column each names. Mudae's own
+# tags are additive (`$wa, $ha` means both), so a filter lists facets that must
+# all hold.
+_POOL_FACETS = {
+    "waifu": "is_waifu",
+    "husbando": "is_husbando",
+    "anime": "is_anime",
+    "game": "is_game",
+}
+
+
+def _catalog_facets(row) -> list[str]:
+    """The pool keys a catalog row belongs to."""
+    if row is None:
+        return []
+    return [name for name, column in _POOL_FACETS.items() if row[column]]
+
+
+def _attach_catalog_facets(conn, items: list[dict]) -> None:
+    """Give each suggestion item the catalog pool keys for its name, in place.
+
+    Fetched only for the returned page, not the whole catalog.
+    """
+    if not items:
+        return
+    import catalog_import
+
+    keys = [catalog_import.name_key(item["name"]) for item in items]
+    placeholders = ",".join("?" * len(keys))
+    found = {
+        row["name_key"]: _catalog_facets(row)
+        for row in conn.execute(
+            "SELECT name_key, is_waifu, is_husbando, is_anime, is_game"
+            f"  FROM character_catalog WHERE name_key IN ({placeholders})",
+            keys,
+        )
+    }
+    for item in items:
+        item["facets"] = found.get(catalog_import.name_key(item["name"]), [])
+
+
+
 def suggest_characters(
-    term: str, *, limit: int = 10, series: str | None = None
+    term: str,
+    *,
+    limit: int = 10,
+    series: str | None = None,
+    pools: Iterable[str] | None = None,
 ) -> list[dict]:
     """Name suggestions, drawn from the working set and the full catalog.
 
@@ -466,6 +597,12 @@ def suggest_characters(
 
     `series` restricts to one exact series (case-insensitive), which is how the
     Add form offers the characters of a series the visitor has already named.
+
+    `pools` restricts to characters carrying every named pool facet (waifu,
+    husbando, anime, game). Working-set rows carry no pool of their own, so one
+    is kept only when the catalog lists it with the requested pools; a working
+    character the catalog does not know is omitted while a filter is active
+    rather than assumed to match.
     """
     import catalog_import
 
@@ -508,13 +645,31 @@ def suggest_characters(
         params.append(series)
     clause = f" WHERE {' AND '.join(where)}" if where else ""
 
-    working_sql = (
-        "SELECT name, series, rank, main_image_url AS image FROM characters" + clause
-    )
+    # Pool facets are catalog-only columns. A set of matching name_keys lets a
+    # working row be judged by what the catalog knows about the same character,
+    # rather than by a join the working table cannot supply.
+    requested = [f for f in (pools or []) if f in _POOL_FACETS]
+    allowed_keys = None
+    if requested:
+        predicate = " AND ".join(f"{_POOL_FACETS[f]} = 1" for f in requested)
+        allowed_keys = {
+            row["name_key"]
+            for row in conn.execute(f"SELECT name_key FROM character_catalog WHERE {predicate}")
+        }
+
+    working_sql = "SELECT name, series, rank, main_image_url AS image FROM characters" + clause
+    catalog_clause = clause
+    if requested:
+        pool_predicate = " AND ".join(f"{_POOL_FACETS[f]} = 1" for f in requested)
+        catalog_clause = f"{clause} AND {pool_predicate}" if clause else f" WHERE {pool_predicate}"
     catalog_sql = (
-        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog" + clause
+        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog"
+        + catalog_clause
     )
+
     for row in conn.execute(working_sql, params):
+        if allowed_keys is not None and catalog_import.name_key(row["name"]) not in allowed_keys:
+            continue
         take(row["name"], row["series"], row["rank"], row["image"], True)
     for row in conn.execute(catalog_sql, params):
         take(row["name"], row["series"], row["rank"], row["image"], False)
@@ -528,7 +683,9 @@ def suggest_characters(
         rank = int(item["rank"]) if item["rank"].isdigit() else 10**9
         return (bucket, rank, name_key)
 
-    return sorted(rows.values(), key=order)[:limit]
+    result = sorted(rows.values(), key=order)[:limit]
+    _attach_catalog_facets(conn, result)
+    return result
 
 
 def suggest_series(term: str, *, limit: int = 20) -> list[str]:
@@ -573,8 +730,16 @@ def find_character(name: str) -> dict | None:
     if not key:
         return None
     conn = get_connection()
+    facets = _catalog_facets(
+        conn.execute(
+            "SELECT is_waifu, is_husbando, is_anime, is_game"
+            "  FROM character_catalog WHERE name_key = ?",
+            (key,),
+        ).fetchone()
+    )
     for row in conn.execute(
-        "SELECT name, series, rank, main_image_url AS image FROM characters"
+        "SELECT name, series, rank, main_image_url AS image, is_female, is_male, pools"
+        "  FROM characters"
     ):
         if catalog_import.name_key(row["name"]) == key:
             return {
@@ -583,6 +748,10 @@ def find_character(name: str) -> dict | None:
                 "rank": row["rank"],
                 "image": row["image"],
                 "pool": "",
+                "is_female": bool(row["is_female"]),
+                "is_male": bool(row["is_male"]),
+                "pools": row["pools"],
+                "facets": facets,
                 "in_library": True,
             }
     row = conn.execute(
@@ -597,6 +766,7 @@ def find_character(name: str) -> dict | None:
             "rank": row["rank"],
             "image": row["image"],
             "pool": row["pool"],
+            "facets": facets,
             "in_library": False,
         }
     return None
@@ -768,23 +938,6 @@ def check_health() -> dict:
     return {"ok": True, "detail": "ok", "characters": int(row["n"]) if row else 0}
 
 
-def get_last_updated() -> dict:
-    """{name: unix_seconds}. Converted here because the frontend sorts numerically."""
-    conn = get_connection()
-    out = {}
-    # NULL updated_at means never modified: omitted, exactly as v1 omitted such
-    # names from the document, so the frontend keeps sorting them last.
-    for row in conn.execute("SELECT name, updated_at FROM characters WHERE updated_at IS NOT NULL"):
-        try:
-            stamp = datetime.strptime(row["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(
-                tzinfo=UTC
-            )
-            out[row["name"]] = stamp.timestamp()
-        except (ValueError, TypeError):
-            out[row["name"]] = 0.0
-    return out
-
-
 # --- Custom images ------------------------------------------------------
 
 
@@ -824,18 +977,19 @@ def get_custom_image_stats() -> dict:
     return {"custom_images": row["images"], "characters_with_customs": row["characters"]}
 
 
-def get_home_highlights(limit: int = 8) -> dict:
+def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
     """Everything the landing page shows besides the two totals.
 
-    One function and one round trip, because these are four small queries that
-    are always wanted together and never separately.
+    One function and one round trip, because these are small queries that are
+    always wanted together and never separately: the best-covered characters, the
+    top series (each with its most-represented character), the newest images, the
+    most-viewed characters this week, the contributor board, and the caller's own
+    standing when they are ranked below it.
 
     What is *not* here is as considered as what is. There is no visitor count:
     an identity row is created per cookie, so the honest numbers are "1" (signed
     in with Discord) or "4" (including pseudonyms, one of them literally named
-    Legacy), and neither is worth printing. There is no most-visited section
-    either, because nothing records page views yet -- `image_takes` counts copy
-    and download actions, which measure something else.
+    Legacy), and neither is worth printing.
 
     `contributors` counts only people who signed in with Discord. That keeps
     anonymity genuinely anonymous rather than merely unlabelled, and it means
@@ -856,14 +1010,44 @@ def get_home_highlights(limit: int = 8) -> dict:
         )
     ]
 
+    # Each series also names the character that carries it: the one with the
+    # most active images, ties broken by name so the answer is stable between
+    # visits. The count travels with it because "who" without "how many" reads
+    # as an anecdote rather than a measurement.
     top_series = [
-        {"series": r["series"], "images": r["n"], "characters": r["chars"]}
+        {
+            "series": r["series"],
+            "images": r["n"],
+            "characters": r["chars"],
+            "top_character": r["top_name"],
+            "top_character_images": r["top_n"],
+            "top_character_image": r["top_image"],
+        }
         for r in conn.execute(
-            "SELECT c.series, COUNT(ci.id) AS n, COUNT(DISTINCT c.id) AS chars"
-            "  FROM characters c"
-            "  JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
-            "  WHERE c.series IS NOT NULL AND c.series != ''"
-            "  GROUP BY c.series ORDER BY n DESC, c.series LIMIT ?",
+            "WITH series_totals AS ("
+            "  SELECT c.series, COUNT(ci.id) AS n, COUNT(DISTINCT c.id) AS chars"
+            "    FROM characters c"
+            "    JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
+            "   WHERE c.series IS NOT NULL AND c.series != ''"
+            "   GROUP BY c.series"
+            "), character_totals AS ("
+            "  SELECT c.series, c.name, c.main_image_url, COUNT(ci.id) AS n"
+            "    FROM characters c"
+            "    JOIN custom_images ci ON ci.character_id = c.id AND ci.state = 'active'"
+            "   WHERE c.series IS NOT NULL AND c.series != ''"
+            "   GROUP BY c.id"
+            "), ranked AS ("
+            "  SELECT series, name, main_image_url, n,"
+            "         ROW_NUMBER() OVER ("
+            "           PARTITION BY series ORDER BY n DESC, name"
+            "         ) AS rn"
+            "    FROM character_totals"
+            ") "
+            "SELECT s.series, s.n, s.chars, r.name AS top_name, r.n AS top_n,"
+            "       r.main_image_url AS top_image"
+            "  FROM series_totals s"
+            "  JOIN ranked r ON r.series = s.series AND r.rn = 1"
+            " ORDER BY s.n DESC, s.series LIMIT ?",
             (limit,),
         )
     ]
@@ -904,7 +1088,7 @@ def get_home_highlights(limit: int = 8) -> dict:
             "  JOIN custom_images ci ON ci.added_by = i.id AND ci.state = 'active'"
             " WHERE i.discord_id IS NOT NULL AND i.hide_from_leaderboard = 0"
             " GROUP BY i.id ORDER BY n DESC, i.handle LIMIT ?",
-            (limit,),
+            (contributor_limit,),
         )
     ]
 
@@ -919,6 +1103,36 @@ def get_home_highlights(limit: int = 8) -> dict:
             " WHERE series IS NOT NULL AND series != ''"
         ).fetchone()["n"],
     }
+
+
+def get_contributor_standing(identity_id: str) -> dict | None:
+    """Where one visitor sits on the contributor board, or None if unranked.
+
+    The board itself is the top few; this is the "and you" line, which has to be
+    computed against every ranked contributor, not the returned page. The same
+    filters apply as the board -- Discord identities that have not hidden
+    themselves -- and an identity with no active images is not on the board at
+    all, so the answer is None rather than a rank of zero.
+    """
+    if not identity_id:
+        return None
+    conn = get_connection()
+    row = conn.execute(
+        "WITH counts AS ("
+        "  SELECT i.id, i.handle, COUNT(ci.id) AS n"
+        "    FROM identities i"
+        "    JOIN custom_images ci ON ci.added_by = i.id AND ci.state = 'active'"
+        "   WHERE i.discord_id IS NOT NULL AND i.hide_from_leaderboard = 0"
+        "   GROUP BY i.id"
+        "), ranked AS ("
+        "  SELECT id, handle, n, ROW_NUMBER() OVER (ORDER BY n DESC, handle) AS rank"
+        "    FROM counts"
+        ") SELECT rank, handle, n FROM ranked WHERE id = ?",
+        (identity_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {"rank": row["rank"], "handle": row["handle"], "images": row["n"]}
 
 
 def list_characters_with_customs(

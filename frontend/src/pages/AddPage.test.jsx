@@ -280,7 +280,62 @@ describe('AddPage catalog integration', () => {
       expect(texts.some((text) => text.includes('Rem'))).toBe(true)
       expect(texts.some((text) => text.includes('Emilia'))).toBe(true)
     })
-    expect(api.suggestCharacters).toHaveBeenCalledWith('', 8, 'Re:Zero')
+    expect(api.suggestCharacters).toHaveBeenCalledWith('', 8, 'Re:Zero', [])
+  })
+
+  it('narrows the name suggestions by the chosen pool facets', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const waifu = screen.getByRole('button', { name: 'Waifu' })
+    expect(waifu).toHaveAttribute('aria-pressed', 'false')
+    await user.click(waifu)
+    expect(waifu).toHaveAttribute('aria-pressed', 'true')
+
+    await user.type(screen.getByLabelText('Character Name'), 'rem')
+    await waitFor(() => {
+      expect(api.suggestCharacters).toHaveBeenCalledWith('rem', 8, '', ['waifu'])
+    })
+  })
+
+  it('selects the pools of a character chosen from the suggestions', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({ found: false, character: null })
+    api.suggestCharacters.mockResolvedValue({
+      items: [
+        {
+          name: '9S',
+          series: 'NieR: Automata',
+          rank: '622',
+          image: '',
+          facets: ['husbando', 'game'],
+        },
+      ],
+    })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character Name'), '9S')
+    await user.click(await screen.findByRole('option', { name: /9S/ }))
+
+    expect(screen.getByRole('button', { name: 'Husbando' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Game' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Waifu' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('does not require the pools to add a character', async () => {
+    const user = userEvent.setup()
+    api.findCatalogCharacter.mockResolvedValue({ found: false, character: null })
+    api.addCharacter.mockResolvedValue({ success: true })
+    renderPage()
+
+    await user.type(screen.getByLabelText('Character Name'), 'Nobody Special')
+    await user.click(screen.getByRole('button', { name: /Add Character/ }))
+
+    await waitFor(() => expect(api.addCharacter).toHaveBeenCalledTimes(1))
+    // The groups are all unset, and the form still submits.
+    for (const label of ['Waifu', 'Husbando', 'Anime', 'Game']) {
+      expect(screen.getByRole('button', { name: label })).toHaveAttribute('aria-pressed', 'false')
+    }
   })
 
   it("offers the matched name's series as the only series suggestion", async () => {

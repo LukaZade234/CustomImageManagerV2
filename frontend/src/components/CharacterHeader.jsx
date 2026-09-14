@@ -1,4 +1,5 @@
 import { getImageUrl } from '../api'
+import { GenderMarks } from './GenderMarks'
 import { Button, Field, Input } from './ui'
 
 /**
@@ -85,7 +86,11 @@ export function CharacterHeader({
         {!edit.active ? (
           <div>
             <h1 className="display-title">{char.name}</h1>
-            <p className="text-body">{char.series || '\u2014'}</p>
+            <p className="text-body">
+              {char.series || '\u2014'}
+              <GenderMarks isFemale={char.is_female} isMale={char.is_male} />
+            </p>
+            {char.pools && <p className="text-meta char-pools">{char.pools}</p>}
             <p className="text-meta">Rank: {char.rank || '\u2014'}</p>
           </div>
         ) : (

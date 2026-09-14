@@ -440,10 +440,11 @@ them. There are no v2 users yet, so this costs nothing now.
         LIKE wildcards in the search term are escaped so `%` does not match everything.
       - `GET /api/saved` now returns `updated_at` per row, which retired the separate
         `/api/last-updated` fetch (**33 KB**) whose only remaining consumer was the client-side
-        sort. `lastUpdated` and the library-wide `customImages` map are gone from the store.
+        sort. `lastUpdated` and the library-wide `customImages` map are gone from the store. The
+        endpoint itself has since been deleted too.
 
-      The old endpoint is left in place, commented as superseded, in case something outside the
-      app calls it. It should be deleted once that is ruled out.
+      The old endpoint has since been deleted, so nothing external can depend on it. It was left
+      in place for a while only in case something outside the app called it.
 
       This also unblocks growth: the plan is to seed tens of thousands of characters, at which
       point filtering the whole library in the browser stops being possible at all.
@@ -472,12 +473,14 @@ them. There are no v2 users yet, so this costs nothing now.
 ## Phase 10 — Structure and code quality
 
 - [x] **Split `upload_imgchest.py`** _(done)_ — 1,717 lines down to 248. Six blueprints under
-      `routes/` (`auth`, `characters`, `customs`, `media`, `mudae`, `spa`) plus `remote_images.py`,
-      `ratelimit.py` and `validation.py`. Paths are unchanged; `tests/test_url_map.py` pins every
-      registered route so one going missing is a test failure rather than a production surprise.
-- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671. The four mutually exclusive
-      mode booleans became one `mode` value, and `GalleryToolbar` and `CharacterHeader` moved out
-      with tests of their own. `AddPage.jsx` (617 lines) is still to do.
+      `routes/` (`auth`, `catalog`, `characters`, `customs`, `media`, `mudae`, `spa`) plus
+      `remote_images.py`, `ratelimit.py` and `validation.py`. Paths are unchanged;
+      `tests/test_url_map.py` pins every registered route so one going missing is a test failure
+      rather than a production surprise.
+- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671, now 963 after the mode and
+      accent rework. The four mutually exclusive mode booleans became one `mode` value, and
+      `GalleryToolbar` and `CharacterHeader` moved out with tests of their own. `AddPage.jsx`
+      (745 lines) is still to do.
 - [x] **Structured logging** _(done)_ — `logs.py`, logfmt to stdout, replacing all 99
       `print(..., flush=True)` calls except the four in the `__main__` CLI block, which are
       genuine terminal output. Identity and request path attach automatically via a logging
@@ -541,10 +544,12 @@ each gallery item must show, so building this now means building it twice:
       with nothing cropped. Dimensions come from the database where known and are measured in the
       browser where not, which also removed the reflow cascade on image-heavy characters.
 - [x] **Home page information architecture.** _(done)_ The feature bullet list is gone. The page is
-      now three totals plus four sections drawn from the library itself: just-added artwork, most
-      visited this week, most popular characters, most popular series. Every section hides itself
-      when it has nothing to show. A contributor ranking exists and appears once more than one
-      signed-in person has uploaded.
+      now three totals plus sections drawn from the library itself: the just-added artwork in a
+      transform-driven ticker, most visited this week, most popular characters, a contributor
+      board, and the most popular series as a ledger naming each series' most-represented
+      character. Every section hides itself when it has nothing to show. The contributor board
+      ranks the top ten with gold/silver/bronze medals and adds a "you are #N with M images" line
+      when the visitor is ranked below the visible ten.
 - [x] **Retire `legacy.css`** _(done)_ — gone, from 2,874 lines originally. Its 239 rules moved
       into `layout.css` (the frame), a new `components.css` (toasts, dialogs, the autocomplete,
       skeletons, empty states) and `pages.css`, in their original relative order so the cascade did
@@ -559,9 +564,11 @@ each gallery item must show, so building this now means building it twice:
 - [x] **Re-enable `noDescendingSpecificity`** _(done)_ — on, and clean. Six real orderings were
       fixed by moving base rules above the modifiers that had been written before them.
 
-Impeccable (`impeccable.style`, a design skill pack for AI coding agents) was evaluated and
-deliberately **skipped for now**. Its leverage is highest when there is a system to align to;
-there was none. Worth revisiting for `critique` / `audit` / `polish` against what now exists.
+Impeccable (`impeccable.style`, a design skill pack for AI coding agents) was evaluated during
+this phase and deliberately **skipped at the time**, because its leverage is highest when there is
+a system to align to and there was none. It has since been adopted, hooks-free, as
+`.claude/skills/impeccable`; its `critique` output lives in `.impeccable/critique/`. See
+`DECISIONS.md` §9.
 
 ---
 
@@ -608,11 +615,14 @@ relevant — the concurrency test is written first, before Phase 2:
 
 ## Deferred / future
 
-- **Mudae catalog follow-ups.** Phase 1 (the `character_catalog` importer that enriches the
-  working set) is in. Still open: mirror the `mudae.net` portraits to R2 as WebP and add
-  `characters.main_image_thumb`; move search/autocomplete onto the catalog so the whole roster
-  stops shipping to the client; point the self-bot at gap-filling and rank refresh only; add pool
-  filters and series pages. See `DECISIONS.md` §8, "The Mudae catalog".
+- **Mudae catalog follow-ups.** The `character_catalog` importer is in, and catalog search is now
+  wired into the Add page (`routes/catalog.py`: characters, character, series, add-character) as
+  is the one-DM `$imartsmi-` bulk series add. Still open: mirror the `mudae.net` portraits to R2 as
+  WebP and add `characters.main_image_thumb`; move search/autocomplete fully onto the catalog so
+  the whole roster stops shipping to the client (the SPA still loads every character into the
+  store on startup); point the self-bot at gap-filling and rank refresh only; add series pages.
+  Pool filters are in: the suggestions API takes `pool=` and the Add form carries the facet
+  chips. See `DECISIONS.md` §8, "The Mudae catalog".
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).

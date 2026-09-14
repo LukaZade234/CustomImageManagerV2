@@ -86,6 +86,33 @@ describe('CharacterHeader', () => {
     expect(screen.getByText('Rank: —')).toBeInTheDocument()
   })
 
+  it('shows the gender sign beside the series and the pool list under it', () => {
+    setup({
+      char: {
+        name: '9S',
+        series: 'NieR: Automata',
+        rank: 622,
+        is_male: true,
+        pools: 'Game & Animanga',
+      },
+    })
+    expect(screen.getByRole('img', { name: 'Male' })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Female' })).not.toBeInTheDocument()
+    expect(screen.getByText('Game & Animanga')).toBeInTheDocument()
+  })
+
+  it('can show both genders', () => {
+    setup({ char: { name: 'Truck-kun', is_female: true, is_male: true } })
+    expect(screen.getByRole('img', { name: 'Female' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Male' })).toBeInTheDocument()
+  })
+
+  it('shows neither when the card did not say', () => {
+    setup()
+    expect(screen.queryByRole('img', { name: /Female|Male/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.char-pools')).not.toBeInTheDocument()
+  })
+
   it('the portrait is inert until the character is being edited', () => {
     setup()
     // The only button on the image side is Save; the portrait is not a control.

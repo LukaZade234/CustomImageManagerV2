@@ -2,11 +2,7 @@
 
 The routes themselves live in `routes/`, one blueprint per subject. They used to
 live here, all forty-six of them, because `@app.route` needs the app object to
-already exist — so every route had to sit below `# Before anything else that might log, so no startup line is lost.
-logs.setup()
-log = logs.get(__name__)
-
-app = Flask(__name__)` in this
+already exist — so every route had to sit below `app = Flask(__name__)` in this
 file, and the file was 1,700 lines. A Blueprint records the same declarations
 without an app, which is what lets them move out; this module attaches them at
 the bottom, so the import only ever goes one way.
@@ -23,6 +19,7 @@ import io
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 # Force UTF-8 for stdout/stderr to fix Windows console encoding errors
 if sys.platform.startswith("win"):
@@ -70,6 +67,40 @@ if _secret_is_ephemeral:
         "identity.ephemeral_secret_key",
         detail="identities reset on restart; fine for local development",
     )
+
+
+# The durable paths default into the code tree so a checkout works with no
+# configuration. In production that tree is mounted read-only
+# (`ProtectSystem=strict`), so a default left in place fails at the *first
+# write* rather than at startup -- the exact shape of the uploads bug, which
+# worked locally and failed on the server for every request.
+_REPO_ROOT = Path(__file__).resolve().parent
+
+
+def _guard_deployed_paths() -> None:
+    """Refuse a deployed config whose durable paths land in the code tree.
+
+    CORS_ORIGINS is the signal for "deployed", the same one `resolve_secret_key`
+    uses; unset means local development, where the in-tree defaults are fine.
+    """
+    if not os.environ.get("CORS_ORIGINS", "").strip():
+        return
+    for env_var, path in (
+        ("DATABASE_PATH", db.database_path()),
+        ("THUMB_DIR", thumbnails.cache_dir()),
+    ):
+        resolved = path.resolve()
+        if resolved == _REPO_ROOT or _REPO_ROOT in resolved.parents:
+            raise RuntimeError(
+                f"{env_var} resolves inside the code tree ({resolved}). The checkout "
+                "is read-only in production, so this fails at the first write. Set "
+                f"{env_var} to a path under /var/lib/imgmanager in the service "
+                "environment; see docs/DEPLOYMENT.md."
+            )
+
+
+_guard_deployed_paths()
+
 
 # CORS.
 #
@@ -161,7 +192,6 @@ def _deployed_revision() -> str:
 _DEPLOYED_REVISION = _deployed_revision()
 
 
-
 @app.route("/api/health", methods=["GET"])
 def health():
     """Is this deployment actually serving? 200 if yes, 503 if not.
@@ -215,6 +245,7 @@ def get_stats():
         "recent": [],
         "contributors": [],
         "series_count": 0,
+        "you": None,
     }
     try:
         highlights = db.get_home_highlights()
@@ -225,65 +256,14 @@ def get_stats():
     except Exception:
         log.exception("stats.highlights_failed")
 
-    return jsonify({**totals, **highlights})
-
-
-@app.route("/api/last-updated", methods=["GET"])
-def get_last_updated():
+    # The caller's own standing, separately guarded: it needs the request's
+    # identity and must not take the whole highlights block down with it.
     try:
-        return jsonify(db.get_last_updated())
-    except db.DatabaseConfigurationError:
-        raise
+        highlights["you"] = db.get_contributor_standing(identity.current_identity().id)
     except Exception:
-        log.exception("last_updated.read_failed")
-    return jsonify({})
+        log.exception("stats.standing_failed")
 
-
-
-
-
-
-
-
-
-
-
-# ... existing code ...
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    return jsonify({**totals, **highlights})
 
 
 if __name__ == "__main__":
