@@ -454,9 +454,10 @@ the flat document.
 The identity block on a character page: the name, the series, and two things the Mudae
 card carries for free.
 
-- **Gender:** the sign (or signs) sit immediately after the series, muted, each with an
-  `aria-label` rather than being read out as "female sign". A character can be in both
-  pools, so both can show, and neither does when the card did not say.
+- **Gender:** the sign (or signs) sit immediately after the series, using Mudae's own emoji
+  (`frontend/public/emoji/`, rendered as an `<img>` with alt text rather than the Unicode
+  signs). A character can be in both pools, so both can show, and neither does when the card
+  did not say.
 - **Pools:** the label the card prints under the series ("Game & Animanga", "Animanga
   roulette") takes its own micro line beneath it, above the rank. It is the card's
   caption, not the catalog's pool codes.
@@ -493,6 +494,9 @@ The Add form's name suggestions can be narrowed to a pool.
 - **Semantics:** A `fieldset` labelled "Filter suggestions by pool", one toggle per facet
   (waifu, husbando, anime, game). The facets are additive: selecting two narrows to
   characters carrying both.
+- **Follows the character:** picking a suggestion, or an exact name match autofilling, presses
+  that character's facets, so the filter reflects the character you are adding until you
+  change it.
 - **Why here:** filtering is about finding a character to add, and the name suggestions
   are the only place the catalog is browsed by name. It is deliberately absent from the
   Mudae lookup panel, which asks the bot rather than the catalog.
