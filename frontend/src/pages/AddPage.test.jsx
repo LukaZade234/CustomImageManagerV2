@@ -38,6 +38,14 @@ function renderPage() {
   )
 }
 
+function renderPageAt(route) {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <AddPage />
+    </MemoryRouter>,
+  )
+}
+
 /** Open the empty series field and choose its connected suggestion. */
 async function pickSeries(user, label) {
   await user.click(screen.getByLabelText('Series'))
@@ -53,6 +61,34 @@ beforeEach(() => {
 })
 
 describe('AddPage catalog integration', () => {
+  it('prefills series, rank, portrait and pools from a search link', async () => {
+    api.findCatalogCharacter.mockResolvedValue({
+      found: true,
+      character: {
+        name: 'Saber',
+        series: 'Fate/stay night',
+        rank: '4',
+        image: 'https://mudae.net/saber.png',
+        facets: ['waifu', 'anime'],
+        in_library: false,
+      },
+    })
+    renderPageAt('/add?name=Saber')
+
+    expect(screen.getByLabelText('Character Name')).toHaveValue('Saber')
+    await waitFor(() => expect(screen.getByLabelText('Series')).toHaveValue('Fate/stay night'))
+    expect(screen.getByLabelText('Rank (Optional)')).toHaveValue(4)
+    // The portrait arrives with the match, which is debounced a beat behind.
+    await waitFor(() =>
+      expect(document.querySelector('.add-char-image-preview__img')).toHaveAttribute(
+        'src',
+        'https://mudae.net/saber.png',
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Waifu' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Anime' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('offers the known series and refuses a mismatched one', async () => {
     const user = userEvent.setup()
     api.findCatalogCharacter.mockResolvedValue({

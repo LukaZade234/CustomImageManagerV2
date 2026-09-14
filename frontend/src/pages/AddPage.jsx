@@ -83,11 +83,32 @@ export default function AddPage() {
   const navigate = useNavigate()
   const addToast = useStore((s) => s.addToast)
   // A search result that is in the catalog but not the library links here with
-  // the name in the query string, so the form opens ready to add it.
+  // the name in the query string, so the form opens ready to add it. The rest of
+  // the record (series, rank, portrait, pools) is filled from the catalog rather
+  // than left for the visitor to retype; the portrait follows from the match
+  // once the series agrees.
   const [searchParams] = useSearchParams()
   const prefillName = searchParams.get('name') || ''
   useEffect(() => {
-    if (prefillName) setName(prefillName)
+    if (!prefillName) return undefined
+    setName(prefillName)
+    let cancelled = false
+    apiClient
+      .findCatalogCharacter(prefillName)
+      .then((res) => {
+        if (cancelled || !res?.found || !res.character) return
+        const c = res.character
+        if (c.series) setSeries(c.series)
+        if (c.rank) setRank(c.rank)
+        if (c.facets?.length) {
+          setPoolFilter(c.facets)
+          autoPoolName.current = c.name || prefillName
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [prefillName])
 
   useEffect(() => {
