@@ -18,7 +18,7 @@ describe('remembered search preferences', () => {
     const { useStore } = await import('./useStore')
     expect(useStore.getState().searchMode).toBe('name')
     expect(useStore.getState().searchSort).toBe('rank')
-    expect(useStore.getState().searchOrder).toBe('asc')
+    expect(useStore.getState().searchOrder).toBe('desc')
     expect(useStore.getState().customsSort).toBe('recent')
     expect(useStore.getState().customsOrder).toBe('desc')
   })
@@ -26,15 +26,21 @@ describe('remembered search preferences', () => {
   it('starts from what was chosen last time', async () => {
     localStorage.setItem('impeccable:search-mode', 'series')
     localStorage.setItem('impeccable:search-sort', 'alphabet')
-    localStorage.setItem('impeccable:search-order', 'desc')
+    localStorage.setItem('impeccable:search-order-v2', 'asc')
     localStorage.setItem('impeccable:customs-sort', 'count')
     localStorage.setItem('impeccable:customs-order', 'asc')
     const { useStore } = await import('./useStore')
     expect(useStore.getState().searchMode).toBe('series')
     expect(useStore.getState().searchSort).toBe('alphabet')
-    expect(useStore.getState().searchOrder).toBe('desc')
+    expect(useStore.getState().searchOrder).toBe('asc')
     expect(useStore.getState().customsSort).toBe('count')
     expect(useStore.getState().customsOrder).toBe('asc')
+  })
+
+  it('ignores the pre-v2 order key, whose meaning was inverted', async () => {
+    localStorage.setItem('impeccable:search-order', 'asc')
+    const { useStore } = await import('./useStore')
+    expect(useStore.getState().searchOrder).toBe('desc')
   })
 
   it('writes each choice the moment it is made', async () => {
@@ -46,7 +52,7 @@ describe('remembered search preferences', () => {
     useStore.getState().setCustomsOrder('asc')
     expect(localStorage.getItem('impeccable:search-mode')).toBe('series')
     expect(localStorage.getItem('impeccable:search-sort')).toBe('alphabet')
-    expect(localStorage.getItem('impeccable:search-order')).toBe('desc')
+    expect(localStorage.getItem('impeccable:search-order-v2')).toBe('desc')
     expect(localStorage.getItem('impeccable:customs-sort')).toBe('count')
     expect(localStorage.getItem('impeccable:customs-order')).toBe('asc')
   })

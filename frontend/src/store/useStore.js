@@ -257,9 +257,9 @@ export const useStore = create((set, get) => ({
   // options are a different set.
   searchMode: readStored(SEARCH_MODE_KEY, 'name'),
   searchSort: readStoredSort(),
-  // The default sort is rank, and rank 1 is the top rank, so ascending is what
-  // reads best-first (the server orders literally: asc = 1, 2, 3).
-  searchOrder: readStored(SEARCH_ORDER_KEY, 'asc'),
+  // The default sort is rank, and rank 1 is the top rank, so descending is what
+  // reads best-first (the search hook swaps it for the literal server order).
+  searchOrder: readStored(SEARCH_ORDER_KEY, 'desc'),
   customsSort: readStoredCustomsSort(),
   customsOrder: readStored(CUSTOMS_ORDER_KEY, 'desc'),
   setSearchMode: (m) => {

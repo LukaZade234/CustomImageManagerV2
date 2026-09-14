@@ -30,13 +30,17 @@ export function useCatalogSearch({ query, mode, sort, order, delay = 250 }) {
     }
     let cancelled = false
     setState((s) => ({ ...s, loading: true }))
+    // Rank 1 is the best rank, so the direction that reads best-first is the
+    // descending one; the server sorts literally. The customs list makes the
+    // same swap, so both read the same way.
+    const apiOrder = sort === 'rank' ? (order === 'desc' ? 'asc' : 'desc') : order
     const run = async () => {
       try {
         const res = await apiClient.searchCharacters({
           q,
           by: mode,
           sort,
-          order,
+          order: apiOrder,
           page: pageNumber,
           perPage: PAGE_SIZE,
         })
