@@ -380,6 +380,7 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/catalog/characters` | Name suggestions from the catalog and the working set; `series` and `pool` narrow them. |
+| GET | `/api/catalog/search` | One page of a catalog search (name or series, sorted, paginated) plus a total. |
 | GET | `/api/catalog/character` | One catalog entry by name. |
 | GET | `/api/catalog/series` | Series names for autocomplete. |
 | POST | `/api/catalog/add-character` | Promote a catalog entry into the working set. |
@@ -478,9 +479,11 @@ across 106 files (14,062 including tests).
 with five nested tab routes. `/saved` redirects into the profile, where the list
 now lives.
 
-**State:** one flat zustand store — characters, saved, the current character's
-customs, `me`, theme, toasts. No react-query yet (Phase 9). Retry and backoff are
-hand-written in `useStore.js` and `api.js`.
+**State:** one flat zustand store — saved, the current character's customs, `me`,
+theme, toasts. The full roster is no longer held: search and autocomplete run on
+the server (`/api/catalog/search`, `/api/catalog/characters`) and the character
+page fetches the one record it shows. No react-query yet (Phase 9). Retry and
+backoff are hand-written in `useStore.js` and `api.js`.
 
 **Styling:** a token layer plus primitives, loaded in order by
 `styles/index.css`: tokens → base → layout → ui → components → pages. `ui` must
