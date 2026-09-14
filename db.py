@@ -688,6 +688,89 @@ def suggest_characters(
     return result
 
 
+def search_catalog(
+    term: str,
+    *,
+    mode: str = "name",
+    sort: str = "rank",
+    order: str = "asc",
+    page: int = 1,
+    per_page: int = 60,
+) -> dict:
+    """One page of a search over the working set and the catalog together.
+
+    Returns `{"items": [...], "total": n}`. Each item is name, series, rank,
+    image, in_library and custom_count. A name in both tables appears once, as
+    the working row -- it may carry hand-edited fields and a real image count --
+    while a catalog-only row is `in_library: False` with zero images.
+
+    Matching is the same folded `LIKE` the suggestions use, so accented and NFD
+    spellings behave the same in both. Sorting and pagination happen here, which
+    is what lets the client stop downloading the roster.
+    """
+    import catalog_import
+
+    term = (term or "").strip()
+    if not term:
+        return {"items": [], "total": 0}
+    column = "series" if mode == "series" else "name"
+    like = f"%{_like_escape(term)}%"
+    conn = get_connection()
+
+    rows: dict[str, dict] = {}
+
+    working_sql = (
+        "SELECT c.name, c.series, c.rank, c.main_image_url AS image,"
+        "       COALESCE(SUM(CASE WHEN ci.state = 'active' THEN 1 ELSE 0 END), 0)"
+        "         AS custom_count"
+        "  FROM characters c"
+        "  LEFT JOIN custom_images ci ON ci.character_id = c.id"
+        f" WHERE c.{column} COLLATE NOCASE LIKE ? ESCAPE '\\'"
+        "  GROUP BY c.id"
+    )
+    for row in conn.execute(working_sql, (like,)):
+        rows[catalog_import.name_key(row["name"])] = {
+            "name": row["name"],
+            "series": row["series"],
+            "rank": row["rank"],
+            "image": row["image"],
+            "custom_count": row["custom_count"],
+            "in_library": True,
+        }
+
+    catalog_sql = (
+        "SELECT name, series, rank, mudae_image_url AS image"
+        "  FROM character_catalog"
+        f" WHERE {column} COLLATE NOCASE LIKE ? ESCAPE '\\'"
+    )
+    for row in conn.execute(catalog_sql, (like,)):
+        key = catalog_import.name_key(row["name"])
+        if key in rows:
+            continue
+        rows[key] = {
+            "name": row["name"],
+            "series": row["series"],
+            "rank": row["rank"],
+            "image": row["image"],
+            "custom_count": 0,
+            "in_library": False,
+        }
+
+    def sort_key(item):
+        if sort == "alphabet":
+            return item["name"].casefold()
+        if sort == "count":
+            return item["custom_count"]
+        # Best rank first when ascending; an unranked name sorts last.
+        return int(item["rank"]) if str(item["rank"]).isdigit() else 10**9
+
+    items = list(rows.values())
+    items.sort(key=sort_key, reverse=(order == "desc"))
+    total = len(items)
+    start = max(0, (page - 1) * per_page)
+    return {"items": items[start : start + per_page], "total": total}
+
+
 def suggest_series(term: str, *, limit: int = 20) -> list[str]:
     """Series names from the working set and the catalog's series list.
 

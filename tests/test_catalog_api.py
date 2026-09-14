@@ -183,6 +183,61 @@ class TestFindCharacter:
         assert clean_db.find_character("Nobody Here") is None
 
 
+class TestSearch:
+    def _seed(self, clean_db):
+        seed_catalog(
+            clean_db,
+            [
+                _catalog_row("Rem", "Re:Zero", "3"),
+                _catalog_row("Emilia", "Re:Zero", "2"),
+                _catalog_row("Saber", "Fate/stay night", "4"),
+            ],
+        )
+
+    def test_blank_query_returns_nothing(self, clean_db):
+        self._seed(clean_db)
+        assert clean_db.search_catalog("") == {"items": [], "total": 0}
+
+    def test_rank_sort_is_best_first_and_paginates(self, clean_db):
+        self._seed(clean_db)
+        result = clean_db.search_catalog("e", sort="rank", order="asc", per_page=2)
+        assert result["total"] == 3
+        assert [i["name"] for i in result["items"]] == ["Emilia", "Rem"]  # rank 2, 3
+        page2 = clean_db.search_catalog("e", sort="rank", order="asc", page=2, per_page=2)
+        assert [i["name"] for i in page2["items"]] == ["Saber"]
+
+    def test_series_mode_and_alphabet_sort(self, clean_db):
+        self._seed(clean_db)
+        result = clean_db.search_catalog("re:zero", mode="series", sort="alphabet")
+        assert [i["name"] for i in result["items"]] == ["Emilia", "Rem"]
+
+    def test_marks_library_rows_and_counts_their_images(self, clean_db):
+        self._seed(clean_db)
+        clean_db.add_character("Rem", "Hand Edited", "3", "")
+        clean_db.add_custom_images("Rem", ["https://cdn/rem-1.png", "https://cdn/rem-2.png"])
+        item = clean_db.search_catalog("rem")["items"][0]
+        assert item["in_library"] is True
+        assert item["series"] == "Hand Edited"
+        assert item["custom_count"] == 2
+
+    def test_catalog_only_row_is_not_in_library(self, clean_db):
+        self._seed(clean_db)
+        item = clean_db.search_catalog("saber")["items"][0]
+        assert item["in_library"] is False
+        assert item["custom_count"] == 0
+
+    def test_count_sort_puts_the_fullest_first(self, clean_db):
+        self._seed(clean_db)
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        clean_db.add_character("Emilia", "Re:Zero", "2", "")
+        clean_db.add_custom_images("Rem", ["https://cdn/rem-1.png", "https://cdn/rem-2.png"])
+        clean_db.add_custom_images("Emilia", ["https://cdn/emilia-1.png"])
+        names = [
+            i["name"] for i in clean_db.search_catalog("e", sort="count", order="desc")["items"]
+        ]
+        assert names == ["Rem", "Emilia", "Saber"]
+
+
 class TestCatalogRoutes:
     def _seed(self, clean_db):
         seed_catalog(
@@ -211,6 +266,12 @@ class TestCatalogRoutes:
         )
         body = client.get("/api/catalog/characters?pool=husbando").get_json()
         assert [i["name"] for i in body["items"]] == ["Husbando"]
+
+    def test_search_endpoint(self, client, clean_db):
+        self._seed(clean_db)
+        body = client.get("/api/catalog/search?q=r&sort=rank&order=asc").get_json()
+        assert [i["name"] for i in body["items"]] == ["Rem", "Artoria Pendragon"]
+        assert body["total"] == 2
 
     def test_series_endpoint(self, client, clean_db):
         self._seed(clean_db)

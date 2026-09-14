@@ -33,6 +33,7 @@ EXPECTED_ROUTES = {
     ("/api/catalog/add-character", "POST"),
     ("/api/catalog/character", "GET"),
     ("/api/catalog/characters", "GET"),
+    ("/api/catalog/search", "GET"),
     ("/api/catalog/series", "GET"),
     ("/api/characters", "GET"),
     ("/api/characters/<path:name>/view", "POST"),
