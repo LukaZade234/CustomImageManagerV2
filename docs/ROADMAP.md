@@ -620,8 +620,9 @@ relevant — the concurrency test is written first, before Phase 2:
   is the one-DM `$imartsmi-` bulk series add. Still open: mirror the `mudae.net` portraits to R2 as
   WebP and add `characters.main_image_thumb`; move search/autocomplete fully onto the catalog so
   the whole roster stops shipping to the client (the SPA still loads every character into the
-  store on startup); point the self-bot at gap-filling and rank refresh only; add pool filters and
-  series pages. See `DECISIONS.md` §8, "The Mudae catalog".
+  store on startup); point the self-bot at gap-filling and rank refresh only; add pool-filter
+  controls to the Add flow and series pages (the suggestions API already accepts `pool=`). See
+  `DECISIONS.md` §8, "The Mudae catalog".
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).

@@ -454,8 +454,23 @@ def _like_escape(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+# The catalog's four pool facets, mapped to the column each names. Mudae's own
+# tags are additive (`$wa, $ha` means both), so a filter lists facets that must
+# all hold.
+_POOL_FACETS = {
+    "waifu": "is_waifu",
+    "husbando": "is_husbando",
+    "anime": "is_anime",
+    "game": "is_game",
+}
+
+
 def suggest_characters(
-    term: str, *, limit: int = 10, series: str | None = None
+    term: str,
+    *,
+    limit: int = 10,
+    series: str | None = None,
+    pools: Iterable[str] | None = None,
 ) -> list[dict]:
     """Name suggestions, drawn from the working set and the full catalog.
 
@@ -466,6 +481,12 @@ def suggest_characters(
 
     `series` restricts to one exact series (case-insensitive), which is how the
     Add form offers the characters of a series the visitor has already named.
+
+    `pools` restricts to characters carrying every named pool facet (waifu,
+    husbando, anime, game). Working-set rows carry no pool of their own, so one
+    is kept only when the catalog lists it with the requested pools; a working
+    character the catalog does not know is omitted while a filter is active
+    rather than assumed to match.
     """
     import catalog_import
 
@@ -508,13 +529,31 @@ def suggest_characters(
         params.append(series)
     clause = f" WHERE {' AND '.join(where)}" if where else ""
 
-    working_sql = (
-        "SELECT name, series, rank, main_image_url AS image FROM characters" + clause
-    )
+    # Pool facets are catalog-only columns. A set of matching name_keys lets a
+    # working row be judged by what the catalog knows about the same character,
+    # rather than by a join the working table cannot supply.
+    requested = [f for f in (pools or []) if f in _POOL_FACETS]
+    allowed_keys = None
+    if requested:
+        predicate = " AND ".join(f"{_POOL_FACETS[f]} = 1" for f in requested)
+        allowed_keys = {
+            row["name_key"]
+            for row in conn.execute(f"SELECT name_key FROM character_catalog WHERE {predicate}")
+        }
+
+    working_sql = "SELECT name, series, rank, main_image_url AS image FROM characters" + clause
+    catalog_clause = clause
+    if requested:
+        pool_predicate = " AND ".join(f"{_POOL_FACETS[f]} = 1" for f in requested)
+        catalog_clause = f"{clause} AND {pool_predicate}" if clause else f" WHERE {pool_predicate}"
     catalog_sql = (
-        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog" + clause
+        "SELECT name, series, rank, mudae_image_url AS image FROM character_catalog"
+        + catalog_clause
     )
+
     for row in conn.execute(working_sql, params):
+        if allowed_keys is not None and catalog_import.name_key(row["name"]) not in allowed_keys:
+            continue
         take(row["name"], row["series"], row["rank"], row["image"], True)
     for row in conn.execute(catalog_sql, params):
         take(row["name"], row["series"], row["rank"], row["image"], False)

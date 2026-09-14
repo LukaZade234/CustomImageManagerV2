@@ -32,14 +32,17 @@ def catalog_characters():
     """Name suggestions for the combobox, best-ranked first on an empty query.
 
     `series` narrows to one exact series, so a visitor who has already named the
-    series is offered its characters.
+    series is offered its characters. `pool` is a comma-separated list of pool
+    facets (waifu, husbando, anime, game); every one named must hold.
     """
+    pools = [p.strip().lower() for p in request.args.get("pool", "").split(",") if p.strip()]
     return jsonify(
         {
             "items": db.suggest_characters(
                 request.args.get("q", ""),
                 limit=_int_arg("limit", 10, 25),
                 series=request.args.get("series", ""),
+                pools=pools,
             )
         }
     )
