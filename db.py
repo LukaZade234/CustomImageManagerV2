@@ -196,6 +196,7 @@ def get_characters() -> list | None:
     conn = get_connection()
     rows = conn.execute(
         "SELECT c.name, c.series, c.rank, c.main_image_url, c.accent_seed,"
+        "       c.is_female, c.is_male, c.pools,"
         "       COALESCE(SUM(CASE WHEN i.state = 'active' THEN 1 ELSE 0 END), 0)"
         "         AS custom_count"
         "  FROM characters c"
@@ -214,6 +215,10 @@ def get_characters() -> list | None:
             # NULL until the accent backfill or a gallery visit has measured
             # this character; the page then keeps the system accent.
             "accent_seed": r["accent_seed"],
+            # From the Mudae card; both zero and "" when it did not say.
+            "is_female": bool(r["is_female"]),
+            "is_male": bool(r["is_male"]),
+            "pools": r["pools"],
             # Active customs only, matching the browse-customs count.
             "custom_count": r["custom_count"],
         }
@@ -221,17 +226,65 @@ def get_characters() -> list | None:
     ]
 
 
-def add_character(name: str, series: str, rank: str, main_image_url: str = "") -> bool:
+def add_character(
+    name: str,
+    series: str,
+    rank: str,
+    main_image_url: str = "",
+    *,
+    is_female: bool = False,
+    is_male: bool = False,
+    pools: str = "",
+) -> bool:
     """False if the name is already taken."""
     with transaction() as conn:
         # Let the UNIQUE constraint decide, rather than checking first and
         # racing another writer between the check and the insert.
         cur = conn.execute(
-            "INSERT INTO characters (name, series, rank, main_image_url) VALUES (?, ?, ?, ?)"
+            "INSERT INTO characters"
+            " (name, series, rank, main_image_url, is_female, is_male, pools)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT (name) DO NOTHING",
-            (name, series, rank, main_image_url),
+            (
+                name,
+                series,
+                rank,
+                main_image_url,
+                int(bool(is_female)),
+                int(bool(is_male)),
+                pools,
+            ),
         )
         return bool(cur.rowcount)
+
+
+def set_character_traits(
+    name: str,
+    *,
+    is_female: bool,
+    is_male: bool,
+    pools: str,
+) -> bool:
+    """Refresh the Mudae-card traits on an existing character. False if unknown.
+
+    Traits are never cleared to make an existing value disappear: a lookup that
+    came back without a gender leaves what is stored alone, because a card
+    missing the emoji is not evidence the character stopped having one.
+    """
+    with transaction() as conn:
+        char_id = _character_id(conn, name)
+        if char_id is None:
+            return False
+        conn.execute(
+            "UPDATE characters"
+            "   SET is_female = CASE WHEN ? THEN 1 ELSE is_female END,"
+            "       is_male = CASE WHEN ? THEN 1 ELSE is_male END,"
+            "       pools = CASE WHEN ? <> '' THEN ? ELSE pools END,"
+            "       updated_at = ?"
+            " WHERE id = ?",
+            (int(bool(is_female)), int(bool(is_male)), pools, pools, _now(), char_id),
+        )
+        return True
 
 
 def update_character(orig_name: str, new_name: str, series: str, rank: str) -> bool:
@@ -613,7 +666,8 @@ def find_character(name: str) -> dict | None:
         return None
     conn = get_connection()
     for row in conn.execute(
-        "SELECT name, series, rank, main_image_url AS image FROM characters"
+        "SELECT name, series, rank, main_image_url AS image, is_female, is_male, pools"
+        "  FROM characters"
     ):
         if catalog_import.name_key(row["name"]) == key:
             return {
@@ -622,6 +676,9 @@ def find_character(name: str) -> dict | None:
                 "rank": row["rank"],
                 "image": row["image"],
                 "pool": "",
+                "is_female": bool(row["is_female"]),
+                "is_male": bool(row["is_male"]),
+                "pools": row["pools"],
                 "in_library": True,
             }
     row = conn.execute(

@@ -105,11 +105,21 @@ def _persist_mudae_character(info, *, overwrite_main=False):
         if overwrite_main and image_url:
             if not db.set_main_image(name, image_url):
                 raise RuntimeError("Failed to update main image")
-            db.update_last_modified(name)
+            db.set_character_traits(
+                name, is_female=info.is_female, is_male=info.is_male, pools=info.pools
+            )
             return "updated", image_url
         return "exists", existing[0].get("image") or image_url
 
-    if not db.add_character(name, series, rank, image_url):
+    if not db.add_character(
+        name,
+        series,
+        rank,
+        image_url,
+        is_female=info.is_female,
+        is_male=info.is_male,
+        pools=info.pools,
+    ):
         raise RuntimeError(f'Failed to add "{name}"')
     db.update_last_modified(name)
     return "added", image_url
@@ -396,7 +406,13 @@ def mudae_refresh_main_image():
         image_url = _mudae_main_image_url(info.image_url, char_name)
         if not db.set_main_image(char_name, image_url):
             return jsonify({"error": "Character not found"}), 404
-        db.update_last_modified(char_name)
+        # The same card carries the gender and pools, so refresh those too.
+        db.set_character_traits(
+            char_name,
+            is_female=info.is_female,
+            is_male=info.is_male,
+            pools=info.pools,
+        )
 
         return jsonify(
             {
