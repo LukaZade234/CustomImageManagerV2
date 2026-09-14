@@ -76,6 +76,20 @@ class TestSuggestCharacters:
         assert names == ["Emilia", "Rem"]
         assert clean_db.suggest_characters("", series="Nope") == []
 
+    def test_items_carry_their_pool_facets(self, clean_db):
+        # So the Add form can select the character's pools the moment it is
+        # picked, without a second request.
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        item = clean_db.suggest_characters("Rem", limit=1)[0]
+        assert item["facets"] == ["waifu", "anime"]
+
+    def test_a_working_row_carries_its_catalog_facets(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Rem", "Re:Zero", "3")])
+        clean_db.add_character("Rem", "Re:Zero", "3", "")
+        item = clean_db.suggest_characters("Rem", limit=1)[0]
+        assert item["in_library"] is True
+        assert item["facets"] == ["waifu", "anime"]
+
 
 class TestPoolFilters:
     def test_keeps_only_catalog_rows_with_the_named_facet(self, clean_db):
@@ -159,6 +173,11 @@ class TestFindCharacter:
     def test_matches_accented_spellings_by_key(self, clean_db):
         seed_catalog(clean_db, [_catalog_row("Hange Zoe\u0308", "AOT", "42")])
         assert clean_db.find_character("Hange Zoë")["series"] == "AOT"
+
+    def test_found_character_carries_facets(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Artoria Pendragon", "Fate/stay night", "4")])
+        found = clean_db.find_character("Artoria Pendragon")
+        assert found["facets"] == ["waifu", "anime"]
 
     def test_unknown_is_none(self, clean_db):
         assert clean_db.find_character("Nobody Here") is None

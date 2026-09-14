@@ -550,6 +550,37 @@ _POOL_FACETS = {
 }
 
 
+def _catalog_facets(row) -> list[str]:
+    """The pool keys a catalog row belongs to."""
+    if row is None:
+        return []
+    return [name for name, column in _POOL_FACETS.items() if row[column]]
+
+
+def _attach_catalog_facets(conn, items: list[dict]) -> None:
+    """Give each suggestion item the catalog pool keys for its name, in place.
+
+    Fetched only for the returned page, not the whole catalog.
+    """
+    if not items:
+        return
+    import catalog_import
+
+    keys = [catalog_import.name_key(item["name"]) for item in items]
+    placeholders = ",".join("?" * len(keys))
+    found = {
+        row["name_key"]: _catalog_facets(row)
+        for row in conn.execute(
+            "SELECT name_key, is_waifu, is_husbando, is_anime, is_game"
+            f"  FROM character_catalog WHERE name_key IN ({placeholders})",
+            keys,
+        )
+    }
+    for item in items:
+        item["facets"] = found.get(catalog_import.name_key(item["name"]), [])
+
+
+
 def suggest_characters(
     term: str,
     *,
@@ -652,7 +683,9 @@ def suggest_characters(
         rank = int(item["rank"]) if item["rank"].isdigit() else 10**9
         return (bucket, rank, name_key)
 
-    return sorted(rows.values(), key=order)[:limit]
+    result = sorted(rows.values(), key=order)[:limit]
+    _attach_catalog_facets(conn, result)
+    return result
 
 
 def suggest_series(term: str, *, limit: int = 20) -> list[str]:
@@ -697,6 +730,13 @@ def find_character(name: str) -> dict | None:
     if not key:
         return None
     conn = get_connection()
+    facets = _catalog_facets(
+        conn.execute(
+            "SELECT is_waifu, is_husbando, is_anime, is_game"
+            "  FROM character_catalog WHERE name_key = ?",
+            (key,),
+        ).fetchone()
+    )
     for row in conn.execute(
         "SELECT name, series, rank, main_image_url AS image, is_female, is_male, pools"
         "  FROM characters"
@@ -711,6 +751,7 @@ def find_character(name: str) -> dict | None:
                 "is_female": bool(row["is_female"]),
                 "is_male": bool(row["is_male"]),
                 "pools": row["pools"],
+                "facets": facets,
                 "in_library": True,
             }
     row = conn.execute(
@@ -725,6 +766,7 @@ def find_character(name: str) -> dict | None:
             "rank": row["rank"],
             "image": row["image"],
             "pool": row["pool"],
+            "facets": facets,
             "in_library": False,
         }
     return None
