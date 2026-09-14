@@ -524,6 +524,19 @@
   min-height: 100%;
   object-fit: cover;
 }
+/* The portrait arrives from Mudae with a 1px white line at its edge. A border
+   would sit outside that line and leave it showing, so the frame is an inset
+   outline that lands on the line and paints it over, the same move the
+   character page makes. Hover takes the accent, echoing the card's own state. */
+.customs-list .search-result-img {
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
+  transition: outline-color var(--duration) var(--ease);
+}
+.customs-item-with-preview:hover .search-result-img,
+.customs-item-with-preview:focus-visible .search-result-img {
+  outline-color: var(--accent);
+}
 /* A field of self-contained cards rather than a divided ribbon: each character
    is its own surface, so a long list scans as a grid and a phone can read two
    columns instead of one endless line. */
@@ -1187,6 +1200,30 @@ body.reorder-touch-dragging {
 }
 .add-char-form.field-stack .form-error {
   margin-top: var(--space-1);
+}
+/* The lookup panel's inputs and the manual form's are the same control, so the
+   older .modern-input takes the shared input treatment (34px, 6px radius, meta
+   type); the note and the upload box line up with the rest of the surface. */
+.add-type--ramp .mudae-panel .modern-input {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border-color: var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--type-meta);
+}
+.add-type--ramp .mudae-panel .modern-input:hover {
+  border-color: var(--text-subtle);
+}
+.add-type--ramp .mudae-panel .modern-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--ring);
+}
+.add-type--ramp .edit-group > label:not(.file-upload-box) {
+  margin-bottom: var(--space-1);
+}
+.add-type--ramp .file-upload-box {
+  border-color: var(--border-strong);
 }
 .char-mudae-actions {
   display: flex;
