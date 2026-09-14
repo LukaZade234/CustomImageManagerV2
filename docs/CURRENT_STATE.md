@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the nine migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the ten migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -158,7 +158,7 @@ because that had to stop being true.
 | Table | Rows (prod) | What it holds |
 |---|---|---|
 | `custom_images` | 8,560 | The library. Id, url, content hash, position, owner, state, dimensions |
-| `characters` | 1,705 | Name, series, rank, main image, timestamps |
+| `characters` | 1,705 | Name, series, rank, main image, gender, pools, timestamps |
 | `image_takes` | 271 | `copy_command` / `download` events, per image |
 | `rate_limit_hits` | — | Fixed-window counters, swept after a day |
 | `character_views` | — | One row per person per character per hour |
@@ -168,7 +168,7 @@ because that had to stop being true.
 | `image_reports` | — | Two distinct reporters remove an image |
 | `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
-| `schema_migrations` | 9 | Which migrations have run |
+| `schema_migrations` | 10 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),
@@ -379,7 +379,7 @@ limited per identity (`ratelimit.py`).
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/catalog/characters` | Search the imported Mudae catalog, paginated. |
+| GET | `/api/catalog/characters` | Name suggestions from the catalog and the working set; `series` and `pool` narrow them. |
 | GET | `/api/catalog/character` | One catalog entry by name. |
 | GET | `/api/catalog/series` | Series names for autocomplete. |
 | POST | `/api/catalog/add-character` | Promote a catalog entry into the working set. |
@@ -465,7 +465,7 @@ across 106 files (14,062 including tests).
 | Area | Lines | Notes |
 |---|---|---|
 | `pages/CharacterPage.jsx` | 963 | The gallery and its three modes. Was 1,611 |
-| `pages/AddPage.jsx` | 745 | Add character + Mudae series import. Not yet split |
+| `pages/AddPage.jsx` | 780 | Add character + Mudae series import + pool-filtered suggestions. Not yet split |
 | `pages/HomePage.jsx` | 577 | Totals, just-added ticker, most-visited, popular characters, series ledger, contributor board |
 | `pages/CustomsPage.jsx` | 410 | Browse all customs, filtered server-side |
 | `hooks/useGalleryReorder.js` | 316 | Pointer-events drag-to-reorder, mouse and touch, plus arrow-key moves |
@@ -585,7 +585,7 @@ is worth remembering:
 | Anyone could delete anything | Ownership-scoped removal, soft delete, reports |
 | No rate limiting anywhere | `ratelimit.py`, per identity, per action |
 | `CORS: *` by default | Explicit origins; wildcards refused at startup |
-| No tests at all | 438 backend, 386 frontend |
+| No tests at all | 462 backend, 390 frontend |
 | `print()` with no actor | `logs.py`; identity attaches automatically inside a request |
 | Health check could not fail | Reads the database; 503 when it cannot |
 | Full-map fetch on the home page | `/api/stats`, with a test that it stays bounded |

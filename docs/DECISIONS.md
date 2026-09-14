@@ -519,11 +519,28 @@ repeats are dropped, and when two captures disagree the better (lower) rank wins
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
 **Deferred, not rejected.** Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than
-the PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring the
-self-bot to gap-filling and refreshes, and pool filters are all natural next phases. The catalog
-only *adds* a table, so none of them are blocked by this one. `remote_images._allowed_portrait_url`
-is deliberately separate from the user-facing download proxy's allowlist: the internal accent
-fetch may read Mudae, a visitor's "download this image" may not.
+the PNGs, and free-egress), server-side catalog search to replace the full-roster fetch, retiring
+the self-bot to gap-filling and refreshes, and series pages are all natural next phases. Pool
+filters, once on this list, have since landed: the catalog's four booleans back a `pool=` parameter
+on the suggestions API and the facet chips in the Add form. The catalog only *adds* a table, so none
+of them are blocked by this one. `remote_images._allowed_portrait_url` is deliberately separate from
+the user-facing download proxy's allowlist: the internal accent fetch may read Mudae, a visitor's
+"download this image" may not.
+
+### The `$im` card's gender and pools
+
+`$im` shows more than a name and a rank: the gender beside the series (`NieR: Automata :male:`) and
+the pools the character belongs to underneath (`Game & Animanga · 201`). Both were being parsed past
+and thrown away. They are now read off the card and stored on the working row (`is_female`,
+`is_male`, `pools`), because the alternative is a second Mudae request later to recover what the
+first reply already said.
+
+The gender arrives as a custom Discord emoji, which `_strip_md` removes before the series is read,
+so it is parsed from the raw description; the shortcode and Unicode forms are accepted too. A
+character can be in both gender pools, so the two flags are independent. `pools` is the label as
+Mudae prints it, not the catalog's tag codes: it is a caption for the character page, and the
+catalog's own booleans remain what filtering reads. A lookup that comes back without a gender never
+clears a stored one — a sparse card is not evidence the character changed.
 
 ### Bulk-adding a series: one DM, then review
 

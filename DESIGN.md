@@ -449,6 +449,18 @@ the flat document.
 - **Profile control:** A single button carrying the visitor's handle. Signing in and out,
   the theme, and every preference live behind it rather than in the bar.
 
+### Character details
+
+The identity block on a character page: the name, the series, and two things the Mudae
+card carries for free.
+
+- **Gender:** the sign (or signs) sit immediately after the series, muted, each with an
+  `aria-label` rather than being read out as "female sign". A character can be in both
+  pools, so both can show, and neither does when the card did not say.
+- **Pools:** the label the card prints under the series ("Game & Animanga", "Animanga
+  roulette") takes its own micro line beneath it, above the rank. It is the card's
+  caption, not the catalog's pool codes.
+
 ### Action bar
 
 - **Style:** Fixed to the bottom of the viewport while a gallery mode is open, surface
@@ -470,6 +482,20 @@ the flat document.
   padding; the selected option is a raised surface chip inside it.
 - **Use:** Name versus Series search. It is a real radiogroup, not two buttons that look
   like one.
+
+### Pool filter chips
+
+The Add form's name suggestions can be narrowed to a pool.
+
+- **Style:** A row of small secondary buttons. A pressed one takes the shared
+  `aria-pressed` treatment — accent tint, accent border, accent text — so it reads as a
+  toggle without a second selected-state vocabulary.
+- **Semantics:** A `fieldset` labelled "Filter suggestions by pool", one toggle per facet
+  (waifu, husbando, anime, game). The facets are additive: selecting two narrows to
+  characters carrying both.
+- **Why here:** filtering is about finding a character to add, and the name suggestions
+  are the only place the catalog is browsed by name. It is deliberately absent from the
+  Mudae lookup panel, which asks the bot rather than the catalog.
 
 ### Contact strip
 

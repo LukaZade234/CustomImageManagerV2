@@ -48,7 +48,8 @@ and deduplicated across everyone rather than per-account, and removal is always 
   upload, by dragging an image from another page, or by URL.
 - Both phone and desktop are real usage. Curating a character's images is done on either.
 - A Mudae self-bot can fetch a character's metadata (series, rank, card art) so a character can be
-  added without typing it.
+  added without typing it. The card also carries the gender beside the series and the pools the
+  character belongs to; both are kept so a character page can show them.
 - The landing page is drawn from the library rather than from copy: the product name beside
   its headline figures, the newest images, a weekly "Most visited" ranking, the most popular
   characters and series, and a top-ten contributor board. Every section hides itself when it
