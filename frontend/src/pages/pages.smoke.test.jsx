@@ -148,6 +148,18 @@ describe('page smoke tests', () => {
     )
   })
 
+  it('reads rank best-first: the descending UI order is sent ascending', async () => {
+    // Rank 1 is the best rank, so "desc" in the menu means best-first, which is
+    // the server's literal ascending order.
+    useStore.setState({ searchSort: 'rank', searchOrder: 'desc' })
+    renderAt(<SearchResultsPage />, '/search?q=a&by=name')
+    await waitFor(() =>
+      expect(api.apiClient.searchCharacters).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'rank', order: 'asc' }),
+      ),
+    )
+  })
+
   it('pages the results behind a Show more button', async () => {
     const many = Array.from({ length: 75 }, (_, i) => ({
       name: `Char ${String(i).padStart(2, '0')}`,
