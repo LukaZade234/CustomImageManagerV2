@@ -810,15 +810,16 @@ def get_custom_image_stats() -> dict:
 def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
     """Everything the landing page shows besides the two totals.
 
-    One function and one round trip, because these are four small queries that
-    are always wanted together and never separately.
+    One function and one round trip, because these are small queries that are
+    always wanted together and never separately: the best-covered characters, the
+    top series (each with its most-represented character), the newest images, the
+    most-viewed characters this week, the contributor board, and the caller's own
+    standing when they are ranked below it.
 
     What is *not* here is as considered as what is. There is no visitor count:
     an identity row is created per cookie, so the honest numbers are "1" (signed
     in with Discord) or "4" (including pseudonyms, one of them literally named
-    Legacy), and neither is worth printing. There is no most-visited section
-    either, because nothing records page views yet -- `image_takes` counts copy
-    and download actions, which measure something else.
+    Legacy), and neither is worth printing.
 
     `contributors` counts only people who signed in with Discord. That keeps
     anonymity genuinely anonymous rather than merely unlabelled, and it means
