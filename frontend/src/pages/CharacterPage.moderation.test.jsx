@@ -32,6 +32,11 @@ vi.mock('../api', () => ({
   apiClient: new Proxy(
     {
       getCustomImagesForChar: vi.fn(async () => served.rows),
+      // The page fetches its own record now instead of reading a downloaded roster.
+      findCatalogCharacter: vi.fn(async (name) => ({
+        found: true,
+        character: { name, series: 'Re:Zero', rank: '1', image: 'rem.png', in_library: true },
+      })),
       hideImages,
       deleteCustomImages,
     },

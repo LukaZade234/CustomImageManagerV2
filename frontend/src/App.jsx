@@ -47,15 +47,13 @@ class AppErrorBoundary extends React.Component {
 }
 
 function App() {
-  const loadCharacters = useStore((s) => s.loadCharacters)
   const loadSaved = useStore((s) => s.loadSaved)
   const loadMe = useStore((s) => s.loadMe)
 
   useEffect(() => {
-    loadCharacters()
     loadSaved()
     loadMe()
-  }, [loadCharacters, loadSaved, loadMe])
+  }, [loadSaved, loadMe])
 
   return (
     <>

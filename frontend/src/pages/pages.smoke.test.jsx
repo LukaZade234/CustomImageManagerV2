@@ -51,9 +51,21 @@ const CHARACTERS = [
 beforeEach(() => {
   api.apiClient.searchCharacters.mockReset()
   api.apiClient.searchCharacters.mockResolvedValue({ items: [], total: 0 })
+  // The character page fetches its own record now; serve it from CHARACTERS so
+  // a known name resolves and an unknown one is genuinely not found.
+  api.apiClient.findCatalogCharacter.mockReset()
+  api.apiClient.findCatalogCharacter.mockImplementation((name) => {
+    const character = CHARACTERS.find((c) => c.name === name)
+    return Promise.resolve(
+      character
+        ? { found: true, character: { ...character, in_library: true } }
+        : { found: false, character: null },
+    )
+  })
+  api.apiClient.getCustomImagesForChar.mockReset()
+  api.apiClient.getCustomImagesForChar.mockResolvedValue({})
   useStore.setState({
-    characters: CHARACTERS,
-    savedCharacters: [{ name: 'Ayanami Rei' }],
+    savedCharacters: [{ name: 'Ayanami Rei', series: 'Neon Genesis Evangelion', image: 'rei.png' }],
     customImages: { 'Ayanami Rei': ['https://cdn.example/a.png'] },
     lastUpdated: {},
     currentCharacter: null,
@@ -69,9 +81,11 @@ function renderAt(ui, route = '/') {
 }
 
 describe('page smoke tests', () => {
-  it('renders the home page with its counts', () => {
+  it('renders the home page with its counts', async () => {
     renderAt(<HomePage />)
-    expect(screen.getByRole('heading', { level: 1, name: /imgmanager/i })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /imgmanager/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders the saved list with a saved character', () => {
@@ -176,8 +190,9 @@ describe('character page loading states', () => {
    * refresh, bookmark and link pasted into Discord therefore opened on an error
    * claiming the character did not exist.
    */
-  it('shows a skeleton while the library is still loading, not an error', () => {
-    useStore.setState({ characters: [], loading: true })
+  it('shows a skeleton while the record is still loading, not an error', () => {
+    // A record that never resolves stands in for the request being in flight.
+    api.apiClient.findCatalogCharacter.mockReturnValue(new Promise(() => {}))
     renderAt(<CharacterPage />, '/character/Ayanami%20Rei')
 
     expect(screen.getByText(/Loading character/i)).toBeInTheDocument()
@@ -189,20 +204,21 @@ describe('character page loading states', () => {
     expect(document.querySelectorAll('.gallery-item-wrapper--skeleton').length).toBeGreaterThan(0)
   })
 
-  it('only says not-found once the library has actually arrived', () => {
-    useStore.setState({ characters: CHARACTERS, loading: false })
+  it('only says not-found once the record has actually arrived', async () => {
     renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
 
     expect(
-      screen.getByRole('heading', { level: 1, name: /Character not found/i }),
+      await screen.findByRole('heading', { level: 1, name: /Character not found/i }),
     ).toBeInTheDocument()
     expect(screen.getByText(/Nothing here called/i)).toBeInTheDocument()
   })
 
-  it('offers a way back rather than stranding you', () => {
-    useStore.setState({ characters: CHARACTERS, loading: false })
+  it('offers a way back rather than stranding you', async () => {
     renderAt(<CharacterPage />, '/character/Nobody%20At%20All')
-    expect(screen.getByRole('link', { name: /Back to search/i })).toHaveAttribute('href', '/')
+    expect(await screen.findByRole('link', { name: /Back to search/i })).toHaveAttribute(
+      'href',
+      '/',
+    )
   })
 })
 
@@ -224,26 +240,25 @@ describe('an empty gallery', () => {
     )
   }
 
-  it('says there is nothing here yet, and offers the way to add one', () => {
+  it('says there is nothing here yet, and offers the way to add one', async () => {
     useStore.setState({ characterImages: { 'Ayanami Rei': [] } })
     renderCharacter()
 
-    expect(screen.getByText(/No custom images yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No custom images yet/i)).toBeInTheDocument()
     // Its own button, inside the gallery, rather than only the toolbar's — the
     // point is that the way out sits where the missing images would be.
     const gallery = within(document.querySelector('.custom-images-gallery'))
     expect(gallery.getByRole('button', { name: /^Add image$/i })).toBeInTheDocument()
   })
 
-  it('distinguishes an empty gallery from one you have hidden all of', () => {
-    useStore.setState({
-      characterImages: {
-        'Ayanami Rei': [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }],
-      },
-    })
+  it('distinguishes an empty gallery from one you have hidden all of', async () => {
+    const hidden = [{ id: 1, url: 'https://cdn.example/a.png', hidden: true, is_mine: false }]
+    // The page refetches on mount, so what the mock serves is what is shown.
+    api.apiClient.getCustomImagesForChar.mockResolvedValue({ rows: hidden })
+    useStore.setState({ characterImages: { 'Ayanami Rei': hidden } })
     renderCharacter()
 
-    expect(screen.getByText(/The only image here is one you hid/i)).toBeInTheDocument()
+    expect(await screen.findByText(/The only image here is one you hid/i)).toBeInTheDocument()
     expect(screen.queryByText(/No custom images yet/i)).not.toBeInTheDocument()
   })
 })

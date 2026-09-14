@@ -43,7 +43,6 @@ function readStoredCustomsSort() {
 }
 
 export const useStore = create((set, get) => ({
-  characters: [],
   savedCharacters: [],
   // Per-character rows: id, url, owner, is_mine, hidden. Loaded on demand for
   // the character page only. There is deliberately no library-wide image map any
@@ -75,23 +74,6 @@ export const useStore = create((set, get) => ({
     get().setTheme(nextTheme(get().theme))
   },
 
-  loadCharacters: async () => {
-    set({ loading: true, error: null })
-    try {
-      const data = await apiClient.getCharacters()
-      const list = data || []
-      set((s) => ({
-        characters: list,
-        loading: false,
-        accentSeeds: { ...s.accentSeeds, ...seedsByName(list) },
-      }))
-      return data
-    } catch (e) {
-      set({ error: e.message, loading: false })
-      return []
-    }
-  },
-
   loadSaved: async () => {
     try {
       // Already ordered most-recently-updated first by the server, which knows
@@ -108,10 +90,13 @@ export const useStore = create((set, get) => ({
 
   /** Two integers for the landing page, in place of the whole library. */
   loadStats: async () => {
+    set({ loading: true, error: null })
     try {
-      set({ stats: await apiClient.getStats() })
-    } catch {
-      /* keep whatever we had; a stale count beats an empty page */
+      set({ stats: await apiClient.getStats(), loading: false })
+    } catch (e) {
+      // The home page is the only reader; a failed load is worth showing rather
+      // than rendering a page of zeros that looks like an empty library.
+      set({ error: e.message, loading: false })
     }
   },
 

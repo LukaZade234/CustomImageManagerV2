@@ -53,7 +53,6 @@ beforeEach(() => {
     },
     theme: 'system',
     savedCharacters: [],
-    characters: [],
     addToast: vi.fn(),
     loadMe: vi.fn(),
     removeSaved: vi.fn().mockResolvedValue({}),
@@ -214,10 +213,9 @@ describe('history', () => {
 })
 
 describe('saved', () => {
-  it('fills in the series from the library', async () => {
+  it('shows the series the server joined into the saved row', async () => {
     useStore.setState({
-      savedCharacters: [{ name: 'Rem' }],
-      characters: [{ name: 'Rem', series: 'Re:Zero', image: 'r.png' }],
+      savedCharacters: [{ name: 'Rem', series: 'Re:Zero', image: 'r.png' }],
     })
     at(<SavedTab />)
     expect(screen.getByText('Rem')).toBeInTheDocument()

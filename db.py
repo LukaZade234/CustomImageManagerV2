@@ -821,7 +821,8 @@ def find_character(name: str) -> dict | None:
         ).fetchone()
     )
     for row in conn.execute(
-        "SELECT name, series, rank, main_image_url AS image, is_female, is_male, pools"
+        "SELECT name, series, rank, main_image_url AS image, accent_seed,"
+        "       is_female, is_male, pools"
         "  FROM characters"
     ):
         if catalog_import.name_key(row["name"]) == key:
@@ -830,6 +831,7 @@ def find_character(name: str) -> dict | None:
                 "series": row["series"],
                 "rank": row["rank"],
                 "image": row["image"],
+                "accent_seed": row["accent_seed"],
                 "pool": "",
                 "is_female": bool(row["is_female"]),
                 "is_male": bool(row["is_male"]),

@@ -44,24 +44,25 @@ export default function CharacterPage() {
   const { name } = useParams()
   const navigate = useNavigate()
   const isNarrow = useMediaQuery(NARROW)
-  const characters = useStore((s) => s.characters)
-  // Named apart from the edit form's own `loading` below.
-  const libraryLoading = useStore((s) => s.loading)
   const savedCharacters = useStore((s) => s.savedCharacters)
   const characterImages = useStore((s) => s.characterImages)
   const characterImagesLoading = useStore((s) => s.characterImagesLoading)
   const loadCustomImagesForCharacter = useStore((s) => s.loadCustomImagesForCharacter)
   const appendCustomImageUrls = useStore((s) => s.appendCustomImageUrls)
   const setCustomImageOrder = useStore((s) => s.setCustomImageOrder)
-  const loadCharacters = useStore((s) => s.loadCharacters)
   const loadSaved = useStore((s) => s.loadSaved)
   const renameCustomCharacterData = useStore((s) => s.renameCustomCharacterData)
   const saveCharacter = useStore((s) => s.saveCharacter)
   const removeSaved = useStore((s) => s.removeSaved)
   const addToast = useStore((s) => s.addToast)
 
-  const char =
-    characters.find((c) => c.name === name) || savedCharacters.find((c) => c.name === name)
+  // The roster is no longer downloaded, so the page fetches the one character
+  // it is showing. A catalog-only name (never added) is treated as not found;
+  // search sends those to the Add form instead.
+  const [char, setChar] = useState(null)
+  const [charLoading, setCharLoading] = useState(true)
+  const [charVersion, setCharVersion] = useState(0)
+  const reloadChar = () => setCharVersion((v) => v + 1)
   const isSaved = savedCharacters.some((s) => s.name === name)
 
   const [showHidden, setShowHidden] = useState(false)
@@ -152,6 +153,27 @@ export default function CharacterPage() {
       setMainImage(char.image || '')
     }
   }, [char])
+
+  // charVersion is a re-run trigger, not a value the effect reads.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger, not an input
+  useEffect(() => {
+    let cancelled = false
+    setCharLoading(true)
+    apiClient
+      .findCatalogCharacter(name)
+      .then((res) => {
+        if (!cancelled) setChar(res?.found && res.character?.in_library ? res.character : null)
+      })
+      .catch(() => {
+        if (!cancelled) setChar(null)
+      })
+      .finally(() => {
+        if (!cancelled) setCharLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [name, charVersion])
 
   useEffect(() => {
     apiClient
@@ -328,10 +350,10 @@ export default function CharacterPage() {
     [name, setCustomImageOrder, loadCustomImagesForCharacter, addToast],
   )
 
-  // Three states, not two. `char` is absent both while the library is loading
-  // and when the character genuinely does not exist, and conflating them meant
-  // every shared link opened on an error.
-  if (!char && libraryLoading) return <CharacterLoadingState />
+  // Three states, not two. `char` is absent both while the record is being
+  // fetched and when the character genuinely does not exist, and conflating them
+  // meant every shared link opened on an error.
+  if (!char && charLoading) return <CharacterLoadingState />
   if (!char) {
     return (
       <Card as="section" padding="lg">
@@ -358,8 +380,8 @@ export default function CharacterPage() {
         series: editSeries,
         rank: editRank,
       })
-      await loadCharacters()
       await loadSaved()
+      reloadChar()
       if (name !== editName) {
         renameCustomCharacterData(name, editName)
       }
@@ -426,7 +448,7 @@ export default function CharacterPage() {
     try {
       const res = await apiClient.mudaeRefreshMainImage(name)
       setMainImage(res.image_url)
-      await loadCharacters()
+      reloadChar()
       addToast(res.message || 'Main image updated from Mudae', 'success')
     } catch (err) {
       addToast(err.message, 'error')

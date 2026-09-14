@@ -462,6 +462,5 @@ describe('AddPage catalog integration', () => {
     expect(seriesArg).toBe('Lord of the Mysteries')
     expect(items).toHaveLength(3)
     expect(items[0]).toMatchObject({ name: 'Klein Moretti', rank: '4252' })
-    expect(api.getCharacters).toHaveBeenCalled()
   })
 })
