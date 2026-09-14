@@ -91,7 +91,9 @@ class TestRecording:
         assert written == 1
         assert clean_db.find_character("Rem")["image_thumb"] == "portraits/1-abcdef12.webp"
 
-    def test_a_hand_uploaded_main_image_is_left_alone(self, clean_db):
+    def test_a_hand_uploaded_main_image_still_shows_the_catalog_portrait(self, clean_db):
+        # The main image is display-only, so the catalog's Mudae art wins even
+        # when the working row carries an ImgChest main image.
         _seed_catalog(clean_db, [_catalog_row("Rem", "https://mudae.net/uploads/1/a.png")])
         clean_db.add_character("Rem", "S", "1", "https://cdn.imgchest.com/files/mine.png")
 
@@ -99,8 +101,30 @@ class TestRecording:
             [(catalog_import.name_key("Rem"), "portraits/1-abcdef12.webp")]
         )
 
-        # The catalog row is mirrored, but the working row points somewhere else,
-        # so it must not be given a portrait it does not have.
+        assert clean_db.find_character("Rem")["image_thumb"] == "portraits/1-abcdef12.webp"
+
+
+class TestSyncThumbs:
+    def test_sync_reaches_working_rows_added_after_the_mirror(self, clean_db):
+        _seed_catalog(clean_db, [_catalog_row("Rem", "https://mudae.net/uploads/1/a.png")])
+        clean_db.record_catalog_portrait_mirrors(
+            [(catalog_import.name_key("Rem"), "portraits/1-abcdef12.webp")]
+        )
+        # Added afterwards, so the mirror run never touched this row.
+        clean_db.add_character("Rem", "S", "1", "https://cdn.imgchest.com/files/mine.png")
+        assert clean_db.find_character("Rem")["image_thumb"] == ""
+
+        updated = clean_db.sync_character_thumbs_from_catalog()
+
+        assert updated == 1
+        assert clean_db.find_character("Rem")["image_thumb"] == "portraits/1-abcdef12.webp"
+
+    def test_sync_leaves_rows_the_catalog_has_no_mirror_for(self, clean_db):
+        _seed_catalog(clean_db, [_catalog_row("Rem", "https://mudae.net/uploads/1/a.png")])
+        # Catalog row is known but never mirrored (empty thumb).
+        clean_db.add_character("Rem", "S", "1", "https://cdn.imgchest.com/files/mine.png")
+
+        assert clean_db.sync_character_thumbs_from_catalog() == 0
         assert clean_db.find_character("Rem")["image_thumb"] == ""
 
 

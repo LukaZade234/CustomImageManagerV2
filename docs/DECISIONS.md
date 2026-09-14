@@ -532,7 +532,10 @@ dry-runnable, and never overwrites a working row's field it did not find in the 
 natural next phases. Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the PNGs,
 free egress) has since landed: `scripts/mirror_portraits_to_r2.py` fetches each `mudae.net` portrait,
 encodes WebP, uploads to R2 and records the key in `characters.main_image_thumb` /
-`character_catalog.mudae_image_thumb`, and the frontend prefers it via `portraitUrl`. Server-side
+`character_catalog.mudae_image_thumb`, and the frontend prefers it via `portraitUrl`. Because the main
+image is display-only and the catalog's Mudae portrait is the canonical public image, a working row
+takes that mirror even when its `main_image_url` is a hand-uploaded ImgChest file -- the main image is
+meant to be the character's true art, not whatever someone last set. Server-side
 catalog search and pool filters, once on this list, have landed too: `/api/catalog/search` replaces
 the full-roster fetch, and the catalog's four booleans back a `pool=` parameter on the suggestions
 API and the facet chips in the Add form. The catalog only *adds*

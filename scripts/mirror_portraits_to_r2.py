@@ -159,6 +159,11 @@ def main() -> int:
     parser.add_argument(
         "--dry-run", action="store_true", help="List what would be mirrored, fetching nothing"
     )
+    parser.add_argument(
+        "--resync-thumbs",
+        action="store_true",
+        help="Skip fetching/uploading; just repoint working rows at the catalog mirrors that already exist",
+    )
     parser.add_argument("--workers", type=int, default=8, help="Concurrent portrait fetches")
     parser.add_argument(
         "--batch",
@@ -175,10 +180,18 @@ def main() -> int:
     bucket = args.bucket or os.environ.get("R2_BUCKET", "imgmanager-assets")
     remote = args.remote or os.environ.get("RCLONE_REMOTE", "r2")
 
+    if args.resync_thumbs:
+        updated = db.sync_character_thumbs_from_catalog()
+        print(f"database: {db.database_path()}")
+        print(f"working rows repointed at their catalog mirror: {updated}")
+        return 0
+
     rows = db.catalog_portraits_to_mirror(limit=args.limit, redo=args.redo)
     print(f"database: {db.database_path()}")
     print(f"portraits to mirror: {len(rows)}")
     if not rows:
+        synced = db.sync_character_thumbs_from_catalog()
+        print(f"nothing to mirror; working rows repointed: {synced}")
         return 0
 
     if args.dry_run:
@@ -228,6 +241,8 @@ def main() -> int:
         clear_dir(staging)
 
     print(f"recorded {recorded} mirrored portraits")
+    synced = db.sync_character_thumbs_from_catalog()
+    print(f"working rows repointed at their catalog mirror: {synced}")
     if own_staging:
         shutil.rmtree(staging, ignore_errors=True)
     return 0
