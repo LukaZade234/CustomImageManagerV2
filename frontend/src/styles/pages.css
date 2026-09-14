@@ -142,18 +142,19 @@
 .character-page .char-info-section p.text-meta {
   margin: var(--space-2) 0;
 }
-/* The gender signs sit beside the series; the pool list ("Game & Animanga")
+/* The gender marks sit beside the series; the pool list ("Game & Animanga")
    sits under it as its own muted line. Both come from the Mudae card, so both
-   are simply absent when it did not say. */
+   are simply absent when it did not say. The marks are Mudae's own emoji. */
 .char-gender {
   display: inline-flex;
+  align-items: center;
   gap: var(--space-1);
   margin-left: var(--space-2);
-  color: var(--text-muted);
-  vertical-align: baseline;
 }
 .char-gender__mark {
-  line-height: 1;
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
 }
 .custom-images-header-row {
   display: flex;
