@@ -49,8 +49,14 @@ class CharacterInfo:
     series: str = ""
     rank: str = ""  # Claim rank number as string (no #)
     image_url: str = ""
+    # A card shows the gender beside the series and its pools underneath:
+    # "Game & Animanga". Both are on the card for free, so they are parsed and
+    # carried through to the character page rather than thrown away.
+    is_female: bool = False
+    is_male: bool = False
+    pools: str = ""
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -180,6 +186,51 @@ def _parse_claim_rank(text: str) -> str:
     return ""
 
 
+# The gender sits beside the series. Mudae sends it as a custom emoji, which
+# `_strip_md` removes, so gender is read from the raw line; captures that render
+# it as the shortcode (`:female:`) or the Unicode sign are accepted too.
+_FEMALE_RE = re.compile(r":female:|<a?:female:\d+>|♀", re.IGNORECASE)
+_MALE_RE = re.compile(r":male:|<a?:male:\d+>|♂", re.IGNORECASE)
+
+# Trailing gender tokens to strip off the series once the emoji/form is removed.
+_GENDER_SUFFIX_RE = re.compile(
+    r"\s*(?::female:|:male:|<a?:female:\d+>|<a?:male:\d+>|female|male|girl|boy|♀|♂)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _parse_gender(description: str) -> tuple[bool, bool]:
+    """(is_female, is_male) from a card. Both can be true; neither may be."""
+    text = description or ""
+    return bool(_FEMALE_RE.search(text)), bool(_MALE_RE.search(text))
+
+
+def _parse_pools(description: str) -> str:
+    """The pool list a card shows under the series, e.g. "Game & Animanga".
+
+    It arrives as `<pools> · <kakera>`, sometimes with "roulette" in the label
+    ("Animanga roulette · 27"). Only the label before the separator is kept.
+    """
+    for raw in (description or "").splitlines():
+        line = _strip_md(raw)
+        if not line:
+            continue
+        m = re.match(r"^(?P<label>.+?)\s*[·•]\s*\d", line)
+        if m:
+            label = m.group("label").strip()
+            if label:
+                return label[:120]
+    return ""
+
+
+def _strip_gender_suffix(line: str) -> str:
+    previous = None
+    while previous != line:
+        previous = line
+        line = _GENDER_SUFFIX_RE.sub("", line).strip()
+    return line
+
+
 def _series_from_description(description: str) -> str:
     if not description:
         return ""
@@ -198,7 +249,7 @@ def _series_from_description(description: str) -> str:
         if "claims" in line.lower() and "#" in line:
             continue
         line = re.split(r"\s*[·•|]\s*", line)[0].strip()
-        line = re.sub(r"\s+(female|male|girl|boy)\s*$", "", line, flags=re.IGNORECASE).strip()
+        line = _strip_gender_suffix(line)
         if line:
             return line[:300]
     return ""
@@ -323,6 +374,7 @@ def parse_im_embed(embed: discord.Embed) -> LookupResult:
         )
 
     if _is_character_card(embed):
+        is_female, is_male = _parse_gender(desc)
         return LookupResult(
             type="character",
             character=CharacterInfo(
@@ -330,6 +382,9 @@ def parse_im_embed(embed: discord.Embed) -> LookupResult:
                 series=_series_from_description(desc),
                 rank=_parse_claim_rank(full_text),
                 image_url=_embed_image_url(embed),
+                is_female=is_female,
+                is_male=is_male,
+                pools=_parse_pools(desc),
             ),
         )
 
