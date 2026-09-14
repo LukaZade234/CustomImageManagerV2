@@ -486,18 +486,20 @@ card carries for free.
 
 ### Pool filter chips
 
-The Add form's name suggestions can be narrowed to a pool.
+The Add form's name suggestions can be narrowed to the character's gender and roulette
+pools.
 
-- **Style:** A row of small secondary buttons. A pressed one takes the shared
-  `aria-pressed` treatment — accent tint, accent border, accent text — so it reads as a
-  toggle without a second selected-state vocabulary.
-- **Semantics:** A `fieldset` labelled "Filter suggestions by pool", one toggle per facet
-  (waifu, husbando, anime, game). The facets are additive: selecting two narrows to
-  characters carrying both.
-- **Optional and manual:** empty by default — nothing is selected for you, and an empty
-  selection filters nothing. It sits below the Series field, where it reads as narrowing the
-  form's suggestions. It is deliberately absent from the Mudae lookup panel, which asks the
-  bot rather than the catalog.
+- **Style:** A row of small secondary buttons under a label, below the Series field. A
+  pressed one takes the shared `aria-pressed` treatment — accent tint, accent border, accent
+  text — so it reads as a toggle without a second selected-state vocabulary.
+- **Semantics:** A `fieldset` whose `legend` reads "Gender And Roulette Pools (Optional)",
+  one toggle per facet (waifu, husbando, anime, game). The facets are additive: selecting two
+  narrows to characters carrying both.
+- **Optional:** like Rank and Main Photo, it never has to be set to add a character, and an
+  empty selection filters nothing.
+- **Follows the character:** picking a suggestion, or an exact name match autofilling, presses
+  that character's facets; the visitor can clear them. Deliberately absent from the Mudae
+  lookup panel, which asks the bot rather than the catalog.
 
 ### Contact strip
 
