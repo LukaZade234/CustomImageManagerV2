@@ -6,15 +6,33 @@
  * the page, in front of a user. A render is the cheapest thing that catches it,
  * and it also guards the migration onto the shared primitives.
  */
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// A memoizing proxy so the same vi.fn is returned for a given method across
+// calls, which lets a test stub the one it cares about while every other call
+// resolves to `{}`. Without the cache each access made a fresh mock and stubs
+// could never be asserted on.
+const api = vi.hoisted(() => {
+  const cache = new Map()
+  const apiClient = new Proxy(
+    {},
+    {
+      get: (_target, prop) => {
+        if (!cache.has(prop)) cache.set(prop, vi.fn().mockResolvedValue({}))
+        return cache.get(prop)
+      },
+    },
+  )
+  return { apiClient }
+})
+
 vi.mock('../api', () => ({
   getImageUrl: (p) => (p ? `/images/${p}` : ''),
   apiUrl: (p) => p,
-  apiClient: new Proxy({}, { get: () => vi.fn().mockResolvedValue({}) }),
+  apiClient: api.apiClient,
 }))
 
 import { useStore } from '../store/useStore'
@@ -31,6 +49,8 @@ const CHARACTERS = [
 ]
 
 beforeEach(() => {
+  api.apiClient.searchCharacters.mockReset()
+  api.apiClient.searchCharacters.mockResolvedValue({ items: [], total: 0 })
   useStore.setState({
     characters: CHARACTERS,
     savedCharacters: [{ name: 'Ayanami Rei' }],
@@ -78,55 +98,70 @@ describe('page smoke tests', () => {
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
   })
 
-  it('renders search results from the URL, not from store state', () => {
+  it('renders server search results from the URL', async () => {
+    api.apiClient.searchCharacters.mockImplementation(({ q, by }) => {
+      const needle = q.toLowerCase()
+      const items = CHARACTERS.filter((c) =>
+        (by === 'series' ? c.series : c.name).toLowerCase().includes(needle),
+      ).map((c) => ({ ...c, in_library: true }))
+      return Promise.resolve({ items, total: items.length })
+    })
     renderAt(<SearchResultsPage />, '/search?q=rei&by=name')
-    expect(screen.getByRole('heading', { level: 1, name: /search results/i })).toBeInTheDocument()
-    expect(screen.getByText('Ayanami Rei')).toBeInTheDocument()
+    expect(await screen.findByText('Ayanami Rei')).toBeInTheDocument()
     expect(screen.queryByText('Makise Kurisu')).not.toBeInTheDocument()
   })
 
-  it('searches series when the URL says so', () => {
+  it('searches series when the URL says so', async () => {
+    api.apiClient.searchCharacters.mockImplementation(({ q, by }) => {
+      const needle = q.toLowerCase()
+      const items = CHARACTERS.filter((c) =>
+        (by === 'series' ? c.series : c.name).toLowerCase().includes(needle),
+      ).map((c) => ({ ...c, in_library: true }))
+      return Promise.resolve({ items, total: items.length })
+    })
     renderAt(<SearchResultsPage />, '/search?q=steins&by=series')
-    expect(screen.getByText('Makise Kurisu')).toBeInTheDocument()
+    expect(await screen.findByText('Makise Kurisu')).toBeInTheDocument()
     expect(screen.queryByText('Ayanami Rei')).not.toBeInTheDocument()
   })
 
-  it('orders results by the chosen field and direction', () => {
-    const names = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+  it('asks the server for the chosen sort and order', async () => {
     useStore.setState({ searchSort: 'alphabet', searchOrder: 'asc' })
-    const { unmount } = renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Ayanami Rei', 'Makise Kurisu'])
-    unmount()
-    useStore.setState({ searchOrder: 'desc' })
     renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
+    await waitFor(() =>
+      expect(api.apiClient.searchCharacters).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'a', by: 'name', sort: 'alphabet', order: 'asc', page: 1 }),
+      ),
+    )
   })
 
-  it('caps the rendered results behind a Show more button', async () => {
+  it('pages the results behind a Show more button', async () => {
     const many = Array.from({ length: 75 }, (_, i) => ({
       name: `Char ${String(i).padStart(2, '0')}`,
       series: 'S',
       rank: i + 1,
       image: `${i}.png`,
+      in_library: true,
     }))
-    useStore.setState({ characters: many })
+    api.apiClient.searchCharacters.mockImplementation(({ page, perPage }) => {
+      const start = (page - 1) * perPage
+      return Promise.resolve({ items: many.slice(start, start + perPage), total: many.length })
+    })
     renderAt(<SearchResultsPage />, '/search?q=char&by=name')
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(60)
+    await waitFor(() => expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(60))
     await userEvent.click(screen.getByRole('button', { name: /show 15 more/i }))
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(75)
+    await waitFor(() => expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(75))
   })
 
-  it('reads rank as top-first, matching the character page', () => {
-    const names = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
-    // Ayanami Rei is rank 12, Makise Kurisu rank 4 — so rank 4 is the better
-    // rank and descending shows it first.
-    useStore.setState({ searchSort: 'rank', searchOrder: 'desc' })
-    const { unmount } = renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Makise Kurisu', 'Ayanami Rei'])
-    unmount()
-    useStore.setState({ searchOrder: 'asc' })
-    renderAt(<SearchResultsPage />, '/search?q=a&by=name')
-    expect(names()).toEqual(['Ayanami Rei', 'Makise Kurisu'])
+  it('sends a catalog-only result to the Add form', async () => {
+    api.apiClient.searchCharacters.mockResolvedValue({
+      items: [
+        { name: 'Saber', series: 'Fate/stay night', rank: '4', image: '', in_library: false },
+      ],
+      total: 1,
+    })
+    renderAt(<SearchResultsPage />, '/search?q=saber&by=name')
+    const link = await screen.findByRole('link', { name: /Saber/ })
+    expect(link).toHaveAttribute('href', '/add?name=Saber')
   })
 
   it('renders a character page', () => {

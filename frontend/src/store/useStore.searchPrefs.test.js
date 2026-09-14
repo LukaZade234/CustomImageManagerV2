@@ -18,7 +18,7 @@ describe('remembered search preferences', () => {
     const { useStore } = await import('./useStore')
     expect(useStore.getState().searchMode).toBe('name')
     expect(useStore.getState().searchSort).toBe('rank')
-    expect(useStore.getState().searchOrder).toBe('desc')
+    expect(useStore.getState().searchOrder).toBe('asc')
     expect(useStore.getState().customsSort).toBe('recent')
     expect(useStore.getState().customsOrder).toBe('desc')
   })

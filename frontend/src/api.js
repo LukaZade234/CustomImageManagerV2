@@ -72,6 +72,28 @@ export const apiClient = {
   },
   suggestSeries: (q = '', limit = 20) =>
     api(`/api/catalog/series?q=${encodeURIComponent(q)}&limit=${limit}`),
+  /**
+   * One page of a catalog search. Returns `{ items, total }`; each item carries
+   * `in_library`, so a catalog-only result can be offered for adding.
+   */
+  searchCharacters: ({
+    q = '',
+    by = 'name',
+    sort = 'rank',
+    order = 'asc',
+    page = 1,
+    perPage = 60,
+  } = {}) => {
+    const params = new URLSearchParams({
+      q,
+      by,
+      sort,
+      order,
+      page: String(page),
+      per_page: String(perPage),
+    })
+    return api(`/api/catalog/search?${params}`)
+  },
   findCatalogCharacter: (name) => api(`/api/catalog/character?name=${encodeURIComponent(name)}`),
   catalogAddCharacter: (name) =>
     api('/api/catalog/add-character', {
