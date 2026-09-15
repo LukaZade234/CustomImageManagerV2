@@ -84,3 +84,36 @@ export function useSetModerationRole() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: moderationUsersKey }),
   })
 }
+
+/** The staff log of what has been sent this contributor, newest first. */
+export const moderationHistoryKey = (ref) => ['moderation-history', ref]
+
+export function useModerationHistory(ref) {
+  return useQuery({
+    queryKey: moderationHistoryKey(ref),
+    queryFn: () => apiClient.listModerationHistory(ref),
+    enabled: Boolean(ref),
+  })
+}
+
+/**
+ * Warn a contributor: one message to their inbox, and a line in their history.
+ * The history list has changed, so refresh it.
+ */
+export function useWarnModerationUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ref, title, body }) => apiClient.warnModerationUser(ref, { title, body }),
+    onSuccess: (_result, variables) =>
+      queryClient.invalidateQueries({ queryKey: moderationHistoryKey(variables.ref) }),
+  })
+}
+
+/** Owner-only: remove a moderation record, and the message it delivered. */
+export function useDeleteModerationHistory() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => apiClient.deleteModerationHistory(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['moderation-history'] }),
+  })
+}

@@ -513,3 +513,70 @@ class TestModerationRoleChanges:
     def test_you_cannot_change_your_own_role(self, client, clean_db, identity_id, make_moderator):
         make_moderator("owner")
         assert self._post(client, self._ref(identity_id), "moderator").status_code == 400
+
+
+class TestModerationWarnings:
+    """Warn sends the recipient a message and keeps a record staff can read.
+
+    The two are one action and must not disagree: only the owner can delete the
+    record, and deleting it takes the delivered message with it.
+    """
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def _warn(self, client, ref, title="Keep it civil", body="Third time this week."):
+        return client.post(f"/api/moderation/users/{ref}/warn", json={"title": title, "body": body})
+
+    def test_a_plain_user_cannot_warn_or_read_history(self, client, clean_db):
+        clean_db.ensure_identity("target")
+        ref = self._ref("target")
+        assert self._warn(client, ref).status_code == 403
+        assert client.get(f"/api/moderation/users/{ref}/history").status_code == 403
+
+    def test_a_warn_delivers_a_badged_message_and_logs_it(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+
+        assert self._warn(client, self._ref("target")).status_code == 200
+
+        inbox = clean_db.list_notifications("target")
+        assert inbox[0]["title"] == "Keep it civil"
+        assert inbox[0]["moderation_action"] == "warn"
+        assert inbox[0]["source"] == "notification"
+
+        history = client.get(f"/api/moderation/users/{self._ref('target')}/history").get_json()
+        assert history["total"] == 1
+        entry = history["items"][0]
+        assert entry["action"] == "warn"
+        assert entry["body"] == "Third time this week."
+        assert entry["actor_handle"], "the log names who sent it"
+
+    def test_a_warn_needs_a_title(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+        assert self._warn(client, self._ref("target"), title="  ").status_code == 400
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert self._warn(client, "notthere").status_code == 404
+
+    def test_only_the_owner_can_delete_a_record(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator("moderator")
+        action_id = self._warn(client, self._ref("target")).get_json()["id"]
+
+        assert client.post(f"/api/moderation/history/{action_id}/delete").status_code == 403
+
+        make_moderator("owner")
+        assert client.post(f"/api/moderation/history/{action_id}/delete").status_code == 200
+        assert clean_db.list_moderation_actions("target") == []
+        # The message the record delivered goes with it.
+        assert clean_db.list_notifications("target") == []
+
+    def test_a_warn_does_not_need_the_recipient_to_have_an_account(self, client, clean_db, make_moderator):
+        """A moderator needs a ref to warn, which means the target already exists
+        in `identities` -- but only as a row, not a signed-in account."""
+        clean_db.ensure_identity("target")
+        make_moderator()
+        assert self._warn(client, self._ref("target")).status_code == 200

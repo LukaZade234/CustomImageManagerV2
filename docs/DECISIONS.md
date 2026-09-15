@@ -302,12 +302,13 @@ A staff-only **inspection surface** was added later (`/profile/moderation`; see 
 It sits inside the profile as one more tab rather than in the topbar, and does not contradict the
 paragraph above, because it is not a queue: it holds nothing, counts nothing pending, and changes no
 chrome with site state. It answers *"what has this person been doing?"* when the operator already has
-a reason to look, which is inspection rather than routine moderation. Two of its verbs are live —
-**restore** an image (already non-destructive) and the **owner-only** promote/demote of a
-contributor's role. The topbar instead carries **Notifications**, the channel a future warn/suspend
-needs: the app messaging one account, and the owner messaging everyone or the moderators. It is a
-message log, not a worklist. The remaining verbs stay inert: permanent delete, and warn/suspend/ban,
-which have no meaning yet for a cookie identity. `image_reports` stays unread. Image verbs are placed
+a reason to look, which is inspection rather than routine moderation. Three of its verbs are live —
+**restore** an image (already non-destructive), the **owner-only** promote/demote of a contributor's
+role, and **warn**, which sends the person a message and keeps a staff record. The topbar instead
+carries **Notifications**, the channel a warn rides: the app messaging one account, and the owner
+messaging everyone or the moderators. It is a message log, not a worklist. The remaining verbs stay
+inert: permanent delete, and suspend/ban, which need their *effect* decided before they fire (a ban
+that only sent a notice would be untrue). `image_reports` stays unread. Image verbs are placed
 here as well as on the character page because a pattern — the same person removing images across many
 characters — is only visible in one place; that still requires opening a contributor on purpose. If a
 later phase adds a pending count, a badge, or action logic driven by site state, that is the signal

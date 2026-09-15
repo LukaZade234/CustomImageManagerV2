@@ -1,16 +1,20 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import { Card, EmptyState } from '../../components/ui'
+import { Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useMe } from '../../queries/me'
 import {
+  useDeleteModerationHistory,
+  useModerationHistory,
   useModerationUserCharacters,
   useModerationUserImages,
   useModerationUsers,
   useRestoreModerationImage,
   useSetModerationRole,
+  useWarnModerationUser,
 } from '../../queries/moderation'
 import { useStore } from '../../store/useStore'
+import ModerationHistory from './ModerationHistory'
 import UserList from './UserList'
 import UserProfile from './UserProfile'
 import UserWork from './UserWork'
@@ -100,11 +104,15 @@ export default function ModerationPage() {
     order,
     page,
   })
+  const historyQuery = useModerationHistory(user)
 
   const { data: me } = useMe()
   const addToast = useStore((s) => s.addToast)
   const restoreImage = useRestoreModerationImage()
   const setRole = useSetModerationRole()
+  const warnUser = useWarnModerationUser()
+  const deleteHistory = useDeleteModerationHistory()
+  const [historyToDelete, setHistoryToDelete] = useState(null)
 
   const handleRestore = (row) => {
     restoreImage.mutate(
@@ -127,6 +135,26 @@ export default function ModerationPage() {
         onError: (err) => addToast(err.message, 'error'),
       },
     )
+  }
+  // Resolves true only once it lands, so the dialog knows whether to close.
+  const handleWarn = async (values) => {
+    try {
+      await warnUser.mutateAsync({ ref: user, ...values })
+      addToast('Warning sent', 'success')
+      return true
+    } catch (err) {
+      addToast(err.message, 'error')
+      return false
+    }
+  }
+  const handleDeleteHistory = () => {
+    const target = historyToDelete
+    setHistoryToDelete(null)
+    if (!target) return
+    deleteHistory.mutate(target.id, {
+      onSuccess: () => addToast('Moderation record deleted', 'success'),
+      onError: (err) => addToast(err.message, 'error'),
+    })
   }
   const restoringUrl = restoreImage.isPending ? (restoreImage.variables?.url ?? null) : null
 
@@ -162,6 +190,15 @@ export default function ModerationPage() {
                 user={selected}
                 canManageRoles={Boolean(me?.is_owner)}
                 onChangeRole={handleChangeRole}
+                onWarn={handleWarn}
+              />
+              <ModerationHistory
+                items={historyQuery.data?.items}
+                loading={historyQuery.isPending}
+                error={historyQuery.isError ? historyQuery.error.message : null}
+                onRetry={historyQuery.refetch}
+                canDelete={Boolean(me?.is_owner)}
+                onDelete={setHistoryToDelete}
               />
               <UserWork
                 view={view}
@@ -194,6 +231,17 @@ export default function ModerationPage() {
           )}
         </div>
       </div>
+
+      {historyToDelete && (
+        <ConfirmDialog
+          title="Delete this moderation record?"
+          body={`"${historyToDelete.title}" will be removed from ${selected?.handle ?? 'their'} moderation history, and the message it sent will be deleted from their inbox.`}
+          confirmLabel="Delete record"
+          variant="danger"
+          onConfirm={handleDeleteHistory}
+          onCancel={() => setHistoryToDelete(null)}
+        />
+      )}
     </Card>
   )
 }

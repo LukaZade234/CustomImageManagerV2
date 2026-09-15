@@ -630,9 +630,14 @@ why it does not contradict the anti-queue argument there.
       surface: a plain list of messages to you, mechanical (a role change) and owner broadcasts
       (everyone, or moderators only). Ordinary messages are dismissible by their recipient and
       deletable by the owner for everyone; **pinned** ones are global, always visible (including to
-      later accounts), and cannot be dismissed. This is what "warn" will use.
-- [ ] **Phase 2 — warn / suspend / ban.** Still inert; needs a decision on what each means for a
-      cookie identity, and now has the notification channel to say them through.
+      later accounts), and cannot be dismissed.
+- [x] **Warn a contributor.** `POST /api/moderation/users/<ref>/warn` writes a `moderation_actions`
+      record **and** delivers a badged, dismissible notification; the record survives the recipient
+      dismissing the message, and only the owner can delete it (which takes the message with it). The
+      profile shows the contributor's full moderation history. Suspend and ban reuse the same record,
+      composer and colour ramp but stay inert until their effect is decided.
+- [ ] **Phase 2 — suspend / ban.** Still inert; needs a decision on what each means for a cookie
+      identity and what a suspended account may still do. The message side is built.
 - [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
       that may not exist, a cascade, and a second confirmation. The first irreversible action.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and

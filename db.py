@@ -2135,12 +2135,18 @@ def list_notifications(
     limit = max(1, int(limit))
     conn = get_connection()
     rows = conn.execute(
-        "SELECT id, kind, title, body, created_at, read_at, group_id"
-        "  FROM notifications WHERE identity_id = ?"
-        " ORDER BY created_at DESC, id DESC LIMIT ?",
+        "SELECT n.id, n.kind, n.title, n.body, n.created_at, n.read_at, n.group_id,"
+        "       m.action AS moderation_action"
+        "  FROM notifications n"
+        "  LEFT JOIN moderation_actions m ON m.id = n.moderation_action_id"
+        " WHERE n.identity_id = ?"
+        " ORDER BY n.created_at DESC, n.id DESC LIMIT ?",
         (identity_id, limit),
     ).fetchall()
-    items = [{**dict(r), "source": "notification", "pinned": False} for r in rows]
+    items = [
+        {**dict(r), "source": "notification", "pinned": False, "moderation_action": r["moderation_action"]}
+        for r in rows
+    ]
 
     audiences = ("everyone", "moderators") if is_staff else ("everyone",)
     placeholders = ",".join("?" for _ in audiences)
@@ -2164,6 +2170,7 @@ def list_notifications(
             "group_id": None,
             "source": "pin",
             "pinned": True,
+            "moderation_action": None,
         }
         for r in pinned
     ]
@@ -2302,6 +2309,75 @@ def broadcast_notification(
             [(identity_id, title, body, created_by, now, group_id) for identity_id in ids],
         )
         return len(ids)
+
+
+# --- Moderation actions --------------------------------------------------
+#
+# What staff have sent a contributor. A warn (or, later, a suspend or a ban) is
+# two rows with one meaning: a line in `moderation_actions`, the durable record
+# staff read, and an ordinary dismissible `notifications` row for the recipient.
+# The notification points back at the action, so the owner deleting the record
+# takes the delivered message with it (ON DELETE CASCADE, migration 017).
+
+_ACTIONS = ("warn", "suspend", "ban")
+
+
+def moderate_identity(
+    identity_id: str,
+    actor_id: str | None,
+    action: str,
+    title: str,
+    body: str = "",
+) -> int:
+    """Log a moderation action against an identity and deliver it. Returns its id.
+
+    The record survives the recipient dismissing the message; deleting the record
+    is what removes the message for them.
+    """
+    if action not in _ACTIONS:
+        raise ValueError(f"Unknown moderation action: {action!r}")
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        cur = conn.execute(
+            "INSERT INTO moderation_actions (identity_id, actor_id, action, title, body, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (identity_id, actor_id, action, title, body, _now()),
+        )
+        action_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO notifications"
+            " (identity_id, kind, title, body, created_by, created_at, moderation_action_id)"
+            " VALUES (?, 'broadcast', ?, ?, ?, ?, ?)",
+            (identity_id, title, body, actor_id, _now(), action_id),
+        )
+        return action_id
+
+
+def list_moderation_actions(identity_id: str) -> list[dict]:
+    """Everything staff have sent this identity, newest first, with the sender."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT a.id, a.action, a.title, a.body, a.created_at,"
+        "       actor.handle AS actor_handle"
+        "  FROM moderation_actions a"
+        "  LEFT JOIN identities actor ON actor.id = a.actor_id"
+        " WHERE a.identity_id = ?"
+        " ORDER BY a.created_at DESC, a.id DESC",
+        (identity_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_moderation_action(action_id: int) -> bool:
+    """Owner-only. Remove a record, and with it the recipient's copy.
+
+    The cascade is what makes this "delete for everyone": once the record is
+    gone the delivered notification goes too, so nothing is left claiming a
+    warning that the staff log says never happened.
+    """
+    with transaction() as conn:
+        cur = conn.execute("DELETE FROM moderation_actions WHERE id = ?", (action_id,))
+        return bool(cur.rowcount)
 
 
 def get_removed_for(char_name: str) -> list[dict]:

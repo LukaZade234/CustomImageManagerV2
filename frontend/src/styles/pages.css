@@ -1776,6 +1776,95 @@ body.reorder-touch-dragging {
   gap: var(--space-1);
   margin-top: var(--space-2);
 }
+/* A moderation message carries its severity twice: the badge names it, and this
+   colours the title. The badge is why the meaning never rests on colour alone.
+   Kept at one class so `.notification--unread` (a later, more specific rule) can
+   still win the title with the accent until the message has been read. */
+.moderation-severity--warning {
+  color: var(--warning);
+}
+.moderation-severity--caution {
+  color: var(--caution);
+}
+.moderation-severity--danger {
+  color: var(--danger);
+}
+
+/* ---- Moderation history ------------------------------------------------
+ * The staff log of what has been sent a contributor, sitting under their header
+ * in the moderation view. A list, not cards: the messages are short and read in
+ * sequence, and the rules above already separate rows with a hairline. */
+.moderation-history {
+  margin-top: var(--space-6);
+}
+.moderation-history__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.moderation-history__empty {
+  margin: var(--space-2) 0 0;
+}
+.moderation-history__list {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.moderation-message {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+.moderation-message:first-child {
+  border-top: 0;
+}
+.moderation-message__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.moderation-message__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-section);
+  font-weight: var(--weight-medium);
+}
+.moderation-message__meta {
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+.moderation-message__body {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+.moderation-message__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+/* ---- Warn dialog ------------------------------------------------------- */
+.warn-dialog {
+  display: grid;
+  gap: var(--space-4);
+}
+.warn-dialog__lead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.warn-dialog__message {
+  min-height: 96px;
+  resize: vertical;
+}
+
 /* The owner's notification composer, compacted. It used to be a heading, a
    lead paragraph, three stacked fields and a bordered footer, which stood half a
    screen tall while empty. Now it is one row — title, audience, Send — plus an

@@ -195,6 +195,10 @@
   background: var(--warning-subtle);
   color: var(--warning);
 }
+.ui-badge--caution {
+  background: var(--caution-subtle);
+  color: var(--caution);
+}
 
 /* ============================ Inputs ============================ */
 

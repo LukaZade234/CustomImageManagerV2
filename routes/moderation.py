@@ -17,6 +17,7 @@ import identity
 import logs
 from identity import require_moderator, require_owner
 from ratelimit import rate_limited
+from routes.notifications import MAX_BODY, MAX_TITLE
 
 log = logs.get(__name__)
 moderation_bp = Blueprint("moderation", __name__)
@@ -160,3 +161,54 @@ def moderation_set_role(ref):
         )
     log.info("moderation.role_changed", ref=ref, role=role)
     return jsonify({"success": True, "ref": ref, "role": role})
+
+
+@moderation_bp.route("/api/moderation/users/<ref>/warn", methods=["POST"])
+@require_moderator
+@rate_limited("moderate")
+def moderation_warn(ref):
+    """Send one contributor a warning: a message in their inbox, and a log line.
+
+    Any moderator may warn. The message is the recipient's to dismiss, but the
+    record is not -- it stays in their moderation history for staff to read, and
+    only the owner can remove it.
+    """
+    target_id = db.identity_by_ref(ref)
+    if target_id is None:
+        return jsonify({"error": "Unknown contributor"}), 404
+
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not title:
+        return jsonify({"error": "A title is required"}), 400
+    if len(title) > MAX_TITLE:
+        return jsonify({"error": f"Title too long (max {MAX_TITLE} characters)"}), 400
+    if len(body) > MAX_BODY:
+        return jsonify({"error": f"Message too long (max {MAX_BODY} characters)"}), 400
+
+    action_id = db.moderate_identity(target_id, identity.current_identity().id, "warn", title, body)
+    log.info("moderation.warned", ref=ref, action_id=action_id)
+    return jsonify({"success": True, "id": action_id, "ref": ref})
+
+
+@moderation_bp.route("/api/moderation/users/<ref>/history")
+@require_moderator
+def moderation_history(ref):
+    """Everything staff have sent this contributor, newest first."""
+    target_id = db.identity_by_ref(ref)
+    if target_id is None:
+        return jsonify({"error": "Unknown contributor"}), 404
+    items = db.list_moderation_actions(target_id)
+    return jsonify({"items": items, "total": len(items)})
+
+
+@moderation_bp.route("/api/moderation/history/<int:action_id>/delete", methods=["POST"])
+@require_owner
+@rate_limited("moderate")
+def moderation_delete_history(action_id):
+    """Owner only: remove a moderation record, and the recipient's copy with it."""
+    if not db.delete_moderation_action(action_id):
+        return jsonify({"error": "Moderation record not found"}), 404
+    log.info("moderation.history_deleted", action_id=action_id)
+    return jsonify({"success": True})

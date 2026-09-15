@@ -22,10 +22,10 @@ page holds the evidence and read its Removed drawer, or open SQLite. There is no
 contributor's work as a contributor.
 
 The surface is a **master list of contributors** on the left, and, for the selected one, a **profile
-pane** on the right: their stats and the staff actions that act on the *person* (warn, suspend, ban),
-above their work — the images they added or removed, with the verbs that act on an *image* (restore,
-permanent delete), and a character-level view of the same work sorted the way Browse Customs sorts
-characters.
+pane** on the right: their stats, the staff actions that act on the *person* (warn, suspend, ban), and
+their **moderation history** — every message staff have sent them — above their work: the images they
+added or removed, with the verbs that act on an *image* (restore, permanent delete), and a
+character-level view of the same work sorted the way Browse Customs sorts characters.
 
 It lives **inside the profile**, as one more tab beside Saved, History, Hidden and Removed, and not
 in the topbar. It is something you go to; a permanent topbar entry for a staff tool is the queue's
@@ -69,9 +69,10 @@ profile — stats and staff actions — above their work, which can be read as a
 (added or removed, filtered by character) or as a character-level list sorted by rank, image count,
 name or recency.
 
-**Phase 1 is the full UI and the `GET` endpoints behind it. Every acting button is present and
-inert** — warn, suspend, ban, restore, permanent delete. Wiring them is later (§ Later phases), and
-deliberately so: the layout is worth settling before any of it does something irreversible.
+**Phase 1 was the full UI and the `GET` endpoints behind it, with every acting button present and
+inert.** Two of those verbs are now live: **restore** an image, the **owner-only** promote/demote, and
+**warn** a person (below). **Suspend, ban and permanent delete stay inert** — each has a decision to
+settle first, so a button that would not do anything true stays disabled rather than firing.
 
 ### Decisions taken
 
@@ -80,7 +81,7 @@ deliberately so: the layout is worth settling before any of it does something ir
 | Backend scope | The UI **and** the read-only endpoints. The action verbs are rendered but do nothing yet. |
 | Who is listed | Every identity with at least one added or removed image — pseudonyms included, `hide_from_leaderboard` and `hide_attribution` ignored. Idle cookie-only identities are excluded. |
 | Shape | Master–detail on one route, selection and filters carried in the URL (`?user=…&view=…&state=…&char=…&sort=…&page=…`). |
-| Profile pane | Stats (total images, removed, account created, last activity, signed-in) and person-level actions (warn, suspend, ban). |
+| Profile pane | Stats (total images, removed, account created, last activity, signed-in), person-level actions (warn, suspend, ban), and the moderation history. |
 | Work pane | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary). |
 | Gating | Non-moderators are redirected home, indistinguishable from the existing `*` catch-all. The backend enforces separately and does not trust the client. |
 
@@ -118,11 +119,12 @@ leak back onto a public surface from here.
 
 #### Named out of scope
 
-- **The remaining action logic.** Restore and promote/demote are wired (see below). **Warn, suspend
+- **The remaining action logic.** Restore, promote/demote and warn are wired (see below). **Suspend
   and ban** are still inert — they have a real design question (what does "suspended" even mean for a
-  cookie identity?) that has to be settled before they do anything. **Permanent delete** is inert too:
-  it removes the image from ImgChest as well as the row, and it is the first irreversible action in
-  the app, so it needs its own decision (and a second confirmation) first.
+  cookie identity?) that has to be settled before they do anything, and a ban that only sent a notice
+  would be a lie. **Permanent delete** is inert too: it removes the image from ImgChest as well as the
+  row, and it is the first irreversible action in the app, so it needs its own decision (and a second
+  confirmation) first.
 - **Reading `image_reports`** — see above.
 - **The ~8,547 unattributed images** (`added_by IS NULL`, migrated from v1). They have no actor, so
   they cannot appear under a contributor, and they are not a moderation concern — they are the
@@ -284,9 +286,9 @@ Name/Series choice here — and sort options *Most added* / *Most removed* / *Re
 
 **`UserProfile.jsx`** — the selected contributor. A header with the handle, a role `Badge`, and the
 stats: **total images** (active), **removed**, **account created** (`created_at`), **last activity**,
-and whether they are Discord-signed-in, all counts in `.tabular`. Below them the person-level
-actions — **Warn**, **Suspend**, **Ban** — rendered as buttons and **inert** (`disabled`, with a
-title saying so).
+and whether they are Discord-signed-in, all counts in `.tabular`. Below them the person-level actions:
+**Warn** is live and opens `WarnDialog`; **Suspend** and **Ban** are rendered but **inert**
+(`disabled`, with a title saying so).
 
 For the **owner alone**, a plus/minus `IconButton` sits beside the name: plus for a `user` (promote),
 minus for a `moderator` (demote), nothing for the `owner`. Either opens a `ConfirmDialog`, and only
@@ -387,7 +389,8 @@ whose claims are already false teaches the next reader that the rules are decora
 ## Notifications — the channel moderation needs
 
 The topbar carries **Notifications** (`/notifications`), because moderation needs a way to *tell*
-someone something. It is the missing half of "warn": without a channel, a warn button does nothing.
+someone something. It is the channel a warn rides: a warning is a message here, and this page is
+where the recipient reads it.
 
 **Shape.** A simple, hairline-separated list — a title, a date, and optional body text, newest first.
 Two sources:
@@ -448,6 +451,51 @@ announcement. Nothing here is actionable — acting still happens where the thin
   bell); opening the menu swaps that bar copy for the labelled one. The owner's compose form is the
   first card on the page, owner-only, with a pin checkbox. Ordinary rows carry **Dismiss**; pins carry
   a **Pinned** badge and no dismiss; the owner additionally sees a confirmed **Delete** on every row.
+  A moderation message is the one kind with a severity: its title is coloured and it carries a badge
+  (`utils/moderationActions.js`).
+
+---
+
+## Warnings, and the moderation history
+
+A **warn** is the first person-level action. It does exactly two things, and they are deliberately
+distinct:
+
+- it delivers the recipient a **notification** — an ordinary, dismissible message, badged and
+  coloured by severity (warning amber, suspension orange, ban red); and
+- it writes a line to the target's **moderation history**, the durable staff record.
+
+The record has to outlive the message: a recipient dismissing their warning must not delete the fact
+that staff sent one. So the two are different rows. `moderation_actions` is the log; the delivered
+notification points back at it with `moderation_action_id`, and that link is `ON DELETE CASCADE`, so
+the owner's delete runs from the record to the message and the two can never disagree about whether a
+warning was sent.
+
+Warn is the only verb wired today. Suspend and ban reuse the same record, the same composer and the
+same colour ramp, but each stays inert until its *effect* is decided — a ban that only sent a message
+would be a lie. The vocabulary is built once so they slot in without a second migration.
+
+### Backend
+- Migration `017_moderation_actions.sql`:
+  `moderation_actions(id, identity_id, actor_id, action, title, body, created_at)`, `action` in
+  `warn` / `suspend` / `ban`, indexed on `(identity_id, created_at DESC)`; and
+  `notifications.moderation_action_id` pointing at it with `ON DELETE CASCADE`.
+- `db.moderate_identity` (log the action, deliver the message, return its id),
+  `db.list_moderation_actions(identity_id)` (the log with the sender's handle) and
+  `db.delete_moderation_action(id)` (owner-only at the route; the cascade removes the message).
+  `db.list_notifications` joins the link to carry `moderation_action` on each item.
+- `routes/moderation.py`: `POST /api/moderation/users/<ref>/warn` (any moderator),
+  `GET /api/moderation/users/<ref>/history` (any moderator, view-only), and
+  `POST /api/moderation/history/<int:action_id>/delete` (owner only).
+
+### Frontend
+- `WarnDialog.jsx`: the popup — a title field (required) and a description — opened from **Warn** in
+  the profile. What the moderator writes is exactly what the recipient reads.
+- `ModerationHistory.jsx`: the selected contributor's record, under their header — each line badged
+  and titled by severity, naming the sender. The owner gets a confirmed **Delete**; a moderator's is
+  view-only. `utils/moderationActions.js` is the one map from action to label and colour, used here
+  and in the inbox so the two never drift. It rides on `--caution`, the orange added to the status
+  palette in `tokens.css` for the middle severity.
 
 ---
 
@@ -457,14 +505,14 @@ Sketches only. Each needs its own decision before it is built, and none is commi
 The phase-1 buttons exist precisely so their placement and wording can be settled without their
 logic.
 
-**Phase 2 — acting on a person.** **Promote and demote are done**: an owner-only route wrapping
-`db.set_role`, with the plus/minus control on the profile and a confirmation each way. **Warn,
-suspend and ban remain.** Bans are now meaningful in a way they were not: adding an image requires a
-linked Discord account (`require_signed_in`, `DECISIONS.md` §4), so a ban on that account removes the
-ability to upload — the action actually worth preventing — even though a fresh cookie can still be
-minted for browsing. What still needs deciding is the *shape* of each: whether a ban blocks the
-Discord account, the identity, or both; what "warn" does with no notification channel; and what a
-suspended account may still do.
+**Phase 2 — acting on a person.** **Promote, demote and warn are done**: an owner-only route
+wrapping `db.set_role` with the plus/minus control, and a warn that delivers a badged message and
+keeps a record (see above). **Suspend and ban remain.** Bans are now meaningful in a way they were
+not: adding an image requires a linked Discord account (`require_signed_in`, `DECISIONS.md` §4), so a
+ban on that account removes the ability to upload — the action actually worth preventing — even
+though a fresh cookie can still be minted for browsing. What still needs deciding is the *shape* of
+each: whether a ban blocks the Discord account, the identity, or both; and what a suspended account
+may still do. The message side of both is already built; only the effect is missing.
 
 **Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
 Permanent delete does not, and it is the first irreversible action in the app: it would remove the

@@ -60,6 +60,9 @@ RATE_LIMITS = {
     # down. This is the "auto-cooldown" the roadmap asks for: at two distinct
     # reporters per removal, 20 an hour is far more than honest use needs.
     "report": _limits_from_env("report", [(5, 60), (20, 3600)]),
+    # A moderation message lands in someone's inbox, like a report lands against
+    # their work; modest ceilings, but not a button that can be held down.
+    "moderate": _limits_from_env("moderate", [(10, 60), (60, 3600)]),
     # Each Mudae call burns one of Discord's ~1000 daily identify calls.
     "mudae": _limits_from_env("mudae", [(10, 60), (60, 3600)]),
     # Sign-in is cheap for us but hits Discord's API, and a loop here would look

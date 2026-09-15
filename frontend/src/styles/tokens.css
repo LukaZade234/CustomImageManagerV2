@@ -70,6 +70,11 @@
   --danger-subtle: #fbeae9;
   --warning: #8a5a00;
   --warning-subtle: #fbf1de;
+  /* The moderation vocabulary reads as a ramp: a warning is the amber above, a
+     suspension this orange, a ban the refuse red. Defined as its own status so
+     the three never borrow each other's colour. */
+  --caution: #9a4d00;
+  --caution-subtle: #fbeadb;
 
   /* ---- Medals ------------------------------------------------------ */
   /* The contributor leaderboard's top three. A scoped exception to the Art
@@ -230,6 +235,8 @@
     --danger-subtle: #35191a;
     --warning: #e0b341;
     --warning-subtle: #33280f;
+    --caution: #e08b3f;
+    --caution-subtle: #3a2410;
 
     --medal-gold: #e8c24a;
     --medal-gold-subtle: #33280f;

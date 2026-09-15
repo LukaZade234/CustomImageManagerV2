@@ -196,6 +196,9 @@ artwork is the only saturated thing on screen.
 - **Refuse Red** (`#b3261e` light / `#f2857a` dark): Destructive actions and errors.
 - **Caution Amber** (`#8a5a00` light / `#e0b341` dark): The one warning surface — the
   cookie-identity notice on the profile.
+- **Suspend Orange** (`#9a4d00` light / `#e08b3f` dark): The moderation vocabulary reads as a
+  ramp — a warning is the amber, a suspension this orange, a ban the refuse red. It exists so
+  the three severities never borrow each other's colour.
 
 Each status colour has a `-subtle` tint for use as a background. The foreground on a
 subtle tint is always the status colour itself, never the `-fg` token: `-fg` is designed

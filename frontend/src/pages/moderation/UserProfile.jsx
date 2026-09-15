@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { Badge, Button, ConfirmDialog, IconButton } from '../../components/ui'
+import WarnDialog from './WarnDialog'
 
 /**
  * The selected contributor's header: who they are, how much they have done, the
  * actions that act on the *person*, and — for the owner alone — the role
  * change.
  *
- * The person actions are inert in phase 1. The role change is live, and
- * owner-only: a moderator has every other power the owner has but may not
- * change roles, so the control is not rendered for them at all (the backend
- * enforces it regardless).
+ * Warn is live: it sends the person a message and logs it (see WarnDialog and
+ * the moderation history below the header). Suspend and ban have no effect to
+ * attach to yet — a ban is only meaningful once it stops the account uploading —
+ * so they stay inert rather than send a notice that would not be true.
  */
 
 /** "12 Jan 2026" reads better than an ISO string in a stat block. */
@@ -93,11 +94,22 @@ function MinusIcon() {
   )
 }
 
-const ACTIONS = [{ label: 'Warn' }, { label: 'Suspend' }, { label: 'Ban', variant: 'danger' }]
+/** Still waiting on a decision about what they do; see the docstring. */
+const INERT_ACTIONS = [{ label: 'Suspend' }, { label: 'Ban', variant: 'danger' }]
 
-export default function UserProfile({ user, canManageRoles = false, onChangeRole }) {
+export default function UserProfile({ user, canManageRoles = false, onChangeRole, onWarn }) {
   const [confirming, setConfirming] = useState(false)
+  const [warnOpen, setWarnOpen] = useState(false)
+  const [sendingWarn, setSendingWarn] = useState(false)
   const roleChange = roleChangeFor(user)
+
+  // The dialog stays up on failure so the text is not lost; the page reports why.
+  const sendWarn = async (values) => {
+    setSendingWarn(true)
+    const sent = await onWarn(values)
+    setSendingWarn(false)
+    if (sent) setWarnOpen(false)
+  }
 
   const stats = [
     { label: 'Images', value: user.added },
@@ -125,7 +137,10 @@ export default function UserProfile({ user, canManageRoles = false, onChangeRole
         </div>
 
         <div className="moderation-profile__actions">
-          {ACTIONS.map((action) => (
+          <Button size="sm" variant="secondary" onClick={() => setWarnOpen(true)}>
+            Warn
+          </Button>
+          {INERT_ACTIONS.map((action) => (
             <Button
               key={action.label}
               size="sm"
@@ -138,7 +153,9 @@ export default function UserProfile({ user, canManageRoles = false, onChangeRole
           ))}
         </div>
 
-        <p className="moderation-profile__note text-meta">Actions are not wired up yet.</p>
+        <p className="moderation-profile__note text-meta">
+          Warn sends a message to their inbox. Suspend and ban are not wired up yet.
+        </p>
       </div>
 
       <dl className="moderation-profile__stats">
@@ -161,6 +178,15 @@ export default function UserProfile({ user, canManageRoles = false, onChangeRole
             onChangeRole(roleChange.to)
           }}
           onCancel={() => setConfirming(false)}
+        />
+      )}
+
+      {warnOpen && (
+        <WarnDialog
+          handle={user.handle}
+          sending={sendingWarn}
+          onSend={sendWarn}
+          onCancel={() => setWarnOpen(false)}
         />
       )}
     </div>

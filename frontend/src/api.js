@@ -98,6 +98,15 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
     }),
+  warnModerationUser: (ref, { title, body }) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/warn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body }),
+    }),
+  listModerationHistory: (ref) => api(`/api/moderation/users/${encodeURIComponent(ref)}/history`),
+  deleteModerationHistory: (id) =>
+    api(`/api/moderation/history/${encodeURIComponent(id)}/delete`, { method: 'POST' }),
   getNotifications: () => api('/api/notifications'),
   markNotificationsRead: () => api('/api/notifications/read', { method: 'POST' }),
   dismissNotification: (data) =>
