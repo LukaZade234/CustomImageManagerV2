@@ -12,6 +12,13 @@ export function useMe() {
   return useQuery({
     queryKey: meKey,
     queryFn: () => apiClient.getMe(),
+    // `me` carries the role, and a role is handed out by someone else. The
+    // navbar keeps this query mounted for the life of the tab, so it never
+    // refetches on navigation, and the global "no focus refetch" (there for the
+    // galleries) would leave a promoted moderator staring at a profile with no
+    // Moderation tab until they happened to reload. It is a tiny payload; fetch
+    // it on focus so a change made elsewhere arrives on its own.
+    refetchOnWindowFocus: true,
   })
 }
 

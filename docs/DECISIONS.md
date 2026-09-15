@@ -126,8 +126,10 @@ duplicate — and every one of those has a right answer that requires no consens
 3. **Report** handles only the objective cases, with a reason attached, auto-removing at 2 distinct
    reports. Its friction is a feature — someone clearing a page will not file ten reasoned
    reports.
-4. **Nothing is ever destroyed.** Removals are soft; a Removed drawer restores in one click. This
-   is nearly free because ImgChest never deletes the underlying file (see §2).
+4. **Nothing is destroyed by the ordinary verbs.** Removals are soft; a Removed drawer restores in one
+   click. This is nearly free because ImgChest was assumed never to delete the underlying file (see
+   §2). A later staff **permanent delete** is the sole exception: it removes the ImgChest post,
+   which the API does allow, and keeps the row as a tombstone so the record survives.
 5. **Take counts are logged but drive nothing**, except an opt-in "sort by popular" toggle.
    Collecting them costs nothing and commits to nothing, and it means that if bloat ever does
    become real, there will be months of actual data to design against instead of another guess.
@@ -302,14 +304,16 @@ A staff-only **inspection surface** was added later (`/profile/moderation`; see 
 It sits inside the profile as one more tab rather than in the topbar, and does not contradict the
 paragraph above, because it is not a queue: it holds nothing, counts nothing pending, and changes no
 chrome with site state. It answers *"what has this person been doing?"* when the operator already has
-a reason to look, which is inspection rather than routine moderation. Two of its verbs are live —
-**restore** an image (already non-destructive) and the **owner-only** promote/demote of a
-contributor's role. The topbar instead carries **Notifications**, the channel a future warn/suspend
-needs: the app messaging one account, and the owner messaging everyone or the moderators. It is a
-message log, not a worklist. The remaining verbs stay inert: permanent delete, and warn/suspend/ban,
-which have no meaning yet for a cookie identity. `image_reports` stays unread. Image verbs are placed
-here as well as on the character page because a pattern — the same person removing images across many
-characters — is only visible in one place; that still requires opening a contributor on purpose. If a
+a reason to look, which is inspection rather than routine moderation. Five of its verbs are live —
+**restore** an image (already non-destructive), the **owner-only** promote/demote of a contributor's
+role, **warn** (a message and a staff record), and **suspend / ban**, which restrict the account to
+reading while a banner tells the person why (owner-only to lift). The topbar instead carries
+**Notifications**, the channel these ride: the app messaging one account, and the owner messaging
+everyone or the moderators. It is a message log, not a worklist. The one verb still inert is
+permanent delete, which needs its irreversible-file decision first. `image_reports` stays unread.
+Image verbs are placed here as well as on the character page because a pattern — the same person
+removing images across many characters — is only visible in one place; that still requires opening a
+contributor on purpose. If a
 later phase adds a pending count, a badge, or action logic driven by site state, that is the signal
 to re-read §1 and fix what is generating the backlog.
 

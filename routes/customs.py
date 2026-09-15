@@ -21,6 +21,7 @@ import db
 import identity
 import logs
 import tempfiles
+import thumbnails
 from image_utils import (
     detect_format,
     is_animated,
@@ -28,7 +29,14 @@ from image_utils import (
     read_image_dimensions,
     validate_image_file,
 )
-from imgchest_utils import ImgChestError, upload_to_imgchest
+from imgchest_utils import (
+    ImgChestError,
+    delete_imgchest_file,
+    delete_imgchest_post,
+    fetch_imgchest_post,
+    file_id_from_url,
+    upload_to_imgchest,
+)
 from ratelimit import rate_limited
 from remote_images import (
     MAX_FILE_SIZE,
@@ -46,8 +54,9 @@ customs_bp = Blueprint("customs", __name__)
 def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name=None):
     """
     Validate, convert, upload one temp file to ImgChest.
-    Returns (direct_link, None) on success, or (None, error_message).
-    Removes temp files when done.
+    Returns (direct_link, error, dimensions, post_id); direct_link is None on
+    failure. The post id is what a later permanent delete needs. Removes temp
+    files when done.
     """
     conversion_created_new_file = False
     final_path = temp_path
@@ -70,13 +79,14 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
                 None,
                 f"{display_filename}: File is {file_size_mb:.2f} MB; maximum allowed is {limit_mb:.0f} MB.",
                 None,
+                None,
             )
 
         ok, val_err = validate_image_file(temp_path)
         if not ok:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-            return None, f"{display_filename}: {val_err}", None
+            return None, f"{display_filename}: {val_err}", None, None
 
         # Animated GIFs pass through: re-encoding them costs the animation, which
         # is usually the reason the image was chosen. Everything else is
@@ -96,7 +106,7 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
                 )
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-                return None, err_msg, None
+                return None, err_msg, None, None
 
         final_size = os.path.getsize(final_path)
         if final_size > MAX_FILE_SIZE:
@@ -113,6 +123,7 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
                 f"{display_filename}: After processing the file is {final_mb:.2f} MB, which exceeds "
                 f"ImgChest's limit of {limit_mb:.0f} MB.",
                 None,
+                None,
             )
 
         # Measured here because the file is already on disk; the alternative is
@@ -124,23 +135,24 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
             log.debug("upload.sending", filename=display_filename)
             result = upload_to_imgchest(final_path, upload_name=upload_name)
             if result:
-                post_link, direct_link = result
+                post_link, direct_link, post_id = result
                 log.info("upload.succeeded", filename=display_filename)
-                return direct_link, None, dimensions
+                return direct_link, None, dimensions, post_id
             log.warning("upload.failed", filename=display_filename, reason="imgchest_no_result")
             return (
                 None,
                 f"{display_filename}: Image host did not return a link (unexpected). Try again.",
+                None,
                 None,
             )
         except ImgChestError as e:
             log.warning(
                 "upload.failed", filename=display_filename, reason="imgchest_error", error=str(e)
             )
-            return None, str(e), None
+            return None, str(e), None, None
         except Exception as e:
             log.exception("upload.failed", filename=display_filename, reason="unexpected")
-            return None, f"Error uploading {display_filename}: {str(e)}", None
+            return None, f"Error uploading {display_filename}: {str(e)}", None, None
     finally:
         if os.path.exists(temp_path):
             try:
@@ -218,6 +230,7 @@ def add_custom_image():
 
         uploaded_links = []
         uploaded_dimensions = {}
+        uploaded_post_ids = {}
         errors = []
         processed = 0
         # Numbering continues from every image this character has ever had, not
@@ -242,7 +255,7 @@ def add_custom_image():
             temp_path = tempfiles.reserve("custom", fn)
             file.save(temp_path)
 
-            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
+            direct_link, one_err, dimensions, post_id = _run_single_custom_upload_from_temp(
                 temp_path, fn, upload_name=imgchest_filename(char_name, next_index)
             )
             if direct_link:
@@ -250,6 +263,8 @@ def add_custom_image():
                 uploaded_links.append(direct_link)
                 if dimensions:
                     uploaded_dimensions[direct_link] = dimensions
+                if post_id:
+                    uploaded_post_ids[direct_link] = post_id
                 log.debug("upload.batch_item_ok", character=char_name, index=processed, filename=fn)
             else:
                 errors.append(one_err or "Unknown error")
@@ -272,6 +287,7 @@ def add_custom_image():
             uploaded_links,
             added_by=identity.current_identity().id,
             dimensions=uploaded_dimensions,
+            post_ids=uploaded_post_ids,
         )
         db.update_last_modified(char_name)
         log.info("customs.added", character=char_name, count=len(uploaded_links))
@@ -310,6 +326,7 @@ def import_custom_images_from_urls():
 
         uploaded_links = []
         uploaded_dimensions = {}
+        uploaded_post_ids = {}
         errors = []
         next_index = db.count_custom_images_ever(char_name) + 1
         for idx, url in enumerate(urls):
@@ -322,7 +339,7 @@ def import_custom_images_from_urls():
             except Exception as e:
                 errors.append(f"{url}: {str(e)}")
                 continue
-            direct_link, one_err, dimensions = _run_single_custom_upload_from_temp(
+            direct_link, one_err, dimensions, post_id = _run_single_custom_upload_from_temp(
                 temp_path, display_filename, upload_name=imgchest_filename(char_name, next_index)
             )
             if direct_link:
@@ -330,6 +347,8 @@ def import_custom_images_from_urls():
                 uploaded_links.append(direct_link)
                 if dimensions:
                     uploaded_dimensions[direct_link] = dimensions
+                if post_id:
+                    uploaded_post_ids[direct_link] = post_id
             else:
                 errors.append(one_err or "Unknown error")
 
@@ -348,6 +367,7 @@ def import_custom_images_from_urls():
             uploaded_links,
             added_by=identity.current_identity().id,
             dimensions=uploaded_dimensions,
+            post_ids=uploaded_post_ids,
         )
         db.update_last_modified(char_name)
         log.info(
@@ -530,6 +550,82 @@ def restore_images():
     except Exception as e:
         log.exception("customs.restore_failed")
         return jsonify({"error": str(e)}), 500
+
+
+@customs_bp.route("/api/purge-custom-image", methods=["POST"])
+@identity.require_moderator
+@rate_limited("remove")
+def purge_custom_image():
+    """Permanently delete one image from ImgChest, then tombstone the row.
+
+    Staff only, and the one irreversible act in the app. The post's image count
+    decides the call: a single-image post is deleted whole, a post with siblings
+    loses only the file, so nothing else goes with it.
+    """
+    data = request.get_json(silent=True) or {}
+    char_name = (data.get("character_name") or "").strip()
+    url = (data.get("url") or "").strip()
+    if not char_name or not url:
+        return jsonify({"error": "character_name and url are required"}), 400
+
+    row = db.get_image_for_purge(char_name, url)
+    if row is None:
+        return jsonify({"error": "Image not found"}), 404
+    if row["purged_at"]:
+        return jsonify({"error": "Already permanently deleted"}), 400
+
+    file_id = file_id_from_url(url)
+    try:
+        if row["imgchest_post_id"]:
+            # A post with more than one image must lose only the one file, or its
+            # siblings go with it; a single-image post is deleted whole. A post
+            # that is already gone makes the post delete a no-op.
+            post = fetch_imgchest_post(row["imgchest_post_id"])
+            image_count = (post or {}).get("image_count") or len((post or {}).get("images") or [])
+            if image_count > 1:
+                if not file_id:
+                    return (
+                        jsonify({"error": "Could not read the file id from this image's URL."}),
+                        500,
+                    )
+                delete_imgchest_file(file_id)
+            else:
+                delete_imgchest_post(row["imgchest_post_id"])
+        elif file_id:
+            # No post id: either a non-first image of a multi-image post -- the
+            # listing only exposes the first, so the backfill missed it -- or one
+            # we could never map. A file delete settles it, because it succeeds
+            # exactly when the post has siblings. The only-image refusal means a
+            # single-image post whose id we do not know, which we cannot touch.
+            try:
+                delete_imgchest_file(file_id)
+            except ImgChestError as e:
+                if "only image" in str(e).lower():
+                    return (
+                        jsonify(
+                            {
+                                "error": "This image is the only one in a post we could not "
+                                "identify, so it cannot be removed from ImgChest."
+                            }
+                        ),
+                        400,
+                    )
+                raise
+        else:
+            return jsonify({"error": "Could not read the file id from this image's URL."}), 500
+    except ImgChestError as e:
+        return jsonify({"error": str(e)}), 502
+
+    db.purge_custom_image(char_name, url, identity.current_identity().id)
+
+    # The cached thumbnail points at a source that no longer exists.
+    try:
+        thumbnails.cache_path(row["id"]).unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("customs.purge_thumb_failed", image_id=row["id"], error=str(e))
+
+    log.info("customs.purged", character=char_name, image_id=row["id"])
+    return jsonify({"success": True})
 
 
 def _image_ids_from(data):

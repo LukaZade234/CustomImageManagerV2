@@ -98,6 +98,29 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
     }),
+  warnModerationUser: (ref, { title, body }) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/warn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body }),
+    }),
+  suspendModerationUser: (ref, { title, body, days }) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/suspend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body, days }),
+    }),
+  banModerationUser: (ref, { title, body }) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/ban`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body }),
+    }),
+  liftModerationUser: (ref) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/lift`, { method: 'POST' }),
+  listModerationHistory: (ref) => api(`/api/moderation/users/${encodeURIComponent(ref)}/history`),
+  deleteModerationHistory: (id) =>
+    api(`/api/moderation/history/${encodeURIComponent(id)}/delete`, { method: 'POST' }),
   getNotifications: () => api('/api/notifications'),
   markNotificationsRead: () => api('/api/notifications/read', { method: 'POST' }),
   dismissNotification: (data) =>
@@ -230,6 +253,12 @@ export const apiClient = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
+    }),
+  purgeCustomImage: (charName, url) =>
+    api('/api/purge-custom-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, url }),
     }),
   getRemovedImages: (charName) => api(`/api/removed/${encodeURIComponent(charName)}`),
   reportImage: (imageId, reason) =>

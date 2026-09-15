@@ -341,7 +341,9 @@ class TestModerationReadSurface:
         assert item["added"] == 1
         assert item["removed"] == 0
 
-    def test_someone_who_only_removed_something_still_appears(self, client, clean_db, make_moderator):
+    def test_someone_who_only_removed_something_still_appears(
+        self, client, clean_db, make_moderator
+    ):
         # They added one image and later removed it, so they have no *active*
         # additions — but the actor set is a union, so they still show up.
         clean_db.ensure_identity("remover")
@@ -349,12 +351,16 @@ class TestModerationReadSurface:
         clean_db.remove_custom_images("Rem", ["https://cdn/x.png"], "remover")
         make_moderator()
 
-        items = {item["ref"]: item for item in client.get("/api/moderation/users").get_json()["items"]}
+        items = {
+            item["ref"]: item for item in client.get("/api/moderation/users").get_json()["items"]
+        }
         remover = items[identity_module.public_ref("remover")]
         assert remover["added"] == 0
         assert remover["removed"] == 1
 
-    def test_the_detail_splits_additions_and_removals(self, client, clean_db, identity_id, make_moderator):
+    def test_the_detail_splits_additions_and_removals(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/kept.png"], identity_id)
         self._owned(clean_db, "Rem", ["https://cdn/gone.png"], identity_id)
         clean_db.remove_custom_images("Rem", ["https://cdn/gone.png"], identity_id)
@@ -371,7 +377,9 @@ class TestModerationReadSurface:
         assert removed["added"] == 1
         assert removed["removed"] == 1
 
-    def test_the_character_filter_trims_the_list(self, client, clean_db, identity_id, make_moderator):
+    def test_the_character_filter_trims_the_list(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/rem.png"], identity_id)
         self._owned(clean_db, "Emilia", ["https://cdn/emilia.png"], identity_id)
         make_moderator()
@@ -422,9 +430,14 @@ class TestModerationCharacterView:
         return identity_module.public_ref(identity_id)
 
     def test_a_plain_user_is_refused(self, client, clean_db, identity_id):
-        assert client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").status_code == 403
+        assert (
+            client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").status_code
+            == 403
+        )
 
-    def test_it_groups_by_character_with_counts(self, client, clean_db, identity_id, make_moderator):
+    def test_it_groups_by_character_with_counts(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/a.png", "https://cdn/b.png"], identity_id)
         self._owned(clean_db, "Emilia", ["https://cdn/c.png"], identity_id)
         make_moderator()
@@ -446,7 +459,9 @@ class TestModerationCharacterView:
         make_moderator()
         assert client.get("/api/moderation/users/notthere/characters").status_code == 404
 
-    def test_created_at_is_carried_on_the_contributor(self, client, clean_db, identity_id, make_moderator):
+    def test_created_at_is_carried_on_the_contributor(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
         make_moderator()
         item = client.get("/api/moderation/users").get_json()["items"][0]
@@ -513,3 +528,436 @@ class TestModerationRoleChanges:
     def test_you_cannot_change_your_own_role(self, client, clean_db, identity_id, make_moderator):
         make_moderator("owner")
         assert self._post(client, self._ref(identity_id), "moderator").status_code == 400
+
+
+class TestModerationWarnings:
+    """Warn sends the recipient a message and keeps a record staff can read.
+
+    The two are one action and must not disagree: only the owner can delete the
+    record, and deleting it takes the delivered message with it.
+    """
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def _warn(self, client, ref, title="Keep it civil", body="Third time this week."):
+        return client.post(f"/api/moderation/users/{ref}/warn", json={"title": title, "body": body})
+
+    def test_a_plain_user_cannot_warn_or_read_history(self, client, clean_db):
+        clean_db.ensure_identity("target")
+        ref = self._ref("target")
+        assert self._warn(client, ref).status_code == 403
+        assert client.get(f"/api/moderation/users/{ref}/history").status_code == 403
+
+    def test_a_warn_delivers_a_badged_message_and_logs_it(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+
+        assert self._warn(client, self._ref("target")).status_code == 200
+
+        inbox = clean_db.list_notifications("target")
+        assert inbox[0]["title"] == "Keep it civil"
+        assert inbox[0]["moderation_action"] == "warn"
+        assert inbox[0]["source"] == "notification"
+
+        history = client.get(f"/api/moderation/users/{self._ref('target')}/history").get_json()
+        assert history["total"] == 1
+        entry = history["items"][0]
+        assert entry["action"] == "warn"
+        assert entry["body"] == "Third time this week."
+        assert entry["actor_handle"], "the log names who sent it"
+
+    def test_a_warn_needs_a_title(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+        assert self._warn(client, self._ref("target"), title="  ").status_code == 400
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert self._warn(client, "notthere").status_code == 404
+
+    def test_only_the_owner_can_delete_a_record(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator("moderator")
+        action_id = self._warn(client, self._ref("target")).get_json()["id"]
+
+        assert client.post(f"/api/moderation/history/{action_id}/delete").status_code == 403
+
+        make_moderator("owner")
+        assert client.post(f"/api/moderation/history/{action_id}/delete").status_code == 200
+        assert clean_db.list_moderation_actions("target") == []
+        # The message the record delivered goes with it.
+        assert clean_db.list_notifications("target") == []
+
+    def test_a_warn_does_not_need_the_recipient_to_have_an_account(
+        self, client, clean_db, make_moderator
+    ):
+        """A moderator needs a ref to warn, which means the target already exists
+        in `identities` -- but only as a row, not a signed-in account."""
+        clean_db.ensure_identity("target")
+        make_moderator()
+        assert self._warn(client, self._ref("target")).status_code == 200
+
+
+class TestModerationRestrictions:
+    """Suspension and ban: the state, not just the message.
+
+    The enforcement is global (identity.block_restricted_writes refuses every
+    non-GET for a restricted identity), so these pin the boundary rather than
+    each endpoint: a banned account can read and leave, and cannot write.
+    """
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def _post(self, client, ref, action, **payload):
+        return client.post(f"/api/moderation/users/{ref}/{action}", json=payload)
+
+    def _suspend(self, client, ref, days=3):
+        return self._post(client, ref, "suspend", title="Cool off", body="Three days.", days=days)
+
+    def test_a_banned_identity_can_read_but_not_write(self, client, clean_db, identity_id):
+        clean_db.set_moderation_status(identity_id, "banned", reason="spam")
+
+        # Reading still works, and says why.
+        me = client.get("/api/me")
+        assert me.status_code == 200
+        assert me.get_json()["moderation_status"] == "banned"
+
+        blocked = client.post("/api/saved", json={"name": "Rem"})
+        assert blocked.status_code == 403
+        assert blocked.get_json()["restricted"] is True
+        assert "banned" in blocked.get_json()["error"].lower()
+        # Using the product is not contributing: the notice, the way out, a page
+        # view and a command copy all stay open. (The view 404s here only because
+        # the character does not exist; what matters is the restriction did not
+        # intercept it.)
+        assert client.post("/api/notifications/read").status_code == 200
+        assert "banned" not in client.post("/api/characters/Rem/view").get_data(as_text=True)
+        takes = client.post("/api/takes", json={"kind": "copy_command", "ids": [1]})
+        assert "banned" not in takes.get_data(as_text=True)
+
+    def test_a_live_suspension_blocks_writes_too(self, client, clean_db, identity_id):
+        clean_db.set_moderation_status(identity_id, "suspended", until="2999-01-01T00:00:00.000Z")
+        assert client.post("/api/saved", json={"name": "Rem"}).status_code == 403
+
+    def test_an_expired_suspension_is_not_a_restriction(self, client, clean_db, identity_id):
+        clean_db.set_moderation_status(identity_id, "suspended", until="2000-01-01T00:00:00.000Z")
+        assert clean_db.get_identity(identity_id)["moderation_status"] is None
+        assert client.post("/api/saved", json={"name": "Rem"}).status_code != 403
+
+    def test_a_suspension_is_recorded_and_delivered(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+
+        res = self._suspend(client, self._ref("target"))
+        assert res.status_code == 200
+        assert res.get_json()["until"]
+
+        stored = clean_db.get_identity("target")
+        assert stored["moderation_status"] == "suspended"
+        assert stored["moderation_reason"] == "Three days."
+        assert clean_db.list_notifications("target")[0]["moderation_action"] == "suspend"
+
+    def test_a_ban_is_open_ended(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+
+        assert (
+            self._post(client, self._ref("target"), "ban", title="Bye", body="").status_code == 200
+        )
+        stored = clean_db.get_identity("target")
+        assert stored["moderation_status"] == "banned"
+        assert stored["moderation_until"] is None
+
+    def test_suspend_needs_a_sensible_number_of_days(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+        ref = self._ref("target")
+        assert self._post(client, ref, "suspend", title="x", days=0).status_code == 400
+        assert self._post(client, ref, "suspend", title="x", days=9999).status_code == 400
+        assert self._post(client, ref, "suspend", title="x").status_code == 400
+        assert self._post(client, ref, "suspend", body="no title", days=1).status_code == 400
+
+    def test_the_owner_and_yourself_cannot_be_restricted(
+        self, client, clean_db, identity_id, make_moderator
+    ):
+        make_moderator("owner")
+        clean_db.ensure_identity("boss")
+        clean_db.set_role("boss", "owner")
+        assert self._post(client, self._ref("boss"), "ban", title="x").status_code == 400
+        assert self._post(client, self._ref(identity_id), "ban", title="x").status_code == 400
+
+    def test_a_moderator_cannot_restrict_another_moderator(self, client, clean_db, make_moderator):
+        make_moderator("moderator")
+        clean_db.ensure_identity("peer")
+        clean_db.set_role("peer", "moderator")
+        ref = self._ref("peer")
+
+        assert self._post(client, ref, "ban", title="x").status_code == 403
+        assert self._post(client, ref, "suspend", title="x", days=1).status_code == 403
+
+        # The owner is the one who moves staff.
+        make_moderator("owner")
+        assert self._post(client, ref, "ban", title="x").status_code == 200
+
+    def test_only_the_owner_can_lift(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator("moderator")
+        ref = self._ref("target")
+        self._suspend(client, ref)
+
+        assert self._post(client, ref, "lift").status_code == 403
+
+        make_moderator("owner")
+        assert self._post(client, ref, "lift").status_code == 200
+        assert clean_db.get_identity("target")["moderation_status"] is None
+        assert clean_db.list_notifications("target")[0]["title"] == "Your account has been restored"
+
+    def test_lifting_nothing_is_a_bad_request(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator("owner")
+        assert self._post(client, self._ref("target"), "lift").status_code == 400
+
+    def test_a_plain_user_cannot_suspend_or_ban(self, client, clean_db):
+        clean_db.ensure_identity("target")
+        ref = self._ref("target")
+        assert self._suspend(client, ref).status_code == 403
+        assert self._post(client, ref, "ban", title="x").status_code == 403
+
+
+class TestNetworkLinks:
+    """Sharing a network with a restricted account is a signal, not a rule.
+
+    It is deliberately weak: a shared IP is a household, a phone network or a VPN
+    exit as often as it is one person, so it is surfaced for a human to judge and
+    never triggers a restriction by itself.
+    """
+
+    def _owned(self, db, char, url, owner):
+        db.ensure_identity(owner)
+        db.add_custom_images(char, [url], added_by=owner)
+
+    def test_a_write_records_the_network_once_and_counts_hits(self, client, clean_db, identity_id):
+        base = {"REMOTE_ADDR": "203.0.113.7"}
+        client.post("/api/saved", json={"name": "Rem"}, environ_base=base)
+        client.post("/api/saved", json={"name": "Emilia"}, environ_base=base)
+
+        rows = (
+            clean_db.get_connection()
+            .execute(
+                "SELECT ip_hash, hits FROM identity_networks WHERE identity_id = ?", (identity_id,)
+            )
+            .fetchall()
+        )
+        assert len(rows) == 1
+        assert rows[0]["ip_hash"]
+        assert rows[0]["hits"] == 2
+
+        # A different network is a second row, not a second identity.
+        client.post(
+            "/api/saved", json={"name": "Rem"}, environ_base={"REMOTE_ADDR": "198.51.100.4"}
+        )
+        assert (
+            clean_db.get_connection()
+            .execute(
+                "SELECT COUNT(*) AS n FROM identity_networks WHERE identity_id = ?", (identity_id,)
+            )
+            .fetchone()["n"]
+            == 2
+        )
+
+    def test_an_account_that_shares_a_banned_network_is_flagged(self, clean_db):
+        self._owned(clean_db, "Rem", "https://cdn/banned.png", "banned")
+        self._owned(clean_db, "Rem", "https://cdn/other.png", "other")
+        clean_db.record_identity_network("banned", "shared")
+        clean_db.record_identity_network("other", "shared")
+        clean_db.set_moderation_status("banned", "banned", reason="spam")
+
+        items = {item["ref"]: item for item in clean_db.list_contributors()}
+        assert items[identity_module.public_ref("other")]["linked_restricted"] is True
+        # The restricted account is not "linked to itself".
+        assert items[identity_module.public_ref("banned")]["linked_restricted"] is False
+
+    def test_an_expired_suspension_does_not_link(self, clean_db):
+        self._owned(clean_db, "Rem", "https://cdn/old.png", "old")
+        self._owned(clean_db, "Rem", "https://cdn/other.png", "other")
+        clean_db.record_identity_network("old", "shared")
+        clean_db.record_identity_network("other", "shared")
+        clean_db.set_moderation_status("old", "suspended", until="2000-01-01T00:00:00.000Z")
+
+        items = {item["ref"]: item for item in clean_db.list_contributors()}
+        assert items[identity_module.public_ref("other")]["linked_restricted"] is False
+
+    def test_old_links_are_pruned(self, clean_db):
+        clean_db.ensure_identity("ghost")
+        with clean_db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO identity_networks (identity_id, ip_hash, first_seen, last_seen, hits)"
+                " VALUES ('ghost', 'stale', '2000-01-01T00:00:00.000Z',"
+                "         '2000-01-01T00:00:00.000Z', 1)"
+            )
+        # Writing again prunes anything past the retention window.
+        clean_db.record_identity_network("ghost", "fresh")
+        rows = (
+            clean_db.get_connection()
+            .execute("SELECT ip_hash FROM identity_networks WHERE identity_id = ?", ("ghost",))
+            .fetchall()
+        )
+        assert [r["ip_hash"] for r in rows] == ["fresh"]
+
+
+class TestPermanentDelete:
+    """The one irreversible act: delete from ImgChest, tombstone the row.
+
+    Owner only, and image-count aware: a single-image post is deleted whole,
+    while a post with several (only possible via a hand merge) loses just the one
+    file, so siblings survive. The file id is read from the stored URL.
+    """
+
+    FILE_ID = "deadbeef1234"
+    URL = f"https://cdn.imgchest.com/files/{FILE_ID}.png"
+
+    def _seed(self, db, *, post_id):
+        db.ensure_identity("adder")
+        db.add_custom_images(
+            "Rem", [self.URL], added_by="adder", post_ids={self.URL: post_id} if post_id else None
+        )
+
+    def _patch(self, monkeypatch, *, image_count=1, fetch=None):
+        calls = {"post": [], "file": []}
+        if fetch is not None:
+            monkeypatch.setattr("routes.customs.fetch_imgchest_post", fetch)
+        else:
+            monkeypatch.setattr(
+                "routes.customs.fetch_imgchest_post",
+                lambda pid: {"image_count": image_count, "images": [{}] * image_count},
+            )
+        monkeypatch.setattr(
+            "routes.customs.delete_imgchest_post", lambda pid: calls["post"].append(pid)
+        )
+        monkeypatch.setattr(
+            "routes.customs.delete_imgchest_file", lambda fid: calls["file"].append(fid)
+        )
+        return calls
+
+    def _purge(self, client):
+        return client.post(
+            "/api/purge-custom-image", json={"character_name": "Rem", "url": self.URL}
+        )
+
+    def test_a_plain_user_cannot_purge(self, client, clean_db):
+        self._seed(clean_db, post_id="post-1")
+        assert self._purge(client).status_code == 403
+
+    def test_a_moderator_can_purge(self, client, clean_db, make_moderator, monkeypatch):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("moderator")
+        calls = self._patch(monkeypatch, image_count=1)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": ["post-1"], "file": []}
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
+
+    def test_a_single_image_post_is_deleted_whole(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        calls = self._patch(monkeypatch, image_count=1)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": ["post-1"], "file": []}
+
+        row = clean_db.get_image_for_purge("Rem", self.URL)
+        assert row["state"] == "removed"
+        assert row["purged_at"] is not None
+        # Gone from the Removed drawer, and it cannot be restored.
+        assert clean_db.get_removed_for("Rem") == []
+        assert clean_db.restore_custom_images("Rem", [self.URL]) == 0
+
+    def test_a_multi_image_post_loses_only_the_file(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        calls = self._patch(monkeypatch, image_count=3)
+
+        assert self._purge(client).status_code == 200
+        # The post is left alone; only the file goes, so siblings survive.
+        assert calls == {"post": [], "file": [self.FILE_ID]}
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
+
+    def test_a_post_that_is_already_gone_is_a_success(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        calls = self._patch(monkeypatch, fetch=lambda pid: None)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": ["post-1"], "file": []}
+
+    def test_an_unmapped_image_is_purged_by_file_delete(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        # The listing only exposes a post's *first* image, so a non-first image in a
+        # multi-image post has no post id -- but a file delete works, because the
+        # post has siblings. This is the case that used to refuse.
+        self._seed(clean_db, post_id=None)
+        make_moderator("owner")
+        calls = self._patch(monkeypatch, fetch=lambda pid: None)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": [], "file": [self.FILE_ID]}
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
+
+    def test_an_unmapped_single_image_post_is_refused(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        from imgchest_utils import ImgChestError
+
+        self._seed(clean_db, post_id=None)
+        make_moderator("owner")
+        monkeypatch.setattr("routes.customs.fetch_imgchest_post", lambda pid: None)
+        monkeypatch.setattr("routes.customs.delete_imgchest_post", lambda pid: None)
+
+        def only_image(_file_id):
+            raise ImgChestError(
+                "Image hosting refused the delete (HTTP 500): You can't delete the only "
+                "image on a post. Please delete your post instead."
+            )
+
+        monkeypatch.setattr("routes.customs.delete_imgchest_file", only_image)
+        res = self._purge(client)
+        assert res.status_code == 400
+        assert "only one" in res.get_json()["error"]
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is None
+
+    def test_a_failed_delete_leaves_the_row_alone(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        from imgchest_utils import ImgChestError
+
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+
+        def boom(_pid):
+            raise ImgChestError("Image hosting refused the delete (HTTP 500).")
+
+        self._patch(monkeypatch, fetch=boom)
+        assert self._purge(client).status_code == 502
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is None
+
+    def test_purging_twice_and_unknown_images(self, client, clean_db, make_moderator, monkeypatch):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        self._patch(monkeypatch, image_count=1)
+
+        assert self._purge(client).status_code == 200
+        assert self._purge(client).status_code == 400  # already purged
+        unknown = client.post(
+            "/api/purge-custom-image",
+            json={"character_name": "Rem", "url": "https://cdn.imgchest.com/files/nope.png"},
+        )
+        assert unknown.status_code == 404

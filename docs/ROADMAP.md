@@ -615,13 +615,13 @@ doing?"* meant guessing a character page or opening SQLite. This adds the surfac
 **inspection, not a queue** — see `docs/MODERATION.md` for the full plan and `DECISIONS.md` §5 for
 why it does not contradict the anti-queue argument there.
 
-- [x] **The review surface** (staff-only). A master list of every contributor who added or removed
-      an image, beside a detail pane of their additions or removals, filtered by character and paged
-      on the server. Backed by `GET /api/moderation/users` and
-      `/api/moderation/users/<ref>/images` and `/characters`, gated by a shared `require_moderator`
-      decorator. Reshaped around a contributor profile with stats, a character-level view, and image
-      restore; role changes are owner-only. It is a **profile tab** (`/profile/moderation`), not a
-      topbar entry.
+- [x] **The review surface** (staff-only). Opens as a finder — a centred search with facets (role,
+      Discord account, has removals) over the contributor list — then **Info / Images** tabs once a
+      contributor is picked: Info is the profile and moderation history, Images is their additions or
+      removals, filtered by character and paged on the server. Backed by
+      `GET /api/moderation/users` and `/api/moderation/users/<ref>/images` and `/characters`, gated by
+      a shared `require_moderator` decorator. Image restore and role changes (owner-only) are wired.
+      It is a **profile tab** (`/profile/moderation`), not a topbar entry.
 - [x] **Restore an image from the moderation page.** Reuses the existing `/api/restore-images`.
 - [x] **Promote / demote a contributor (owner only).** `POST /api/moderation/users/<ref>/role`,
       wrapping `db.set_role`, with a plus/minus control and a confirmation. Moderators hold every
@@ -630,11 +630,28 @@ why it does not contradict the anti-queue argument there.
       surface: a plain list of messages to you, mechanical (a role change) and owner broadcasts
       (everyone, or moderators only). Ordinary messages are dismissible by their recipient and
       deletable by the owner for everyone; **pinned** ones are global, always visible (including to
-      later accounts), and cannot be dismissed. This is what "warn" will use.
-- [ ] **Phase 2 — warn / suspend / ban.** Still inert; needs a decision on what each means for a
-      cookie identity, and now has the notification channel to say them through.
-- [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
-      that may not exist, a cascade, and a second confirmation. The first irreversible action.
+      later accounts), and cannot be dismissed.
+- [x] **Warn a contributor.** `POST /api/moderation/users/<ref>/warn` writes a `moderation_actions`
+      record **and** delivers a badged, dismissible notification; the record survives the recipient
+      dismissing the message, and only the owner can delete it (which takes the message with it). The
+      profile shows the contributor's full moderation history.
+- [x] **Suspend and ban a contributor.** A `moderation_status` row keyed by identity: `suspended`
+      (time-boxed, self-lifting) or `banned` (open-ended). `identity.block_restricted_writes` refuses
+      every write for a restricted account while reads pass, a persistent banner tells the person why
+      (there is no email), and only the owner lifts it. The ban follows the unique Discord id across
+      cookies; a different Discord account is the accepted gap.
+- [x] **A network signal for the second-account case.** Every write records a keyed hash of the
+      client address (never the address), pruned after 90 days; a contributor seen on a network a
+      restricted account used is flagged on their profile. A lead for a human, not an automatic
+      restriction — an IP is a household or a carrier as often as it is one person.
+- [x] **Permanent delete (staff).** ImgChest refuses to delete the only image in a post, so the
+      post goes (`DELETE /v1/post/{id}`, verified live) — or, for a post with several images, just the
+      file (`DELETE /v1/file/{id}`), decided per purge from the post's image count. The post id is
+      captured at upload and backfilled for the old library from `GET /v1/user/{username}/posts` (the
+      documented API; no session, no merge) — 8,579 of 8,581 rows matched. Tombstoned (`purged_at`),
+      behind a second confirmation, cached thumbnail dropped.
+- [ ] **Later: the multi-image audit.** How many posts hold more than one image, and how large (one
+      `GET /v1/post/{slug}` per post, ~4h at 60/min). Informational; the purge is safe either way.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and
       whether the honest case for it is a statistic rather than a queue.
 

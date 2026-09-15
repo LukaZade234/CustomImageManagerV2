@@ -2,6 +2,7 @@ import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import RequireModerator from './components/RequireModerator'
+import RestrictionBanner from './components/RestrictionBanner'
 import Toast from './components/Toast'
 import { Button, Card } from './components/ui'
 import AddPage from './pages/AddPage'
@@ -57,6 +58,7 @@ function App() {
       <Navbar />
       <Toast />
       <AppErrorBoundary>
+        <RestrictionBanner />
         <main id="main-content" className="container" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<HomePage />} />

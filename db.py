@@ -1711,6 +1711,7 @@ def add_custom_images(
     urls: Iterable[str],
     added_by: str | None = None,
     dimensions: dict[str, tuple[int, int]] | None = None,
+    post_ids: dict[str, str] | None = None,
 ) -> int:
     """Append images, skipping any URL already present. Returns how many landed.
 
@@ -1719,6 +1720,10 @@ def add_custom_images(
     `dimensions` maps url -> (width, height). Supplying it is what keeps the
     gallery from reflowing as images arrive; it is optional because the import
     paths do not always have the file to hand.
+
+    `post_ids` maps url -> the ImgChest post id, which is what a later permanent
+    delete needs. Optional for the same reason dimensions is, and absent
+    entirely for rows that predate permanent delete.
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
@@ -1733,13 +1738,14 @@ def add_custom_images(
         position = int(row["p"]) + 1
         added = 0
         sizes = dimensions or {}
+        posts = post_ids or {}
         for url in urls:
             width, height = sizes.get(url, (None, None))
             cur = conn.execute(
                 "INSERT INTO custom_images"
-                " (character_id, url, position, added_by, added_at, width, height)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
-                (char_id, url, position, added_by, _now(), width, height),
+                " (character_id, url, position, added_by, added_at, width, height, imgchest_post_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
+                (char_id, url, position, added_by, _now(), width, height, posts.get(url)),
             )
             if cur.rowcount:
                 position += 1
@@ -2067,7 +2073,7 @@ def get_removed_by_identity(identity_id: str) -> list[dict]:
         "       c.name AS character"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
-        " WHERE i.removed_by = ? AND i.state = 'removed'"
+        " WHERE i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         " ORDER BY i.removed_at DESC, i.id DESC",
         (identity_id,),
     )
@@ -2135,12 +2141,18 @@ def list_notifications(
     limit = max(1, int(limit))
     conn = get_connection()
     rows = conn.execute(
-        "SELECT id, kind, title, body, created_at, read_at, group_id"
-        "  FROM notifications WHERE identity_id = ?"
-        " ORDER BY created_at DESC, id DESC LIMIT ?",
+        "SELECT n.id, n.kind, n.title, n.body, n.created_at, n.read_at, n.group_id,"
+        "       m.action AS moderation_action"
+        "  FROM notifications n"
+        "  LEFT JOIN moderation_actions m ON m.id = n.moderation_action_id"
+        " WHERE n.identity_id = ?"
+        " ORDER BY n.created_at DESC, n.id DESC LIMIT ?",
         (identity_id, limit),
     ).fetchall()
-    items = [{**dict(r), "source": "notification", "pinned": False} for r in rows]
+    items = [
+        {**dict(r), "source": "notification", "pinned": False, "moderation_action": r["moderation_action"]}
+        for r in rows
+    ]
 
     audiences = ("everyone", "moderators") if is_staff else ("everyone",)
     placeholders = ",".join("?" for _ in audiences)
@@ -2164,6 +2176,7 @@ def list_notifications(
             "group_id": None,
             "source": "pin",
             "pinned": True,
+            "moderation_action": None,
         }
         for r in pinned
     ]
@@ -2304,6 +2317,145 @@ def broadcast_notification(
         return len(ids)
 
 
+# --- Moderation actions --------------------------------------------------
+#
+# What staff have sent a contributor. A warn (or, later, a suspend or a ban) is
+# two rows with one meaning: a line in `moderation_actions`, the durable record
+# staff read, and an ordinary dismissible `notifications` row for the recipient.
+# The notification points back at the action, so the owner deleting the record
+# takes the delivered message with it (ON DELETE CASCADE, migration 017).
+
+_ACTIONS = ("warn", "suspend", "ban")
+
+
+def moderate_identity(
+    identity_id: str,
+    actor_id: str | None,
+    action: str,
+    title: str,
+    body: str = "",
+) -> int:
+    """Log a moderation action against an identity and deliver it. Returns its id.
+
+    The record survives the recipient dismissing the message; deleting the record
+    is what removes the message for them.
+    """
+    if action not in _ACTIONS:
+        raise ValueError(f"Unknown moderation action: {action!r}")
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        cur = conn.execute(
+            "INSERT INTO moderation_actions (identity_id, actor_id, action, title, body, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (identity_id, actor_id, action, title, body, _now()),
+        )
+        action_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO notifications"
+            " (identity_id, kind, title, body, created_by, created_at, moderation_action_id)"
+            " VALUES (?, 'broadcast', ?, ?, ?, ?, ?)",
+            (identity_id, title, body, actor_id, _now(), action_id),
+        )
+        return action_id
+
+
+def list_moderation_actions(identity_id: str) -> list[dict]:
+    """Everything staff have sent this identity, newest first, with the sender."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT a.id, a.action, a.title, a.body, a.created_at,"
+        "       actor.handle AS actor_handle"
+        "  FROM moderation_actions a"
+        "  LEFT JOIN identities actor ON actor.id = a.actor_id"
+        " WHERE a.identity_id = ?"
+        " ORDER BY a.created_at DESC, a.id DESC",
+        (identity_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_moderation_action(action_id: int) -> bool:
+    """Owner-only. Remove a record, and with it the recipient's copy.
+
+    The cascade is what makes this "delete for everyone": once the record is
+    gone the delivered notification goes too, so nothing is left claiming a
+    warning that the staff log says never happened.
+    """
+    with transaction() as conn:
+        cur = conn.execute("DELETE FROM moderation_actions WHERE id = ?", (action_id,))
+        return bool(cur.rowcount)
+
+
+def _active_moderation(status: str | None, until: str | None) -> tuple[str | None, str | None]:
+    """Normalise a stored status, expiring a suspension that has passed.
+
+    A suspension lifts itself: nothing has to run for it to end, the next read
+    simply stops seeing it. An open-ended ban is returned as it stands; anything
+    with no `until` (or a missing status) is not a restriction.
+    """
+    if status == "suspended" and (not until or until <= _now()):
+        return None, None
+    return status, until
+
+
+def set_moderation_status(
+    identity_id: str,
+    status: str,
+    *,
+    until: str | None = None,
+    reason: str = "",
+    actor_id: str | None = None,
+) -> None:
+    """Suspend or ban an identity. One live status per identity; this replaces it."""
+    if status not in ("suspended", "banned"):
+        raise ValueError(f"Unknown moderation status: {status!r}")
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO moderation_status (identity_id, status, until, reason, actor_id, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT (identity_id) DO UPDATE SET"
+            "   status = excluded.status, until = excluded.until, reason = excluded.reason,"
+            "   actor_id = excluded.actor_id, created_at = excluded.created_at",
+            (identity_id, status, until, reason, actor_id, _now()),
+        )
+
+
+def clear_moderation_status(identity_id: str) -> bool:
+    """Lift a suspension or ban. False if there was nothing to lift."""
+    with transaction() as conn:
+        cur = conn.execute("DELETE FROM moderation_status WHERE identity_id = ?", (identity_id,))
+        return bool(cur.rowcount)
+
+
+# How long a network link is kept. Long enough to catch a return within a few
+# months, short enough that it is not a permanent record of where someone was.
+NETWORK_RETENTION_DAYS = 90
+
+
+def record_identity_network(
+    identity_id: str, ip_hash: str, *, retention_days: int = NETWORK_RETENTION_DAYS
+) -> None:
+    """Remember that an identity was seen from a network hash.
+
+    An upsert, so the table is bounded by (identity, network) pairs rather than
+    by requests, and anything past the retention window is pruned on the way
+    through -- the link is deliberately short-lived.
+    """
+    now = _now()
+    cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO identity_networks (identity_id, ip_hash, first_seen, last_seen, hits)"
+            " VALUES (?, ?, ?, ?, 1)"
+            " ON CONFLICT (identity_id, ip_hash) DO UPDATE SET"
+            "   last_seen = excluded.last_seen, hits = identity_networks.hits + 1",
+            (identity_id, ip_hash, now, now),
+        )
+        conn.execute("DELETE FROM identity_networks WHERE last_seen < ?", (cutoff,))
+
+
 def get_removed_for(char_name: str) -> list[dict]:
     """The Removed drawer: everything soft-deleted for this character."""
     conn = get_connection()
@@ -2314,7 +2466,7 @@ def get_removed_for(char_name: str) -> list[dict]:
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
         "  LEFT JOIN identities remover ON remover.id = i.removed_by"
-        " WHERE c.name = ? AND i.state = 'removed'"
+        " WHERE c.name = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         " ORDER BY i.removed_at DESC, i.id DESC",
         (char_name,),
     )
@@ -2349,12 +2501,56 @@ def restore_custom_images(char_name: str, urls: Iterable[str]) -> int:
             f"UPDATE custom_images"
             f"   SET state = 'active', removed_by = NULL, removed_at = NULL,"
             f"       removed_reason = NULL"
-            f" WHERE character_id = ? AND state = 'removed' AND url IN ({placeholders})",
+            f" WHERE character_id = ? AND state = 'removed' AND purged_at IS NULL AND url IN ({placeholders})",
             (char_id, *wanted),
         )
         if cur.rowcount:
             conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
         return cur.rowcount
+
+
+# --- Permanent delete ----------------------------------------------------
+#
+# The one irreversible act. ImgChest refuses to delete the only image in a post,
+# so the post is what goes; the row stays as a tombstone so the record does not
+# silently vanish, hidden from every removed list and refused by restore.
+
+
+def get_image_for_purge(char_name: str, url: str) -> dict | None:
+    """The row a permanent delete is about, with the handle it needs."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT i.id, i.url, i.state, i.purged_at, i.imgchest_post_id"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE c.name = ? AND i.url = ?",
+        (char_name, url),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def purge_custom_image(char_name: str, url: str, actor_id: str) -> bool:
+    """Tombstone a row, after its ImgChest post has already been deleted.
+
+    `state` becomes 'removed' with `purged_at` set, which hides it from every
+    removed list and blocks restore: the record stays for the audit, but nothing
+    can bring the image back. False if the row is unknown or already purged.
+    """
+    with transaction() as conn:
+        char_id = _character_id(conn, char_name)
+        if char_id is None:
+            return False
+        now = _now()
+        cur = conn.execute(
+            "UPDATE custom_images"
+            "   SET state = 'removed', purged_at = ?, removed_by = ?,"
+            "       removed_at = ?, removed_reason = 'permanently deleted'"
+            " WHERE character_id = ? AND url = ? AND purged_at IS NULL",
+            (now, actor_id, now, char_id, url),
+        )
+        if cur.rowcount:
+            conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (now, char_id))
+        return bool(cur.rowcount)
 
 
 # --- Hide for me --------------------------------------------------------
@@ -2636,13 +2832,31 @@ def ensure_identity(identity_id: str, handle: str | None = None) -> None:
 
 
 def get_identity(identity_id: str) -> dict | None:
-    """The stored row, or None if this identity has never written anything."""
+    """The stored row, or None if this identity has never written anything.
+
+    The current moderation status is joined in rather than fetched separately:
+    every request that reads a role reads this row anyway, and the restriction is
+    needed on the same path.
+    """
     conn = get_connection()
     row = conn.execute(
-        "SELECT id, handle, discord_id, role, created_at FROM identities WHERE id = ?",
+        "SELECT i.id, i.handle, i.discord_id, i.role, i.created_at,"
+        "       m.status AS moderation_status, m.until AS moderation_until,"
+        "       m.reason AS moderation_reason"
+        "  FROM identities i"
+        "  LEFT JOIN moderation_status m ON m.identity_id = i.id"
+        " WHERE i.id = ?",
         (identity_id,),
     ).fetchone()
-    return dict(row) if row else None
+    if row is None:
+        return None
+    data = dict(row)
+    # An expired suspension reads as no restriction, so callers never have to
+    # carry the clock.
+    data["moderation_status"], data["moderation_until"] = _active_moderation(
+        data.get("moderation_status"), data.get("moderation_until")
+    )
+    return data
 
 
 def identity_by_ref(ref: str) -> str | None:
@@ -2702,11 +2916,47 @@ def list_contributors() -> list[dict]:
         people = {
             r["id"]: dict(r)
             for r in conn.execute(
-                "SELECT id, handle, role, discord_id, created_at FROM identities"
-                f" WHERE id IN ({placeholders})",
+                "SELECT i.id, i.handle, i.role, i.discord_id, i.created_at,"
+                "       m.status AS moderation_status, m.until AS moderation_until,"
+                "       m.reason AS moderation_reason"
+                "  FROM identities i"
+                "  LEFT JOIN moderation_status m ON m.identity_id = i.id"
+                f" WHERE i.id IN ({placeholders})",
                 ids,
             )
         }
+
+    # The networks a currently-restricted account has used, and which other
+    # accounts share one. Computed only when there is something restricted, so
+    # the common case touches nothing.
+    restricted_ids = {
+        r["identity_id"]
+        for r in conn.execute(
+            "SELECT identity_id FROM moderation_status"
+            " WHERE status = 'banned' OR (status = 'suspended' AND (until IS NULL OR until > ?))",
+            (_now(),),
+        )
+    }
+    restricted_networks: set[str] = set()
+    networks: dict[str, set[str]] = {}
+    if restricted_ids:
+        placeholders = ",".join("?" for _ in restricted_ids)
+        restricted_networks = {
+            r["ip_hash"]
+            for r in conn.execute(
+                "SELECT DISTINCT ip_hash FROM identity_networks"
+                f" WHERE identity_id IN ({placeholders})",
+                list(restricted_ids),
+            )
+        }
+    if restricted_networks:
+        placeholders = ",".join("?" for _ in restricted_networks)
+        for r in conn.execute(
+            "SELECT identity_id, ip_hash FROM identity_networks"
+            f" WHERE ip_hash IN ({placeholders})",
+            list(restricted_networks),
+        ):
+            networks.setdefault(r["identity_id"], set()).add(r["ip_hash"])
 
     items = []
     for r in rows:
@@ -2715,6 +2965,9 @@ def list_contributors() -> list[dict]:
         # fall back to the derived handle rather than dropping them, matching
         # current_identity()'s own tolerance.
         person = people.get(actor)
+        status, until = _active_moderation(
+            (person or {}).get("moderation_status"), (person or {}).get("moderation_until")
+        )
         items.append(
             {
                 "ref": identity_module.public_ref(actor),
@@ -2725,6 +2978,13 @@ def list_contributors() -> list[dict]:
                 "added": int(r["added"] or 0),
                 "removed": int(r["removed"] or 0),
                 "last_at": r["last_at"],
+                "moderation_status": status,
+                "moderation_until": until,
+                "moderation_reason": (person or {}).get("moderation_reason") or "",
+                # A signal, not a rule: this account has been seen from a network
+                # a currently-restricted *other* account has used. A human judges.
+                "linked_restricted": actor not in restricted_ids
+                and bool(networks.get(actor, set()) & restricted_networks),
             }
         )
     items.sort(key=lambda item: item["last_at"] or "", reverse=True)
@@ -2750,7 +3010,7 @@ def list_images_by_identity(
     per_page = max(1, min(100, int(per_page)))
 
     if state == "removed":
-        where = "i.removed_by = ? AND i.state = 'removed'"
+        where = "i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         order = "COALESCE(i.removed_at, i.added_at) DESC, i.id DESC"
     else:
         where = "i.added_by = ? AND i.state = 'active'"
@@ -2786,7 +3046,7 @@ def list_images_by_identity(
     totals = conn.execute(
         "SELECT"
         "  SUM(CASE WHEN added_by = ? AND state = 'active' THEN 1 ELSE 0 END) AS added,"
-        "  SUM(CASE WHEN removed_by = ? AND state = 'removed' THEN 1 ELSE 0 END) AS removed"
+        "  SUM(CASE WHEN removed_by = ? AND state = 'removed' AND purged_at IS NULL THEN 1 ELSE 0 END) AS removed"
         "  FROM custom_images",
         (identity_id, identity_id),
     ).fetchone()
@@ -2840,7 +3100,7 @@ def list_characters_by_identity(
     direction = "DESC" if order == "desc" else "ASC"
 
     if state == "removed":
-        where = "i.removed_by = ? AND i.state = 'removed'"
+        where = "i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         recency = "MAX(i.removed_at)"
     else:
         where = "i.added_by = ? AND i.state = 'active'"

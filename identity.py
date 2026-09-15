@@ -70,6 +70,9 @@ class Identity:
     handle: str
     role: str = "user"
     discord_id: str | None = None
+    moderation_status: str | None = None
+    moderation_until: str | None = None
+    moderation_reason: str = ""
 
     @property
     def is_moderator(self) -> bool:
@@ -82,6 +85,20 @@ class Identity:
     @property
     def is_signed_in(self) -> bool:
         return self.discord_id is not None
+
+    @property
+    def is_suspended(self) -> bool:
+        # An expired suspension is normalised away by db.get_identity, so this is
+        # only ever the live kind.
+        return self.moderation_status == "suspended"
+
+    @property
+    def is_banned(self) -> bool:
+        return self.moderation_status == "banned"
+
+    @property
+    def is_restricted(self) -> bool:
+        return self.is_suspended or self.is_banned
 
 
 def new_identity_id() -> str:
@@ -274,6 +291,108 @@ def persist_identity(response):
     return response
 
 
+def client_ip() -> str:
+    """The caller's address, as best the deployment allows.
+
+    Cloudflare sets `CF-Connecting-IP`; `X-Forwarded-For`'s first hop is the next
+    best. Both are only meaningful when the origin is reached through the proxy,
+    which is the production shape; locally neither is present and the socket
+    address is the client. This feeds a moderation *signal*, never a gate, so the
+    spoofing caveat is acceptable.
+    """
+    forwarded = request.headers.get("CF-Connecting-IP")
+    if forwarded:
+        return forwarded.strip()
+    chain = request.headers.get("X-Forwarded-For")
+    if chain:
+        return chain.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
+def ip_hash(ip: str) -> str:
+    """A keyed digest of an address, so the address itself is never stored.
+
+    Keyed with SECRET_KEY: rotating the key invalidates every stored link, which
+    is the right failure mode for a short-lived signal.
+    """
+    from flask import current_app
+
+    key = current_app.config["SECRET_KEY"].encode("utf-8")[:64]
+    return hashlib.blake2b(ip.encode("utf-8"), key=key, digest_size=16).hexdigest()
+
+
+def record_network() -> None:
+    """before_request hook: remember which network an identity wrote from.
+
+    It runs before `block_restricted_writes` so a blocked attempt is still
+    recorded -- a restricted account coming back is exactly the link worth
+    seeing. Only non-GETs are recorded: a read says nothing about who is
+    contributing, and recording every page view would be a log of where everyone
+    browsed.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    identity_id = getattr(g, "identity_id", None)
+    if not identity_id:
+        return None
+    ip = client_ip()
+    if not ip:
+        return None
+
+    import db
+
+    db.record_identity_network(identity_id, ip_hash(ip))
+    return None
+
+
+# A restricted account may still read, so the few POSTs that are *reads* in
+# disguise stay open: leaving, reading the notice, fetching an image to download,
+# copying a command. Exact paths, not a prefix, so a future route is not opened
+# by accident.
+_RESTRICTED_ALLOWLIST = frozenset(
+    {
+        "/api/auth/logout",
+        "/api/notifications/read",
+        "/api/notifications/dismiss",
+        "/api/download-image-proxy",
+        "/api/takes",
+    }
+)
+
+
+def _restricted_allowed(path: str) -> bool:
+    if path in _RESTRICTED_ALLOWLIST:
+        return True
+    # Recording a page view is part of browsing, not contributing; its path has a
+    # name in the middle, so it cannot live in the exact-match set.
+    return path.startswith("/api/characters/") and path.endswith("/view")
+
+
+def block_restricted_writes():
+    """before_request hook: a suspended or banned identity may read, not write.
+
+    Browsing is public and anonymous, so a restriction cannot hide the site and
+    does not try to -- it removes the ability to *change* anything, which is the
+    only lever a ban actually has. It is applied once, to every non-GET, rather
+    than by a decorator per endpoint: a new write route should be covered by
+    default, not only if its author remembers.
+
+    Sign-in is a GET (the Discord callback), so a banned person can still sign in
+    and be told why -- and the ban follows the unique Discord row across cookies.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    if _restricted_allowed(request.path):
+        return None
+
+    me = current_identity()
+    if not me.is_restricted:
+        return None
+
+    error = "Your account is banned." if me.is_banned else "Your account is suspended."
+    return jsonify({"error": error, "reason": me.moderation_reason, "restricted": True}), 403
+
+
 def adopt(identity_id: str) -> None:
     """Become a different identity for the rest of this request, and reissue the cookie.
 
@@ -309,6 +428,9 @@ def current_identity() -> Identity:
             handle=row.get("handle") or handle_for(identity_id),
             role=row.get("role") or "user",
             discord_id=row.get("discord_id"),
+            moderation_status=row.get("moderation_status"),
+            moderation_until=row.get("moderation_until"),
+            moderation_reason=row.get("moderation_reason") or "",
         )
     g.identity_loaded = loaded
     return loaded

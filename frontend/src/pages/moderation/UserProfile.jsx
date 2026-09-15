@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { Badge, Button, ConfirmDialog, IconButton } from '../../components/ui'
+import { moderationStatus } from '../../utils/moderationActions'
+import ModerationDialog from './ModerationDialog'
 
 /**
  * The selected contributor's header: who they are, how much they have done, the
  * actions that act on the *person*, and — for the owner alone — the role
  * change.
  *
- * The person actions are inert in phase 1. The role change is live, and
- * owner-only: a moderator has every other power the owner has but may not
- * change roles, so the control is not rendered for them at all (the backend
- * enforces it regardless).
+ * Warn is live: it sends the person a message and logs it (see WarnDialog and
+ * the moderation history below the header). Suspend and ban have no effect to
+ * attach to yet — a ban is only meaningful once it stops the account uploading —
+ * so they stay inert rather than send a notice that would not be true.
  */
 
 /** "12 Jan 2026" reads better than an ISO string in a stat block. */
@@ -93,11 +95,34 @@ function MinusIcon() {
   )
 }
 
-const ACTIONS = [{ label: 'Warn' }, { label: 'Suspend' }, { label: 'Ban', variant: 'danger' }]
-
-export default function UserProfile({ user, canManageRoles = false, onChangeRole }) {
+export default function UserProfile({
+  user,
+  canManageRoles = false,
+  onChangeRole,
+  onWarn,
+  onSuspend,
+  onBan,
+  onLift,
+  canLift = false,
+}) {
   const [confirming, setConfirming] = useState(false)
+  const [dialog, setDialog] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [lifting, setLifting] = useState(false)
   const roleChange = roleChangeFor(user)
+
+  const status = user.moderation_status
+  const restriction = moderationStatus(status)
+  const banned = status === 'banned'
+  const handlerFor = { warn: onWarn, suspend: onSuspend, ban: onBan }
+
+  // The dialog stays up on failure so the text is not lost; the page reports why.
+  const send = async (values) => {
+    setSending(true)
+    const done = await handlerFor[dialog](values)
+    setSending(false)
+    if (done) setDialog(null)
+  }
 
   const stats = [
     { label: 'Images', value: user.added },
@@ -113,6 +138,13 @@ export default function UserProfile({ user, canManageRoles = false, onChangeRole
           <h2 className="section-heading moderation-profile__name">{user.handle}</h2>
           {user.role !== 'user' && <Badge tone="neutral">{user.role}</Badge>}
           {user.signed_in && <Badge tone="neutral">Discord</Badge>}
+          {restriction && (
+            <Badge tone={restriction.tone}>
+              {status === 'suspended' && user.moderation_until
+                ? `Suspended until ${formatDate(user.moderation_until)}`
+                : restriction.label}
+            </Badge>
+          )}
           {canManageRoles && roleChange && (
             <IconButton
               label={roleChange.label}
@@ -125,20 +157,43 @@ export default function UserProfile({ user, canManageRoles = false, onChangeRole
         </div>
 
         <div className="moderation-profile__actions">
-          {ACTIONS.map((action) => (
-            <Button
-              key={action.label}
-              size="sm"
-              variant={action.variant ?? 'secondary'}
-              disabled
-              title="Not wired up yet"
-            >
-              {action.label}
+          <Button size="sm" variant="secondary" onClick={() => setDialog('warn')}>
+            Warn
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={banned}
+            title={banned ? 'Already banned' : undefined}
+            onClick={() => setDialog('suspend')}
+          >
+            Suspend
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            disabled={banned}
+            title={banned ? 'Already banned' : undefined}
+            onClick={() => setDialog('ban')}
+          >
+            Ban
+          </Button>
+          {canLift && restriction && (
+            <Button size="sm" variant="secondary" onClick={() => setLifting(true)}>
+              Lift {restriction.label.toLowerCase()}
             </Button>
-          ))}
+          )}
         </div>
 
-        <p className="moderation-profile__note text-meta">Actions are not wired up yet.</p>
+        <p className="moderation-profile__note text-meta">
+          Warn sends a message. Suspend and ban also stop the account changing anything.
+        </p>
+        {user.linked_restricted && (
+          <p className="moderation-profile__link text-meta">
+            <Badge tone="caution">Linked network</Badge> Seen from the same network as a restricted
+            account.
+          </p>
+        )}
       </div>
 
       <dl className="moderation-profile__stats">
@@ -161,6 +216,29 @@ export default function UserProfile({ user, canManageRoles = false, onChangeRole
             onChangeRole(roleChange.to)
           }}
           onCancel={() => setConfirming(false)}
+        />
+      )}
+
+      {lifting && restriction && (
+        <ConfirmDialog
+          title={`Lift the ${restriction.label.toLowerCase()}?`}
+          body={`${user.handle} will be able to contribute again.`}
+          confirmLabel="Lift"
+          onConfirm={() => {
+            setLifting(false)
+            onLift()
+          }}
+          onCancel={() => setLifting(false)}
+        />
+      )}
+
+      {dialog && (
+        <ModerationDialog
+          action={dialog}
+          handle={user.handle}
+          sending={sending}
+          onSend={send}
+          onCancel={() => setDialog(null)}
         />
       )}
     </div>

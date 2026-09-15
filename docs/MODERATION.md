@@ -21,11 +21,12 @@ the one question worth asking when something looks wrong — the operator has to
 page holds the evidence and read its Removed drawer, or open SQLite. There is no view of a
 contributor's work as a contributor.
 
-The surface is a **master list of contributors** on the left, and, for the selected one, a **profile
-pane** on the right: their stats and the staff actions that act on the *person* (warn, suspend, ban),
-above their work — the images they added or removed, with the verbs that act on an *image* (restore,
-permanent delete), and a character-level view of the same work sorted the way Browse Customs sorts
-characters.
+The surface opens as a **finder** — a centred search and a row of facets (role, Discord account, has
+removals, sort) over the bounded contributor list. Picking someone turns the page into their **Info /
+Images** tabs: **Info** is the profile (stats, the staff actions that act on the *person*, and the
+**moderation history** — every message staff have sent them); **Images** is their work (the images
+they added or removed, with the verbs that act on an *image* — restore, permanent delete — and a
+character-level view sorted the way Browse Customs sorts).
 
 It lives **inside the profile**, as one more tab beside Saved, History, Hidden and Removed, and not
 in the topbar. It is something you go to; a permanent topbar entry for a staff tool is the queue's
@@ -64,14 +65,17 @@ thing generating the backlog instead.
 
 ## Phase 1 — the review surface
 
-`/moderation`, staff-only. A master list of contributors; pick one and the right pane becomes their
-profile — stats and staff actions — above their work, which can be read as a paged image grid
-(added or removed, filtered by character) or as a character-level list sorted by rank, image count,
-name or recency.
+`/moderation`, staff-only. It opens as a **finder** — a prominent search with facets (role, Discord
+account, has removals, sort) over the bounded contributor list. Pick someone and the page becomes
+their **Info / Images** tabs: Info is the profile (stats and staff actions) and the moderation
+history; Images is their work, readable as a paged image grid (added or removed, filtered by
+character) or as a character-level list sorted by rank, image count, name or recency.
 
-**Phase 1 is the full UI and the `GET` endpoints behind it. Every acting button is present and
-inert** — warn, suspend, ban, restore, permanent delete. Wiring them is later (§ Later phases), and
-deliberately so: the layout is worth settling before any of it does something irreversible.
+**Phase 1 was the full UI and the `GET` endpoints behind it, with every acting button present and
+inert.** All of those verbs are now live: **restore** an image, the **owner-only** promote/demote,
+**warn** a person (a message), **suspend / ban** (a state, below), and **permanent delete** (the one
+irreversible act, below). The last is staff, and a one-time backfill brings the whole old library
+within reach.
 
 ### Decisions taken
 
@@ -79,9 +83,9 @@ deliberately so: the layout is worth settling before any of it does something ir
 |---|---|
 | Backend scope | The UI **and** the read-only endpoints. The action verbs are rendered but do nothing yet. |
 | Who is listed | Every identity with at least one added or removed image — pseudonyms included, `hide_from_leaderboard` and `hide_attribution` ignored. Idle cookie-only identities are excluded. |
-| Shape | Master–detail on one route, selection and filters carried in the URL (`?user=…&view=…&state=…&char=…&sort=…&page=…`). |
-| Profile pane | Stats (total images, removed, account created, last activity, signed-in) and person-level actions (warn, suspend, ban). |
-| Work pane | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary). |
+| Shape | A **finder** first (centred search + facets over the list), then **Info / Images** tabs once a contributor is picked, on one route. Selection and filters are carried in the URL (`?user=…&tab=…&view=…&state=…&char=…&sort=…&page=…`). |
+| Info tab | Stats (total images, removed, account created, last activity, signed-in), person-level actions (warn, suspend, ban), and the moderation history. |
+| Images tab | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary), with the character filter and added/removed switch. |
 | Gating | Non-moderators are redirected home, indistinguishable from the existing `*` catch-all. The backend enforces separately and does not trust the client. |
 
 #### On putting the verbs on this page
@@ -118,11 +122,9 @@ leak back onto a public surface from here.
 
 #### Named out of scope
 
-- **The remaining action logic.** Restore and promote/demote are wired (see below). **Warn, suspend
-  and ban** are still inert — they have a real design question (what does "suspended" even mean for a
-  cookie identity?) that has to be settled before they do anything. **Permanent delete** is inert too:
-  it removes the image from ImgChest as well as the row, and it is the first irreversible action in
-  the app, so it needs its own decision (and a second confirmation) first.
+- **The remaining action logic.** Restore, promote/demote, warn, suspend, ban and permanent delete are
+  all wired (see below). The last is staff, and a one-off backfill recovers the post ids the old
+  library never had.
 - **Reading `image_reports`** — see above.
 - **The ~8,547 unattributed images** (`added_by IS NULL`, migrated from v1). They have no actor, so
   they cannot appear under a contributor, and they are not a moderation concern — they are the
@@ -275,18 +277,30 @@ profile and work. Copy the `useSearchParams` discipline from `CustomsPage.jsx` e
 /moderation?user=<ref>&view=characters&state=removed&char=Rem&sort=rank&order=asc&page=2
 ```
 
-**`UserList.jsx`** — the master. The list is small and fully loaded, which is the case
-`profile/useFilteredList.js` exists for: reuse it for query, sort and order rather than adding
-server-side search. Render through the existing `FilterBar` with `mode` omitted — there is no
-Name/Series choice here — and sort options *Most added* / *Most removed* / *Recent activity* /
-*Name*. Each row is a `Card` carrying the handle, a `Badge tone="neutral"` when the role is not
-`user`, and two counts in `.tabular`. The selected row carries `is-selected`.
+**`ContributorFinder.jsx`** — the opening state. A prominent centred search with a row of facets
+beneath it, then the list. The list is small and fully loaded, which is the case
+`profile/useFilteredList.js` exists for: reuse it for query and sort (search by handle; *Most added* /
+*Most removed* / *Recent activity* / *Newest accounts* / *Name*) rather than adding server-side
+search. The facets are
+in-memory too — **Role** (staff only), **Account** (Discord only) and **History** (has removals) — each
+a labelled `Select`, because those are the questions worth asking before picking a name: are they
+staff, would a ban mean anything, and have they removed anything. Each row is a `Card` carrying the
+handle, `Badge`s for role and Discord, and two counts in `.tabular`.
+
+**`ModerationPage.jsx`** — two states on one route. With no `?user`, the finder; with one, a way back
+and the **Info / Images** tabs, then the tab's content. The tabs are the profile's own tab bar
+(`profile-tabs`: anchors with the accent underline), not a second tab idiom — History, Hidden and
+Moderation are the same kind of place — and each is a real link whose `info` default is the absence
+of `?tab`. The work queries are gated to the Images tab (`enabled`), so opening someone on Info does
+not fetch their gallery; the history is fetched whenever a contributor is selected. Picking a
+contributor pushes and resets every filter that belonged to the last person; the tab links replace,
+so Back leaves the contributor rather than walking their tabs.
 
 **`UserProfile.jsx`** — the selected contributor. A header with the handle, a role `Badge`, and the
 stats: **total images** (active), **removed**, **account created** (`created_at`), **last activity**,
-and whether they are Discord-signed-in, all counts in `.tabular`. Below them the person-level
-actions — **Warn**, **Suspend**, **Ban** — rendered as buttons and **inert** (`disabled`, with a
-title saying so).
+and whether they are Discord-signed-in, all counts in `.tabular`. Below them the person-level actions:
+**Warn** is live and opens `WarnDialog`; **Suspend** and **Ban** are rendered but **inert**
+(`disabled`, with a title saying so).
 
 For the **owner alone**, a plus/minus `IconButton` sits beside the name: plus for a `user` (promote),
 minus for a `moderator` (demote), nothing for the `owner`. Either opens a `ConfirmDialog`, and only
@@ -327,13 +341,16 @@ they added and removed."*
 - **`ProfileLayout.jsx`** — a **Moderation** tab, added to the tab list only when `me.is_moderator`.
 - **`Navbar.jsx`** — no moderation entry. The end rail's fourth link is **Notifications** (see
   below), because that is the thing every visitor has.
-- **`pages.css`** — a new `/* Moderation */` section after the existing "Identity and moderation"
-  block. **Its responsive rules go in that same section**, not in a separate media-query pile at the
-  end of the file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation`,
+- **`pages.css`** — a `/* Moderation */` section in the "Identity and moderation" block. **Its
+  responsive rules go in that same section**, not in a separate media-query pile at the end of the
+  file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation-finder`,
+  `.moderation-finder__search`, `.moderation-finder__input`, `.moderation-finder__filters`,
+  `.moderation-facet`, `.moderation-head`, `.moderation-back`, `.moderation-tabpanel`,
+  `.moderation-dialog`, `.restriction-banner`,
   `.moderation-users`, `.moderation-user`, `.moderation-user__counts`, `.moderation-profile`,
   `.moderation-profile__stats`, `.moderation-profile__actions`, `.moderation-work`,
-  `.moderation-work__header`, with `is-selected` for state. Below 768px the master collapses above
-  the profile in one column.
+  `.moderation-work__header`. The finder is a centred 720px column; below 768px the contributor list
+  caps its height so the search stays in view.
 
 Design constraints that apply, from DESIGN.md: this is off a character page, so the Art Carries the
 Colour Rule is absolute — no tinted cards, no coloured headers, accent marks state only. Counts are
@@ -387,7 +404,8 @@ whose claims are already false teaches the next reader that the rules are decora
 ## Notifications — the channel moderation needs
 
 The topbar carries **Notifications** (`/notifications`), because moderation needs a way to *tell*
-someone something. It is the missing half of "warn": without a channel, a warn button does nothing.
+someone something. It is the channel a warn rides: a warning is a message here, and this page is
+where the recipient reads it.
 
 **Shape.** A simple, hairline-separated list — a title, a date, and optional body text, newest first.
 Two sources:
@@ -448,6 +466,171 @@ announcement. Nothing here is actionable — acting still happens where the thin
   bell); opening the menu swaps that bar copy for the labelled one. The owner's compose form is the
   first card on the page, owner-only, with a pin checkbox. Ordinary rows carry **Dismiss**; pins carry
   a **Pinned** badge and no dismiss; the owner additionally sees a confirmed **Delete** on every row.
+  A moderation message is the one kind with a severity: its title is coloured and it carries a badge
+  (`utils/moderationActions.js`).
+
+---
+
+## Warnings, and the moderation history
+
+A **warn** is the first person-level action. It does exactly two things, and they are deliberately
+distinct:
+
+- it delivers the recipient a **notification** — an ordinary, dismissible message, badged and
+  coloured by severity (warning amber, suspension orange, ban red); and
+- it writes a line to the target's **moderation history**, the durable staff record.
+
+The record has to outlive the message: a recipient dismissing their warning must not delete the fact
+that staff sent one. So the two are different rows. `moderation_actions` is the log; the delivered
+notification points back at it with `moderation_action_id`, and that link is `ON DELETE CASCADE`, so
+the owner's delete runs from the record to the message and the two can never disagree about whether a
+warning was sent.
+
+All three verbs are wired. Warn is a message only. **Suspend and ban add a state** — and that change
+has to outlive the message, because dismissing the notification must not lift the restriction.
+
+### Suspension and ban — the state, not the message
+
+A restricted account may still **read** the site. A restriction cannot hide content that an anonymous
+visitor can read anyway, so it does not try; it removes the ability to *change* anything, which is the
+only lever a ban has. So the live state is its own row, `moderation_status` (migration 018), keyed by
+identity.
+
+- **Suspended** — time-boxed. `until` comes from the composer's duration; reads pass, writes are
+  refused, and it expires on its own at read time.
+- **Banned** — open-ended, same enforcement, no end. The anchor is the identity, whose `discord_id` is
+  unique: signing in on a fresh cookie finds the same row and adopts it, so the ban follows the
+  Discord account rather than the cookie.
+- **The person is told.** There is no email, so the account can still sign in and read a persistent,
+  non-dismissible **banner** on every page, plus the notification in their inbox. Only
+  `/api/auth/logout` and the notifications read/dismiss routes are allowed through while restricted;
+  everything else is refused, so they can read the notice and leave.
+- **Lifting** is owner-only, clears the state, and sends a notification.
+- **Limits, accepted deliberately.** A *different* Discord account slips past, and a cookie-only
+  identity (no Discord) can be blocked but evaded with a new cookie. A ban is only as durable as the
+  Discord binding it hangs on. This is why `DECISIONS.md` §4 says bans became meaningful once
+  uploading required Discord.
+
+#### The second Discord account — a signal, not a rule
+
+The one evasion the identity anchor cannot catch is a person making a *new* Discord account. An IP
+looked like the tool for it, and was rejected as a restriction: an address is a mobile carrier, a
+household or a VPN exit as often as it is one person, it rotates, and it is evaded by a VPN — so an
+IP ban is both easy to escape and expensive in innocents. It is the worst shape of lever.
+
+What is kept instead is weaker and safer: every write records a **keyed hash** of the client address
+(never the address), tied to the identity and pruned after 90 days. When a contributor has been seen
+from a network a *currently restricted other* account used, their profile says so — a label for a
+moderator to weigh, not an action the app takes. Nothing is auto-restricted, no backlog accumulates,
+and a shared household network is a question rather than a sentence.
+
+The obvious caveats: the hash is only as trustworthy as the header it comes from (Cloudflare's
+`CF-Connecting-IP`, else the first `X-Forwarded-For` hop — meaningful only when the origin is reached
+through the proxy), and a VPN defeats it. It is a lead, not proof.
+
+### Backend
+- Migration `017_moderation_actions.sql`:
+  `moderation_actions(id, identity_id, actor_id, action, title, body, created_at)`, `action` in
+  `warn` / `suspend` / `ban`, indexed on `(identity_id, created_at DESC)`; and
+  `notifications.moderation_action_id` pointing at it with `ON DELETE CASCADE`.
+- Migration `018_moderation_status.sql`:
+  `moderation_status(identity_id PK, status, until, reason, actor_id, created_at)`, `status` in
+  `suspended` / `banned`. `db.get_identity` joins it in and expires an old suspension;
+  `db.set_moderation_status` / `db.clear_moderation_status` write it.
+- Migration `019_identity_networks.sql`:
+  `identity_networks(identity_id, ip_hash, first_seen, last_seen, hits)` keyed on
+  `(identity_id, ip_hash)`. `identity.record_network` (a `before_request` ahead of the guard) writes a
+  keyed hash of the client address on every non-GET; `db.record_identity_network` upserts it and prunes
+  past a 90-day window. `db.list_contributors` carries `linked_restricted`.
+- `db.moderate_identity` (log the action, deliver the message, return its id),
+  `db.list_moderation_actions(identity_id)` (the log with the sender's handle) and
+  `db.delete_moderation_action(id)` (owner-only at the route; the cascade removes the message).
+  `db.list_notifications` joins the link to carry `moderation_action` on each item.
+- `identity.block_restricted_writes` — a `before_request` after `load_identity` that refuses every
+  non-GET for a restricted identity. It allow-lists the POSTs that are reads in disguise:
+  `/api/auth/logout`, notifications read/dismiss, `/api/download-image-proxy`, `/api/takes`, and
+  recording a page view. `identity.Identity` carries `is_suspended` / `is_banned` / `is_restricted`,
+  and `/api/me` returns the status, its end and the reason.
+- `routes/moderation.py`: `POST .../warn`, `.../suspend` (takes `days`), `.../ban` — any moderator,
+  but the owner is never a target, you cannot target yourself, and a moderator cannot target another
+  moderator (staff-on-staff restriction is an owner move) — `.../lift` (owner only), `GET .../history`,
+  and `POST /api/moderation/history/<int:action_id>/delete` (owner only).
+
+### Frontend
+- `ModerationDialog.jsx`: the one popup behind **Warn / Suspend / Ban** — a title (required), a
+  description, and a duration for a suspension. What the moderator writes is exactly what the
+  recipient reads, and the lead names the difference a suspend or ban makes.
+- `UserProfile.jsx`: the three buttons, the current status as a badge (with a suspension's end date),
+  a disabled **Ban** once already banned, an owner-only confirmed **Lift**, and the linked-network
+  signal when `linked_restricted`.
+- `RestrictionBanner.jsx`: the global notice, tinted from the status colour and rendered above the app
+  shell; it disappears the moment the restriction is lifted.
+- `ModerationHistory.jsx`: the selected contributor's record, under their header — each line badged
+  and titled by severity, naming the sender. The owner gets a confirmed **Delete**; a moderator's is
+  view-only. `utils/moderationActions.js` is the one map from action (and status) to label and colour,
+  used here and in the inbox so the two never drift. It rides on `--caution`, the orange added to the
+  status palette in `tokens.css` for the middle severity.
+
+---
+
+## Permanent delete
+
+The app's one irreversible act, and the exception to "nothing is ever hard-deleted".
+
+**What research settled.** ImgChest does expose deletion, but not the one we wanted: `DELETE
+/v1/file/{id}` is refused with *"You can't delete the only image on a post"*, and every upload here is
+a single-image post. The reachable lever is `DELETE /v1/post/{id}`. The create-post response carries
+the post id as `data.id`; the uploader already had it and threw it away. There is **no file→post
+lookup** (`GET /v1/file/{id}` returns an empty `200`). A merge route exists, but only on the website —
+session-authenticated, undocumented — and it turned out to be unnecessary: `GET
+/v1/user/{username}/posts` (documented API, the token we already hold) lists every post, hidden ones
+included, with its `slug` and its first image's file id as `thumbnail.id`. Since every stored URL is
+`cdn.imgchest.com/files/{id}.ext`, that maps the whole old library back to its posts with no session
+and nothing risky.
+
+**So:** new uploads store `imgchest_post_id` directly; old rows get theirs from
+`scripts/backfill_imgchest_post_ids.py` (a one-time pass: ~141 page calls for 14k posts, which matched
+**8,579 of 8,581** library rows). A purge then deletes the post. Staff, and behind a second,
+explicit confirmation — an `$ai` command already copied into Discord breaks, and only a holding period
+could soften that (none is built).
+
+**Image-count aware.** The listing only exposes a post's *first* image, so a post that holds several
+(possible only if posts were merged by hand) would lose its siblings if deleted whole — and its
+non-first images have no post id at all, since nothing maps them. So a purge reads the post where it
+can and decides: one image → `DELETE /v1/post/{id}`; more than one → `DELETE /v1/file/{file_id}` with
+the id taken from the stored URL. Where there is **no** post id, it goes straight to the file delete,
+which succeeds exactly when the post has siblings; only a single-image post we could not identify is
+refused, and it says so.
+
+**The tombstone.** The row is not deleted. It goes to `state='removed'` with `purged_at` set, hidden
+from every removed list and refused by restore: the record survives for the audit, but nothing can
+bring the image back. The cached thumbnail goes with it. The API's own `state` CHECK predates this, so
+`purged` is a column, not a state value.
+
+### Backend
+- Migration `020_permanent_delete.sql`: `custom_images.imgchest_post_id` (the purge handle) and
+  `custom_images.purged_at` (the tombstone). Every `state='removed'` query gained `purged_at IS NULL`,
+  and restore refuses a purged row.
+- `imgchest_utils`: `fetch_imgchest_post` (read the image count), `delete_imgchest_post`,
+  `delete_imgchest_file`, and `file_id_from_url` — all `DELETE`/`GET` on the documented API, with the
+  upload's retry/backoff; a `404` counts as success.
+- `db.get_image_for_purge`, `db.purge_custom_image`, and `add_custom_images(..., post_ids=…)`.
+- `routes/customs.py`: `POST /api/purge-custom-image` (`character_name`, `url`), staff only: verify,
+  pick file vs post from the image count (falling back to a file delete when there is no post id),
+  tombstone, drop the thumbnail.
+- `scripts/backfill_imgchest_post_ids.py --username NAME [--dry-run]` — the one-off mapping pass.
+
+### Frontend
+- `UserWork.jsx`: **Delete permanently** is enabled for the owner, opens a confirmed `ConfirmDialog`
+  ("Delete forever"), and is disabled with a reason for anyone else. `queries/moderation.js` adds
+  `usePurgeModerationImage`, which refreshes both work views and the contributor counts.
+
+### Later: the multi-image audit
+We did not scan how many posts hold more than one image, or how large they are. It would need one
+`GET /v1/post/{slug}` per post — 14,072 calls at the API's 60/min, roughly four hours — so it was set
+aside. It is informational: the purge is already image-count aware and safe either way. Run it if a
+merged post ever looks suspect, or if a future pass wants to know the shape of the account.
+
 
 ---
 
@@ -457,22 +640,21 @@ Sketches only. Each needs its own decision before it is built, and none is commi
 The phase-1 buttons exist precisely so their placement and wording can be settled without their
 logic.
 
-**Phase 2 — acting on a person.** **Promote and demote are done**: an owner-only route wrapping
-`db.set_role`, with the plus/minus control on the profile and a confirmation each way. **Warn,
-suspend and ban remain.** Bans are now meaningful in a way they were not: adding an image requires a
-linked Discord account (`require_signed_in`, `DECISIONS.md` §4), so a ban on that account removes the
-ability to upload — the action actually worth preventing — even though a fresh cookie can still be
-minted for browsing. What still needs deciding is the *shape* of each: whether a ban blocks the
-Discord account, the identity, or both; what "warn" does with no notification channel; and what a
-suspended account may still do.
+**Phase 2 — acting on a person. Done.** Promote/demote, warn, suspend and ban are all wired. A
+suspension is time-boxed and self-lifting; a ban is open-ended and anchored to the identity's unique
+Discord id, so it survives a new cookie. Both leave the account able to read and to be told why, and
+refuse every write. The owner alone lifts them. The one accepted gap is a *different* Discord account,
+which nothing in this design can stop.
 
-**Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
-Permanent delete does not, and it is the first irreversible action in the app: it would remove the
-row *and* the file from ImgChest. It **must require a second, explicit confirmation** — a popup the
-operator clicks through after the first — so a misclick can never destroy an image, and the button
-stays inert until that exists. The other decisions it needs: whether ImgChest even exposes a delete,
-what happens to `$ai` commands already copied out, and whether a "recently destroyed" holding period
-is warranted.
+**Phase 3 — acting on an image, including permanent delete. Done.** ImgChest exposes
+`DELETE /v1/post/{id}` (its `file` delete refuses to remove the only image in a post, and every upload
+here is a single-image post). The post id is captured from the create response (`data.id`) for new
+uploads and recovered for the old library from `GET /v1/user/{username}/posts` — the documented API,
+no session and no merge. A purge reads the post and deletes the file when it has siblings, the post
+when it does not. It is **staff-only** and the app's one irreversible act: a second, explicit
+confirmation, and a tombstone (`purged_at`) so the record does not silently vanish. The known cost
+stands — an `$ai` command already copied into Discord breaks — which is the argument a holding period
+would answer, and none is built.
 
 **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, given that §1
 designed it to work *without* a human. The honest case for reading it is diagnostic rather than

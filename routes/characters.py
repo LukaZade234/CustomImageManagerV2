@@ -104,7 +104,7 @@ def upload():
     try:
         result = upload_to_imgchest(temp_path)
         if result:
-            post_link, direct_link = result
+            post_link, direct_link, _post_id = result
             log.info("upload.succeeded", filename=file.filename)
             return jsonify({"success": True, "post_link": post_link, "direct_link": direct_link})
         else:
@@ -241,7 +241,7 @@ def add_character():
                     temp_path, upload_name=imgchest_filename(name, kind="main")
                 )
                 if result:
-                    _, image_url = result
+                    _, image_url, _post_id = result
             except ImgChestError as e:
                 log.warning("characters.main_image_failed", character=name, error=str(e))
                 return jsonify({"error": str(e)}), 503
@@ -391,7 +391,7 @@ def set_main_image():
         if not result:
             return jsonify({"error": "Failed to upload to ImgChest"}), 500
 
-        post_link, direct_link = result
+        post_link, direct_link, _post_id = result
 
         if db.get_characters() is None:
             return jsonify(

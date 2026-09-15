@@ -85,7 +85,7 @@ class TestSignedInIsAllowed:
         clean_db.add_character("Rem", "Re:Zero", "1", "")
         monkeypatch.setattr(
             "routes.customs.upload_to_imgchest",
-            lambda path, upload_name=None: ("post", "https://cdn.imgchest.com/files/a.png"),
+            lambda path, upload_name=None: ("post", "https://cdn.imgchest.com/files/a.png", "post"),
         )
         res = client.post(
             "/api/custom-image",
@@ -100,7 +100,7 @@ class TestSignedInIsAllowed:
         clean_db.add_character("Seed", "S", "1", "")
         monkeypatch.setattr(
             "routes.characters.upload_to_imgchest",
-            lambda path, upload_name=None: ("post", "https://cdn.imgchest.com/files/a.png"),
+            lambda path, upload_name=None: ("post", "https://cdn.imgchest.com/files/a.png", "post"),
         )
         res = client.post(
             "/api/add-character",
@@ -132,7 +132,9 @@ class TestAddingACharacter:
         )
         assert res.status_code == 200, res.get_json()
 
-    def test_a_signed_in_visitor_can_add_a_brand_new_character(self, client, clean_db, make_signed_in):
+    def test_a_signed_in_visitor_can_add_a_brand_new_character(
+        self, client, clean_db, make_signed_in
+    ):
         make_signed_in()
         clean_db.add_character("Seed", "S", "1", "")
         res = client.post("/api/add-character", data={"name": "Brand New", "series": "S"})

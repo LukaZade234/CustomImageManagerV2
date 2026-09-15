@@ -120,7 +120,7 @@ class TestAgainstAReadOnlyWorkingDirectory:
             "routes.customs.upload_to_imgchest",
             lambda path, upload_name=None: (
                 sent.append(Path(path).parent),
-                ("post", "https://cdn.imgchest.com/files/a.png"),
+                ("post", "https://cdn.imgchest.com/files/a.png", "post"),
             )[1],
         )
 

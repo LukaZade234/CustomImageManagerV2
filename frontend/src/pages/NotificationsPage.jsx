@@ -17,6 +17,7 @@ import {
   useNotifications,
 } from '../queries/notifications'
 import { useStore } from '../store/useStore'
+import { moderationAction } from '../utils/moderationActions'
 
 /**
  * Notifications: a plain list of messages to you, newest first.
@@ -218,42 +219,52 @@ export default function NotificationsPage() {
             description="Messages about your account, and announcements, will appear here."
           />
         ) : (
-          items.map((notification) => (
-            <article
-              key={`${notification.source}-${notification.id}`}
-              className={`notification ${!notification.read_at ? 'notification--unread' : ''}`}
-            >
-              <div className="notification__head">
-                <h2 className="notification__title">
-                  {notification.title}
-                  {notification.pinned && <Badge tone="neutral">Pinned</Badge>}
-                </h2>
-                <time className="notification__date text-meta" dateTime={notification.created_at}>
-                  {formatDate(notification.created_at)}
-                </time>
-              </div>
-              {notification.body && <p className="notification__body">{notification.body}</p>}
-              <div className="notification__actions">
-                {/* A pinned message cannot be dismissed; an ordinary one is the
-                    recipient's own row to remove. */}
-                {!notification.pinned && (
-                  <Button size="sm" variant="ghost" onClick={() => handleDismiss(notification)}>
-                    Dismiss
-                  </Button>
-                )}
-                {isOwner && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDeleteTarget(notification)}
-                    title="Remove this notification for everyone"
+          items.map((notification) => {
+            const severity = notification.moderation_action
+              ? moderationAction(notification.moderation_action)
+              : null
+            return (
+              <article
+                key={`${notification.source}-${notification.id}`}
+                className={`notification ${!notification.read_at ? 'notification--unread' : ''}`}
+              >
+                <div className="notification__head">
+                  <h2
+                    className={`notification__title ${
+                      severity ? `moderation-severity--${severity.tone}` : ''
+                    }`}
                   >
-                    Delete
-                  </Button>
-                )}
-              </div>
-            </article>
-          ))
+                    {notification.title}
+                    {severity && <Badge tone={severity.tone}>{severity.label}</Badge>}
+                    {notification.pinned && <Badge tone="neutral">Pinned</Badge>}
+                  </h2>
+                  <time className="notification__date text-meta" dateTime={notification.created_at}>
+                    {formatDate(notification.created_at)}
+                  </time>
+                </div>
+                {notification.body && <p className="notification__body">{notification.body}</p>}
+                <div className="notification__actions">
+                  {/* A pinned message cannot be dismissed; an ordinary one is the
+                      recipient's own row to remove. */}
+                  {!notification.pinned && (
+                    <Button size="sm" variant="ghost" onClick={() => handleDismiss(notification)}>
+                      Dismiss
+                    </Button>
+                  )}
+                  {isOwner && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeleteTarget(notification)}
+                      title="Remove this notification for everyone"
+                    >
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              </article>
+            )
+          })
         )}
       </div>
 

@@ -65,9 +65,10 @@ Confirmed and binding:
    thumbnails served from Cloudflare R2 are the display path — but the canonical link does not move.
 2. **The `$ai` command is the product's real output.** Every other capability exists to produce a
    better one.
-3. **Nothing is ever hard-deleted.** ImgChest keeps the file regardless, so removal is a state
-   change and restoring is free. Anyone can restore what anyone removed; see DECISIONS.md §1 for
-   why that is deliberate rather than lax.
+3. **Removal is a state change, not a delete.** Restoring is free, and anyone can restore what anyone
+   removed; see DECISIONS.md §1 for why that is deliberate rather than lax. The one exception is a
+   staff **permanent delete**, which removes the file from ImgChest as well — and even then
+   the row is kept as a tombstone rather than destroyed.
 4. **The Mudae self-bot is peripheral.** It fetches metadata for character authoring and must not
    be treated as a constraint on the data layer or the architecture. Automating a user account
    carries a ban risk, so the product has to work without it.

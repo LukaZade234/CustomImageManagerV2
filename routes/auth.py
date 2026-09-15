@@ -118,6 +118,11 @@ def get_me():
             "signed_in": me.discord_id is not None,
             "discord_available": discord_auth.configured(),
             "settings": db.get_identity_settings(me.id),
+            # The restriction, so the SPA can show the banner and disable writes
+            # before they are refused. The server is still the boundary.
+            "moderation_status": me.moderation_status,
+            "moderation_until": me.moderation_until,
+            "moderation_reason": me.moderation_reason,
         }
     )
 

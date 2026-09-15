@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getImageUrl, getPortraitUrl } from '../../api'
-import { Button, EmptyState, Input, SegmentedControl } from '../../components/ui'
+import { Button, ConfirmDialog, EmptyState, Input, SegmentedControl } from '../../components/ui'
 import { apiUrl } from '../../config'
 import CardGrid, { cardRatio } from '../profile/CardGrid'
 
@@ -77,7 +77,7 @@ function DeleteIcon() {
  * irreversible action (it removes the file from ImgChest too). A single click
  * must never reach it. See docs/MODERATION.md, later phases.
  */
-function imageActions(state, row, onRestore, restoringUrl) {
+function imageActions(state, row, onRestore, restoringUrl, onPurge, canPurge) {
   const busy = restoringUrl === row.url
   return [
     ...(state === 'removed'
@@ -95,8 +95,11 @@ function imageActions(state, row, onRestore, restoringUrl) {
       label: 'Delete permanently',
       icon: <DeleteIcon />,
       variant: 'danger',
-      disabled: true,
-      title: 'Not wired up yet — this will ask you to confirm',
+      disabled: !canPurge,
+      title: canPurge
+        ? 'Remove the file from ImgChest too — this asks you to confirm'
+        : 'Moderators only',
+      onClick: canPurge ? () => onPurge(row) : undefined,
     },
   ]
 }
@@ -159,10 +162,13 @@ export default function UserWork({
   onShowCharacter,
   onRestore,
   restoringUrl,
+  onPurge,
+  canPurge,
 }) {
   // The character box is local and debounced, so typing does not refetch every
   // keystroke; the URL is the source of truth once the value is applied.
   const [draft, setDraft] = useState(character)
+  const [purgeTarget, setPurgeTarget] = useState(null)
   useEffect(() => setDraft(character), [character])
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -186,7 +192,7 @@ export default function UserWork({
     title: row.character,
     subtitle: row.removed_reason || '',
     ratio: cardRatio(row.width, row.height),
-    actions: imageActions(state, row, onRestore, restoringUrl),
+    actions: imageActions(state, row, onRestore, restoringUrl, setPurgeTarget, canPurge),
   }))
 
   const characterCards = items.map((row) => ({
@@ -289,6 +295,21 @@ export default function UserWork({
       )}
 
       {!active.error && <Pagination page={page} totalPages={totalPages} onPage={onPage} />}
+
+      {purgeTarget && (
+        <ConfirmDialog
+          title="Delete this image permanently?"
+          body={`The file will be removed from ImgChest as well as the site. This cannot be undone — the $ai command that uses it will break.`}
+          confirmLabel="Delete forever"
+          variant="danger"
+          onConfirm={() => {
+            const target = purgeTarget
+            setPurgeTarget(null)
+            onPurge(target)
+          }}
+          onCancel={() => setPurgeTarget(null)}
+        />
+      )}
     </div>
   )
 }

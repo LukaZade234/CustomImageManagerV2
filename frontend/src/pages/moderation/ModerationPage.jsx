@@ -1,49 +1,72 @@
-import { useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useCallback, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
-import { Card, EmptyState } from '../../components/ui'
+import { Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useMe } from '../../queries/me'
 import {
+  useBanModerationUser,
+  useDeleteModerationHistory,
+  useLiftModerationUser,
+  useModerationHistory,
   useModerationUserCharacters,
   useModerationUserImages,
   useModerationUsers,
+  usePurgeModerationImage,
   useRestoreModerationImage,
   useSetModerationRole,
+  useSuspendModerationUser,
+  useWarnModerationUser,
 } from '../../queries/moderation'
 import { useStore } from '../../store/useStore'
-import UserList from './UserList'
+import ContributorFinder from './ContributorFinder'
+import ModerationHistory from './ModerationHistory'
 import UserProfile from './UserProfile'
 import UserWork from './UserWork'
 
 /**
- * The moderation surface: a master list of contributors beside the selected
- * one's profile and their work.
+ * The moderation surface, in two states rather than a master–detail split.
  *
- * It pulls rather than pushes. Nothing is counted as pending, and the action
- * buttons are inert — this answers "what has this person been doing?" and asks
- * nothing of the operator in return. See docs/MODERATION.md and DECISIONS.md §1.
+ * Open, it is a **finder**: a prominent search and a row of facets over the
+ * contributor list, all in memory. Pick someone and the page becomes their
+ * **Info / Images** tabs — Info is the profile and the moderation history,
+ * Images is their work with its own character and added/removed filters. The
+ * master pane used to sit permanently beside a detail column; a name you are
+ * looking for is a search, not a list to scroll.
  *
- * Selection and filters live in the URL (`?user=<ref>&view=characters&state=removed&char=Rem&sort=rank&page=2`)
- * so the whole state is linkable and the back button steps through what was
- * actually looked at. The discipline is CustomsPage's: the default value is the
- * *absence* of the parameter, a filter change resets `page` with `replace`, and
- * a first selection pushes.
+ * It still pulls rather than pushes: nothing is counted pending, and it is
+ * opened deliberately. See docs/MODERATION.md.
+ *
+ * State lives in the URL (`?user=<ref>&tab=images&state=removed&char=Rem&sort=rank&page=2`)
+ * so it is linkable and the back button steps through what was actually looked
+ * at. The discipline is CustomsPage's: a default value is the *absence* of the
+ * parameter, a filter change resets `page` with `replace`, and a selection
+ * pushes.
  */
 
+const SORTS = {
+  count: { order: 'desc' },
+  rank: { order: 'asc' },
+  name: { order: 'asc' },
+  recent: { order: 'desc' },
+}
 const DEFAULT_SORT = 'count'
 
-/** The direction each sort reads best in, so choosing it does not need a second click. */
-const SORT_ORDER = { count: 'desc', rank: 'asc', name: 'asc', recent: 'desc' }
+const TABS = [
+  { value: 'info', label: 'Info' },
+  { value: 'images', label: 'Images' },
+]
 
 export default function ModerationPage() {
   const [params, setParams] = useSearchParams()
+  const { pathname } = useLocation()
   const user = params.get('user') ?? ''
+  const tab = params.get('tab') === 'images' ? 'images' : 'info'
   const view = params.get('view') === 'characters' ? 'characters' : 'images'
   const state = params.get('state') === 'removed' ? 'removed' : 'active'
   const character = params.get('char') ?? ''
   const requestedSort = params.get('sort')
-  const sort = requestedSort && SORT_ORDER[requestedSort] ? requestedSort : DEFAULT_SORT
-  const order = params.get('order') ?? SORT_ORDER[sort]
+  const sort = requestedSort && SORTS[requestedSort] ? requestedSort : DEFAULT_SORT
+  const order = params.get('order') ?? SORTS[sort].order
   const parsedPage = Number.parseInt(params.get('page') ?? '1', 10)
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
 
@@ -65,9 +88,31 @@ export default function ModerationPage() {
   )
 
   // Picking a contributor is a place to return to, so it pushes; and changing
-  // who you are looking at resets the filters that belonged to the last person.
+  // who you are looking at resets everything that belonged to the last person.
   const selectUser = (userRef) =>
-    update({ user: userRef, view: '', state: '', char: '', sort: '', order: '', page: '' })
+    update({
+      user: userRef,
+      tab: '',
+      view: '',
+      state: '',
+      char: '',
+      sort: '',
+      order: '',
+      page: '',
+    })
+  const searchAnother = () =>
+    update({ user: '', tab: '', view: '', state: '', char: '', sort: '', order: '', page: '' })
+  // A tab is a place within one contributor, so it is a real link (the same tab
+  // bar the profile uses) that replaces rather than pushes: Back leaves the
+  // contributor rather than walking their tabs. `info` is the default, so it is
+  // the absence of the parameter.
+  const tabHref = (value) => {
+    const next = new URLSearchParams(params)
+    if (value === 'info') next.delete('tab')
+    else next.set('tab', value)
+    const query = next.toString()
+    return `${pathname}${query ? `?${query}` : ''}`
+  }
   // A filter change is a correction rather than a page you chose: it replaces,
   // and it sends the list back to its first page.
   const setView = (value) =>
@@ -79,19 +124,25 @@ export default function ModerationPage() {
     update(
       {
         sort: value === DEFAULT_SORT ? '' : value,
-        order: SORT_ORDER[value] === 'desc' ? '' : SORT_ORDER[value],
+        order: SORTS[value].order === 'desc' ? '' : SORTS[value].order,
         page: '',
       },
       { replace: true },
     )
   const setPage = (value) => update({ page: value <= 1 ? '' : String(value) })
   // Clicking a character drills into this contributor's images on it, rather
-  // than leaving for the public character page. Pushed, so Back returns to the
-  // character list you came from.
+  // than leaving for the public character page.
   const showCharacterImages = (name) => update({ view: '', char: name, page: '' })
 
   const usersQuery = useModerationUsers()
-  const imagesQuery = useModerationUserImages({ ref: user, state, character, page })
+  const onImagesTab = tab === 'images'
+  const imagesQuery = useModerationUserImages({
+    ref: user,
+    state,
+    character,
+    page,
+    enabled: onImagesTab,
+  })
   const charactersQuery = useModerationUserCharacters({
     ref: user,
     state,
@@ -99,18 +150,36 @@ export default function ModerationPage() {
     sort,
     order,
     page,
+    enabled: onImagesTab,
   })
+  const historyQuery = useModerationHistory(user)
 
   const { data: me } = useMe()
   const addToast = useStore((s) => s.addToast)
   const restoreImage = useRestoreModerationImage()
+  const purgeImage = usePurgeModerationImage()
   const setRole = useSetModerationRole()
+  const warnUser = useWarnModerationUser()
+  const suspendUser = useSuspendModerationUser()
+  const banUser = useBanModerationUser()
+  const liftUser = useLiftModerationUser()
+  const deleteHistory = useDeleteModerationHistory()
+  const [historyToDelete, setHistoryToDelete] = useState(null)
 
   const handleRestore = (row) => {
     restoreImage.mutate(
       { character: row.character, url: row.url },
       {
         onSuccess: () => addToast('Image restored', 'success'),
+        onError: (err) => addToast(err.message, 'error'),
+      },
+    )
+  }
+  const handlePurge = (row) => {
+    purgeImage.mutate(
+      { character: row.character, url: row.url },
+      {
+        onSuccess: () => addToast('Image permanently deleted', 'success'),
         onError: (err) => addToast(err.message, 'error'),
       },
     )
@@ -128,41 +197,135 @@ export default function ModerationPage() {
       },
     )
   }
+  // Resolves true only once it lands, so the dialog knows whether to close.
+  const handleWarn = async (values) => {
+    try {
+      await warnUser.mutateAsync({ ref: user, ...values })
+      addToast('Warning sent', 'success')
+      return true
+    } catch (err) {
+      addToast(err.message, 'error')
+      return false
+    }
+  }
+  const handleSuspend = async (values) => {
+    try {
+      await suspendUser.mutateAsync({ ref: user, ...values })
+      addToast('Account suspended', 'success')
+      return true
+    } catch (err) {
+      addToast(err.message, 'error')
+      return false
+    }
+  }
+  const handleBan = async (values) => {
+    try {
+      await banUser.mutateAsync({ ref: user, ...values })
+      addToast('Account banned', 'success')
+      return true
+    } catch (err) {
+      addToast(err.message, 'error')
+      return false
+    }
+  }
+  const handleLift = () => {
+    liftUser.mutate(user, {
+      onSuccess: () => addToast('Restriction lifted', 'success'),
+      onError: (err) => addToast(err.message, 'error'),
+    })
+  }
+  const handleDeleteHistory = () => {
+    const target = historyToDelete
+    setHistoryToDelete(null)
+    if (!target) return
+    deleteHistory.mutate(target.id, {
+      onSuccess: () => addToast('Moderation record deleted', 'success'),
+      onError: (err) => addToast(err.message, 'error'),
+    })
+  }
   const restoringUrl = restoreImage.isPending ? (restoreImage.variables?.url ?? null) : null
 
   const users = usersQuery.data?.items ?? []
   const selected = users.find((item) => item.ref === user) ?? null
 
-  return (
-    <Card as="section" padding="lg">
-      <h1 className="page-title">Moderation</h1>
-      <p className="text-meta moderation-lead">
-        Who added and removed what. Read-only: every action is present but inert.
-      </p>
+  const pageBody = (
+    <>
+      <div className="moderation-head">
+        <h1 className="page-title">Moderation</h1>
+        {user && (
+          <Link className="moderation-back" to={pathname}>
+            ← Search another contributor
+          </Link>
+        )}
+      </div>
 
-      <div className="moderation">
-        <UserList
-          users={users}
-          loading={usersQuery.isPending}
-          error={usersQuery.isError ? usersQuery.error.message : null}
-          selectedRef={user}
-          onSelect={selectUser}
-          onRetry={usersQuery.refetch}
-        />
+      {!user ? (
+        <>
+          <p className="text-meta moderation-lead">
+            Find a contributor to see who they are and what they have added or removed.
+          </p>
+          <ContributorFinder
+            users={users}
+            loading={usersQuery.isPending}
+            error={usersQuery.isError ? usersQuery.error.message : null}
+            onSelect={selectUser}
+            onRetry={usersQuery.refetch}
+          />
+        </>
+      ) : !selected ? (
+        usersQuery.isPending ? (
+          <p className="text-meta" role="status">
+            Loading…
+          </p>
+        ) : (
+          <EmptyState
+            title="Contributor not found"
+            description="They are no longer in the contributor list."
+            action={<Button onClick={searchAnother}>Search contributors</Button>}
+          />
+        )
+      ) : (
+        <>
+          <nav className="profile-tabs" aria-label="Contributor sections">
+            {TABS.map((item) => {
+              const active = tab === item.value
+              return (
+                <Link
+                  key={item.value}
+                  to={tabHref(item.value)}
+                  replace
+                  className={`profile-tab ${active ? 'profile-tab--active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </nav>
 
-        <div className="moderation-main">
-          {!user || !selected ? (
-            <EmptyState
-              title="Pick a contributor"
-              description="Pick a contributor to see what they added and removed."
-            />
-          ) : (
-            <>
+          {tab === 'info' ? (
+            <div className="moderation-tabpanel">
               <UserProfile
                 user={selected}
                 canManageRoles={Boolean(me?.is_owner)}
                 onChangeRole={handleChangeRole}
+                onWarn={handleWarn}
+                onSuspend={handleSuspend}
+                onBan={handleBan}
+                onLift={handleLift}
+                canLift={Boolean(me?.is_owner)}
               />
+              <ModerationHistory
+                items={historyQuery.data?.items}
+                loading={historyQuery.isPending}
+                error={historyQuery.isError ? historyQuery.error.message : null}
+                onRetry={historyQuery.refetch}
+                canDelete={Boolean(me?.is_owner)}
+                onDelete={setHistoryToDelete}
+              />
+            </div>
+          ) : (
+            <div className="moderation-tabpanel">
               <UserWork
                 view={view}
                 state={state}
@@ -189,11 +352,34 @@ export default function ModerationPage() {
                 onShowCharacter={showCharacterImages}
                 onRestore={handleRestore}
                 restoringUrl={restoringUrl}
+                onPurge={handlePurge}
+                canPurge={Boolean(me?.is_moderator)}
               />
-            </>
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
+
+      {historyToDelete && (
+        <ConfirmDialog
+          title="Delete this moderation record?"
+          body={`"${historyToDelete.title}" will be removed from ${selected?.handle ?? 'their'} moderation history, and the message it sent will be deleted from their inbox.`}
+          confirmLabel="Delete record"
+          variant="danger"
+          onConfirm={handleDeleteHistory}
+          onCancel={() => setHistoryToDelete(null)}
+        />
+      )}
+    </>
+  )
+
+  return (
+    <Card
+      as="section"
+      padding="md"
+      className="moderation-page moderation-page--ledger moderation-detail--ledger"
+    >
+      {pageBody}
     </Card>
   )
 }
