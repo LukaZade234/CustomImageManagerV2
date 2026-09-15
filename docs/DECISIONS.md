@@ -602,6 +602,9 @@ would need. The remaining open problem is the opposite direction — inferring t
 when a dominant background or hair out-votes it — for which foreground segmentation is the
 promising route, not more colour statistics.
 
+The full history of the extractor — every idea tried, every version reverted, and the numbers
+behind each — is in **[ACCENT.md](ACCENT.md)**. Read it before changing the accent logic.
+
 ### Bulk-adding a series: one DM, then review
 
 Bulk-adding used to run `$ima` for the series and then one `$im` per character, which is both slow

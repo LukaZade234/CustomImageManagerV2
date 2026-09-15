@@ -647,6 +647,12 @@ relevant — the concurrency test is written first, before Phase 2:
   `/images` / `/character_images` routes, the local-file accent branch, the dev proxies and the
   R2 upload script were all removed. Forward-only: `.git` still holds the blobs, so clones are
   unchanged until a history rewrite.
+- **Rework the accent-colour extractor.** The dominant-colour method cannot infer a character's
+  *signature* colour when a background or hair out-areas it. The manual override is the interim
+  safety valve; the promising routes are percentile tuning for washed-out results, a labelled
+  calibration set built from the overrides, and foreground segmentation for background-beats-
+  subject. Every idea tried (and reverted) is recorded in **[ACCENT.md](ACCENT.md)** — read it
+  first.
 - **Per-user saved selections and personal ordering.** Deliberately deferred; hide-for-me is the
   minimum that solves the actual problem.
 - **Revisit retirement policy with real take data.** Take counts are being logged from Phase 6

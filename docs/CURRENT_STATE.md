@@ -529,6 +529,9 @@ so every read path shows it. The extractor returns it and refuses to recompute
 over it, including `scripts/recompute_accents.py`; clearing drops both and the
 next visit measures afresh. The picks double as a labelled calibration set.
 
+The full history of the accent logic — every idea tried, every version reverted,
+and the numbers behind each — is in **[ACCENT.md](ACCENT.md)**.
+
 ---
 
 ## 7. CI
