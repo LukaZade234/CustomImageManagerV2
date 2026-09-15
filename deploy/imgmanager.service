@@ -20,6 +20,11 @@ WorkingDirectory=/opt/imgmanager
 
 Environment=DATABASE_PATH=/var/lib/imgmanager/imgmanager.db
 Environment=PORT=8080
+# Where rclone finds the R2 remote, so "update main from Mudae" can mirror a
+# freshly fetched portrait to the CDN inside the request. It lives in the writable
+# state dir, not the read-only code tree (ProtectSystem=strict), and is owned by
+# imgmanager mode 600 -- see docs/DEPLOYMENT.md.
+Environment=RCLONE_CONFIG=/var/lib/imgmanager/.rclone.conf
 # Only the Pages origin. Wildcards are refused at startup because the API sends
 # credentials; see the CORS block in upload_imgchest.py.
 Environment=CORS_ORIGINS=https://<YOUR_PAGES_DOMAIN>

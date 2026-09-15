@@ -11,8 +11,10 @@
 -- images and the generated thumbnails. An empty value means the original URL is
 -- still what to show, which is also what a development build does.
 --
--- characters.main_image_thumb is only ever set when the working row's portrait
--- still points at the catalog's mudae URL; a hand-uploaded main image (ImgChest)
--- keeps no mirror and displays from its own URL.
+-- characters.main_image_thumb mirrors the catalog key for the same name, and it
+-- is set for a working row even when that row's main_image_url is a
+-- hand-uploaded ImgChest file: the main image is display-only (never part of a
+-- $ai command) and the catalog's Mudae portrait is the canonical public image of
+-- the character, so it wins for display.
 ALTER TABLE characters ADD COLUMN main_image_thumb TEXT NOT NULL DEFAULT '';
 ALTER TABLE character_catalog ADD COLUMN mudae_image_thumb TEXT NOT NULL DEFAULT '';

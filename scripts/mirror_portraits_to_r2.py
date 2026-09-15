@@ -29,7 +29,6 @@ not there.
 """
 
 import argparse
-import hashlib
 import os
 import shutil
 import subprocess
@@ -43,37 +42,19 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import db  # noqa: E402
-import thumbnails  # noqa: E402
+import portrait_mirror  # noqa: E402
 from accent_extract import fetch_portrait_bytes  # noqa: E402
 
-# Objects live under the same custom domain as the character images, in their
-# own prefix. The column stores this whole key ("portraits/<file>"), so the
-# frontend only has to prefix the image base.
-PREFIX = "portraits"
+# The object-key rule and WebP encoding are shared with the "update main from
+# Mudae" web flow, so the two can never drift.
+PREFIX = portrait_mirror.PREFIX
+object_key = portrait_mirror.object_key
+render_portrait = portrait_mirror.render
 
 # How many portraits to fetch, upload and record before moving on. Small enough
 # that an interrupted run keeps most of its work, large enough that the upload
 # listing overhead is negligible.
 DEFAULT_BATCH = 500
-
-
-def object_key(image_id: int, data: bytes) -> str:
-    """The R2 key for a portrait, with a short content hash.
-
-    The hash is what makes a changed portrait a new object: the URL is served
-    `immutable`, so overwriting the same key would leave the edge serving the old
-    bytes for a year.
-    """
-    digest = hashlib.sha1(data).hexdigest()[:8]
-    return f"{PREFIX}/{image_id}-{digest}.webp"
-
-
-def render_portrait(raw: bytes) -> bytes | None:
-    """WebP bytes for a fetched portrait, or None if it cannot be decoded."""
-    try:
-        return thumbnails.render(raw)
-    except Exception:
-        return None
 
 
 def mirror_row(row: dict, staging: Path) -> tuple[str, str] | None:
@@ -159,6 +140,11 @@ def main() -> int:
     parser.add_argument(
         "--dry-run", action="store_true", help="List what would be mirrored, fetching nothing"
     )
+    parser.add_argument(
+        "--resync-thumbs",
+        action="store_true",
+        help="Skip fetching/uploading; just repoint working rows at the catalog mirrors that already exist",
+    )
     parser.add_argument("--workers", type=int, default=8, help="Concurrent portrait fetches")
     parser.add_argument(
         "--batch",
@@ -175,10 +161,18 @@ def main() -> int:
     bucket = args.bucket or os.environ.get("R2_BUCKET", "imgmanager-assets")
     remote = args.remote or os.environ.get("RCLONE_REMOTE", "r2")
 
+    if args.resync_thumbs:
+        updated = db.sync_character_thumbs_from_catalog()
+        print(f"database: {db.database_path()}")
+        print(f"working rows repointed at their catalog mirror: {updated}")
+        return 0
+
     rows = db.catalog_portraits_to_mirror(limit=args.limit, redo=args.redo)
     print(f"database: {db.database_path()}")
     print(f"portraits to mirror: {len(rows)}")
     if not rows:
+        synced = db.sync_character_thumbs_from_catalog()
+        print(f"nothing to mirror; working rows repointed: {synced}")
         return 0
 
     if args.dry_run:
@@ -228,6 +222,8 @@ def main() -> int:
         clear_dir(staging)
 
     print(f"recorded {recorded} mirrored portraits")
+    synced = db.sync_character_thumbs_from_catalog()
+    print(f"working rows repointed at their catalog mirror: {synced}")
     if own_staging:
         shutil.rmtree(staging, ignore_errors=True)
     return 0

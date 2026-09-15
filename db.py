@@ -256,6 +256,29 @@ def get_characters() -> list | None:
     ]
 
 
+def _apply_catalog_thumb(conn: sqlite3.Connection, name_key: str) -> None:
+    """Give a working row its catalog portrait mirror, if the catalog has one.
+
+    The main image is display-only, so a working row should show the catalog's
+    canonical Mudae art whenever one has been mirrored -- regardless of whether
+    its own `main_image_url` is a Mudae URL, an ImgChest upload or blank. Called
+    from the write paths so a newly added or re-pointed character is wired to the
+    mirror without waiting for a batch sync.
+    """
+    if not name_key:
+        return
+    mirror = (
+        "SELECT k.mudae_image_thumb FROM character_catalog k"
+        " WHERE k.name_key = ? AND k.mudae_image_thumb <> ''"
+    )
+    conn.execute(
+        f"UPDATE characters SET main_image_thumb = ({mirror})"
+        " WHERE name_key = ? AND EXISTS ("
+        "   SELECT 1 FROM character_catalog k WHERE k.name_key = ? AND k.mudae_image_thumb <> '')",
+        (name_key, name_key, name_key),
+    )
+
+
 def add_character(
     name: str,
     series: str,
@@ -268,6 +291,7 @@ def add_character(
 ) -> bool:
     """False if the name is already taken."""
     with transaction() as conn:
+        key = _name_key(name)
         # Let the UNIQUE constraint decide, rather than checking first and
         # racing another writer between the check and the insert.
         cur = conn.execute(
@@ -277,7 +301,7 @@ def add_character(
             " ON CONFLICT (name) DO NOTHING",
             (
                 name,
-                _name_key(name),
+                key,
                 series,
                 rank,
                 main_image_url,
@@ -286,7 +310,10 @@ def add_character(
                 pools,
             ),
         )
-        return bool(cur.rowcount)
+        if not cur.rowcount:
+            return False
+        _apply_catalog_thumb(conn, key)
+        return True
 
 
 def set_character_traits(
@@ -372,13 +399,18 @@ def update_character(orig_name: str, new_name: str, series: str, rank: str) -> b
 
 def set_main_image(char_name: str, image_url: str) -> bool:
     with transaction() as conn:
-        char_id = _character_id(conn, char_name)
-        if char_id is None:
+        row = conn.execute(
+            "SELECT id, name_key FROM characters WHERE name = ?", (char_name,)
+        ).fetchone()
+        if row is None:
             return False
         conn.execute(
             "UPDATE characters SET main_image_url = ?, updated_at = ? WHERE id = ?",
-            (image_url, _now(), char_id),
+            (image_url, _now(), row["id"]),
         )
+        # The catalog's mirrored Mudae art wins for display even though this row
+        # now carries a different (often ImgChest) canonical URL.
+        _apply_catalog_thumb(conn, row["name_key"])
         return True
 
 
@@ -425,6 +457,7 @@ def apply_series_characters(series: str, items: Iterable[dict]) -> dict:
                 )
                 if cur.rowcount:
                     created += 1
+                    _apply_catalog_thumb(conn, key)
                     results.append({"name": name, "action": "created"})
                 else:
                     unchanged += 1
@@ -445,6 +478,7 @@ def apply_series_characters(series: str, items: Iterable[dict]) -> dict:
                     (*updates.values(), _now(), row["id"]),
                 )
                 updated += 1
+                _apply_catalog_thumb(conn, key)
                 results.append(
                     {
                         "name": row["name"],
@@ -1073,13 +1107,14 @@ def catalog_portraits_to_mirror(*, limit: int = 0, redo: bool = False) -> list[d
 
 
 def record_catalog_portrait_mirrors(mirrors: Iterable[tuple[str, str]]) -> int:
-    """Store the mirrored object key on catalog rows, and on the working rows that share the portrait.
+    """Store the mirrored object key on catalog rows, and on the working rows that share the name.
 
     `mirrors` is (name_key, object_key). Returns the number of catalog rows
-    changed. A working character only inherits the mirror when its
-    `main_image_url` still equals that catalog row's Mudae URL, so a
-    hand-uploaded main image (ImgChest) is never given a portrait it does not
-    have.
+    changed. A working character gets the mirror whenever the catalog knows a
+    portrait for its name -- including one whose `main_image_url` is a
+    hand-uploaded ImgChest file -- because the main image is display-only and the
+    catalog's Mudae portrait is the canonical one (see
+    `sync_character_thumbs_from_catalog`).
     """
     written = 0
     with transaction() as conn:
@@ -1092,11 +1127,80 @@ def record_catalog_portrait_mirrors(mirrors: Iterable[tuple[str, str]]) -> int:
             written += cur.rowcount
             conn.execute(
                 "UPDATE characters SET main_image_thumb = ?"
-                " WHERE name_key = ? AND main_image_url ="
-                "       (SELECT mudae_image_url FROM character_catalog WHERE name_key = ?)",
-                (thumb, name_key, name_key),
+                " WHERE name_key = ? AND main_image_thumb != ?",
+                (thumb, name_key, thumb),
             )
     return written
+
+
+def sync_character_thumbs_from_catalog() -> int:
+    """Point every working row's portrait at its catalog mirror.
+
+    The main image is display-only -- it is never part of a `$ai` command, unlike
+    a custom image -- and the catalog's Mudae portrait is the true public image
+    of the character. So a working row that carries a hand-uploaded main image
+    (ImgChest) should still show the mirrored catalog portrait, rather than a
+    different picture someone set. `portraitUrl` prefers the mirror whenever one
+    exists, so recording the key here is all it takes. Returns the number of
+    working rows updated.
+    """
+    mirror = (
+        "SELECT k.mudae_image_thumb FROM character_catalog k"
+        " WHERE k.name_key = characters.name_key AND k.mudae_image_thumb <> ''"
+    )
+    with transaction() as conn:
+        cur = conn.execute(
+            f"UPDATE characters SET main_image_thumb = ({mirror})"
+            f" WHERE EXISTS ({mirror}) AND main_image_thumb <> ({mirror})"
+        )
+        return cur.rowcount
+
+
+def refresh_catalog_portrait(
+    name: str, series: str, rank: str, mudae_image_url: str
+) -> tuple[int, str] | None:
+    """Set one character's catalog portrait to a freshly fetched Mudae URL.
+
+    Creates the catalog row if the name is unknown to it, so a portrait pulled
+    live from an `$im` card has somewhere to be mirrored under. Returns
+    (catalog id, name_key), or None if there is nothing to record. When the URL
+    is unchanged the existing mirror is left in place; when it changes the mirror
+    is cleared so the fresh portrait gets re-mirrored rather than serving stale
+    bytes.
+    """
+    import catalog_import
+
+    name = (name or "").strip()
+    mudae_image_url = (mudae_image_url or "").strip()
+    if not name or not mudae_image_url:
+        return None
+    key = catalog_import.name_key(name)
+    with transaction() as conn:
+        conn.execute(
+            "INSERT INTO character_catalog"
+            " (name, name_key, series, rank, mudae_image_url, scraped_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(name_key) DO UPDATE SET"
+            "   name = excluded.name,"
+            "   series = CASE WHEN excluded.series <> '' THEN excluded.series ELSE character_catalog.series END,"
+            "   rank = CASE WHEN excluded.rank <> '' THEN excluded.rank ELSE character_catalog.rank END,"
+            "   mudae_image_url = excluded.mudae_image_url,"
+            "   mudae_image_thumb = CASE"
+            "     WHEN character_catalog.mudae_image_url = excluded.mudae_image_url"
+            "     THEN character_catalog.mudae_image_thumb ELSE '' END,"
+            "   updated_at = excluded.updated_at",
+            (
+                name,
+                key,
+                (series or "").strip(),
+                (rank or "").strip(),
+                mudae_image_url,
+                _now(),
+                _now(),
+            ),
+        )
+        row = conn.execute("SELECT id FROM character_catalog WHERE name_key = ?", (key,)).fetchone()
+    return (int(row["id"]), key) if row else None
 
 
 def check_health() -> dict:
