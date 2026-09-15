@@ -42,6 +42,8 @@ import AddPage from './AddPage'
 import CharacterPage from './CharacterPage'
 import CustomsPage from './CustomsPage'
 import HomePage from './HomePage'
+import ModerationPage from './moderation/ModerationPage'
+import NotificationsPage from './NotificationsPage'
 import SavedTab from './profile/SavedTab'
 import SearchResultsPage from './SearchResultsPage'
 
@@ -66,6 +68,8 @@ beforeEach(() => {
   })
   api.apiClient.getCustomImagesForChar.mockReset()
   api.apiClient.getCustomImagesForChar.mockResolvedValue({})
+  // Signed in, so the add-image controls render (they are hidden otherwise).
+  api.apiClient.getMe.mockResolvedValue({ signed_in: true, is_moderator: false })
   useStore.setState({
     savedCharacters: [{ name: 'Ayanami Rei', series: 'Neon Genesis Evangelion', image: 'rei.png' }],
     customImages: { 'Ayanami Rei': ['https://cdn.example/a.png'] },
@@ -123,6 +127,20 @@ describe('page smoke tests', () => {
   it('renders the add page', () => {
     renderAt(<AddPage />)
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
+  })
+
+  it('renders the moderation page', async () => {
+    renderAt(<ModerationPage />, '/moderation')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /moderation/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders the notifications page', async () => {
+    renderAt(<NotificationsPage />, '/notifications')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /notifications/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders server search results from the URL', async () => {

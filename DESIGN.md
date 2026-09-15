@@ -240,6 +240,14 @@ browser only turns the seed into contrast-fitted tokens (`useCharacterTheme`,
 `useApplyCharacterTheme`). See `tests/test_accent_extract.py` for the calibration panel of
 real characters these thresholds were set against.
 
+When the measurement is wrong in a way no statistic can fix — the colour a community reads as a
+character's is not the one with the most pixels — a **moderator or the owner can overrule it**.
+A small control under the header actions ("Accent", with a swatch and a Measured/Manual state)
+arms a picker; the next click on the portrait or a gallery image samples that pixel and saves it.
+Manual is shown in words, not only in the swatch, and "Reset to measured" hands the colour back to
+the extractor. It is deliberately staff-only and unadorned: a quiet row, not a coloured button,
+because it is a correction tool rather than a thing every visitor uses.
+
 **The Tinted Neutral Rule.** No pure grey anywhere. Every neutral carries the ~222 hue
 cast. A `#888` in a diff is a bug.
 

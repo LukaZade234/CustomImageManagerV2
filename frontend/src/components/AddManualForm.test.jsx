@@ -101,6 +101,20 @@ describe('AddManualForm', () => {
     expect(document.querySelector('#addCharImage')).not.toBeNull()
   })
 
+  it('asks a cookie-only visitor to sign in rather than offering an upload', () => {
+    renderForm(makeForm({ canAddImages: false }))
+    expect(document.querySelector('#addCharImage')).toBeNull()
+    expect(screen.getByRole('link', { name: /Sign in with Discord/i })).toBeInTheDocument()
+  })
+
+  it('blocks adding a brand-new character without an account', () => {
+    renderForm(makeForm({ canAddNewCharacter: false }))
+    expect(screen.getByRole('button', { name: /Add Character/ })).toBeDisabled()
+    expect(
+      screen.getByText(/Adding a new character needs a linked Discord account/i),
+    ).toBeInTheDocument()
+  })
+
   it('renders an error status as an alert', () => {
     renderForm(makeForm({ status: { type: 'error', message: 'Nope' } }))
     expect(screen.getByRole('alert')).toHaveTextContent('Nope')

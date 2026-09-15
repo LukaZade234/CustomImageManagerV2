@@ -30,12 +30,12 @@ import Navbar from './Navbar'
 
 // The navbar reads `me` from react-query now; the tests still describe it by
 // seeding the store, so hand that value to the query cache at render time.
-const renderNav = (route = '/') =>
+const renderNav = (route = '/', queries = [[['me'], useStore.getState().me]]) =>
   renderWithQueryClient(
     <MemoryRouter initialEntries={[route]}>
       <Navbar />
     </MemoryRouter>,
-    { queries: [[['me'], useStore.getState().me]] },
+    { queries },
   )
 
 beforeEach(() => {
@@ -287,5 +287,108 @@ describe('folding on a narrow viewport', () => {
     // There is room to spell out the current filter beside the arrow.
     expect(screen.getByText('Rank asc.')).toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+})
+
+describe('notifications entry', () => {
+  it('carries Notifications and no moderation entry', () => {
+    useStore.setState({
+      me: {
+        handle: 'Amber Otter',
+        role: 'owner',
+        is_moderator: true,
+        is_owner: true,
+        signed_in: true,
+        discord_available: true,
+      },
+    })
+    renderNav()
+    expect(screen.getByRole('link', { name: /Notifications/i })).toHaveAttribute(
+      'href',
+      '/notifications',
+    )
+    // Moderation lives in the profile now, not the topbar.
+    expect(screen.queryByRole('link', { name: /Moderation/i })).not.toBeInTheDocument()
+  })
+
+  it('pulses the bell while something is unread', () => {
+    useStore.setState({ me: { handle: 'Amber Otter', role: 'user', signed_in: false } })
+    renderNav('/', [
+      [['me'], useStore.getState().me],
+      [['notifications'], { items: [], unread: 2 }],
+    ])
+    const bell = screen.getByRole('link', { name: /Notifications, 2 unread/i })
+    expect(bell).toHaveClass('navbar-notifications--unread')
+  })
+
+  it('does not pulse when nothing is unread', () => {
+    useStore.setState({ me: { handle: 'Amber Otter', role: 'user', signed_in: false } })
+    renderNav('/', [
+      [['me'], useStore.getState().me],
+      [['notifications'], { items: [], unread: 0 }],
+    ])
+    expect(screen.getByRole('link', { name: /Notifications/i })).not.toHaveClass(
+      'navbar-notifications--unread',
+    )
+  })
+})
+
+describe('the folded bar', () => {
+  const mql = (matches) => ({
+    matches,
+    media: '',
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })
+
+  const renderFolded = (queries) => {
+    window.matchMedia = vi.fn().mockImplementation(() => mql(true))
+    try {
+      return renderNav('/', queries)
+    } finally {
+      window.matchMedia = vi.fn().mockImplementation(() => mql(false))
+    }
+  }
+
+  const me = () => ({ handle: 'Amber Otter', role: 'user', signed_in: false })
+
+  it('keeps the bell off the bar while nothing is unread', () => {
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 0 }],
+    ])
+    // The links fold away, and with nothing unread there is nothing to see.
+    for (const name of [/Add Character/i, /Customs/i, /Amber Otter/, /Notifications/i]) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
+  })
+
+  it('puts a pulsing bell on the bar as soon as something is unread', () => {
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 1 }],
+    ])
+    // Visible without opening the menu, and icon-only -- the links are still folded.
+    const bell = screen.getByRole('link', { name: /Notifications, 1 unread/i })
+    expect(bell).toHaveClass('navbar-notifications--unread')
+    expect(bell).toHaveClass('navbar-notifications--icon-only')
+    expect(screen.queryByRole('link', { name: /Add Character/i })).not.toBeInTheDocument()
+  })
+
+  it('swaps the bar bell for the labelled one when the menu opens', async () => {
+    const user = userEvent.setup()
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 1 }],
+    ])
+
+    await user.click(screen.getByRole('button', { name: /Show menu/i }))
+    // One bell, not two: the bar copy steps aside for the one in the links.
+    const bell = screen.getByRole('link', { name: /Notifications, 1 unread/i })
+    expect(bell).not.toHaveClass('navbar-notifications--icon-only')
+    expect(screen.getByRole('link', { name: /Add Character/i })).toBeInTheDocument()
   })
 })

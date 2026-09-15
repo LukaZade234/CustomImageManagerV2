@@ -12,13 +12,17 @@ the visitor has signed in with Discord.
 from __future__ import annotations
 
 import os
+import re
 
 from flask import Blueprint, jsonify, request
+from PIL import Image
 
+import accent_extract
 import db
 import identity
 import logs
 import tempfiles
+import thumbnails
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from ratelimit import rate_limited
@@ -56,6 +60,7 @@ def record_view(name):
 
 
 @characters_bp.route("/upload", methods=["POST"])
+@identity.require_signed_in
 def upload():
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -119,7 +124,9 @@ def upload():
 @characters_bp.route("/api/saved", methods=["GET"])
 def get_saved():
     try:
-        return jsonify(db.get_saved_characters())
+        # Per-identity: a bookmark is tied to the cookie (or the Discord account
+        # once signed in), so it follows the caller like every other list.
+        return jsonify(db.get_saved_characters(identity.current_identity().id))
     except Exception:
         log.exception("saved.list_failed")
     return jsonify([])
@@ -136,7 +143,7 @@ def save_character():
     if not ok:
         return jsonify({"error": err}), 400
     try:
-        if not db.save_character(char_name):
+        if not db.save_character(char_name, identity.current_identity().id):
             return jsonify({"error": "Character already saved"}), 400
         db.update_last_modified(char_name)
         return jsonify({"success": True, "message": "Character saved"})
@@ -191,6 +198,20 @@ def add_character():
     if existing and existing["in_library"]:
         return jsonify({"error": f'Character "{existing["name"]}" already exists'}), 400
 
+    # A cookie-only visitor may add a character the catalog already knows; making
+    # a brand-new entry needs a linked Discord account (DECISIONS.md §4). The
+    # catalog add route is the "from the library" path and stays open.
+    if existing is None and not identity.current_identity().is_signed_in:
+        return (
+            jsonify(
+                {
+                    "error": "Sign in with Discord to add a new character",
+                    "code": "discord_required",
+                }
+            ),
+            403,
+        )
+
     image_url = ""
     if provided_image_url:
         if not _allowed_portrait_url(provided_image_url):
@@ -201,6 +222,18 @@ def add_character():
         file = request.files["image"]
         fn = file.filename
         if fn:
+            # Uploading a portrait is adding an image, so it needs an account --
+            # the catalog URL path above does not upload and stays open.
+            if not identity.current_identity().is_signed_in:
+                return (
+                    jsonify(
+                        {
+                            "error": "Sign in with Discord to add images",
+                            "code": "discord_required",
+                        }
+                    ),
+                    403,
+                )
             temp_path = tempfiles.reserve("add", fn)
             file.save(temp_path)
             try:
@@ -234,7 +267,7 @@ def add_character():
 @characters_bp.route("/api/saved/<path:name>", methods=["DELETE"])
 def remove_saved(name):
     try:
-        if not db.unsave_character(name):
+        if not db.unsave_character(name, identity.current_identity().id):
             return jsonify({"error": "Character not found in saved list"}), 404
         return jsonify({"success": True, "message": "Character removed"})
     except Exception:
@@ -312,6 +345,7 @@ def edit_character():
 
 
 @characters_bp.route("/api/set-main-image", methods=["POST"])
+@identity.require_signed_in
 @rate_limited("edit_character")
 def set_main_image():
     if "file" not in request.files:
@@ -380,3 +414,89 @@ def set_main_image():
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+_ACCENT_SEED = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+@characters_bp.route("/api/accent-override", methods=["POST"])
+@identity.require_moderator
+@rate_limited("edit_character")
+def accent_override():
+    """Set, clear, or pixel-pick a character's accent colour. Staff only.
+
+    The accent is one value on the character row that every visitor sees, so
+    this is not a per-identity preference: it is a moderator/owner action. A
+    request either names a `seed`, clears with `clear: true`, or names a point
+    (`image_id` or `portrait: true`, plus `u`/`v` in 0..1) to sample a pixel.
+    """
+    me = identity.current_identity()
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Character name is required"}), 400
+
+    if data.get("clear"):
+        if not db.clear_accent_override(name):
+            return jsonify({"error": "Character not found"}), 404
+        return jsonify({"success": True, "seed": None, "manual": False})
+
+    seed = data.get("seed")
+    if seed is None:
+        try:
+            u = float(data["u"])
+            v = float(data["v"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"error": "A point (u, v) is required"}), 400
+        if not (0.0 <= u <= 1.0 and 0.0 <= v <= 1.0):
+            return jsonify({"error": "Point is outside the image"}), 400
+        image = _image_for_point(name, data)
+        if image is None:
+            return jsonify({"error": "Could not read that image"}), 502
+        seed = accent_extract.hex_at_point(image, u, v)
+    else:
+        if not isinstance(seed, str) or not _ACCENT_SEED.match(seed):
+            return jsonify({"error": "seed must be a #rrggbb colour"}), 400
+        seed = seed.lower()
+
+    if not db.set_accent_override(name, seed, me.id):
+        return jsonify({"error": "Character not found"}), 404
+    return jsonify({"success": True, "seed": seed, "manual": True})
+
+
+def _image_for_point(name, data):
+    """The full-resolution image a pick refers to, or None.
+
+    A gallery pick names an `image_id`, which resolves to the cached thumbnail
+    the grid is showing (materialised if it has never been viewed). A portrait
+    pick uses the character's own main image. Either way the URL is looked up
+    from the database by name/id, never supplied by the caller, so this can only
+    ever be asked for an image already in the library.
+    """
+    image_id = data.get("image_id")
+    if image_id is not None:
+        try:
+            image_id = int(image_id)
+        except (TypeError, ValueError):
+            return None
+        path = thumbnails.cache_path(image_id)
+        if not path.is_file():
+            accent_extract._materialise_thumbnail(image_id)
+        if not path.is_file():
+            return None
+        try:
+            with Image.open(path) as img:
+                img.load()
+                return img.convert("RGB")
+        except Exception:
+            log.warning("characters.accent_pick_unreadable", image_id=image_id)
+            return None
+
+    portrait = db.get_character_portrait(name)
+    if not portrait:
+        return None
+    raw = accent_extract.fetch_portrait_bytes(portrait[1])
+    if raw is None:
+        return None
+    return accent_extract.open_image_bytes(raw)

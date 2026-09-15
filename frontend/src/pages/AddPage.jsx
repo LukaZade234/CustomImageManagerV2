@@ -5,6 +5,7 @@ import AddManualForm from '../components/AddManualForm'
 import AddMudaePanel from '../components/AddMudaePanel'
 import { Card } from '../components/ui'
 import { useCatalogMatch, useCatalogSuggest } from '../hooks/useCatalogSuggest'
+import { useMe } from '../queries/me'
 import { useStore } from '../store/useStore'
 import { normalizeSeries } from '../utils/normalizeSeries'
 
@@ -34,6 +35,7 @@ export default function AddPage() {
 
   const navigate = useNavigate()
   const addToast = useStore((s) => s.addToast)
+  const { data: me } = useMe()
   // A search result that is in the catalog but not the library links here with
   // the name in the query string, so the form opens ready to add it. The rest of
   // the record (series, rank, portrait, pools) is filled from the catalog rather
@@ -224,6 +226,10 @@ export default function AddPage() {
     nameMatch,
     catalogImage,
     catalogImageSrc,
+    canAddImages: Boolean(me?.signed_in),
+    // A brand-new character needs an account; a name the catalog already knows
+    // is "from the library" and may be added from a cookie alone.
+    canAddNewCharacter: Boolean(me?.signed_in) || Boolean(matchedExactly && nameMatch),
     onNameChange: setName,
     onSeriesChange: setSeries,
     onRankChange: (value) => {

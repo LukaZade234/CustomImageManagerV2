@@ -118,6 +118,19 @@ describe('CustomImageGallery', () => {
     expect(props.onToggleSelect).not.toHaveBeenCalled()
     expect(props.onOpenImage).not.toHaveBeenCalled()
   })
+
+  it('samples a pixel instead of opening while picking the accent', async () => {
+    const onPick = vi.fn()
+    setup({ pick: true, onPick })
+    const first = screen.getAllByRole('button')[0]
+    expect(first).toHaveAccessibleName(/Pick the accent colour from image 1/i)
+    await userEvent.click(first)
+    expect(onPick).toHaveBeenCalledTimes(1)
+    // jsdom has no layout, so the point collapses to the origin; what matters
+    // here is that the row (with its id) reaches the handler at all.
+    expect(onPick.mock.calls[0][0]).toBe(ROWS[0])
+    expect(onPick.mock.calls[0][1]).toEqual({ u: 0, v: 0 })
+  })
 })
 
 describe('layout', () => {

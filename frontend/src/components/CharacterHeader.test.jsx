@@ -51,6 +51,9 @@ function setup(overrides = {}) {
     onToggleSave: vi.fn(),
     onGetAiCommand: vi.fn(),
     customCount: 3,
+    pick: false,
+    onPickPortrait: vi.fn(),
+    accent: { canEdit: false },
     ...overrides,
     edit,
     mudae,
@@ -120,6 +123,13 @@ describe('CharacterHeader', () => {
     // The only button on the image side is Save; the portrait is not a control.
     expect(screen.queryByRole('button', { name: /Change the main image/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Save$/ })).toBeInTheDocument()
+  })
+
+  it('turns the portrait into a picker while picking the accent', async () => {
+    const props = setup({ pick: true, accent: { canEdit: true } })
+    const button = screen.getByRole('button', { name: /Pick the accent colour from the portrait/i })
+    await userEvent.click(button)
+    expect(props.onPickPortrait).toHaveBeenCalledTimes(1)
   })
 
   it('the portrait becomes a real button in edit mode', async () => {

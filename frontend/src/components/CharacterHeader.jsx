@@ -1,4 +1,5 @@
 import { getPortraitUrl } from '../api'
+import AccentOverrideControl from './AccentOverrideControl'
 import { GenderMarks } from './GenderMarks'
 import { PoolFilterChips } from './PoolFilterChips'
 import { Button, Field, Input } from './ui'
@@ -28,6 +29,10 @@ export function CharacterHeader({
   customCount,
   edit,
   mudae,
+  pick,
+  onPickPortrait,
+  accent,
+  canAddImages = true,
 }) {
   const portrait = (
     <>
@@ -75,14 +80,29 @@ export function CharacterHeader({
           <button
             type="button"
             className={`image-wrapper edit-mode ${dragOver ? 'drag-over-main' : ''}`}
-            aria-label="Change the main image"
-            onClick={() => mainInputRef.current?.click()}
+            aria-label={
+              canAddImages
+                ? 'Change the main image'
+                : 'Sign in with Discord to change the main image'
+            }
+            title={canAddImages ? undefined : 'Sign in with Discord to change the main image'}
+            disabled={!canAddImages}
+            onClick={() => canAddImages && mainInputRef.current?.click()}
             onDragOver={(e) => {
               e.preventDefault()
               onDragOverChange(true)
             }}
             onDragLeave={() => onDragOverChange(false)}
             onDrop={onMainImageDrop}
+          >
+            {portrait}
+          </button>
+        ) : pick ? (
+          <button
+            type="button"
+            className="image-wrapper pick-mode"
+            aria-label="Pick the accent colour from the portrait"
+            onClick={onPickPortrait}
           >
             {portrait}
           </button>
@@ -244,6 +264,7 @@ export function CharacterHeader({
               </svg>
               $ai command
             </Button>
+            <AccentOverrideControl accent={accent} />
           </div>
         )}
       </div>

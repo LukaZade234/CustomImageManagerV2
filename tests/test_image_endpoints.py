@@ -151,19 +151,28 @@ class TestReorder:
 
 
 class TestSaved:
-    def test_saving_twice_is_rejected(self, client, clean_db):
+    def test_saving_twice_is_rejected(self, client, clean_db, identity_id):
         payload = {"name": "Rem", "series": "Re:Zero", "rank": "#1"}
         assert _post(client, "/api/saved", payload).status_code == 200
         r = _post(client, "/api/saved", payload)
         assert r.status_code == 400
         assert r.get_json()["error"] == "Character already saved"
-        assert len(clean_db.get_saved_characters()) == 1
+        assert len(clean_db.get_saved_characters(identity_id)) == 1
 
     def test_removing_an_unsaved_character_is_404(self, client, clean_db):
         assert client.delete("/api/saved/Nobody").status_code == 404
 
-    def test_remove_deletes_only_that_character(self, client, clean_db):
+    def test_remove_deletes_only_that_character(self, client, clean_db, identity_id):
         _post(client, "/api/saved", {"name": "Rem"})
         _post(client, "/api/saved", {"name": "Emilia"})
         assert client.delete("/api/saved/Rem").status_code == 200
-        assert [c["name"] for c in clean_db.get_saved_characters()] == ["Emilia"]
+        assert [c["name"] for c in clean_db.get_saved_characters(identity_id)] == ["Emilia"]
+
+    def test_saved_follows_the_identity(self, client, clean_db, identity_id):
+        """The regression: signing out must not leave the previous list behind."""
+        _post(client, "/api/saved", {"name": "Rem"})
+        assert [c["name"] for c in client.get("/api/saved").get_json()] == ["Rem"]
+
+        # Signing out hands out a fresh anonymous identity.
+        client.post("/api/auth/logout")
+        assert client.get("/api/saved").get_json() == []

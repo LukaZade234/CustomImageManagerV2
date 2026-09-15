@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the eleven migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the sixteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -168,7 +168,10 @@ because that had to stop being true.
 | `image_reports` | — | Two distinct reporters remove an image |
 | `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
-| `schema_migrations` | 11 | Which migrations have run |
+| `notifications` | — | A row per recipient: mechanical, and owner broadcasts (dismissible, grouped by `group_id`) |
+| `pinned_notifications` | — | Owner announcements resolved by audience at read time, always visible, never dismissible |
+| `pinned_notification_reads` | — | Per-identity read state for a pin, so a new account sees it unread |
+| `schema_migrations` | 16 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),
@@ -186,7 +189,17 @@ and it is what makes removal cheap to undo and the Removed tab possible.
 Every visitor gets a row in `identities` lazily, on their first write. The id
 lives in an HttpOnly cookie and is never returned by the API; clients get a
 handle and a per-image `is_mine`. Signing in with Discord binds an existing
-pseudonym to an account, merging the two identities.
+pseudonym to an account, merging the two identities. **Adding an image, or a
+brand-new character, requires that upgrade**: browsing, saving, hiding,
+reporting, restoring and metadata edits are open to a cookie-only visitor, but
+the endpoints that upload to ImgChest (`/api/custom-image`,
+`/api/import-custom-images-from-urls`, `/api/set-main-image`, `/upload`, and the
+file branch of `/api/add-character`) are behind `identity.require_signed_in` and
+answer `403` with `code: discord_required`. `/api/add-character` also refuses a
+name the catalog does not know, so a cookie-only visitor can add characters
+*from the library* but cannot invent one; `/api/catalog/add-character` stays
+open. Uploading is the one action that spends the shared ImgChest key, and tying
+this to an account is also what makes a ban meaningful.
 
 `hide_attribution` and `hide_from_leaderboard` are *display* preferences applied
 when rendering. Ownership is always recorded, because removal is
@@ -326,6 +339,7 @@ limited per identity (`ratelimit.py`).
 
 | Method | Path | Purpose |
 |---|---|---|
+| POST | `/api/accent-override` | Set, clear, or pixel-pick a character's accent colour (staff only). |
 | POST | `/api/add-character` | Add a new character. |
 | POST | `/api/characters/<path:name>/view` | Note that the caller looked at this character. |
 | POST | `/api/edit-character` | — |
@@ -381,6 +395,16 @@ limited per identity (`ratelimit.py`).
 | GET | `/api/catalog/series` | Series names for autocomplete. |
 | POST | `/api/catalog/add-character` | Promote a catalog entry into the working set. |
 
+**`notifications`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/notifications` | This identity's messages, newest first, plus the unread count. |
+| POST | `/api/notifications/read` | Mark everything this identity has as read. |
+| POST | `/api/notifications/dismiss` | Remove one normal notification from your own inbox. Pinned ones cannot be dismissed. |
+| POST | `/api/notifications/delete` | Owner only: remove a broadcast from every inbox, or delete a pin. |
+| POST | `/api/notifications/broadcast` | Owner only: fan a message out to everyone, or to moderators only; `pinned` makes it a permanent global announcement. |
+
 **`spa`**
 
 | Method | Path | Purpose |
@@ -390,6 +414,10 @@ limited per identity (`ratelimit.py`).
 | GET | `/assets/<path:filename>` | — |
 | GET | `/character/<path:name>` | — |
 | GET | `/customs` | — |
+| GET | `/search` | — |
+| GET | `/profile` | — |
+| GET | `/notifications` | — |
+| GET | `/moderation` | — |
 | GET | `/saved` | — |
 
 **`upload_imgchest`**
@@ -520,6 +548,17 @@ what a development build does, where the mirror has no host.
 
 One character page went from **488 MB** to **548 KB** across those changes.
 
+**Accent override.** The measured accent can be overruled. A moderator or the
+owner arms a picker in the character header and clicks a pixel on the portrait
+or a gallery image; the server samples that pixel and stores it in
+`characters.accent_override` (migration 013), written through to `accent_seed`
+so every read path shows it. The extractor returns it and refuses to recompute
+over it, including `scripts/recompute_accents.py`; clearing drops both and the
+next visit measures afresh. The picks double as a labelled calibration set.
+
+The full history of the accent logic — every idea tried, every version reverted,
+and the numbers behind each — is in **[ACCENT.md](ACCENT.md)**.
+
 ---
 
 ## 7. CI
@@ -564,7 +603,10 @@ genuinely does not:
   on one. The per-person `show_nsfw` preference is recorded against that day
   arriving, and reads as such in the UI.
 - **A moderation queue.** Reports remove an image at two distinct reporters and
-  that is the whole mechanism; there is no review screen and no appeal.
+  that is the whole mechanism; there is no appeal. A staff-only *inspection*
+  surface now exists at `/moderation` — who added and removed what — but it is
+  not a queue: nothing is pending, `image_reports` stays unread, and the removal
+  and restore verbs stay on the character page.
 - **Server-side sessions.** Identity is a signed cookie and nothing else.
 - **A second origin.** One box serves everything; Cloudflare caches in front of
   it, and Litestream is the only redundancy.

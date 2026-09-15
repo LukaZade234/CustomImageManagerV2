@@ -429,7 +429,7 @@ round overwrites the live database with itself.
 | `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` | origin | no | See `gunicorn.conf.py` |
 | `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**) |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | origin | no | Sign-in (an **OAuth app**, unrelated to the above) |
-| `DISCORD_REDIRECT_URI` | origin | with sign-in | Must match Discord exactly. Not derived: behind the Tunnel the app sees `localhost:8080` |
+| `DISCORD_REDIRECT_URI` | origin | with sign-in | One or more callbacks, comma-separated. Each must match Discord exactly. Not derived: behind the Tunnel the app sees `localhost:8080`. With several, the one matching the browser's origin is used and the first is the fallback |
 | `OWNER_DISCORD_ID` | origin | no | Grants the owner role at login |
 | `FRONTEND_URL` | origin | no | Where to send the browser after sign-in. Defaults to the first `CORS_ORIGINS` entry |
 | `VITE_API_BASE_URL` | Pages | yes | Build-time |

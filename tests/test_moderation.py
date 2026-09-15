@@ -14,6 +14,8 @@ Three cases matter and are easy to get wrong:
 
 import json
 
+import identity as identity_module
+
 SOMEONE_ELSE = "another-identity"
 
 
@@ -310,3 +312,204 @@ class TestHidingUnknownImages:
         response = client.post("/api/hide-images", json={"image_ids": [image_id]})
         assert response.status_code == 200
         assert response.get_json()["hidden"] == 0
+
+
+class TestModerationReadSurface:
+    """The staff-only inspection surface — read-only, no acting verbs.
+
+    It answers "what has this person been doing?" without becoming a queue:
+    nothing here is pending, and owner/handle/ref are all it ever returns.
+    """
+
+    def _owned(self, db, char, urls, owner):
+        db.ensure_identity(owner)
+        db.add_custom_images(char, urls, added_by=owner)
+
+    def test_a_plain_user_is_refused_by_both_endpoints(self, client, clean_db, identity_id):
+        ref = identity_module.public_ref(identity_id)
+        assert client.get("/api/moderation/users").status_code == 403
+        assert client.get(f"/api/moderation/users/{ref}/images").status_code == 403
+
+    def test_a_moderator_sees_the_contributors(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
+        make_moderator()
+
+        body = client.get("/api/moderation/users").get_json()
+        assert body["total"] == 1
+        item = body["items"][0]
+        assert item["ref"] == identity_module.public_ref(identity_id)
+        assert item["added"] == 1
+        assert item["removed"] == 0
+
+    def test_someone_who_only_removed_something_still_appears(self, client, clean_db, make_moderator):
+        # They added one image and later removed it, so they have no *active*
+        # additions — but the actor set is a union, so they still show up.
+        clean_db.ensure_identity("remover")
+        clean_db.add_custom_images("Rem", ["https://cdn/x.png"], added_by="remover")
+        clean_db.remove_custom_images("Rem", ["https://cdn/x.png"], "remover")
+        make_moderator()
+
+        items = {item["ref"]: item for item in client.get("/api/moderation/users").get_json()["items"]}
+        remover = items[identity_module.public_ref("remover")]
+        assert remover["added"] == 0
+        assert remover["removed"] == 1
+
+    def test_the_detail_splits_additions_and_removals(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/kept.png"], identity_id)
+        self._owned(clean_db, "Rem", ["https://cdn/gone.png"], identity_id)
+        clean_db.remove_custom_images("Rem", ["https://cdn/gone.png"], identity_id)
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+
+        added = client.get(f"/api/moderation/users/{ref}/images?state=active").get_json()
+        assert [i["url"] for i in added["items"]] == ["https://cdn/kept.png"]
+        assert added["added"] == 1
+        assert added["removed"] == 1
+
+        removed = client.get(f"/api/moderation/users/{ref}/images?state=removed").get_json()
+        assert [i["url"] for i in removed["items"]] == ["https://cdn/gone.png"]
+        assert removed["added"] == 1
+        assert removed["removed"] == 1
+
+    def test_the_character_filter_trims_the_list(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/rem.png"], identity_id)
+        self._owned(clean_db, "Emilia", ["https://cdn/emilia.png"], identity_id)
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+
+        body = client.get(f"/api/moderation/users/{ref}/images?char=Rem").get_json()
+        assert [i["url"] for i in body["items"]] == ["https://cdn/rem.png"]
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert client.get("/api/moderation/users/notthere/images").status_code == 404
+
+    def test_an_invalid_state_is_400(self, client, clean_db, identity_id, make_moderator):
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+        assert client.get(f"/api/moderation/users/{ref}/images?state=bogus").status_code == 400
+
+    def test_the_raw_identity_id_never_appears(self, client, clean_db, identity_id, make_moderator):
+        """The ref exists precisely so the id stays server-side."""
+        self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+
+        users = client.get("/api/moderation/users").get_json()
+        detail = client.get(f"/api/moderation/users/{ref}/images").get_json()
+        assert identity_id not in json.dumps(users)
+        assert identity_id not in json.dumps(detail)
+
+    def test_public_ref_round_trips(self, clean_db, identity_id):
+        clean_db.ensure_identity(identity_id)
+        ref = identity_module.public_ref(identity_id)
+        assert clean_db.identity_by_ref(ref) == identity_id
+        assert clean_db.identity_by_ref("0" * 16) is None
+
+
+class TestModerationCharacterView:
+    """The character-level view: the same work grouped by character.
+
+    It exists to answer "where is their work concentrated", which the image grid
+    cannot, and it sorts with the Browse Customs vocabulary.
+    """
+
+    def _owned(self, db, char, urls, owner):
+        db.ensure_identity(owner)
+        db.add_custom_images(char, urls, added_by=owner)
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def test_a_plain_user_is_refused(self, client, clean_db, identity_id):
+        assert client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").status_code == 403
+
+    def test_it_groups_by_character_with_counts(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/a.png", "https://cdn/b.png"], identity_id)
+        self._owned(clean_db, "Emilia", ["https://cdn/c.png"], identity_id)
+        make_moderator()
+
+        body = client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").get_json()
+        by_name = {row["name"]: row for row in body["items"]}
+        assert by_name["Rem"]["count"] == 2
+        assert by_name["Emilia"]["count"] == 1
+        # Default sort is most images first.
+        assert body["items"][0]["name"] == "Rem"
+        assert body["total"] == 2
+
+    def test_an_unknown_sort_is_400(self, client, clean_db, identity_id, make_moderator):
+        make_moderator()
+        res = client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters?sort=bogus")
+        assert res.status_code == 400
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert client.get("/api/moderation/users/notthere/characters").status_code == 404
+
+    def test_created_at_is_carried_on_the_contributor(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
+        make_moderator()
+        item = client.get("/api/moderation/users").get_json()["items"][0]
+        assert item["created_at"], "the account's age drives the profile stat"
+
+
+class TestModerationRoleChanges:
+    """Only the owner may promote or demote; moderators hold every other power.
+
+    A moderator can do everything an owner can on this surface except change
+    roles -- including their own and another moderator's.
+    """
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def _seed_role(self, db, identity_id, role):
+        db.ensure_identity(identity_id)
+        db.set_role(identity_id, role)
+
+    def _post(self, client, ref, role):
+        return client.post(f"/api/moderation/users/{ref}/role", json={"role": role})
+
+    def test_the_owner_can_promote_a_user(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "worker", "user")
+        res = self._post(client, self._ref("worker"), "moderator")
+        assert res.status_code == 200
+        assert res.get_json()["role"] == "moderator"
+        assert clean_db.get_identity("worker")["role"] == "moderator"
+
+    def test_the_owner_can_demote_a_moderator(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "worker", "moderator")
+        res = self._post(client, self._ref("worker"), "user")
+        assert res.status_code == 200
+        assert clean_db.get_identity("worker")["role"] == "user"
+
+    def test_a_moderator_cannot_change_roles(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("moderator")
+        self._seed_role(clean_db, "worker", "user")
+        assert self._post(client, self._ref("worker"), "moderator").status_code == 403
+        assert clean_db.get_identity("worker")["role"] == "user"
+
+    def test_a_plain_user_cannot_change_roles(self, client, clean_db):
+        self._seed_role(clean_db, "worker", "user")
+        assert self._post(client, self._ref("worker"), "moderator").status_code == 403
+
+    def test_owner_is_not_an_assignable_role(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "worker", "user")
+        assert self._post(client, self._ref("worker"), "owner").status_code == 400
+        assert self._post(client, self._ref("worker"), "bogus").status_code == 400
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        assert self._post(client, "notthere", "moderator").status_code == 404
+
+    def test_the_owner_cannot_be_demoted(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "boss", "owner")
+        assert self._post(client, self._ref("boss"), "moderator").status_code == 400
+
+    def test_you_cannot_change_your_own_role(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        assert self._post(client, self._ref(identity_id), "moderator").status_code == 400

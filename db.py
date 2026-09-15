@@ -192,6 +192,51 @@ def get_character_portrait(name: str) -> tuple[int, str] | None:
     return int(row["id"]), row["main_image_url"]
 
 
+def get_accent_override(name: str) -> str | None:
+    """The hand-picked accent seed, or None when the colour is the measured one."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT accent_override FROM characters WHERE name = ?", (name,)
+    ).fetchone()
+    return row["accent_override"] if row else None
+
+
+def set_accent_override(name: str, seed: str, identity_id: str | None) -> bool:
+    """Record a hand-picked accent. False if the character is unknown.
+
+    The seed is written through to `accent_seed` so the many read paths that
+    already show a character's colour need no change; `accent_override` is what
+    marks it as chosen and stops `accent_extract` recomputing over it.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE characters"
+            "   SET accent_override = ?, accent_override_by = ?, accent_override_at = ?,"
+            "       accent_seed = ?, accent_source = 'manual', accent_updated_at = ?"
+            " WHERE name = ?",
+            (seed, identity_id, _now(), seed, _now(), name),
+        )
+        return cur.rowcount > 0
+
+
+def clear_accent_override(name: str) -> bool:
+    """Drop the override and the measured seed, so the next visit measures again.
+
+    `accent_updated_at` is cleared too: leaving it set would let a stale seed
+    read as fresh. False if the character is unknown.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE characters"
+            "   SET accent_override = NULL, accent_override_by = NULL,"
+            "       accent_override_at = NULL, accent_seed = NULL, accent_source = NULL,"
+            "       accent_updated_at = NULL"
+            " WHERE name = ?",
+            (name,),
+        )
+        return cur.rowcount > 0
+
+
 def _name_key(name: str) -> str:
     """The folded match key. `catalog_import` owns the folding rules."""
     import catalog_import
@@ -2049,6 +2094,216 @@ def count_images_added_by(identity_id: str) -> int:
     ).fetchone()["n"]
 
 
+# --- Notifications -------------------------------------------------------
+#
+# Two shapes. A **normal** notification is a row per recipient: delivered at send
+# time, dismissible by its recipient (a hard delete), and carrying a `group_id`
+# so the owner can remove one broadcast from every inbox at once. A **pinned**
+# one is a single global row resolved by audience at read time: it must reach an
+# account made later than the send, and it cannot be dismissed, so it has no
+# per-identity copy at all. See migrations 014 and 015.
+
+
+def add_notification(
+    identity_id: str,
+    title: str,
+    body: str = "",
+    *,
+    kind: str = "mechanical",
+    created_by: str | None = None,
+) -> None:
+    """One message to one identity. The identity row is created if it is new."""
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO notifications (identity_id, kind, title, body, created_by, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (identity_id, kind, title, body, created_by, _now()),
+        )
+
+
+def list_notifications(
+    identity_id: str, *, is_staff: bool = False, limit: int = 100
+) -> list[dict]:
+    """This identity's normal notifications merged with the pinned ones it sees.
+
+    Pinned rows have no per-identity copy, so they are resolved here by audience:
+    `everyone` always, `moderators` only for staff. Read state comes from the
+    `pinned_notification_reads` join table, so a new identity sees every visible
+    pin as unread until it has opened the list once. Pins are never dismissible.
+    """
+    limit = max(1, int(limit))
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, kind, title, body, created_at, read_at, group_id"
+        "  FROM notifications WHERE identity_id = ?"
+        " ORDER BY created_at DESC, id DESC LIMIT ?",
+        (identity_id, limit),
+    ).fetchall()
+    items = [{**dict(r), "source": "notification", "pinned": False} for r in rows]
+
+    audiences = ("everyone", "moderators") if is_staff else ("everyone",)
+    placeholders = ",".join("?" for _ in audiences)
+    pinned = conn.execute(
+        "SELECT p.id, p.title, p.body, p.created_at, r.read_at AS read_at"
+        "  FROM pinned_notifications p"
+        "  LEFT JOIN pinned_notification_reads r"
+        "    ON r.pinned_id = p.id AND r.identity_id = ?"
+        f" WHERE p.audience IN ({placeholders})"
+        " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
+        (identity_id, *audiences, limit),
+    ).fetchall()
+    items += [
+        {
+            "id": r["id"],
+            "kind": "broadcast",
+            "title": r["title"],
+            "body": r["body"],
+            "created_at": r["created_at"],
+            "read_at": r["read_at"],
+            "group_id": None,
+            "source": "pin",
+            "pinned": True,
+        }
+        for r in pinned
+    ]
+    items.sort(key=lambda item: (item["created_at"] or "", item["id"]), reverse=True)
+    return items[:limit]
+
+
+def count_unread_notifications(identity_id: str, *, is_staff: bool = False) -> int:
+    """Unread normal messages plus the visible pins this identity has not read.
+
+    A pin counts until the identity reads it, which is what makes a message sent
+    before an account existed still arrive as unread.
+    """
+    conn = get_connection()
+    unread = conn.execute(
+        "SELECT COUNT(*) AS n FROM notifications WHERE identity_id = ? AND read_at IS NULL",
+        (identity_id,),
+    ).fetchone()["n"]
+
+    audiences = ("everyone", "moderators") if is_staff else ("everyone",)
+    placeholders = ",".join("?" for _ in audiences)
+    unread += conn.execute(
+        "SELECT COUNT(*) AS n FROM pinned_notifications p"
+        "  LEFT JOIN pinned_notification_reads r"
+        "    ON r.pinned_id = p.id AND r.identity_id = ?"
+        f" WHERE p.audience IN ({placeholders}) AND r.pinned_id IS NULL",
+        (identity_id, *audiences),
+    ).fetchone()["n"]
+    return unread
+
+
+def mark_notifications_read(identity_id: str, *, is_staff: bool = False) -> int:
+    """Read everything this identity can see. Returns how many normal rows it cleared.
+
+    Pins are marked read by inserting a row per visible pin that lacks one, which
+    also covers pins sent after this identity last looked.
+    """
+    audiences = ("everyone", "moderators") if is_staff else ("everyone",)
+    placeholders = ",".join("?" for _ in audiences)
+    with transaction() as conn:
+        # A cookie-only reader may have no identity row yet, and the read row
+        # references it -- without this the insert fails and nothing is marked.
+        _ensure_identity(conn, identity_id)
+        cur = conn.execute(
+            "UPDATE notifications SET read_at = ? WHERE identity_id = ? AND read_at IS NULL",
+            (_now(), identity_id),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO pinned_notification_reads (identity_id, pinned_id, read_at)"
+            " SELECT ?, p.id, ? FROM pinned_notifications p"
+            f" WHERE p.audience IN ({placeholders})",
+            (identity_id, _now(), *audiences),
+        )
+        return cur.rowcount
+
+
+def dismiss_notification(identity_id: str, notification_id: int) -> bool:
+    """Delete one of your own normal notifications. A pinned one has no row here.
+
+    Dismissal is a hard delete rather than a flag: the message is gone for this
+    recipient only, which is exactly what removing one row means.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "DELETE FROM notifications WHERE id = ? AND identity_id = ?",
+            (notification_id, identity_id),
+        )
+        return bool(cur.rowcount)
+
+
+def delete_notification(source: str, notification_id: int) -> int:
+    """Owner-only removal. Returns how many recipients it removed.
+
+    A pinned message is one global row, so deleting it removes it for everyone.
+    A normal broadcast shares a `group_id`, so deleting one copy deletes the whole
+    broadcast; a mechanical message has no group and is deleted on its own.
+    """
+    with transaction() as conn:
+        if source == "pin":
+            return conn.execute(
+                "DELETE FROM pinned_notifications WHERE id = ?", (notification_id,)
+            ).rowcount
+        row = conn.execute(
+            "SELECT group_id FROM notifications WHERE id = ?", (notification_id,)
+        ).fetchone()
+        if row is None:
+            return 0
+        if row["group_id"]:
+            return conn.execute(
+                "DELETE FROM notifications WHERE group_id = ?", (row["group_id"],)
+            ).rowcount
+        return conn.execute(
+            "DELETE FROM notifications WHERE id = ?", (notification_id,)
+        ).rowcount
+
+
+def broadcast_notification(
+    title: str,
+    body: str,
+    audience: str,
+    created_by: str | None = None,
+    *,
+    pinned: bool = False,
+) -> int:
+    """Send a message. Returns the number of recipients it reached.
+
+    `audience` is `everyone` or `moderators`. A normal message is fanned out to a
+    row per recipient; a pinned one is a single row that every current and future
+    member of the audience sees.
+    """
+    with transaction() as conn:
+        if audience == "moderators":
+            ids = [
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM identities WHERE role IN ('moderator', 'owner')"
+                )
+            ]
+        else:
+            ids = [r["id"] for r in conn.execute("SELECT id FROM identities")]
+
+        if pinned:
+            conn.execute(
+                "INSERT INTO pinned_notifications (audience, title, body, created_by, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (audience, title, body, created_by, _now()),
+            )
+            return len(ids)
+
+        group_id = os.urandom(8).hex()
+        now = _now()
+        conn.executemany(
+            "INSERT INTO notifications"
+            " (identity_id, kind, title, body, created_by, created_at, group_id)"
+            " VALUES (?, 'broadcast', ?, ?, ?, ?, ?)",
+            [(identity_id, title, body, created_by, now, group_id) for identity_id in ids],
+        )
+        return len(ids)
+
+
 def get_removed_for(char_name: str) -> list[dict]:
     """The Removed drawer: everything soft-deleted for this character."""
     conn = get_connection()
@@ -2338,7 +2593,7 @@ def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:
 # --- Bookmarks ----------------------------------------------------------
 
 
-def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
+def get_saved_characters(identity_id: str) -> list:
     """Bookmarks, most recently updated first.
 
     The timestamp comes back with each row so the client does not have to fetch
@@ -2388,6 +2643,264 @@ def get_identity(identity_id: str) -> dict | None:
         (identity_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def identity_by_ref(ref: str) -> str | None:
+    """The identity id whose public ref is `ref`, or None.
+
+    A scan of the identities table rather than an indexed column: the table is
+    bounded by people who have written something, and the lookup happens once
+    per moderation page view, so a migration would be cost without benefit. If it
+    ever grows past a few thousand rows, add the column then. See
+    `identity.public_ref` for why the id is not simply passed in the URL.
+    """
+    import identity as identity_module
+
+    conn = get_connection()
+    for row in conn.execute("SELECT id FROM identities"):
+        if identity_module.public_ref(row["id"]) == ref:
+            return row["id"]
+    return None
+
+
+def list_contributors() -> list[dict]:
+    """Every identity that has added or removed at least one image.
+
+    Pseudonyms are included and the privacy flags are deliberately ignored: this
+    is a staff-only inspection surface, and a tool that honoured
+    `hide_from_leaderboard` would be blind to exactly the anonymous, unattributed
+    contributor it exists to investigate. The public contributor board is
+    untouched.
+
+    The counts match what the detail lists show -- `added` is *currently active*
+    images the person added, `removed` is images they removed -- so the detail
+    header is never at odds with the list beneath it. Someone who has only ever
+    removed something still appears, because the actor set is the union.
+    """
+    import identity as identity_module
+
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT actor AS identity_id,"
+        "       SUM(CASE WHEN is_add = 1 AND state = 'active' THEN 1 ELSE 0 END) AS added,"
+        "       SUM(CASE WHEN is_add = 0 AND state = 'removed' THEN 1 ELSE 0 END) AS removed,"
+        "       MAX(at) AS last_at"
+        "  FROM ("
+        "        SELECT added_by AS actor, 1 AS is_add, state, added_at AS at"
+        "          FROM custom_images WHERE added_by IS NOT NULL"
+        "        UNION ALL"
+        "        SELECT removed_by AS actor, 0 AS is_add, state, removed_at AS at"
+        "          FROM custom_images WHERE removed_by IS NOT NULL"
+        "       )"
+        " GROUP BY actor",
+    ).fetchall()
+
+    ids = [r["identity_id"] for r in rows]
+    people: dict[str, dict] = {}
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        people = {
+            r["id"]: dict(r)
+            for r in conn.execute(
+                "SELECT id, handle, role, discord_id, created_at FROM identities"
+                f" WHERE id IN ({placeholders})",
+                ids,
+            )
+        }
+
+    items = []
+    for r in rows:
+        actor = r["identity_id"]
+        # An identity row is written lazily, so an actor may not have one yet;
+        # fall back to the derived handle rather than dropping them, matching
+        # current_identity()'s own tolerance.
+        person = people.get(actor)
+        items.append(
+            {
+                "ref": identity_module.public_ref(actor),
+                "handle": (person or {}).get("handle") or identity_module.handle_for(actor),
+                "role": (person or {}).get("role") or "user",
+                "signed_in": bool((person or {}).get("discord_id")),
+                "created_at": (person or {}).get("created_at"),
+                "added": int(r["added"] or 0),
+                "removed": int(r["removed"] or 0),
+                "last_at": r["last_at"],
+            }
+        )
+    items.sort(key=lambda item: item["last_at"] or "", reverse=True)
+    return items
+
+
+def list_images_by_identity(
+    identity_id: str,
+    *,
+    state: str,
+    character: str | None = None,
+    page: int = 1,
+    per_page: int = 24,
+) -> dict:
+    """One page of an actor's active additions or removals, newest first.
+
+    Rows are shaped like `get_removed_by_identity` so the existing card grid can
+    render them unchanged. `character` narrows to one name. The `added`/`removed`
+    totals are returned alongside so the detail header is right before either
+    list has loaded, and they are the same numbers `list_contributors` reports.
+    """
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+
+    if state == "removed":
+        where = "i.removed_by = ? AND i.state = 'removed'"
+        order = "COALESCE(i.removed_at, i.added_at) DESC, i.id DESC"
+    else:
+        where = "i.added_by = ? AND i.state = 'active'"
+        order = "i.added_at DESC, i.id DESC"
+    params: list = [identity_id]
+    if character:
+        # A substring match, not an exact name: the filter is a text box, and
+        # typing "rem" should narrow to Rem rather than silently match nothing.
+        where += " AND c.name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        escaped = character.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+
+    conn = get_connection()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where}",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        "SELECT i.id AS id, i.url AS url, i.width AS width, i.height AS height,"
+        "       c.name AS character, i.added_at AS added_at,"
+        "       i.removed_at AS removed_at, i.removed_reason AS removed_reason"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where}"
+        f" ORDER BY {order}"
+        " LIMIT ? OFFSET ?",
+        (*params, per_page, (page - 1) * per_page),
+    ).fetchall()
+
+    totals = conn.execute(
+        "SELECT"
+        "  SUM(CASE WHEN added_by = ? AND state = 'active' THEN 1 ELSE 0 END) AS added,"
+        "  SUM(CASE WHEN removed_by = ? AND state = 'removed' THEN 1 ELSE 0 END) AS removed"
+        "  FROM custom_images",
+        (identity_id, identity_id),
+    ).fetchone()
+
+    return {
+        "items": [
+            {
+                "id": r["id"],
+                "url": r["url"],
+                "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+                "width": r["width"],
+                "height": r["height"],
+                "character": r["character"],
+                "added_at": r["added_at"],
+                "removed_at": r["removed_at"],
+                "removed_reason": r["removed_reason"],
+            }
+            for r in rows
+        ],
+        "total": int(total),
+        "total_pages": max(1, (int(total) + per_page - 1) // per_page),
+        "added": int(totals["added"] or 0),
+        "removed": int(totals["removed"] or 0),
+    }
+
+
+# The character view's sort keys, the Browse Customs vocabulary. `recent` is a
+# key too but is built from the actor's own timestamps, not a fixed clause.
+MODERATION_CHARACTER_SORT_KEYS = ("count", "rank", "name", "recent")
+
+
+def list_characters_by_identity(
+    identity_id: str,
+    *,
+    state: str,
+    query: str | None = None,
+    sort: str = "count",
+    order: str = "desc",
+    page: int = 1,
+    per_page: int = 24,
+) -> dict:
+    """The character-level view of one actor's work: grouped and sortable.
+
+    The same actor condition as `list_images_by_identity`, but grouped by
+    character, each row carrying how many of that actor's images sit on it. The
+    point is to answer "where is their work concentrated" — which the image grid
+    cannot, because it shows the images rather than the characters they are on.
+    """
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+    direction = "DESC" if order == "desc" else "ASC"
+
+    if state == "removed":
+        where = "i.removed_by = ? AND i.state = 'removed'"
+        recency = "MAX(i.removed_at)"
+    else:
+        where = "i.added_by = ? AND i.state = 'active'"
+        recency = "MAX(i.added_at)"
+    params: list = [identity_id]
+    if query:
+        where += " AND c.name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+
+    # rank is TEXT and often empty, so unranked characters go last in either
+    # direction rather than sorting as zero. `recent` falls back to the actor's
+    # own added/removed timestamps, not characters.updated_at.
+    if sort == "count":
+        clause = f"COUNT(i.id) {direction}, c.name COLLATE NOCASE ASC"
+    elif sort == "rank":
+        clause = f"CASE WHEN c.rank = '' THEN 1 ELSE 0 END, CAST(c.rank AS INTEGER) {direction}"
+    elif sort == "name":
+        clause = f"c.name COLLATE NOCASE {direction}"
+    else:
+        clause = f"{recency} {direction}"
+
+    conn = get_connection()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM ("
+        "  SELECT c.id FROM custom_images i JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where} GROUP BY c.id)",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        "SELECT c.name AS name, c.series AS series, c.rank AS rank,"
+        "       c.main_image_url AS image, c.main_image_thumb AS image_thumb,"
+        "       COUNT(i.id) AS count,"
+        f"      {recency} AS last_at"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where}"
+        " GROUP BY c.id"
+        f" ORDER BY {clause}"
+        " LIMIT ? OFFSET ?",
+        (*params, per_page, (page - 1) * per_page),
+    ).fetchall()
+
+    return {
+        "items": [
+            {
+                "name": r["name"],
+                "series": r["series"],
+                "rank": r["rank"],
+                "image": r["image"],
+                "image_thumb": r["image_thumb"],
+                "count": r["count"],
+                "last_at": r["last_at"],
+            }
+            for r in rows
+        ],
+        "total": int(total),
+        "total_pages": max(1, (int(total) + per_page - 1) // per_page),
+    }
 
 
 def _merge_identity(conn: sqlite3.Connection, source: str, target: str) -> dict:
@@ -2482,7 +2995,7 @@ def set_role(identity_id: str, role: str) -> bool:
         return bool(cur.rowcount)
 
 
-def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:
+def save_character(char_name: str, identity_id: str) -> bool:
     """False if already bookmarked by this identity."""
     with transaction() as conn:
         _ensure_identity(conn, identity_id)
@@ -2495,7 +3008,7 @@ def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> boo
         return bool(cur.rowcount)
 
 
-def unsave_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:
+def unsave_character(char_name: str, identity_id: str) -> bool:
     """False if it was not bookmarked."""
     with transaction() as conn:
         char_id = _character_id(conn, char_name)

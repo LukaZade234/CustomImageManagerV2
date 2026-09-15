@@ -261,6 +261,18 @@ secrets. Because no destructive action is available to *anyone* under §1, an ev
 by evading: the worst outcome is losing your own hidden set and your ability to remove your own
 past uploads.
 
+**Adding an image requires the Discord upgrade.** A cookie-only visitor may browse, save, hide,
+report, restore and edit metadata freely, but every endpoint that uploads bytes to ImgChest
+(`/api/custom-image`, `/api/import-custom-images-from-urls`, `/api/set-main-image`, `/upload`, and the
+file branch of `/api/add-character`) is behind `require_signed_in`. **Creating a brand-new character
+is gated too**: `/api/add-character` accepts a name the catalog already knows and refuses an unknown
+one to a cookie-only caller, so the library grows from Discord-linked accounts while
+`/api/catalog/add-character` (a known character, no upload) stays open. The reason is the one gap in
+the paragraph above: uploading is the only action that spends a shared resource (the ImgChest key),
+and adding arbitrary entries is the other way the library can be shaped from an anonymous cookie. A
+cookie is free to mint, so "who did this" has to survive clearing it — which is also what makes a ban
+or a suspension mean anything at all.
+
 **Implementation note:** Discord OAuth requires a **newly registered Discord application**. The
 existing `DISCORD_USER_TOKEN` is a self-bot account token and cannot be used for OAuth. The two
 are unrelated and must not be conflated.
@@ -285,6 +297,21 @@ login, so there is no chicken-and-egg problem and no admin password to leak.
 
 **This is a fallback, not the design.** If routine operation requires moderators to act, something
 in §1 is wrong and should be fixed there instead.
+
+A staff-only **inspection surface** was added later (`/profile/moderation`; see `MODERATION.md`).
+It sits inside the profile as one more tab rather than in the topbar, and does not contradict the
+paragraph above, because it is not a queue: it holds nothing, counts nothing pending, and changes no
+chrome with site state. It answers *"what has this person been doing?"* when the operator already has
+a reason to look, which is inspection rather than routine moderation. Two of its verbs are live —
+**restore** an image (already non-destructive) and the **owner-only** promote/demote of a
+contributor's role. The topbar instead carries **Notifications**, the channel a future warn/suspend
+needs: the app messaging one account, and the owner messaging everyone or the moderators. It is a
+message log, not a worklist. The remaining verbs stay inert: permanent delete, and warn/suspend/ban,
+which have no meaning yet for a cookie identity. `image_reports` stays unread. Image verbs are placed
+here as well as on the character page because a pattern — the same person removing images across many
+characters — is only visible in one place; that still requires opening a contributor on purpose. If a
+later phase adds a pending count, a badge, or action logic driven by site state, that is the signal
+to re-read §1 and fix what is generating the backlog.
 
 ---
 
@@ -572,6 +599,38 @@ including clearing a gender or emptying `pools`, where `set_character_traits` an
 never clear. The distinction is the source — a card that arrived sparse is not evidence, but a
 person pressing Save is. An edit stays on the working row (`is_female`, `is_male`, `pools`); the
 catalog's facets are the scrape and are left alone, so search filtering still reads the catalog.
+
+### A hand-picked accent override
+
+The measured accent is the dominant chromatic colour the art agrees on. It is occasionally wrong
+in a way no statistic can fix: the colour a community reads as a character's is sometimes not the
+one with the most pixels. Audrey Hall is blonde-haired and green-dressed, and gold wins on area,
+in every variant of the pooling tried — mass-pooled, per-image top-K vote, coarse hue buckets.
+
+So the accent can be **overridden**: a moderator or the owner arms a picker on the character page
+and clicks a pixel on the portrait or a gallery image, and that colour becomes the character's
+(one endpoint, saved on the click). The pick is taken server-side, from the thumbnail file or the
+portrait URL keyed by row id — the client sends only the point within the image, never a URL — so
+the sample is the actual pixel that was clicked.
+
+Two design choices worth holding:
+
+- **Write-through, one source.** The override is written to `accent_override` *and* to
+  `accent_seed`, so the many read paths that already show a character's colour (the list, saved
+  rows, the gallery) need no change. `accent_override` is the flag; `accent_extract` returns it
+  and refuses to recompute over it, including the batch `recompute_accents.py`. Clearing nulls
+  both, and the next visit measures afresh.
+- **Staff-only.** The accent is one value on the character row that every visitor sees, so it is
+  not a per-identity preference. Everyone else keeps the measured colour.
+
+The picks are also the calibration set for any future rework of the extractor: each one is a real
+character with a human-chosen target, which is exactly what a threshold search or a small model
+would need. The remaining open problem is the opposite direction — inferring the *subject* colour
+when a dominant background or hair out-votes it — for which foreground segmentation is the
+promising route, not more colour statistics.
+
+The full history of the extractor — every idea tried, every version reverted, and the numbers
+behind each — is in **[ACCENT.md](ACCENT.md)**. Read it before changing the accent logic.
 
 ### Bulk-adding a series: one DM, then review
 

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Button } from '../../components/ui'
+import { Button, IconButton } from '../../components/ui'
 
 /**
  * The card grid every profile list uses, in one of two arrangements.
@@ -31,9 +31,9 @@ export default function CardGrid({ items, height = 210, uniform = false }) {
       className={`profile-grid${uniform ? ' profile-grid--uniform' : ''}`}
       style={{ '--card-height': `${height}px` }}
     >
-      {items.map((item) => (
-        <article key={item.key} className="profile-card" style={{ '--ratio': item.ratio ?? 0.643 }}>
-          <Link className="profile-card__link" to={item.href}>
+      {items.map((item) => {
+        const content = (
+          <>
             {item.image ? (
               <img
                 className="profile-card__image"
@@ -49,19 +49,68 @@ export default function CardGrid({ items, height = 210, uniform = false }) {
               <span className="profile-card__title">{item.title}</span>
               {item.subtitle && <span className="profile-card__meta">{item.subtitle}</span>}
             </span>
-          </Link>
-          {item.action && (
-            <Button
-              size="sm"
-              className="profile-card__action"
-              disabled={item.busy}
-              onClick={item.onAction}
-            >
-              {item.busy ? '…' : item.action}
-            </Button>
-          )}
-        </article>
-      ))}
+          </>
+        )
+        return (
+          <article
+            key={item.key}
+            className="profile-card"
+            style={{ '--ratio': item.ratio ?? 0.643 }}
+          >
+            {item.onClick ? (
+              // A card whose action is local (filter the same view) is a button,
+              // not a link to somewhere else.
+              <button type="button" className="profile-card__link" onClick={item.onClick}>
+                {content}
+              </button>
+            ) : (
+              <Link className="profile-card__link" to={item.href}>
+                {content}
+              </Link>
+            )}
+            {item.actions && item.actions.length > 0 && (
+              <div className="profile-card__actions">
+                {item.actions.map((action) =>
+                  action.icon ? (
+                    <IconButton
+                      key={action.label}
+                      label={action.label}
+                      variant={action.variant ?? 'secondary'}
+                      disabled={action.disabled}
+                      title={action.title}
+                      onClick={action.onClick}
+                    >
+                      {action.icon}
+                    </IconButton>
+                  ) : (
+                    <Button
+                      key={action.label}
+                      size="sm"
+                      variant={action.variant}
+                      className={action.className}
+                      disabled={action.disabled}
+                      title={action.title}
+                      onClick={action.onClick}
+                    >
+                      {action.label}
+                    </Button>
+                  ),
+                )}
+              </div>
+            )}
+            {!item.actions && item.action && (
+              <Button
+                size="sm"
+                className="profile-card__action"
+                disabled={item.busy}
+                onClick={item.onAction}
+              >
+                {item.busy ? '…' : item.action}
+              </Button>
+            )}
+          </article>
+        )
+      })}
       {/* A grid has no rows to level, so it needs none of these. */}
       {!uniform &&
         items.length > 0 &&

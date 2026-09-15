@@ -1,6 +1,7 @@
 import ExistingCharacterCard from './ExistingCharacterCard'
 import { PoolFilterChips } from './PoolFilterChips'
 import SeriesSuggestInput from './SeriesSuggestInput'
+import SignInPrompt from './SignInPrompt'
 import { Button, Field, Input } from './ui'
 
 /**
@@ -26,6 +27,8 @@ export default function AddManualForm({ form }) {
     nameMatch,
     catalogImage,
     catalogImageSrc,
+    canAddImages = true,
+    canAddNewCharacter = true,
     onNameChange,
     onSeriesChange,
     onRankChange,
@@ -90,6 +93,14 @@ export default function AddManualForm({ form }) {
                 The library&apos;s main image is used automatically and cannot be replaced.
               </p>
             </div>
+          ) : !canAddImages ? (
+            <div className="add-char-photo-gate">
+              <p className="mudae-preview__hint">
+                Uploading a photo needs a linked Discord account. A character from the library can
+                still be added without one.
+              </p>
+              <SignInPrompt note="to upload a photo" />
+            </div>
           ) : (
             <label className="file-upload-box" htmlFor="addCharImage">
               <svg
@@ -120,10 +131,21 @@ export default function AddManualForm({ form }) {
           )}
         </Field>
         <div className="edit-actions add-char-actions">
-          <Button variant="primary" type="submit" disabled={loading}>
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={loading || !canAddNewCharacter}
+            title={canAddNewCharacter ? undefined : 'Sign in with Discord to add a new character'}
+          >
             {loading ? 'Adding...' : 'Add Character'}
           </Button>
         </div>
+        {!canAddNewCharacter && (
+          <p className="text-meta">
+            Adding a new character needs a linked Discord account. Characters already in the library
+            can be added without one.
+          </p>
+        )}
         {status?.type === 'error' && (
           <div id="addCharStatus" className="form-error" role="alert">
             {status.message}

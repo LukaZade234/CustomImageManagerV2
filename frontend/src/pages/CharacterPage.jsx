@@ -11,6 +11,7 @@ import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
+import SignInPrompt from '../components/SignInPrompt'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
 import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
@@ -39,6 +40,7 @@ import {
 } from '../utils/downloadCustomImages'
 import { ratioOf } from '../utils/galleryRatios'
 import { isImageFileLike } from '../utils/imageFiles'
+import { pickPixel } from '../utils/imagePick'
 
 /** What the heading says while a mode is active. Browse gets nothing. */
 const MODE_LABELS = {
@@ -58,6 +60,8 @@ export default function CharacterPage() {
   const removeSaved = useRemoveSaved()
   const { data: me } = useMe()
   const addToast = useStore((s) => s.addToast)
+  // Adding an image needs a linked Discord account; everything else does not.
+  const canAddImages = Boolean(me?.signed_in)
   const queryClient = useQueryClient()
   // The gallery is server state, cached and invalidated by key rather than kept
   // in the store and refetched by hand after every mutation. The first fetch is
@@ -128,6 +132,10 @@ export default function CharacterPage() {
   const [mode, setMode] = useState('browse')
   const selectMode = mode === 'select'
   const reorderMode = mode === 'reorder'
+  // Arming the accent picker turns the portrait and gallery into a pixel
+  // sampler: the next click sets the character's colour (staff only).
+  const [accentPick, setAccentPick] = useState(false)
+  const [accentBusy, setAccentBusy] = useState(false)
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
   const [selectedUrls, setSelectedUrls] = useState([])
   const [confirmRemove, setConfirmRemove] = useState(null)
@@ -420,6 +428,43 @@ export default function CharacterPage() {
     }
   }
 
+  /**
+   * Set or clear the character's accent from a picked pixel. The server samples
+   * the image (keyed by row id, never a caller URL), so the click only has to
+   * carry the point within the image.
+   */
+  const handlePickAccent = async (payload) => {
+    setAccentBusy(true)
+    try {
+      const res = await apiClient.setAccentOverride({ name, ...payload })
+      addToast(res.manual ? 'Accent colour saved' : 'Accent reset to measured', 'success')
+      setAccentPick(false)
+      await queryClient.invalidateQueries({ queryKey: characterImagesKey(name) })
+      await queryClient.invalidateQueries({ queryKey: savedKey })
+      reloadChar()
+    } catch (err) {
+      addToast(err.message, 'error')
+    } finally {
+      setAccentBusy(false)
+    }
+  }
+
+  const handlePickAccentFromGallery = (row, point) => {
+    if (!row.thumb) {
+      addToast('That image has no thumbnail to sample', 'error')
+      return
+    }
+    handlePickAccent({ image_id: row.id, u: point.u, v: point.v })
+  }
+
+  const handlePickAccentFromPortrait = (e) => {
+    const img = e.currentTarget.querySelector('img')
+    const point = pickPixel(img, e.clientX, e.clientY)
+    handlePickAccent({ portrait: true, u: point.u, v: point.v })
+  }
+
+  const handleClearAccent = () => handlePickAccent({ clear: true })
+
   const handleToggleSave = async () => {
     try {
       if (isSaved) {
@@ -437,6 +482,11 @@ export default function CharacterPage() {
   const handleMainImageChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!canAddImages) {
+      addToast('Sign in with Discord to change the main image', 'error')
+      e.target.value = ''
+      return
+    }
     const fd = new FormData()
     fd.append('file', file)
     fd.append('character_name', name)
@@ -452,6 +502,10 @@ export default function CharacterPage() {
   const handleMainImageDrop = (e) => {
     e.preventDefault()
     setDragOver(false)
+    if (!canAddImages) {
+      addToast('Sign in with Discord to change the main image', 'error')
+      return
+    }
     const file = e.dataTransfer.files?.[0]
     if (!isImageFileLike(file)) return
     const fd = new FormData()
@@ -731,6 +785,7 @@ export default function CharacterPage() {
         onDragOverChange={setDragOver}
         onMainImageChange={handleMainImageChange}
         onMainImageDrop={handleMainImageDrop}
+        canAddImages={canAddImages}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
         onGetAiCommand={() => enterSelectMode([...customs])}
@@ -754,6 +809,17 @@ export default function CharacterPage() {
           busy: mudaeMainBusy,
           onRefreshMain: handleMudaeRefreshMain,
         }}
+        pick={accentPick}
+        onPickPortrait={handlePickAccentFromPortrait}
+        accent={{
+          canEdit: Boolean(me?.is_moderator),
+          manual: Boolean(imagesData?.accentManual),
+          pickMode: accentPick,
+          busy: accentBusy,
+          seed: seededAccent,
+          onTogglePick: () => setAccentPick((on) => !on),
+          onClear: handleClearAccent,
+        }}
       />
 
       {/*
@@ -765,9 +831,16 @@ export default function CharacterPage() {
       {/* biome-ignore lint/a11y/noStaticElementInteractions: file drop zone, see above */}
       <div
         className={`custom-images-section ${upload.dragOver ? 'drag-over' : ''}`}
-        onDragOver={upload.onDragOver}
-        onDragLeave={upload.onDragLeave}
-        onDrop={upload.onDrop}
+        onDragOver={canAddImages ? upload.onDragOver : (e) => e.preventDefault()}
+        onDragLeave={canAddImages ? upload.onDragLeave : undefined}
+        onDrop={
+          canAddImages
+            ? upload.onDrop
+            : (e) => {
+                e.preventDefault()
+                addToast('Sign in with Discord to add images', 'error')
+              }
+        }
       >
         <div className="custom-images-header-row">
           <h2 className="section-heading custom-images-heading">
@@ -808,6 +881,7 @@ export default function CharacterPage() {
                 onToggleShowHidden={() => setShowHidden((v) => !v)}
                 onOpenRemovedDrawer={openRemovedDrawer}
                 onAddImage={openCustomFilePicker}
+                canAddImages={canAddImages}
               />
             </div>
           )}
@@ -871,6 +945,8 @@ export default function CharacterPage() {
           onOpenImage={openModal}
           onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
+          pick={accentPick}
+          onPick={handlePickAccentFromGallery}
           /*
             An empty gallery used to be a blank strip under the drop hint, which
             reads as something that failed to load rather than a character
@@ -899,14 +975,20 @@ export default function CharacterPage() {
                 className="gallery-empty"
                 title="No custom images yet"
                 description={
-                  isNarrow
-                    ? `Add one and it becomes part of the $ai command for ${name}.`
-                    : `Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`
+                  !canAddImages
+                    ? `Adding images needs a linked Discord account. Once signed in, an image becomes part of the $ai command for ${name}.`
+                    : isNarrow
+                      ? `Add one and it becomes part of the $ai command for ${name}.`
+                      : `Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`
                 }
                 action={
-                  <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
-                    Add image
-                  </Button>
+                  canAddImages ? (
+                    <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
+                      Add image
+                    </Button>
+                  ) : (
+                    <SignInPrompt />
+                  )
                 }
               />
             )

@@ -10,7 +10,12 @@ export default defineConfig({
     // URL arrives inside an API response, so nothing in src/ mentions it and it
     // was missed -- every thumbnail 404'd in dev while working in production.
     proxy: {
-      '/api': 'http://localhost:5000',
+      // changeOrigin stays off so Flask sees the origin the browser is actually
+      // on. Sign-in picks its OAuth callback from that host (a laptop on
+      // localhost, a phone on the Tailscale address), and Discord only accepts a
+      // callback registered verbatim; rewriting the Host would collapse both to
+      // localhost:5000 and send every flow to one of them.
+      '/api': { target: 'http://localhost:5000', changeOrigin: false },
       '/thumbs': 'http://localhost:5000',
       '/characters': 'http://localhost:5000',
     },

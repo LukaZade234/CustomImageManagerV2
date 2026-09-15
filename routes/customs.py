@@ -192,6 +192,7 @@ def list_customs():
 
 
 @customs_bp.route("/api/custom-image", methods=["POST"])
+@identity.require_signed_in
 @rate_limited("upload")
 def add_custom_image():
     try:
@@ -289,6 +290,7 @@ def add_custom_image():
 
 
 @customs_bp.route("/api/import-custom-images-from-urls", methods=["POST"])
+@identity.require_signed_in
 @rate_limited("import_urls")
 def import_custom_images_from_urls():
     """Fetch image URLs server-side (drag-from-web: Pinterest, etc.) and add as custom images."""
@@ -397,7 +399,10 @@ def get_custom_images(char_name):
                 accent_seed = accent_extract.ensure_accent(char_name)
             except Exception:
                 log.exception("customs.accent_failed", character=char_name)
-        return jsonify({"rows": rows, "accentSeed": accent_seed})
+        # Tells the editor whether the seed was measured or hand-picked, so it
+        # can show the override state and offer to clear it.
+        accent_manual = bool(db.get_accent_override(char_name))
+        return jsonify({"rows": rows, "accentSeed": accent_seed, "accentManual": accent_manual})
     except Exception:
         log.exception("customs.read_failed")
     return jsonify({"rows": [], "accentSeed": None})

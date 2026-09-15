@@ -47,7 +47,9 @@ from routes.catalog import catalog_bp
 from routes.characters import characters_bp
 from routes.customs import customs_bp
 from routes.media import media_bp
+from routes.moderation import moderation_bp
 from routes.mudae import mudae_bp
+from routes.notifications import notifications_bp
 from routes.spa import spa_bp
 
 # Before anything else that might log, so no startup line is lost.
@@ -136,7 +138,9 @@ app.register_blueprint(catalog_bp)
 app.register_blueprint(characters_bp)
 app.register_blueprint(customs_bp)
 app.register_blueprint(media_bp)
+app.register_blueprint(moderation_bp)
 app.register_blueprint(mudae_bp)
+app.register_blueprint(notifications_bp)
 app.register_blueprint(spa_bp)
 
 

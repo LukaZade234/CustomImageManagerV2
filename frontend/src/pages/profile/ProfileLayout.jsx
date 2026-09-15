@@ -23,8 +23,12 @@ const TABS = [
   { to: '/profile/removed', label: 'Removed' },
 ]
 
+/** The moderation surface is a staff tab, not topbar chrome. */
+const MODERATION_TAB = { to: '/profile/moderation', label: 'Moderation' }
+
 export default function ProfileLayout() {
   const { data: me } = useMe()
+  const tabs = me?.is_moderator ? [...TABS, MODERATION_TAB] : TABS
 
   return (
     <div className="profile">
@@ -41,7 +45,7 @@ export default function ProfileLayout() {
       </Card>
 
       <nav className="profile-tabs" aria-label="Profile sections">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}

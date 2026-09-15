@@ -1,12 +1,15 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import RequireModerator from './components/RequireModerator'
 import Toast from './components/Toast'
 import { Button, Card } from './components/ui'
 import AddPage from './pages/AddPage'
 import CharacterPage from './pages/CharacterPage'
 import CustomsPage from './pages/CustomsPage'
 import HomePage from './pages/HomePage'
+import ModerationPage from './pages/moderation/ModerationPage'
+import NotificationsPage from './pages/NotificationsPage'
 import HiddenTab from './pages/profile/HiddenTab'
 import HistoryTab from './pages/profile/HistoryTab'
 import ProfileLayout from './pages/profile/ProfileLayout'
@@ -66,8 +69,19 @@ function App() {
               <Route path="history" element={<HistoryTab />} />
               <Route path="hidden" element={<HiddenTab />} />
               <Route path="removed" element={<RemovedTab />} />
+              <Route
+                path="moderation"
+                element={
+                  <RequireModerator>
+                    <ModerationPage />
+                  </RequireModerator>
+                }
+              />
             </Route>
             <Route path="/search" element={<SearchResultsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            {/* The old top-level route, kept as a redirect for existing links. */}
+            <Route path="/moderation" element={<Navigate to="/profile/moderation" replace />} />
             <Route path="/character/:name" element={<CharacterPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

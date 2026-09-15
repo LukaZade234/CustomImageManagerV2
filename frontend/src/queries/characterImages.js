@@ -19,7 +19,8 @@ export async function fetchCharacterImages(name) {
   const payload = await apiClient.getCustomImagesForChar(name)
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []
   const accentSeed = Array.isArray(payload) ? null : (payload?.accentSeed ?? null)
-  return { rows, accentSeed }
+  const accentManual = Array.isArray(payload) ? false : Boolean(payload?.accentManual)
+  return { rows, accentSeed, accentManual }
 }
 
 export function useCharacterImages(name) {

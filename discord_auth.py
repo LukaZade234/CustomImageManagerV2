@@ -47,18 +47,31 @@ def owner_discord_id() -> str:
     return os.environ.get("OWNER_DISCORD_ID", "").strip()
 
 
-def redirect_uri() -> str:
+def redirect_uri(origin: str | None = None) -> str:
     """Where Discord sends the browser back to.
 
     Configured explicitly rather than derived from the request. Behind the
     Cloudflare Tunnel the app sees `http://localhost:8080`, so anything built
     from `request.url_root` would not match what is registered with Discord —
     and Discord compares this string exactly.
+
+    `DISCORD_REDIRECT_URI` may hold several comma-separated callbacks: one person
+    can sign in from a laptop on `localhost` and a phone on a Tailscale address,
+    and Discord only accepts a callback registered verbatim. When `origin` — the
+    scheme and host the browser is actually using — names one of them, that one
+    is chosen, so the session cookie lands on the origin the flow started on.
+    Anything else falls back to the first entry, which leaves a single-URI
+    production config behaving exactly as before.
     """
-    configured_uri = os.environ.get("DISCORD_REDIRECT_URI", "").strip()
-    if configured_uri:
-        return configured_uri
-    return "http://localhost:5000/api/auth/discord/callback"
+    configured = os.environ.get("DISCORD_REDIRECT_URI", "").strip()
+    if not configured:
+        return "http://localhost:5000/api/auth/discord/callback"
+    candidates = [uri.strip() for uri in configured.split(",") if uri.strip()]
+    if origin:
+        wanted = f"{origin.rstrip('/')}/api/auth/discord/callback"
+        if wanted in candidates:
+            return wanted
+    return candidates[0]
 
 
 def frontend_base() -> str:
@@ -111,13 +124,13 @@ def verify_state(secret_key: str, token: str | None) -> str | None:
     return safe_next_path(payload.get("r"))
 
 
-def authorize_url(state: str) -> str:
+def authorize_url(state: str, origin: str | None = None) -> str:
     from urllib.parse import urlencode
 
     query = urlencode(
         {
             "client_id": client_id(),
-            "redirect_uri": redirect_uri(),
+            "redirect_uri": redirect_uri(origin),
             "response_type": "code",
             "scope": SCOPE,
             "state": state,
@@ -129,7 +142,7 @@ def authorize_url(state: str) -> str:
     return f"{AUTHORIZE_URL}?{query}"
 
 
-def exchange_code(code: str) -> str:
+def exchange_code(code: str, origin: str | None = None) -> str:
     """Trade the one-time code for an access token. Raises on failure."""
     response = requests.post(
         TOKEN_URL,
@@ -138,7 +151,7 @@ def exchange_code(code: str) -> str:
             "client_secret": client_secret(),
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": redirect_uri(),
+            "redirect_uri": redirect_uri(origin),
         },
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         timeout=TIMEOUT_SECONDS,

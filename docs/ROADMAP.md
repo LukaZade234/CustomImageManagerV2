@@ -608,6 +608,38 @@ Not planned as a phase; it grew out of "the home page should look like a real si
 
 ---
 
+## Phase 13 — Moderation _(phase 1 done)_
+
+The roles from Phase 6 were real but had no screen, so answering *"what has this person been
+doing?"* meant guessing a character page or opening SQLite. This adds the surface, deliberately as
+**inspection, not a queue** — see `docs/MODERATION.md` for the full plan and `DECISIONS.md` §5 for
+why it does not contradict the anti-queue argument there.
+
+- [x] **The review surface** (staff-only). A master list of every contributor who added or removed
+      an image, beside a detail pane of their additions or removals, filtered by character and paged
+      on the server. Backed by `GET /api/moderation/users` and
+      `/api/moderation/users/<ref>/images` and `/characters`, gated by a shared `require_moderator`
+      decorator. Reshaped around a contributor profile with stats, a character-level view, and image
+      restore; role changes are owner-only. It is a **profile tab** (`/profile/moderation`), not a
+      topbar entry.
+- [x] **Restore an image from the moderation page.** Reuses the existing `/api/restore-images`.
+- [x] **Promote / demote a contributor (owner only).** `POST /api/moderation/users/<ref>/role`,
+      wrapping `db.set_role`, with a plus/minus control and a confirmation. Moderators hold every
+      other power but cannot change roles.
+- [x] **Notifications** (the moderation channel). A topbar entry beside a profile-tab moderation
+      surface: a plain list of messages to you, mechanical (a role change) and owner broadcasts
+      (everyone, or moderators only). Ordinary messages are dismissible by their recipient and
+      deletable by the owner for everyone; **pinned** ones are global, always visible (including to
+      later accounts), and cannot be dismissed. This is what "warn" will use.
+- [ ] **Phase 2 — warn / suspend / ban.** Still inert; needs a decision on what each means for a
+      cookie identity, and now has the notification channel to say them through.
+- [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
+      that may not exist, a cascade, and a second confirmation. The first irreversible action.
+- [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and
+      whether the honest case for it is a statistic rather than a queue.
+
+---
+
 ## Testing detail (harness set up in Phase 1)
 
 The harness goes up in Phase 1. These are the rules worth covering, in the order they become
@@ -647,6 +679,12 @@ relevant — the concurrency test is written first, before Phase 2:
   `/images` / `/character_images` routes, the local-file accent branch, the dev proxies and the
   R2 upload script were all removed. Forward-only: `.git` still holds the blobs, so clones are
   unchanged until a history rewrite.
+- **Rework the accent-colour extractor.** The dominant-colour method cannot infer a character's
+  *signature* colour when a background or hair out-areas it. The manual override is the interim
+  safety valve; the promising routes are percentile tuning for washed-out results, a labelled
+  calibration set built from the overrides, and foreground segmentation for background-beats-
+  subject. Every idea tried (and reverted) is recorded in **[ACCENT.md](ACCENT.md)** — read it
+  first.
 - **Per-user saved selections and personal ordering.** Deliberately deferred; hide-for-me is the
   minimum that solves the actual problem.
 - **Revisit retirement policy with real take data.** Take counts are being logged from Phase 6

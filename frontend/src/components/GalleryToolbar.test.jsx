@@ -13,6 +13,7 @@
  */
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { GalleryToolbar } from './GalleryToolbar'
 
@@ -108,5 +109,24 @@ describe('GalleryToolbar', () => {
     const shown = setup({ hiddenCount: 3, showHidden: true })
     expect(screen.getByRole('button', { name: /Hide them again/i })).toBeInTheDocument()
     await clickExpecting(/Unhide all \(3\)/i, shown, 'onUnhideAll')
+  })
+
+  it('offers a sign-in prompt instead of Add image to a cookie-only visitor', () => {
+    cleanup()
+    const handlers = Object.fromEntries(handlerNames.map((name) => [name, vi.fn()]))
+    render(
+      <MemoryRouter>
+        <GalleryToolbar
+          totalCount={5}
+          hiddenCount={0}
+          showHidden={false}
+          uploadBusy={false}
+          canAddImages={false}
+          {...handlers}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('button', { name: /Add image/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Sign in with Discord/i })).toBeInTheDocument()
   })
 })
