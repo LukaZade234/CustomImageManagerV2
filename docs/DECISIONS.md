@@ -565,6 +565,13 @@ Animanga, `g` Game), so `wa` is a woman in the Animanga pool and `hg` a man in t
 touching `updated_at` (it is not a user edit); a `$im` lookup remains the authority where the two
 disagree.
 
+The Edit form also sets them by hand, using the same four toggles as the Add form. That path is
+deliberately **exact**, not merge-only: `db.update_character` writes whatever the editor holds,
+including clearing a gender or emptying `pools`, where `set_character_traits` and a `$im` refresh
+never clear. The distinction is the source — a card that arrived sparse is not evidence, but a
+person pressing Save is. An edit stays on the working row (`is_female`, `is_male`, `pools`); the
+catalog's facets are the scrape and are left alone, so search filtering still reads the catalog.
+
 ### Bulk-adding a series: one DM, then review
 
 Bulk-adding used to run `$ima` for the series and then one `$im` per character, which is both slow

@@ -12,6 +12,7 @@ from __future__ import annotations
 MAX_CHAR_NAME_LENGTH = 200
 MAX_SERIES_LENGTH = 300
 MAX_RANK_LENGTH = 50
+MAX_POOLS_LENGTH = 100
 
 
 def validate_character_name(name: str | None) -> tuple[bool, str | None]:

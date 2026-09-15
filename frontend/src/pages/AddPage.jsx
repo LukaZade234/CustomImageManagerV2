@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiClient, getImageUrl, getPortraitUrl } from '../api'
 import ExistingCharacterCard from '../components/ExistingCharacterCard'
 import { GenderMarks } from '../components/GenderMarks'
+import { PoolFilterChips } from '../components/PoolFilterChips'
 import SeriesSuggestInput from '../components/SeriesSuggestInput'
 import { Button, Card, Field, Input } from '../components/ui'
 import { useCatalogMatch, useCatalogSuggest } from '../hooks/useCatalogSuggest'
@@ -41,13 +42,6 @@ function mudaeCandidatesFromResponse(res) {
   }
   return (res?.candidates || []).map((n) => ({ name: n, label: n }))
 }
-
-const POOL_FILTERS = [
-  { key: 'waifu', label: 'Waifu' },
-  { key: 'husbando', label: 'Husbando' },
-  { key: 'anime', label: 'Anime' },
-  { key: 'game', label: 'Game' },
-]
 
 export default function AddPage() {
   const [name, setName] = useState('')
@@ -736,22 +730,7 @@ export default function AddPage() {
             </p>
           )}
         </Field>
-        <fieldset className="pool-filter">
-          <legend className="pool-filter__legend">Gender And Roulette Pools (Optional)</legend>
-          <div className="pool-filter__options">
-            {POOL_FILTERS.map(({ key, label }) => (
-              <Button
-                key={key}
-                variant="secondary"
-                size="sm"
-                aria-pressed={poolFilter.includes(key)}
-                onClick={() => togglePool(key)}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        </fieldset>
+        <PoolFilterChips value={poolFilter} onToggle={togglePool} />
         <Field label="Rank (Optional)" htmlFor="addCharRank" className="full-width">
           <Input
             id="addCharRank"
