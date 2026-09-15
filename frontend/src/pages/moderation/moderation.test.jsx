@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   listModerationUserCharacters: vi.fn(),
   listModerationHistory: vi.fn(),
   restoreImages: vi.fn(),
+  purgeCustomImage: vi.fn(),
   setModerationRole: vi.fn(),
   warnModerationUser: vi.fn(),
   suspendModerationUser: vi.fn(),
@@ -92,6 +93,7 @@ beforeEach(() => {
   api.listModerationUserCharacters.mockReset()
   api.listModerationHistory.mockReset()
   api.restoreImages.mockReset()
+  api.purgeCustomImage.mockReset()
   api.setModerationRole.mockReset()
   api.warnModerationUser.mockReset()
   api.suspendModerationUser.mockReset()
@@ -115,6 +117,7 @@ beforeEach(() => {
   api.listModerationUserCharacters.mockResolvedValue({ items: [], total: 0, total_pages: 1 })
   api.listModerationHistory.mockResolvedValue({ items: [], total: 0 })
   api.restoreImages.mockResolvedValue({ success: true, restored: 1 })
+  api.purgeCustomImage.mockResolvedValue({ success: true })
   api.setModerationRole.mockResolvedValue({ success: true })
   api.warnModerationUser.mockResolvedValue({ success: true, id: 1 })
   api.suspendModerationUser.mockResolvedValue({ success: true, id: 2 })
@@ -289,7 +292,7 @@ describe('the profile and its work', () => {
     }
   })
 
-  it('renders the image verbs, with permanent delete inert', async () => {
+  it('lets the owner permanently delete an image, after confirming', async () => {
     api.listModerationUserImages.mockResolvedValue({
       items: [
         {
@@ -308,9 +311,46 @@ describe('the profile and its work', () => {
       added: 2,
       removed: 1,
     })
+    const user = userEvent.setup()
     renderModeration('/moderation?user=ref-ada&tab=images&state=removed')
-    expect(await screen.findByRole('button', { name: 'Restore' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled()
+    await screen.findByRole('button', { name: 'Restore' })
+
+    await user.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    // Nothing fires until the second, explicit confirmation.
+    expect(api.purgeCustomImage).not.toHaveBeenCalled()
+    await user.click(await screen.findByRole('button', { name: 'Delete forever' }))
+    await waitFor(() =>
+      expect(api.purgeCustomImage).toHaveBeenCalledWith('Rem', 'https://cdn/x.png'),
+    )
+  })
+
+  it('keeps permanent delete out of a moderator’s hands', async () => {
+    api.getMe.mockResolvedValue({
+      handle: 'Amber Otter',
+      role: 'moderator',
+      is_moderator: true,
+      is_owner: false,
+    })
+    api.listModerationUserImages.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          url: 'https://cdn/x.png',
+          thumb: '/thumbs/7.webp',
+          width: 1,
+          height: 1,
+          character: 'Rem',
+          removed_at: null,
+          removed_reason: '',
+        },
+      ],
+      total: 1,
+      total_pages: 1,
+      added: 1,
+      removed: 0,
+    })
+    renderModeration('/moderation?user=ref-ada&tab=images')
+    expect(await screen.findByRole('button', { name: 'Delete permanently' })).toBeDisabled()
   })
 
   it('renders the character view and refetches with the chosen sort', async () => {

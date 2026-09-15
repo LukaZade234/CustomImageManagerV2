@@ -254,6 +254,12 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ character_name: charName, image_urls: imageUrls }),
     }),
+  purgeCustomImage: (charName, url) =>
+    api('/api/purge-custom-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ character_name: charName, url }),
+    }),
   getRemovedImages: (charName) => api(`/api/removed/${encodeURIComponent(charName)}`),
   reportImage: (imageId, reason) =>
     api('/api/report-image', {

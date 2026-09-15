@@ -60,7 +60,7 @@ def _upload_remote_image_to_imgchest(image_url, character_name):
         )
         if not result:
             raise ImgChestError("Failed to upload Mudae image to ImgChest")
-        _, direct_link = result
+        _, direct_link, _post_id = result
         return direct_link
     finally:
         if os.path.exists(temp_path):

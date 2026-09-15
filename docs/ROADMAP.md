@@ -644,8 +644,10 @@ why it does not contradict the anti-queue argument there.
       client address (never the address), pruned after 90 days; a contributor seen on a network a
       restricted account used is flagged on their profile. A lead for a human, not an automatic
       restriction — an IP is a household or a carrier as often as it is one person.
-- [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
-      that may not exist, a cascade, and a second confirmation. The first irreversible action.
+- [x] **Permanent delete (owner only), for images we can reach.** ImgChest refuses to delete the only
+      image in a post, so the post goes (`DELETE /v1/post/{id}`, verified live); the post id is captured
+      at upload from here on. Existing rows have none and cannot be purged. Tombstoned
+      (`purged_at`), behind a second confirmation, and the cached thumbnail is dropped.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and
       whether the honest case for it is a statistic rather than a queue.
 

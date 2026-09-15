@@ -126,8 +126,10 @@ duplicate — and every one of those has a right answer that requires no consens
 3. **Report** handles only the objective cases, with a reason attached, auto-removing at 2 distinct
    reports. Its friction is a feature — someone clearing a page will not file ten reasoned
    reports.
-4. **Nothing is ever destroyed.** Removals are soft; a Removed drawer restores in one click. This
-   is nearly free because ImgChest never deletes the underlying file (see §2).
+4. **Nothing is destroyed by the ordinary verbs.** Removals are soft; a Removed drawer restores in one
+   click. This is nearly free because ImgChest was assumed never to delete the underlying file (see
+   §2). A later owner-only **permanent delete** is the sole exception: it removes the ImgChest post,
+   which the API does allow, and keeps the row as a tombstone so the record survives.
 5. **Take counts are logged but drive nothing**, except an opt-in "sort by popular" toggle.
    Collecting them costs nothing and commits to nothing, and it means that if bloat ever does
    become real, there will be months of actual data to design against instead of another guess.

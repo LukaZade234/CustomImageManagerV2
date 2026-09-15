@@ -39,7 +39,7 @@ class TestUploadRemoteImage:
 
         def fake_upload(path, upload_name=None):
             seen["name"] = upload_name
-            return ("post-id", "https://cdn.imgchest.com/files/abc.png")
+            return ("post-id", "https://cdn.imgchest.com/files/abc.png", "post-id")
 
         monkeypatch.setattr(mudae_routes, "upload_to_imgchest", fake_upload)
 

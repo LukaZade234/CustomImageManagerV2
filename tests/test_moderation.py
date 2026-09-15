@@ -805,3 +805,83 @@ class TestNetworkLinks:
             .fetchall()
         )
         assert [r["ip_hash"] for r in rows] == ["fresh"]
+
+
+class TestPermanentDelete:
+    """The one irreversible act: delete the ImgChest post, tombstone the row.
+
+    Owner only. ImgChest will not delete the only image in a post, so the post
+    is deleted whole, which is why an image with no stored post id cannot be
+    purged and is refused with an explanation rather than a lie.
+    """
+
+    URL = "https://cdn.imgchest.com/files/purge-me.png"
+
+    def _seed(self, db, *, post_id):
+        db.ensure_identity("adder")
+        db.add_custom_images(
+            "Rem", [self.URL], added_by="adder", post_ids={self.URL: post_id} if post_id else None
+        )
+
+    def _purge(self, client):
+        return client.post(
+            "/api/purge-custom-image", json={"character_name": "Rem", "url": self.URL}
+        )
+
+    def test_a_plain_user_cannot_purge(self, client, clean_db):
+        self._seed(clean_db, post_id="post-1")
+        assert self._purge(client).status_code == 403
+
+    def test_the_owner_deletes_the_post_and_tombstones_the_row(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        calls = []
+        monkeypatch.setattr("routes.customs.delete_imgchest_post", lambda pid: calls.append(pid))
+
+        assert self._purge(client).status_code == 200
+        assert calls == ["post-1"]
+
+        row = clean_db.get_image_for_purge("Rem", self.URL)
+        assert row["state"] == "removed"
+        assert row["purged_at"] is not None
+        # Gone from the Removed drawer, and it cannot be restored.
+        assert clean_db.get_removed_for("Rem") == []
+        assert clean_db.restore_custom_images("Rem", [self.URL]) == 0
+
+    def test_an_image_with_no_post_id_is_refused(self, client, clean_db, make_moderator):
+        self._seed(clean_db, post_id=None)
+        make_moderator("owner")
+        res = self._purge(client)
+        assert res.status_code == 400
+        assert "before permanent delete" in res.get_json()["error"]
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is None
+
+    def test_a_failed_delete_leaves_the_row_alone(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        from imgchest_utils import ImgChestError
+
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+
+        def boom(_pid):
+            raise ImgChestError("Image hosting refused the delete (HTTP 500).")
+
+        monkeypatch.setattr("routes.customs.delete_imgchest_post", boom)
+        assert self._purge(client).status_code == 502
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is None
+
+    def test_purging_twice_and_unknown_images(self, client, clean_db, make_moderator, monkeypatch):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        monkeypatch.setattr("routes.customs.delete_imgchest_post", lambda pid: None)
+
+        assert self._purge(client).status_code == 200
+        assert self._purge(client).status_code == 400  # already purged
+        unknown = client.post(
+            "/api/purge-custom-image",
+            json={"character_name": "Rem", "url": "https://cdn.imgchest.com/files/nope.png"},
+        )
+        assert unknown.status_code == 404

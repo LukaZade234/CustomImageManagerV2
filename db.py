@@ -1711,6 +1711,7 @@ def add_custom_images(
     urls: Iterable[str],
     added_by: str | None = None,
     dimensions: dict[str, tuple[int, int]] | None = None,
+    post_ids: dict[str, str] | None = None,
 ) -> int:
     """Append images, skipping any URL already present. Returns how many landed.
 
@@ -1719,6 +1720,10 @@ def add_custom_images(
     `dimensions` maps url -> (width, height). Supplying it is what keeps the
     gallery from reflowing as images arrive; it is optional because the import
     paths do not always have the file to hand.
+
+    `post_ids` maps url -> the ImgChest post id, which is what a later permanent
+    delete needs. Optional for the same reason dimensions is, and absent
+    entirely for rows that predate permanent delete.
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
@@ -1733,13 +1738,14 @@ def add_custom_images(
         position = int(row["p"]) + 1
         added = 0
         sizes = dimensions or {}
+        posts = post_ids or {}
         for url in urls:
             width, height = sizes.get(url, (None, None))
             cur = conn.execute(
                 "INSERT INTO custom_images"
-                " (character_id, url, position, added_by, added_at, width, height)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
-                (char_id, url, position, added_by, _now(), width, height),
+                " (character_id, url, position, added_by, added_at, width, height, imgchest_post_id)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
+                (char_id, url, position, added_by, _now(), width, height, posts.get(url)),
             )
             if cur.rowcount:
                 position += 1
@@ -2067,7 +2073,7 @@ def get_removed_by_identity(identity_id: str) -> list[dict]:
         "       c.name AS character"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
-        " WHERE i.removed_by = ? AND i.state = 'removed'"
+        " WHERE i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         " ORDER BY i.removed_at DESC, i.id DESC",
         (identity_id,),
     )
@@ -2460,7 +2466,7 @@ def get_removed_for(char_name: str) -> list[dict]:
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
         "  LEFT JOIN identities remover ON remover.id = i.removed_by"
-        " WHERE c.name = ? AND i.state = 'removed'"
+        " WHERE c.name = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         " ORDER BY i.removed_at DESC, i.id DESC",
         (char_name,),
     )
@@ -2495,12 +2501,56 @@ def restore_custom_images(char_name: str, urls: Iterable[str]) -> int:
             f"UPDATE custom_images"
             f"   SET state = 'active', removed_by = NULL, removed_at = NULL,"
             f"       removed_reason = NULL"
-            f" WHERE character_id = ? AND state = 'removed' AND url IN ({placeholders})",
+            f" WHERE character_id = ? AND state = 'removed' AND purged_at IS NULL AND url IN ({placeholders})",
             (char_id, *wanted),
         )
         if cur.rowcount:
             conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (_now(), char_id))
         return cur.rowcount
+
+
+# --- Permanent delete ----------------------------------------------------
+#
+# The one irreversible act. ImgChest refuses to delete the only image in a post,
+# so the post is what goes; the row stays as a tombstone so the record does not
+# silently vanish, hidden from every removed list and refused by restore.
+
+
+def get_image_for_purge(char_name: str, url: str) -> dict | None:
+    """The row a permanent delete is about, with the handle it needs."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT i.id, i.url, i.state, i.purged_at, i.imgchest_post_id"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE c.name = ? AND i.url = ?",
+        (char_name, url),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def purge_custom_image(char_name: str, url: str, actor_id: str) -> bool:
+    """Tombstone a row, after its ImgChest post has already been deleted.
+
+    `state` becomes 'removed' with `purged_at` set, which hides it from every
+    removed list and blocks restore: the record stays for the audit, but nothing
+    can bring the image back. False if the row is unknown or already purged.
+    """
+    with transaction() as conn:
+        char_id = _character_id(conn, char_name)
+        if char_id is None:
+            return False
+        now = _now()
+        cur = conn.execute(
+            "UPDATE custom_images"
+            "   SET state = 'removed', purged_at = ?, removed_by = ?,"
+            "       removed_at = ?, removed_reason = 'permanently deleted'"
+            " WHERE character_id = ? AND url = ? AND purged_at IS NULL",
+            (now, actor_id, now, char_id, url),
+        )
+        if cur.rowcount:
+            conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (now, char_id))
+        return bool(cur.rowcount)
 
 
 # --- Hide for me --------------------------------------------------------
@@ -2960,7 +3010,7 @@ def list_images_by_identity(
     per_page = max(1, min(100, int(per_page)))
 
     if state == "removed":
-        where = "i.removed_by = ? AND i.state = 'removed'"
+        where = "i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         order = "COALESCE(i.removed_at, i.added_at) DESC, i.id DESC"
     else:
         where = "i.added_by = ? AND i.state = 'active'"
@@ -2996,7 +3046,7 @@ def list_images_by_identity(
     totals = conn.execute(
         "SELECT"
         "  SUM(CASE WHEN added_by = ? AND state = 'active' THEN 1 ELSE 0 END) AS added,"
-        "  SUM(CASE WHEN removed_by = ? AND state = 'removed' THEN 1 ELSE 0 END) AS removed"
+        "  SUM(CASE WHEN removed_by = ? AND state = 'removed' AND purged_at IS NULL THEN 1 ELSE 0 END) AS removed"
         "  FROM custom_images",
         (identity_id, identity_id),
     ).fetchone()
@@ -3050,7 +3100,7 @@ def list_characters_by_identity(
     direction = "DESC" if order == "desc" else "ASC"
 
     if state == "removed":
-        where = "i.removed_by = ? AND i.state = 'removed'"
+        where = "i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
         recency = "MAX(i.removed_at)"
     else:
         where = "i.added_by = ? AND i.state = 'active'"

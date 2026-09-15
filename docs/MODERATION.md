@@ -72,10 +72,10 @@ history; Images is their work, readable as a paged image grid (added or removed,
 character) or as a character-level list sorted by rank, image count, name or recency.
 
 **Phase 1 was the full UI and the `GET` endpoints behind it, with every acting button present and
-inert.** Four of those verbs are now live: **restore** an image, the **owner-only** promote/demote,
-**warn** a person (a message), and **suspend / ban** (a state, below). **Permanent delete stays
-inert** — removing the file from ImgChest is the app's first irreversible act and needs its own
-decision (and a second confirmation) first.
+inert.** All of those verbs are now live: **restore** an image, the **owner-only** promote/demote,
+**warn** a person (a message), **suspend / ban** (a state, below), and **permanent delete** (the one
+irreversible act, below). The last is owner-only and reachable only for images uploaded after the
+change; the rest of the library cannot be purged and says so.
 
 ### Decisions taken
 
@@ -122,10 +122,9 @@ leak back onto a public surface from here.
 
 #### Named out of scope
 
-- **The remaining action logic.** Restore, promote/demote, warn, suspend and ban are wired (see
-  below). **Permanent delete** is inert: it removes the image from ImgChest as well as the row, and
-  it is the first irreversible action in the app, so it needs its own decision (and a second
-  confirmation) first.
+- **The remaining action logic.** Restore, promote/demote, warn, suspend, ban and permanent delete are
+  all wired (see below). The last is owner-only and limited to images uploaded after it shipped; the
+  rest of the library has no stored ImgChest post id and cannot be purged.
 - **Reading `image_reports`** — see above.
 - **The ~8,547 unattributed images** (`added_by IS NULL`, migrated from v1). They have no actor, so
   they cannot appear under a contributor, and they are not a moderation concern — they are the
@@ -574,6 +573,45 @@ through the proxy), and a VPN defeats it. It is a lead, not proof.
 
 ---
 
+## Permanent delete
+
+The app's one irreversible act, and the exception to "nothing is ever hard-deleted".
+
+**What research settled.** ImgChest does expose deletion, but not the one we wanted: `DELETE
+/v1/file/{id}` is refused with *"You can't delete the only image on a post"*, and every upload here is
+a single-image post. The reachable lever is `DELETE /v1/post/{id}`, which removes the post and its
+files — so the **post id** is what a purge needs. The create-post response carries it as `data.id`; the
+uploader already had it and threw it away. There is **no file→post lookup** (`GET /v1/file/{id}`
+returns an empty `200`), so an image whose post id was never stored cannot be purged. We probed for an
+undocumented merge endpoint too — it is a website-only, session-authenticated feature, not on the API.
+
+**So:** new uploads store `imgchest_post_id`; a purge deletes that post. Existing rows have none and
+the route refuses them, naming the reason, rather than pretending. Owner-only, and behind a second,
+explicit confirmation — an `$ai` command already copied into Discord breaks, and only a holding period
+could soften that (none is built).
+
+**The tombstone.** The row is not deleted. It goes to `state='removed'` with `purged_at` set, hidden
+from every removed list and refused by restore: the record survives for the audit, but nothing can
+bring the image back. The cached thumbnail goes with it. The API's own `state` CHECK predates this, so
+`purged` is a column, not a state value.
+
+### Backend
+- Migration `020_permanent_delete.sql`: `custom_images.imgchest_post_id` (the purge handle) and
+  `custom_images.purged_at` (the tombstone). Every `state='removed'` query gained `purged_at IS NULL`,
+  and restore refuses a purged row.
+- `imgchest_utils.delete_imgchest_post` — `DELETE /v1/post/{id}` with the same retry/backoff as the
+  upload; a `404` counts as success (already gone), a real refusal raises.
+- `db.get_image_for_purge`, `db.purge_custom_image`, and `add_custom_images(..., post_ids=…)`.
+- `routes/customs.py`: `POST /api/purge-custom-image` (`character_name`, `url`), owner-only: verify,
+  delete the post, tombstone, drop the thumbnail.
+
+### Frontend
+- `UserWork.jsx`: **Delete permanently** is enabled for the owner, opens a confirmed `ConfirmDialog`
+  ("Delete forever"), and is disabled with a reason for anyone else. `queries/moderation.js` adds
+  `usePurgeModerationImage`, which refreshes both work views and the contributor counts.
+
+---
+
 ## Later phases
 
 Sketches only. Each needs its own decision before it is built, and none is committed to by phase 1.
@@ -586,13 +624,15 @@ Discord id, so it survives a new cookie. Both leave the account able to read and
 refuse every write. The owner alone lifts them. The one accepted gap is a *different* Discord account,
 which nothing in this design can stop.
 
-**Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
-Permanent delete does not, and it is the first irreversible action in the app: it would remove the
-row *and* the file from ImgChest. It **must require a second, explicit confirmation** — a popup the
-operator clicks through after the first — so a misclick can never destroy an image, and the button
-stays inert until that exists. The other decisions it needs: whether ImgChest even exposes a delete,
-what happens to `$ai` commands already copied out, and whether a "recently destroyed" holding period
-is warranted.
+**Phase 3 — acting on an image, including permanent delete. Done, for images we can reach.** Research
+settled what was unknown: ImgChest exposes `DELETE /v1/post/{id}` (its `file` delete refuses to remove
+the only image in a post, and every upload here is a single-image post). So the *post* is what goes,
+and it needs the post id — captured from the create response (`data.id`) and stored per image from now
+on. Existing rows have none, and there is no file→post lookup, so they cannot be purged; the route
+refuses them with an explanation rather than pretending. It is owner-only and the app's one
+irreversible act: a second, explicit confirmation, and a tombstone (`purged_at`) so the record does not
+silently vanish. The known cost stands — an `$ai` command already copied into Discord breaks — which is
+the argument a holding period would answer, and none is built.
 
 **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, given that §1
 designed it to work *without* a human. The honest case for reading it is diagnostic rather than

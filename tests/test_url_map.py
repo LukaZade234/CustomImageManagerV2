@@ -74,6 +74,7 @@ EXPECTED_ROUTES = {
     ("/api/notifications/delete", "POST"),
     ("/api/notifications/dismiss", "POST"),
     ("/api/notifications/read", "POST"),
+    ("/api/purge-custom-image", "POST"),
     ("/api/removed/<path:char_name>", "GET"),
     ("/api/reorder-custom-images", "POST"),
     ("/api/report-image", "POST"),

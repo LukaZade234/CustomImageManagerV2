@@ -166,3 +166,19 @@ export function useDeleteModerationHistory() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['moderation-history'] }),
   })
 }
+
+/**
+ * Owner-only: permanently delete an image — its ImgChest post, then a tombstone.
+ * Both work views have lost a row, and the contributor counts have changed.
+ */
+export function usePurgeModerationImage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ character, url }) => apiClient.purgeCustomImage(character, url),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['moderation-user-images'] })
+      queryClient.invalidateQueries({ queryKey: ['moderation-user-characters'] })
+      queryClient.invalidateQueries({ queryKey: moderationUsersKey })
+    },
+  })
+}

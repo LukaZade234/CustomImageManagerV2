@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the nineteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the twenty migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -157,7 +157,7 @@ because that had to stop being true.
 
 | Table | Rows (prod) | What it holds |
 |---|---|---|
-| `custom_images` | 8,560 | The library. Id, url, content hash, position, owner, state, dimensions |
+| `custom_images` | 8,560 | The library. Id, url, content hash, position, owner, state, dimensions, ImgChest post id (for permanent delete) |
 | `characters` | 1,705 | Name, folded name key, series, rank, main image, gender, pools, timestamps |
 | `image_takes` | 271 | `copy_command` / `download` events, per image |
 | `rate_limit_hits` | — | Fixed-window counters, swept after a day |
@@ -174,7 +174,7 @@ because that had to stop being true.
 | `moderation_actions` | — | Staff record of a warn/suspend/ban sent a contributor; the delivered notification points back at it |
 | `moderation_status` | — | The live restriction on an account: `suspended` (with an end) or `banned` (open-ended) |
 | `identity_networks` | — | Keyed hashes of the networks each identity has written from, pruned after 90 days — a moderation lead, not a rule |
-| `schema_migrations` | 19 | Which migrations have run |
+| `schema_migrations` | 20 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),

@@ -11,6 +11,7 @@ import {
   useModerationUserCharacters,
   useModerationUserImages,
   useModerationUsers,
+  usePurgeModerationImage,
   useRestoreModerationImage,
   useSetModerationRole,
   useSuspendModerationUser,
@@ -156,6 +157,7 @@ export default function ModerationPage() {
   const { data: me } = useMe()
   const addToast = useStore((s) => s.addToast)
   const restoreImage = useRestoreModerationImage()
+  const purgeImage = usePurgeModerationImage()
   const setRole = useSetModerationRole()
   const warnUser = useWarnModerationUser()
   const suspendUser = useSuspendModerationUser()
@@ -169,6 +171,15 @@ export default function ModerationPage() {
       { character: row.character, url: row.url },
       {
         onSuccess: () => addToast('Image restored', 'success'),
+        onError: (err) => addToast(err.message, 'error'),
+      },
+    )
+  }
+  const handlePurge = (row) => {
+    purgeImage.mutate(
+      { character: row.character, url: row.url },
+      {
+        onSuccess: () => addToast('Image permanently deleted', 'success'),
         onError: (err) => addToast(err.message, 'error'),
       },
     )
@@ -341,6 +352,8 @@ export default function ModerationPage() {
                 onShowCharacter={showCharacterImages}
                 onRestore={handleRestore}
                 restoringUrl={restoringUrl}
+                onPurge={handlePurge}
+                canPurge={Boolean(me?.is_owner)}
               />
             </div>
           )}
