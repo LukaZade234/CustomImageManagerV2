@@ -377,22 +377,46 @@ def apply_character_traits(traits: Iterable[tuple[str, bool, bool, str]]) -> int
     return changed
 
 
-def update_character(orig_name: str, new_name: str, series: str, rank: str) -> bool:
+def update_character(
+    orig_name: str,
+    new_name: str,
+    series: str,
+    rank: str,
+    *,
+    is_female: bool | None = None,
+    is_male: bool | None = None,
+    pools: str | None = None,
+) -> bool:
     """Rename and re-describe. False if orig_name is unknown.
 
     This is the whole rename: images, bookmarks and the timestamp all hang off
     `characters.id`, so nothing else has to be touched. v1 needed a 67-line
     cascade across three documents here, which could half-fail.
+
+    The traits are optional and set exactly when supplied -- unlike
+    `set_character_traits`, which merges a fresh card and never clears. An edit
+    is a person saying what the character is, so an empty `pools` or a cleared
+    gender has to stick. `None` leaves the stored value alone.
     """
     with transaction() as conn:
         char_id = _character_id(conn, orig_name)
         if char_id is None:
             return False
+        assignments = ["name = ?", "name_key = ?", "series = ?", "rank = ?", "updated_at = ?"]
+        values: list[object] = [new_name, _name_key(new_name), series, rank, _now()]
+        if is_female is not None:
+            assignments.append("is_female = ?")
+            values.append(int(bool(is_female)))
+        if is_male is not None:
+            assignments.append("is_male = ?")
+            values.append(int(bool(is_male)))
+        if pools is not None:
+            assignments.append("pools = ?")
+            values.append(pools)
+        values.append(char_id)
         conn.execute(
-            "UPDATE characters"
-            "   SET name = ?, name_key = ?, series = ?, rank = ?, updated_at = ?"
-            " WHERE id = ?",
-            (new_name, _name_key(new_name), series, rank, _now(), char_id),
+            f"UPDATE characters SET {', '.join(assignments)} WHERE id = ?",
+            values,
         )
         return True
 

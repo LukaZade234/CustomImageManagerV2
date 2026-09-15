@@ -461,6 +461,10 @@ card carries for free.
 - **Pools:** the label the card prints under the series ("Game & Animanga", "Animanga
   roulette") takes its own micro line beneath it, above the rank. It is the card's
   caption, not the catalog's pool codes.
+- **Editable:** the Edit form carries the same four toggles, so a wrong or missing gender
+  and roulette can be corrected by hand rather than waiting for a card. They write the
+  working row's own traits (the two genders and the pool label), not the catalog's facets,
+  and — unlike a fresh card — an edit may clear them.
 
 ### Action bar
 
@@ -495,6 +499,9 @@ pools.
 - **Semantics:** A `fieldset` whose `legend` reads "Gender And Roulette Pools (Optional)",
   one toggle per facet (waifu, husbando, anime, game). The facets are additive: selecting two
   narrows to characters carrying both.
+- **Shared:** the same control edits a character's own traits on the character page. There
+  the selection is the row's gender and roulette, seeded from what it already stores, and
+  saving writes them back; in the Add form it only narrows suggestions.
 - **Optional:** like Rank and Main Photo, it never has to be set to add a character, and an
   empty selection filters nothing.
 - **Follows the character:** picking a suggestion, or an exact name match autofilling, presses

@@ -32,6 +32,7 @@ import {
   DISCORD_LIMIT_REGULAR,
   splitAiCommandForLimit,
 } from '../utils/aiCommandDiscord'
+import { keysToTraits, traitsToKeys } from '../utils/characterTraits'
 import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
@@ -92,6 +93,12 @@ export default function CharacterPage() {
   const [editName, setEditName] = useState('')
   const [editSeries, setEditSeries] = useState('')
   const [editRank, setEditRank] = useState('')
+  // The four editable pool facets (waifu/husbando/anime/game). Seeded from the
+  // row's stored card traits, so the editor shows exactly what the identity
+  // block beside it shows.
+  const [editTraits, setEditTraits] = useState([])
+  const toggleEditTrait = (key) =>
+    setEditTraits((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]))
   const [mainImage, setMainImage] = useState('')
   // The catalog's mirrored portrait applies only while the main image is still
   // the catalog's own; an upload or an edit replaces it and has no mirror.
@@ -166,6 +173,7 @@ export default function CharacterPage() {
       setEditSeries(char.series || '')
       setEditRank(char.rank || '')
       setMainImage(char.image || '')
+      setEditTraits(traitsToKeys(char.is_female, char.is_male, char.pools))
     }
   }, [char])
 
@@ -392,6 +400,7 @@ export default function CharacterPage() {
         new_name: editName,
         series: editSeries,
         rank: editRank,
+        ...keysToTraits(editTraits),
       })
       await queryClient.invalidateQueries({ queryKey: savedKey })
       reloadChar()
@@ -734,6 +743,8 @@ export default function CharacterPage() {
           setName: setEditName,
           setSeries: setEditSeries,
           setRank: setEditRank,
+          traits: editTraits,
+          toggleTrait: toggleEditTrait,
           start: () => setEditMode(true),
           cancel: () => setEditMode(false),
           save: handleSaveEdit,

@@ -23,7 +23,12 @@ from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from ratelimit import rate_limited
 from remote_images import MAX_FILE_SIZE, _allowed_portrait_url, imgchest_filename
-from validation import MAX_RANK_LENGTH, MAX_SERIES_LENGTH, validate_character_name
+from validation import (
+    MAX_POOLS_LENGTH,
+    MAX_RANK_LENGTH,
+    MAX_SERIES_LENGTH,
+    validate_character_name,
+)
 
 log = logs.get(__name__)
 characters_bp = Blueprint("characters", __name__)
@@ -261,6 +266,23 @@ def edit_character():
     if len(rank) > MAX_RANK_LENGTH:
         return jsonify({"error": f"Rank too long (max {MAX_RANK_LENGTH} characters)"}), 400
 
+    # Gender and roulette are optional: an older client sends neither, and an
+    # absent field has to leave the stored trait alone rather than read as a
+    # cleared one.
+    is_female = data.get("is_female")
+    is_male = data.get("is_male")
+    pools = data.get("pools")
+    if is_female is not None and not isinstance(is_female, bool):
+        return jsonify({"error": "is_female must be a boolean"}), 400
+    if is_male is not None and not isinstance(is_male, bool):
+        return jsonify({"error": "is_male must be a boolean"}), 400
+    if pools is not None:
+        if not isinstance(pools, str):
+            return jsonify({"error": "pools must be a string"}), 400
+        pools = pools.strip()
+        if len(pools) > MAX_POOLS_LENGTH:
+            return jsonify({"error": f"Pools too long (max {MAX_POOLS_LENGTH} characters)"}), 400
+
     try:
         if db.get_characters() is None:
             return jsonify(
@@ -268,7 +290,15 @@ def edit_character():
                     "error": "Characters not migrated to DB yet. Run scripts/migrate_v1_to_sqlite.py or scripts/import_mudae_catalog.py first."
                 }
             ), 500
-        if not db.update_character(orig_name, new_name, series, rank):
+        if not db.update_character(
+            orig_name,
+            new_name,
+            series,
+            rank,
+            is_female=is_female,
+            is_male=is_male,
+            pools=pools,
+        ):
             return jsonify({"error": "Character not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500

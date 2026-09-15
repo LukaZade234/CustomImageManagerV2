@@ -72,6 +72,25 @@ class TestStorage:
         clean_db.add_character("Seed", "S", "1", "")
         assert not clean_db.set_character_traits("Nobody", is_female=True, is_male=False, pools="X")
 
+    def test_update_character_sets_traits_exactly(self, clean_db):
+        clean_db.add_character("9S", "NieR: Automata", "622", "", is_male=True)
+        assert clean_db.update_character(
+            "9S", "9S", "NieR: Automata", "622", is_female=True, is_male=False, pools="Animanga"
+        )
+        row = _row(clean_db, "9S")
+        assert row["is_female"] is True
+        assert row["is_male"] is False
+        assert row["pools"] == "Animanga"
+
+    def test_update_character_without_traits_leaves_them(self, clean_db):
+        clean_db.add_character(
+            "9S", "NieR: Automata", "622", "", is_male=True, pools="Game & Animanga"
+        )
+        assert clean_db.update_character("9S", "9S", "NieR: Automata", "623")
+        row = _row(clean_db, "9S")
+        assert row["is_male"] is True
+        assert row["pools"] == "Game & Animanga"
+
     def test_apply_character_traits_is_a_bulk_no_timestamp_update(self, clean_db):
         clean_db.add_character("9S", "NieR: Automata", "622", "")
         clean_db.add_character("Rem", "Re:Zero", "3", "")
@@ -96,6 +115,59 @@ class TestStorage:
         assert stamp is None
         # Re-running is a no-op.
         assert clean_db.apply_character_traits([("9S", False, True, "Game & Animanga")]) == 0
+
+
+class TestEditRoute:
+    """The character editor writes the card's gender and roulette by hand."""
+
+    def _edit(self, client, **overrides):
+        body = {
+            "original_name": "9S",
+            "new_name": "9S",
+            "series": "NieR: Automata",
+            "rank": "622",
+        }
+        body.update(overrides)
+        return client.post("/api/edit-character", json=body)
+
+    def test_edit_sets_gender_and_pools(self, client, clean_db):
+        clean_db.add_character("9S", "NieR: Automata", "622", "")
+        res = self._edit(client, is_female=True, is_male=False, pools="Animanga")
+        assert res.status_code == 200
+        row = _row(clean_db, "9S")
+        assert row["is_female"] is True
+        assert row["is_male"] is False
+        assert row["pools"] == "Animanga"
+
+    def test_edit_clears_traits(self, client, clean_db):
+        # An edit is a person, not a card that came back blank, so clearing has
+        # to stick where set_character_traits would keep the old value.
+        clean_db.add_character(
+            "9S", "NieR: Automata", "622", "", is_male=True, pools="Game & Animanga"
+        )
+        res = self._edit(client, is_female=False, is_male=False, pools="")
+        assert res.status_code == 200
+        row = _row(clean_db, "9S")
+        assert row["is_male"] is False
+        assert row["pools"] == ""
+
+    def test_edit_without_traits_leaves_them(self, client, clean_db):
+        clean_db.add_character(
+            "9S", "NieR: Automata", "622", "", is_male=True, pools="Game & Animanga"
+        )
+        assert self._edit(client, rank="623").status_code == 200
+        row = _row(clean_db, "9S")
+        assert row["is_male"] is True
+        assert row["pools"] == "Game & Animanga"
+
+    def test_edit_rejects_a_non_boolean_gender(self, client, clean_db):
+        clean_db.add_character("9S", "NieR: Automata", "622", "")
+        assert self._edit(client, is_female="yes").status_code == 400
+        assert self._edit(client, is_male=1).status_code == 400
+
+    def test_edit_rejects_overlong_pools(self, client, clean_db):
+        clean_db.add_character("9S", "NieR: Automata", "622", "")
+        assert self._edit(client, pools="x" * 101).status_code == 400
 
 
 class TestLookupRoute:

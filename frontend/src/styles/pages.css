@@ -64,14 +64,14 @@
  * is how it became 88px by accident.
  */
 .character-top-section {
-  /* Two columns, two rows: portrait and identity above, their buttons directly
-     below. As two independent flex columns the buttons could only be aligned by
-     auto-margins, which meant guessing which column was taller — and guessing
-     wrong left the save button stranded a long way under the picture. Grid
-     cells are level because they are the same row. */
+  /* Two columns: the portrait (with its Save button) and the identity (or the
+     edit form, with its own actions). The columns stretch to a shared height
+     and each column's footer is pushed to the foot, so in browse mode Save and
+     Edit/$ai line up. In edit mode the form is taller than the portrait, so
+     `.editing` below stops the image column following it down. */
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: stretch;
   gap: var(--space-2) var(--space-5);
   width: 100%;
   min-width: 0;
@@ -79,12 +79,18 @@
 .char-info-section {
   display: flex;
   flex-direction: column;
+  /* The two columns share a row height, so pushing each one's footer to its
+     foot is what keeps Save level with Edit/$ai in browse mode. In edit mode
+     the form is the only child and the row sizes to it, so this does nothing. */
+  justify-content: space-between;
   text-align: left;
   min-width: 0;
 }
 .char-image-section {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-2);
   position: relative;
   min-width: 0;
 }
@@ -124,7 +130,9 @@
   box-sizing: border-box;
 }
 .char-page-actions {
-  grid-column: 2;
+  /* At the foot of the identity column, level with the Save button at the foot
+     of the portrait column: both columns stretch to the row and
+     `justify-content: space-between` pushes their footers down together. */
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -224,11 +232,18 @@
    put a second solid fill on a page that already has one primary action, and
    spent the palette's loudest colour on a state nothing had happened in. */
 .save-button {
-  grid-column: 1;
   width: 100%;
   background-color: var(--surface);
   color: var(--text-muted);
   border: 1px solid var(--border);
+}
+/* The form is taller than the portrait. Keeping the columns stretched would
+   carry the Save button down to the form's foot with the portrait left behind
+   it; sizing the image column to its own content pins Save under the picture
+   instead. Browse mode is untouched, so Save still lines up with Edit and $ai
+   there. */
+.character-top-section.editing {
+  align-items: start;
 }
 .save-button:hover {
   background-color: var(--accent-subtle);

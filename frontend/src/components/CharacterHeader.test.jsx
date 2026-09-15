@@ -25,6 +25,8 @@ function setup(overrides = {}) {
     setName: vi.fn(),
     setSeries: vi.fn(),
     setRank: vi.fn(),
+    traits: [],
+    toggleTrait: vi.fn(),
     start: vi.fn(),
     cancel: vi.fn(),
     save: vi.fn(),
@@ -155,6 +157,26 @@ describe('CharacterHeader', () => {
     expect(props.edit.cancel).toHaveBeenCalledTimes(1)
   })
 
+  it('edits the gender and roulette pools', async () => {
+    const props = setup({ edit: { active: true, traits: ['waifu', 'game'] } })
+
+    expect(screen.getByRole('button', { name: 'Waifu' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Game' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Husbando' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Anime' }))
+    expect(props.edit.toggleTrait).toHaveBeenCalledWith('anime')
+  })
+
+  it('hides the trait editor outside edit mode', () => {
+    setup()
+    expect(screen.queryByRole('button', { name: 'Waifu' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Gender And Roulette Pools/i)).not.toBeInTheDocument()
+  })
+
   it('blocks saving while the page is busy', () => {
     setup({ edit: { active: true }, loading: true })
     expect(screen.getByRole('button', { name: /Save Changes/i })).toBeDisabled()
@@ -207,17 +229,22 @@ describe('the save button', () => {
    */
   it('sits under the portrait rather than on top of it', () => {
     setup()
-    const band = document.querySelector('.character-top-section')
+    const image = document.querySelector('.char-image-section')
     const save = screen.getByRole('button', { name: /^Save$/ })
 
-    // A cell of the band's grid, not a disc floated over the picture. Being a
-    // direct child is what puts it in the same row as the other actions and the
-    // same column as the portrait; nesting it back inside the image column is
-    // what would quietly break that.
-    expect(save.parentElement).toBe(band)
-    expect(band.querySelector('.char-page-actions').parentElement).toBe(band)
+    // Inside the portrait's own column, so a tall edit form beside it cannot
+    // push it down — the bug that made it drop to the form's foot on edit.
+    expect(save.parentElement).toBe(image)
+    expect(image.querySelector('.char-image-section img')).toBeInTheDocument()
     expect(save.className).not.toMatch(/ui-btn--icon/)
-    expect(document.querySelector('.char-image-section img')).toBeInTheDocument()
+  })
+
+  it('keeps the page actions in the identity column', () => {
+    setup()
+    const info = document.querySelector('.char-info-section')
+    const actions = document.querySelector('.char-page-actions')
+    expect(actions.parentElement).toBe(info)
+    expect(info.querySelector('.display-title')).toHaveTextContent('Ayanami Rei')
   })
 
   it('is the same kind of button as the actions it lines up with', () => {
