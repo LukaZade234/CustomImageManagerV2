@@ -89,6 +89,22 @@ describe('tabs', () => {
     at(<ProfileLayout />)
     expect(screen.getByRole('heading', { level: 1, name: 'Amber Otter' })).toBeInTheDocument()
   })
+
+  it('hides the Moderation tab from an ordinary visitor', () => {
+    at(<ProfileLayout />)
+    expect(screen.queryByRole('link', { name: 'Moderation' })).not.toBeInTheDocument()
+  })
+
+  it('shows the Moderation tab once the role says staff', () => {
+    useStore.setState({
+      me: { ...useStore.getState().me, role: 'moderator', is_moderator: true },
+    })
+    at(<ProfileLayout />)
+    expect(screen.getByRole('link', { name: 'Moderation' })).toHaveAttribute(
+      'href',
+      '/profile/moderation',
+    )
+  })
 })
 
 describe('list states', () => {
