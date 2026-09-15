@@ -64,3 +64,43 @@ def moderation_user_images(ref):
         per_page=per_page,
     )
     return jsonify(result)
+
+
+@moderation_bp.route("/api/moderation/users/<ref>/characters")
+@require_moderator
+def moderation_user_characters(ref):
+    """The same actor's work grouped by character, sorted like Browse Customs."""
+    identity_id = db.identity_by_ref(ref)
+    if identity_id is None:
+        return jsonify({"error": "Unknown contributor"}), 404
+
+    state = request.args.get("state") or "active"
+    if state not in _STATES:
+        return jsonify({"error": "state must be active or removed"}), 400
+
+    sort = request.args.get("sort") or "count"
+    if sort not in db.MODERATION_CHARACTER_SORT_KEYS:
+        return jsonify({"error": "unknown sort"}), 400
+    # Rank reads best-first ascending; the count keys read best descending.
+    order = request.args.get("order") or ("asc" if sort == "rank" else "desc")
+    if order not in ("asc", "desc"):
+        return jsonify({"error": "order must be asc or desc"}), 400
+
+    try:
+        page = int(request.args.get("page") or 1)
+        per_page = int(request.args.get("per_page") or _DEFAULT_PER_PAGE)
+    except ValueError:
+        return jsonify({"error": "page and per_page must be integers"}), 400
+    per_page = max(1, min(_MAX_PER_PAGE, per_page))
+
+    query = (request.args.get("character") or "").strip() or None
+    result = db.list_characters_by_identity(
+        identity_id,
+        state=state,
+        query=query,
+        sort=sort,
+        order=order,
+        page=page,
+        per_page=per_page,
+    )
+    return jsonify(result)

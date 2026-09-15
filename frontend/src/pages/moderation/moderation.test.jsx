@@ -6,7 +6,7 @@
  * the parts that would quietly rot — the staff gate, the URL as the source of
  * truth, server-side filtering, and the three list states being told apart.
  */
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   getMe: vi.fn(),
   listModerationUsers: vi.fn(),
   listModerationUserImages: vi.fn(),
+  listModerationUserCharacters: vi.fn(),
 }))
 
 vi.mock('../../api', () => ({
@@ -79,6 +80,7 @@ beforeEach(() => {
   api.getMe.mockReset()
   api.listModerationUsers.mockReset()
   api.listModerationUserImages.mockReset()
+  api.listModerationUserCharacters.mockReset()
   api.getMe.mockResolvedValue({ handle: 'Amber Otter', role: 'moderator', is_moderator: true })
   api.listModerationUsers.mockResolvedValue({ items: USERS, total: USERS.length })
   api.listModerationUserImages.mockResolvedValue({
@@ -88,6 +90,7 @@ beforeEach(() => {
     added: 2,
     removed: 3,
   })
+  api.listModerationUserCharacters.mockResolvedValue({ items: [], total: 0, total_pages: 1 })
 })
 
 describe('the staff gate', () => {
@@ -193,5 +196,73 @@ describe('the three list states are distinguishable', () => {
     })
     renderModeration('/moderation?user=ref-ada&char=Nobody')
     expect(await screen.findByText(/Nothing matches that character/i)).toBeInTheDocument()
+  })
+})
+
+describe('the profile and its work', () => {
+  it('shows the contributor stats', async () => {
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    const profile = document.querySelector('.moderation-profile')
+    expect(within(profile).getByText('Images')).toBeInTheDocument()
+    expect(within(profile).getByText('Joined')).toBeInTheDocument()
+    expect(within(profile).getByText('Last active')).toBeInTheDocument()
+  })
+
+  it('renders the person actions, inert', async () => {
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    for (const name of ['Warn', 'Suspend', 'Ban']) {
+      expect(screen.getByRole('button', { name })).toBeDisabled()
+    }
+  })
+
+  it('renders the image verbs on a removed image, inert', async () => {
+    api.listModerationUserImages.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          url: 'https://cdn/x.png',
+          thumb: '/thumbs/7.webp',
+          width: 1,
+          height: 1,
+          character: 'Rem',
+          removed_at: '2026-01-01T00:00:00Z',
+          removed_reason: 'spam',
+        },
+      ],
+      total: 1,
+      total_pages: 1,
+      added: 2,
+      removed: 1,
+    })
+    renderModeration('/moderation?user=ref-ada&state=removed')
+    expect(await screen.findByRole('button', { name: 'Restore' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled()
+  })
+
+  it('renders the character view and refetches with the chosen sort', async () => {
+    api.listModerationUserCharacters.mockResolvedValue({
+      items: [
+        { name: 'Rem', series: 'Re:Zero', rank: '3', image: 'x.png', image_thumb: '', count: 2 },
+      ],
+      total: 1,
+      total_pages: 1,
+    })
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    await user.click(screen.getByRole('radio', { name: 'Characters' }))
+    expect(location()).toContain('view=characters')
+    expect(await screen.findByText('Rem')).toBeInTheDocument()
+
+    api.listModerationUserCharacters.mockClear()
+    await user.click(screen.getByRole('radio', { name: 'Rank' }))
+    await waitFor(() =>
+      expect(api.listModerationUserCharacters).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'rank', order: 'asc', page: 1 }),
+      ),
+    )
   })
 })

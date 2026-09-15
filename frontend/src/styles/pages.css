@@ -1599,20 +1599,66 @@ body.reorder-touch-dragging {
   border-radius: var(--radius-md);
   background: var(--surface-hover);
 }
-.moderation-detail {
+.moderation-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.moderation-profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.moderation-profile__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.moderation-profile__header .section-heading {
+  margin: 0;
+}
+.moderation-profile__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin: 0;
+}
+.moderation-profile__stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.moderation-profile__stat dt,
+.moderation-profile__stat dd {
+  margin: 0;
+}
+.moderation-profile__stat dd {
+  color: var(--text);
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-medium);
+}
+.moderation-profile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.moderation-profile__note {
+  color: var(--text-subtle);
+}
+.moderation-work {
   min-width: 0;
 }
-.moderation-detail__header {
+.moderation-work__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
-.moderation-detail__header .section-heading {
-  margin: 0;
-}
-.moderation-detail__filter {
+.moderation-work__filter {
   flex: 1 1 200px;
   min-width: 0;
 }
@@ -2668,6 +2714,19 @@ a.home-strip__item:hover .home-strip__shot {
 .profile-card:hover .profile-card__action,
 .profile-card__action:focus-visible {
   opacity: 1;
+}
+/* The moderation surface needs its image verbs always visible — a hover-reveal
+   would hide the restore/delete choice the grid exists to offer. */
+.profile-card__actions {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: var(--space-2);
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
 }
 /* Touch has no hover, so the control has to be there from the start. */
 @media (hover: none) {

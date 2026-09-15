@@ -50,7 +50,24 @@ export default function CardGrid({ items, height = 210, uniform = false }) {
               {item.subtitle && <span className="profile-card__meta">{item.subtitle}</span>}
             </span>
           </Link>
-          {item.action && (
+          {item.actions && item.actions.length > 0 && (
+            <div className="profile-card__actions">
+              {item.actions.map((action) => (
+                <Button
+                  key={action.label}
+                  size="sm"
+                  variant={action.variant}
+                  className={action.className}
+                  disabled={action.disabled}
+                  title={action.title}
+                  onClick={action.onClick}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          )}
+          {!item.actions && item.action && (
             <Button
               size="sm"
               className="profile-card__action"

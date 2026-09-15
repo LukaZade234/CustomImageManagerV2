@@ -405,3 +405,49 @@ class TestModerationReadSurface:
         ref = identity_module.public_ref(identity_id)
         assert clean_db.identity_by_ref(ref) == identity_id
         assert clean_db.identity_by_ref("0" * 16) is None
+
+
+class TestModerationCharacterView:
+    """The character-level view: the same work grouped by character.
+
+    It exists to answer "where is their work concentrated", which the image grid
+    cannot, and it sorts with the Browse Customs vocabulary.
+    """
+
+    def _owned(self, db, char, urls, owner):
+        db.ensure_identity(owner)
+        db.add_custom_images(char, urls, added_by=owner)
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def test_a_plain_user_is_refused(self, client, clean_db, identity_id):
+        assert client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").status_code == 403
+
+    def test_it_groups_by_character_with_counts(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/a.png", "https://cdn/b.png"], identity_id)
+        self._owned(clean_db, "Emilia", ["https://cdn/c.png"], identity_id)
+        make_moderator()
+
+        body = client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").get_json()
+        by_name = {row["name"]: row for row in body["items"]}
+        assert by_name["Rem"]["count"] == 2
+        assert by_name["Emilia"]["count"] == 1
+        # Default sort is most images first.
+        assert body["items"][0]["name"] == "Rem"
+        assert body["total"] == 2
+
+    def test_an_unknown_sort_is_400(self, client, clean_db, identity_id, make_moderator):
+        make_moderator()
+        res = client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters?sort=bogus")
+        assert res.status_code == 400
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert client.get("/api/moderation/users/notthere/characters").status_code == 404
+
+    def test_created_at_is_carried_on_the_contributor(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
+        make_moderator()
+        item = client.get("/api/moderation/users").get_json()["items"][0]
+        assert item["created_at"], "the account's age drives the profile stat"

@@ -2492,7 +2492,7 @@ def list_contributors() -> list[dict]:
         people = {
             r["id"]: dict(r)
             for r in conn.execute(
-                "SELECT id, handle, role, discord_id FROM identities"
+                "SELECT id, handle, role, discord_id, created_at FROM identities"
                 f" WHERE id IN ({placeholders})",
                 ids,
             )
@@ -2511,6 +2511,7 @@ def list_contributors() -> list[dict]:
                 "handle": (person or {}).get("handle") or identity_module.handle_for(actor),
                 "role": (person or {}).get("role") or "user",
                 "signed_in": bool((person or {}).get("discord_id")),
+                "created_at": (person or {}).get("created_at"),
                 "added": int(r["added"] or 0),
                 "removed": int(r["removed"] or 0),
                 "last_at": r["last_at"],
@@ -2599,6 +2600,96 @@ def list_images_by_identity(
         "total_pages": max(1, (int(total) + per_page - 1) // per_page),
         "added": int(totals["added"] or 0),
         "removed": int(totals["removed"] or 0),
+    }
+
+
+# The character view's sort keys, the Browse Customs vocabulary. `recent` is a
+# key too but is built from the actor's own timestamps, not a fixed clause.
+MODERATION_CHARACTER_SORT_KEYS = ("count", "rank", "name", "recent")
+
+
+def list_characters_by_identity(
+    identity_id: str,
+    *,
+    state: str,
+    query: str | None = None,
+    sort: str = "count",
+    order: str = "desc",
+    page: int = 1,
+    per_page: int = 24,
+) -> dict:
+    """The character-level view of one actor's work: grouped and sortable.
+
+    The same actor condition as `list_images_by_identity`, but grouped by
+    character, each row carrying how many of that actor's images sit on it. The
+    point is to answer "where is their work concentrated" — which the image grid
+    cannot, because it shows the images rather than the characters they are on.
+    """
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+    direction = "DESC" if order == "desc" else "ASC"
+
+    if state == "removed":
+        where = "i.removed_by = ? AND i.state = 'removed'"
+        recency = "MAX(i.removed_at)"
+    else:
+        where = "i.added_by = ? AND i.state = 'active'"
+        recency = "MAX(i.added_at)"
+    params: list = [identity_id]
+    if query:
+        where += " AND c.name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+
+    # rank is TEXT and often empty, so unranked characters go last in either
+    # direction rather than sorting as zero. `recent` falls back to the actor's
+    # own added/removed timestamps, not characters.updated_at.
+    if sort == "count":
+        clause = f"COUNT(i.id) {direction}, c.name COLLATE NOCASE ASC"
+    elif sort == "rank":
+        clause = f"CASE WHEN c.rank = '' THEN 1 ELSE 0 END, CAST(c.rank AS INTEGER) {direction}"
+    elif sort == "name":
+        clause = f"c.name COLLATE NOCASE {direction}"
+    else:
+        clause = f"{recency} {direction}"
+
+    conn = get_connection()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM ("
+        "  SELECT c.id FROM custom_images i JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where} GROUP BY c.id)",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        "SELECT c.name AS name, c.series AS series, c.rank AS rank,"
+        "       c.main_image_url AS image, c.main_image_thumb AS image_thumb,"
+        "       COUNT(i.id) AS count,"
+        f"      {recency} AS last_at"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where}"
+        " GROUP BY c.id"
+        f" ORDER BY {clause}"
+        " LIMIT ? OFFSET ?",
+        (*params, per_page, (page - 1) * per_page),
+    ).fetchall()
+
+    return {
+        "items": [
+            {
+                "name": r["name"],
+                "series": r["series"],
+                "rank": r["rank"],
+                "image": r["image"],
+                "image_thumb": r["image_thumb"],
+                "count": r["count"],
+                "last_at": r["last_at"],
+            }
+            for r in rows
+        ],
+        "total": int(total),
+        "total_pages": max(1, (int(total) + per_page - 1) // per_page),
     }
 
 

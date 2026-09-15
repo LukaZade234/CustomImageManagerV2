@@ -37,3 +37,23 @@ export function useModerationUserImages({ ref, state, character, page }) {
     placeholderData: keepPreviousData,
   })
 }
+
+export const moderationUserCharactersKey = (ref, { state, character, sort, order, page }) => [
+  'moderation-user-characters',
+  ref,
+  state,
+  character || '',
+  sort,
+  order,
+  page,
+]
+
+export function useModerationUserCharacters({ ref, state, character, sort, order, page }) {
+  return useQuery({
+    queryKey: moderationUserCharactersKey(ref, { state, character, sort, order, page }),
+    queryFn: () =>
+      apiClient.listModerationUserCharacters({ ref, state, character, sort, order, page }),
+    enabled: Boolean(ref),
+    placeholderData: keepPreviousData,
+  })
+}

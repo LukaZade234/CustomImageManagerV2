@@ -54,6 +54,7 @@ EXPECTED_ROUTES = {
     ("/api/me/removed", "GET"),
     ("/api/me/settings", "PATCH"),
     ("/api/moderation/users", "GET"),
+    ("/api/moderation/users/<ref>/characters", "GET"),
     ("/api/moderation/users/<ref>/images", "GET"),
     ("/api/mudae/lookup-character", "POST"),
     ("/api/mudae/proxy-image", "GET"),
