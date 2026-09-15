@@ -1563,18 +1563,48 @@ body.reorder-touch-dragging {
  * the end of the file — DESIGN.md names that split as a bug that already
  * shipped once.
  */
-.moderation {
-  display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
-  gap: var(--space-5);
-  align-items: start;
+/* The finder: a search that owns the centre of the page, facets beneath it, and
+   the bounded contributor list under both. A name is searched for, not scrolled
+   to, so this is the opening state rather than a permanent sidebar. */
+.moderation-finder {
+  max-width: 720px;
+  margin: var(--space-6) auto 0;
+}
+.moderation-finder__search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.moderation-finder__input {
+  min-height: var(--nav-control-min-h);
+  font-size: var(--type-body);
+}
+.moderation-finder__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.moderation-facet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.moderation-back {
+  margin-top: var(--space-4);
+}
+/* The tab bar is shared with the profile; only the space above it is this
+   page's. A second class rather than a descendant selector keeps the two at the
+   same specificity, so neither ordering can silently win. */
+.moderation-tabs {
+  margin-top: var(--space-3);
+}
+.moderation-tabpanel {
   margin-top: var(--space-5);
 }
 .moderation-lead {
   max-width: 60ch;
-}
-.moderation-users {
-  min-width: 0;
 }
 .moderation-users__list {
   list-style: none;
@@ -1594,10 +1624,6 @@ body.reorder-touch-dragging {
   gap: var(--space-1);
   text-align: left;
 }
-.moderation-user.is-selected {
-  border-color: var(--accent);
-  background: var(--accent-subtle);
-}
 .moderation-user__name {
   display: flex;
   align-items: center;
@@ -1613,12 +1639,6 @@ body.reorder-touch-dragging {
   height: 52px;
   border-radius: var(--radius-md);
   background: var(--surface-hover);
-}
-.moderation-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
 }
 .moderation-profile {
   display: flex;
@@ -1721,9 +1741,6 @@ body.reorder-touch-dragging {
   min-width: 0;
 }
 @media (max-width: 768px) {
-  .moderation {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .moderation-users__list {
     max-height: 40vh;
   }

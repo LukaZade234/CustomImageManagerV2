@@ -27,11 +27,13 @@ export function useModerationUsers() {
   })
 }
 
-export function useModerationUserImages({ ref, state, character, page }) {
+export function useModerationUserImages({ ref, state, character, page, enabled = true }) {
   return useQuery({
     queryKey: moderationUserImagesKey(ref, { state, character, page }),
     queryFn: () => apiClient.listModerationUserImages({ ref, state, character, page }),
-    enabled: Boolean(ref),
+    // Gated by the Images tab: opening a contributor on Info should not fetch
+    // their gallery, and the counts it needs come from the contributor list.
+    enabled: Boolean(ref) && enabled,
     // Keep the previous page on screen while the next loads, so paging does not
     // flash the skeleton over content that is still valid.
     placeholderData: keepPreviousData,
@@ -48,12 +50,20 @@ export const moderationUserCharactersKey = (ref, { state, character, sort, order
   page,
 ]
 
-export function useModerationUserCharacters({ ref, state, character, sort, order, page }) {
+export function useModerationUserCharacters({
+  ref,
+  state,
+  character,
+  sort,
+  order,
+  page,
+  enabled = true,
+}) {
   return useQuery({
     queryKey: moderationUserCharactersKey(ref, { state, character, sort, order, page }),
     queryFn: () =>
       apiClient.listModerationUserCharacters({ ref, state, character, sort, order, page }),
-    enabled: Boolean(ref),
+    enabled: Boolean(ref) && enabled,
     placeholderData: keepPreviousData,
   })
 }

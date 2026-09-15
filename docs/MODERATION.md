@@ -21,11 +21,12 @@ the one question worth asking when something looks wrong — the operator has to
 page holds the evidence and read its Removed drawer, or open SQLite. There is no view of a
 contributor's work as a contributor.
 
-The surface is a **master list of contributors** on the left, and, for the selected one, a **profile
-pane** on the right: their stats, the staff actions that act on the *person* (warn, suspend, ban), and
-their **moderation history** — every message staff have sent them — above their work: the images they
-added or removed, with the verbs that act on an *image* (restore, permanent delete), and a
-character-level view of the same work sorted the way Browse Customs sorts characters.
+The surface opens as a **finder** — a centred search and a row of facets (role, Discord account, has
+removals, sort) over the bounded contributor list. Picking someone turns the page into their **Info /
+Images** tabs: **Info** is the profile (stats, the staff actions that act on the *person*, and the
+**moderation history** — every message staff have sent them); **Images** is their work (the images
+they added or removed, with the verbs that act on an *image* — restore, permanent delete — and a
+character-level view sorted the way Browse Customs sorts).
 
 It lives **inside the profile**, as one more tab beside Saved, History, Hidden and Removed, and not
 in the topbar. It is something you go to; a permanent topbar entry for a staff tool is the queue's
@@ -64,10 +65,11 @@ thing generating the backlog instead.
 
 ## Phase 1 — the review surface
 
-`/moderation`, staff-only. A master list of contributors; pick one and the right pane becomes their
-profile — stats and staff actions — above their work, which can be read as a paged image grid
-(added or removed, filtered by character) or as a character-level list sorted by rank, image count,
-name or recency.
+`/moderation`, staff-only. It opens as a **finder** — a prominent search with facets (role, Discord
+account, has removals, sort) over the bounded contributor list. Pick someone and the page becomes
+their **Info / Images** tabs: Info is the profile (stats and staff actions) and the moderation
+history; Images is their work, readable as a paged image grid (added or removed, filtered by
+character) or as a character-level list sorted by rank, image count, name or recency.
 
 **Phase 1 was the full UI and the `GET` endpoints behind it, with every acting button present and
 inert.** Two of those verbs are now live: **restore** an image, the **owner-only** promote/demote, and
@@ -80,9 +82,9 @@ settle first, so a button that would not do anything true stays disabled rather 
 |---|---|
 | Backend scope | The UI **and** the read-only endpoints. The action verbs are rendered but do nothing yet. |
 | Who is listed | Every identity with at least one added or removed image — pseudonyms included, `hide_from_leaderboard` and `hide_attribution` ignored. Idle cookie-only identities are excluded. |
-| Shape | Master–detail on one route, selection and filters carried in the URL (`?user=…&view=…&state=…&char=…&sort=…&page=…`). |
-| Profile pane | Stats (total images, removed, account created, last activity, signed-in), person-level actions (warn, suspend, ban), and the moderation history. |
-| Work pane | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary). |
+| Shape | A **finder** first (centred search + facets over the list), then **Info / Images** tabs once a contributor is picked, on one route. Selection and filters are carried in the URL (`?user=…&tab=…&view=…&state=…&char=…&sort=…&page=…`). |
+| Info tab | Stats (total images, removed, account created, last activity, signed-in), person-level actions (warn, suspend, ban), and the moderation history. |
+| Images tab | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary), with the character filter and added/removed switch. |
 | Gating | Non-moderators are redirected home, indistinguishable from the existing `*` catch-all. The backend enforces separately and does not trust the client. |
 
 #### On putting the verbs on this page
@@ -277,12 +279,21 @@ profile and work. Copy the `useSearchParams` discipline from `CustomsPage.jsx` e
 /moderation?user=<ref>&view=characters&state=removed&char=Rem&sort=rank&order=asc&page=2
 ```
 
-**`UserList.jsx`** — the master. The list is small and fully loaded, which is the case
-`profile/useFilteredList.js` exists for: reuse it for query, sort and order rather than adding
-server-side search. Render through the existing `FilterBar` with `mode` omitted — there is no
-Name/Series choice here — and sort options *Most added* / *Most removed* / *Recent activity* /
-*Name*. Each row is a `Card` carrying the handle, a `Badge tone="neutral"` when the role is not
-`user`, and two counts in `.tabular`. The selected row carries `is-selected`.
+**`ContributorFinder.jsx`** — the opening state. A prominent centred search with a row of facets
+beneath it, then the list. The list is small and fully loaded, which is the case
+`profile/useFilteredList.js` exists for: reuse it for query and sort (search by handle; *Most added* /
+*Most removed* / *Recent activity* / *Name*) rather than adding server-side search. The facets are
+in-memory too — **Role** (staff only), **Account** (Discord only) and **History** (has removals) — each
+a labelled `Select`, because those are the questions worth asking before picking a name: are they
+staff, would a ban mean anything, and have they removed anything. Each row is a `Card` carrying the
+handle, `Badge`s for role and Discord, and two counts in `.tabular`.
+
+**`ModerationPage.jsx`** — two states on one route. With no `?user`, the finder; with one, a back link
+and the **Info / Images** `role="tablist"` (the `profile-tabs` styling), then the tab's content. The
+work queries are gated to the Images tab (`enabled`), so opening someone on Info does not fetch their
+gallery; the history is fetched whenever a contributor is selected. Picking a contributor pushes and
+resets every filter that belonged to the last person; `?tab` replaces, so Back leaves the contributor
+rather than walking the tabs.
 
 **`UserProfile.jsx`** — the selected contributor. A header with the handle, a role `Badge`, and the
 stats: **total images** (active), **removed**, **account created** (`created_at`), **last activity**,
@@ -329,13 +340,15 @@ they added and removed."*
 - **`ProfileLayout.jsx`** — a **Moderation** tab, added to the tab list only when `me.is_moderator`.
 - **`Navbar.jsx`** — no moderation entry. The end rail's fourth link is **Notifications** (see
   below), because that is the thing every visitor has.
-- **`pages.css`** — a new `/* Moderation */` section after the existing "Identity and moderation"
-  block. **Its responsive rules go in that same section**, not in a separate media-query pile at the
-  end of the file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation`,
+- **`pages.css`** — a `/* Moderation */` section in the "Identity and moderation" block. **Its
+  responsive rules go in that same section**, not in a separate media-query pile at the end of the
+  file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation-finder`,
+  `.moderation-finder__search`, `.moderation-finder__input`, `.moderation-finder__filters`,
+  `.moderation-facet`, `.moderation-back`, `.moderation-tabs`, `.moderation-tabpanel`,
   `.moderation-users`, `.moderation-user`, `.moderation-user__counts`, `.moderation-profile`,
   `.moderation-profile__stats`, `.moderation-profile__actions`, `.moderation-work`,
-  `.moderation-work__header`, with `is-selected` for state. Below 768px the master collapses above
-  the profile in one column.
+  `.moderation-work__header`. The finder is a centred 720px column; below 768px the contributor list
+  caps its height so the search stays in view.
 
 Design constraints that apply, from DESIGN.md: this is off a character page, so the Art Carries the
 Colour Rule is absolute — no tinted cards, no coloured headers, accent marks state only. Counts are

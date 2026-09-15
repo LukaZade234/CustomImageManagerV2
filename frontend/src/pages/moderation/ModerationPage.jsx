@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import { Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useMe } from '../../queries/me'
 import {
   useDeleteModerationHistory,
@@ -14,40 +14,54 @@ import {
   useWarnModerationUser,
 } from '../../queries/moderation'
 import { useStore } from '../../store/useStore'
+import ContributorFinder from './ContributorFinder'
 import ModerationHistory from './ModerationHistory'
-import UserList from './UserList'
 import UserProfile from './UserProfile'
 import UserWork from './UserWork'
 
 /**
- * The moderation surface: a master list of contributors beside the selected
- * one's profile and their work.
+ * The moderation surface, in two states rather than a master–detail split.
  *
- * It pulls rather than pushes. Nothing is counted as pending, and the action
- * buttons are inert — this answers "what has this person been doing?" and asks
- * nothing of the operator in return. See docs/MODERATION.md and DECISIONS.md §1.
+ * Open, it is a **finder**: a prominent search and a row of facets over the
+ * contributor list, all in memory. Pick someone and the page becomes their
+ * **Info / Images** tabs — Info is the profile and the moderation history,
+ * Images is their work with its own character and added/removed filters. The
+ * master pane used to sit permanently beside a detail column; a name you are
+ * looking for is a search, not a list to scroll.
  *
- * Selection and filters live in the URL (`?user=<ref>&view=characters&state=removed&char=Rem&sort=rank&page=2`)
- * so the whole state is linkable and the back button steps through what was
- * actually looked at. The discipline is CustomsPage's: the default value is the
- * *absence* of the parameter, a filter change resets `page` with `replace`, and
- * a first selection pushes.
+ * It still pulls rather than pushes: nothing is counted pending, and it is
+ * opened deliberately. See docs/MODERATION.md.
+ *
+ * State lives in the URL (`?user=<ref>&tab=images&state=removed&char=Rem&sort=rank&page=2`)
+ * so it is linkable and the back button steps through what was actually looked
+ * at. The discipline is CustomsPage's: a default value is the *absence* of the
+ * parameter, a filter change resets `page` with `replace`, and a selection
+ * pushes.
  */
 
+const SORTS = {
+  count: { order: 'desc' },
+  rank: { order: 'asc' },
+  name: { order: 'asc' },
+  recent: { order: 'desc' },
+}
 const DEFAULT_SORT = 'count'
 
-/** The direction each sort reads best in, so choosing it does not need a second click. */
-const SORT_ORDER = { count: 'desc', rank: 'asc', name: 'asc', recent: 'desc' }
+const TABS = [
+  { value: 'info', label: 'Info' },
+  { value: 'images', label: 'Images' },
+]
 
 export default function ModerationPage() {
   const [params, setParams] = useSearchParams()
   const user = params.get('user') ?? ''
+  const tab = params.get('tab') === 'images' ? 'images' : 'info'
   const view = params.get('view') === 'characters' ? 'characters' : 'images'
   const state = params.get('state') === 'removed' ? 'removed' : 'active'
   const character = params.get('char') ?? ''
   const requestedSort = params.get('sort')
-  const sort = requestedSort && SORT_ORDER[requestedSort] ? requestedSort : DEFAULT_SORT
-  const order = params.get('order') ?? SORT_ORDER[sort]
+  const sort = requestedSort && SORTS[requestedSort] ? requestedSort : DEFAULT_SORT
+  const order = params.get('order') ?? SORTS[sort].order
   const parsedPage = Number.parseInt(params.get('page') ?? '1', 10)
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
 
@@ -69,9 +83,23 @@ export default function ModerationPage() {
   )
 
   // Picking a contributor is a place to return to, so it pushes; and changing
-  // who you are looking at resets the filters that belonged to the last person.
+  // who you are looking at resets everything that belonged to the last person.
   const selectUser = (userRef) =>
-    update({ user: userRef, view: '', state: '', char: '', sort: '', order: '', page: '' })
+    update({
+      user: userRef,
+      tab: '',
+      view: '',
+      state: '',
+      char: '',
+      sort: '',
+      order: '',
+      page: '',
+    })
+  const searchAnother = () =>
+    update({ user: '', tab: '', view: '', state: '', char: '', sort: '', order: '', page: '' })
+  // A tab is a place within one contributor: replace, so Back leaves the
+  // contributor rather than walking the tabs.
+  const setTab = (value) => update({ tab: value === 'info' ? '' : value }, { replace: true })
   // A filter change is a correction rather than a page you chose: it replaces,
   // and it sends the list back to its first page.
   const setView = (value) =>
@@ -83,19 +111,25 @@ export default function ModerationPage() {
     update(
       {
         sort: value === DEFAULT_SORT ? '' : value,
-        order: SORT_ORDER[value] === 'desc' ? '' : SORT_ORDER[value],
+        order: SORTS[value].order === 'desc' ? '' : SORTS[value].order,
         page: '',
       },
       { replace: true },
     )
   const setPage = (value) => update({ page: value <= 1 ? '' : String(value) })
   // Clicking a character drills into this contributor's images on it, rather
-  // than leaving for the public character page. Pushed, so Back returns to the
-  // character list you came from.
+  // than leaving for the public character page.
   const showCharacterImages = (name) => update({ view: '', char: name, page: '' })
 
   const usersQuery = useModerationUsers()
-  const imagesQuery = useModerationUserImages({ ref: user, state, character, page })
+  const onImagesTab = tab === 'images'
+  const imagesQuery = useModerationUserImages({
+    ref: user,
+    state,
+    character,
+    page,
+    enabled: onImagesTab,
+  })
   const charactersQuery = useModerationUserCharacters({
     ref: user,
     state,
@@ -103,6 +137,7 @@ export default function ModerationPage() {
     sort,
     order,
     page,
+    enabled: onImagesTab,
   })
   const historyQuery = useModerationHistory(user)
 
@@ -162,30 +197,60 @@ export default function ModerationPage() {
   const selected = users.find((item) => item.ref === user) ?? null
 
   return (
-    <Card as="section" padding="lg">
+    <Card as="section" padding="lg" className="moderation-page">
       <h1 className="page-title">Moderation</h1>
-      <p className="text-meta moderation-lead">
-        Who added and removed what. Read-only: every action is present but inert.
-      </p>
 
-      <div className="moderation">
-        <UserList
-          users={users}
-          loading={usersQuery.isPending}
-          error={usersQuery.isError ? usersQuery.error.message : null}
-          selectedRef={user}
-          onSelect={selectUser}
-          onRetry={usersQuery.refetch}
-        />
+      {!user ? (
+        <>
+          <p className="text-meta moderation-lead">
+            Find a contributor to see who they are and what they have added or removed.
+          </p>
+          <ContributorFinder
+            users={users}
+            loading={usersQuery.isPending}
+            error={usersQuery.isError ? usersQuery.error.message : null}
+            onSelect={selectUser}
+            onRetry={usersQuery.refetch}
+          />
+        </>
+      ) : !selected ? (
+        usersQuery.isPending ? (
+          <p className="text-meta" role="status">
+            Loading…
+          </p>
+        ) : (
+          <EmptyState
+            title="Contributor not found"
+            description="They are no longer in the contributor list."
+            action={<Button onClick={searchAnother}>Search contributors</Button>}
+          />
+        )
+      ) : (
+        <>
+          <Button size="sm" variant="ghost" className="moderation-back" onClick={searchAnother}>
+            ← Search another contributor
+          </Button>
+          <div
+            className="profile-tabs moderation-tabs"
+            role="tablist"
+            aria-label="Contributor sections"
+          >
+            {TABS.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.value}
+                className={`profile-tab ${tab === item.value ? 'profile-tab--active' : ''}`}
+                onClick={() => setTab(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="moderation-main">
-          {!user || !selected ? (
-            <EmptyState
-              title="Pick a contributor"
-              description="Pick a contributor to see what they added and removed."
-            />
-          ) : (
-            <>
+          {tab === 'info' ? (
+            <div className="moderation-tabpanel">
               <UserProfile
                 user={selected}
                 canManageRoles={Boolean(me?.is_owner)}
@@ -200,6 +265,9 @@ export default function ModerationPage() {
                 canDelete={Boolean(me?.is_owner)}
                 onDelete={setHistoryToDelete}
               />
+            </div>
+          ) : (
+            <div className="moderation-tabpanel">
               <UserWork
                 view={view}
                 state={state}
@@ -227,10 +295,10 @@ export default function ModerationPage() {
                 onRestore={handleRestore}
                 restoringUrl={restoringUrl}
               />
-            </>
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
 
       {historyToDelete && (
         <ConfirmDialog

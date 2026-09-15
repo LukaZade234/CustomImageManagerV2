@@ -130,6 +130,34 @@ describe('the staff gate', () => {
   })
 })
 
+describe('opening on the finder', () => {
+  it('shows the search first, and the tabs only after a pick', async () => {
+    const user = userEvent.setup()
+    renderModeration()
+
+    expect(await screen.findByLabelText('Search contributors by name')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Info' })).not.toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: /Ada Otter/ }))
+    expect(await screen.findByRole('tab', { name: 'Info' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: 'Images' })).toBeInTheDocument()
+  })
+
+  it('narrows the list by role', async () => {
+    const user = userEvent.setup()
+    renderModeration()
+    await screen.findByRole('button', { name: /Ada Otter/ })
+
+    await user.selectOptions(screen.getByLabelText('Role'), 'staff')
+
+    expect(screen.getByRole('button', { name: /Bob Falcon/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ada Otter/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('the URL is the source of truth', () => {
   it('puts the selected contributor in the URL, and renders them from it', async () => {
     const user = userEvent.setup()
@@ -140,17 +168,16 @@ describe('the URL is the source of truth', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Ada Otter' })).toBeInTheDocument()
   })
 
-  it('shows the empty detail when no contributor is selected', async () => {
+  it('opens on the finder when no contributor is selected', async () => {
     renderModeration('/moderation')
-    expect(
-      await screen.findByText('Pick a contributor', { selector: '.ui-empty__title' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByLabelText('Search contributors by name')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Info' })).not.toBeInTheDocument()
   })
 
   it('asks the server for removals rather than filtering in the browser', async () => {
     const user = userEvent.setup()
-    renderModeration('/moderation?user=ref-ada')
-    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    renderModeration('/moderation?user=ref-ada&tab=images')
+    await screen.findByRole('radio', { name: /Removed/ })
 
     api.listModerationUserImages.mockClear()
     await user.click(screen.getByRole('radio', { name: /Removed/ }))
@@ -168,8 +195,8 @@ describe('the URL is the source of truth', () => {
 
   it('resets the page to one when the character filter changes', async () => {
     const user = userEvent.setup()
-    renderModeration('/moderation?user=ref-ada&page=2')
-    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    renderModeration('/moderation?user=ref-ada&tab=images&page=2')
+    await screen.findByLabelText('Filter by character')
 
     await user.type(screen.getByLabelText('Filter by character'), 'Rem')
 
@@ -215,7 +242,7 @@ describe('the three list states are distinguishable', () => {
       added: 2,
       removed: 3,
     })
-    renderModeration('/moderation?user=ref-ada&char=Nobody')
+    renderModeration('/moderation?user=ref-ada&tab=images&char=Nobody')
     expect(await screen.findByText(/Nothing matches that character/i)).toBeInTheDocument()
   })
 })
@@ -258,7 +285,7 @@ describe('the profile and its work', () => {
       added: 2,
       removed: 1,
     })
-    renderModeration('/moderation?user=ref-ada&state=removed')
+    renderModeration('/moderation?user=ref-ada&tab=images&state=removed')
     expect(await screen.findByRole('button', { name: 'Restore' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled()
   })
@@ -272,8 +299,8 @@ describe('the profile and its work', () => {
       total_pages: 1,
     })
     const user = userEvent.setup()
-    renderModeration('/moderation?user=ref-ada')
-    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    renderModeration('/moderation?user=ref-ada&tab=images')
+    await screen.findByRole('radio', { name: 'Characters' })
 
     await user.click(screen.getByRole('radio', { name: 'Characters' }))
     expect(location()).toContain('view=characters')
@@ -297,8 +324,7 @@ describe('the profile and its work', () => {
       total_pages: 1,
     })
     const user = userEvent.setup()
-    renderModeration('/moderation?user=ref-ada&view=characters')
-    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    renderModeration('/moderation?user=ref-ada&tab=images&view=characters')
 
     api.listModerationUserImages.mockClear()
     await user.click(await screen.findByRole('button', { name: /Rem/ }))
@@ -336,7 +362,7 @@ describe('restore and role changes', () => {
       removed: 1,
     })
     const user = userEvent.setup()
-    renderModeration('/moderation?user=ref-ada&state=removed')
+    renderModeration('/moderation?user=ref-ada&tab=images&state=removed')
 
     await user.click(await screen.findByRole('button', { name: 'Restore' }))
     await waitFor(() =>

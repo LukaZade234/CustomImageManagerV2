@@ -615,13 +615,13 @@ doing?"* meant guessing a character page or opening SQLite. This adds the surfac
 **inspection, not a queue** — see `docs/MODERATION.md` for the full plan and `DECISIONS.md` §5 for
 why it does not contradict the anti-queue argument there.
 
-- [x] **The review surface** (staff-only). A master list of every contributor who added or removed
-      an image, beside a detail pane of their additions or removals, filtered by character and paged
-      on the server. Backed by `GET /api/moderation/users` and
-      `/api/moderation/users/<ref>/images` and `/characters`, gated by a shared `require_moderator`
-      decorator. Reshaped around a contributor profile with stats, a character-level view, and image
-      restore; role changes are owner-only. It is a **profile tab** (`/profile/moderation`), not a
-      topbar entry.
+- [x] **The review surface** (staff-only). Opens as a finder — a centred search with facets (role,
+      Discord account, has removals) over the contributor list — then **Info / Images** tabs once a
+      contributor is picked: Info is the profile and moderation history, Images is their additions or
+      removals, filtered by character and paged on the server. Backed by
+      `GET /api/moderation/users` and `/api/moderation/users/<ref>/images` and `/characters`, gated by
+      a shared `require_moderator` decorator. Image restore and role changes (owner-only) are wired.
+      It is a **profile tab** (`/profile/moderation`), not a topbar entry.
 - [x] **Restore an image from the moderation page.** Reuses the existing `/api/restore-images`.
 - [x] **Promote / demote a contributor (owner only).** `POST /api/moderation/users/<ref>/role`,
       wrapping `db.set_role`, with a plus/minus control and a confirmation. Moderators hold every
