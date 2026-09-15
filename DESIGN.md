@@ -231,10 +231,9 @@ character has one, the pooled gallery — one normalised hue histogram per image
 resolution and crop cannot bias the vote, decided once over the pool. The gallery outranks
 the portrait only once it is big enough to be a consensus: the portrait's share of the vote
 falls from 70% at one or two images to nothing by ten, so a lone upload cannot outvote the
-character's own portrait, but a real gallery still speaks for her. At ten or more the
-portrait joins only when its hue agrees. A pale identity (a blue-white head of hair present
-in every image) outranks a weak saturated decision (scattered neon backgrounds), which is
-how Lucy reads as a soft blue instead of her backgrounds' loud one. The seed is stored on the
+character's own portrait, but a real gallery still speaks for her. A pale identity (a blue-white
+head of hair present in every image) outranks a weak saturated decision (scattered neon
+backgrounds), which is how Lucy reads as a soft blue instead of her backgrounds' loud one. The seed is stored on the
 character row against a fingerprint of the images it was measured from, so adding or removing
 gallery images recolours the page on the next visit with no cache anywhere to invalidate; the
 browser only turns the seed into contrast-fitted tokens (`useCharacterTheme`,

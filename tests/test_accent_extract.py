@@ -200,14 +200,16 @@ class TestPortraitWeighting:
         assert result["source"] == "gallery"
         assert _hue_gap(_hue(result), _hue(gallery_alone)) < 5
 
-    def test_an_agreeing_portrait_only_reinforces_at_ten_images(self):
+    def test_the_portrait_is_ignored_at_ten_images_even_when_it_agrees(self):
+        # A matching portrait still must not join: a tiny weight can flip the
+        # pale/saturated pool and change the colour, not reinforce it.
         gallery = _grids_of(_png(self.gallery_colour))
         portrait = _grids_of(_png((48, 74, 198)))  # the same blue, a shade off
         gallery_alone = ax.decide(None, [gallery] * 10)
         result = ax.decide(portrait, [gallery] * 10)
         assert result is not None
         assert result["source"] == "gallery"
-        assert _hue_gap(_hue(result), _hue(gallery_alone)) < 10
+        assert result["seed"] == gallery_alone["seed"]
 
 
 
