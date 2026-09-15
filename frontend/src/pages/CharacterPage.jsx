@@ -11,6 +11,7 @@ import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
 import RemovedDrawer from '../components/RemovedDrawer'
 import ReportDialog from '../components/ReportDialog'
+import SignInPrompt from '../components/SignInPrompt'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
 import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
@@ -59,6 +60,8 @@ export default function CharacterPage() {
   const removeSaved = useRemoveSaved()
   const { data: me } = useMe()
   const addToast = useStore((s) => s.addToast)
+  // Adding an image needs a linked Discord account; everything else does not.
+  const canAddImages = Boolean(me?.signed_in)
   const queryClient = useQueryClient()
   // The gallery is server state, cached and invalidated by key rather than kept
   // in the store and refetched by hand after every mutation. The first fetch is
@@ -479,6 +482,11 @@ export default function CharacterPage() {
   const handleMainImageChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!canAddImages) {
+      addToast('Sign in with Discord to change the main image', 'error')
+      e.target.value = ''
+      return
+    }
     const fd = new FormData()
     fd.append('file', file)
     fd.append('character_name', name)
@@ -494,6 +502,10 @@ export default function CharacterPage() {
   const handleMainImageDrop = (e) => {
     e.preventDefault()
     setDragOver(false)
+    if (!canAddImages) {
+      addToast('Sign in with Discord to change the main image', 'error')
+      return
+    }
     const file = e.dataTransfer.files?.[0]
     if (!isImageFileLike(file)) return
     const fd = new FormData()
@@ -773,6 +785,7 @@ export default function CharacterPage() {
         onDragOverChange={setDragOver}
         onMainImageChange={handleMainImageChange}
         onMainImageDrop={handleMainImageDrop}
+        canAddImages={canAddImages}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
         onGetAiCommand={() => enterSelectMode([...customs])}
@@ -818,9 +831,16 @@ export default function CharacterPage() {
       {/* biome-ignore lint/a11y/noStaticElementInteractions: file drop zone, see above */}
       <div
         className={`custom-images-section ${upload.dragOver ? 'drag-over' : ''}`}
-        onDragOver={upload.onDragOver}
-        onDragLeave={upload.onDragLeave}
-        onDrop={upload.onDrop}
+        onDragOver={canAddImages ? upload.onDragOver : (e) => e.preventDefault()}
+        onDragLeave={canAddImages ? upload.onDragLeave : undefined}
+        onDrop={
+          canAddImages
+            ? upload.onDrop
+            : (e) => {
+                e.preventDefault()
+                addToast('Sign in with Discord to add images', 'error')
+              }
+        }
       >
         <div className="custom-images-header-row">
           <h2 className="section-heading custom-images-heading">
@@ -861,6 +881,7 @@ export default function CharacterPage() {
                 onToggleShowHidden={() => setShowHidden((v) => !v)}
                 onOpenRemovedDrawer={openRemovedDrawer}
                 onAddImage={openCustomFilePicker}
+                canAddImages={canAddImages}
               />
             </div>
           )}
@@ -954,14 +975,20 @@ export default function CharacterPage() {
                 className="gallery-empty"
                 title="No custom images yet"
                 description={
-                  isNarrow
-                    ? `Add one and it becomes part of the $ai command for ${name}.`
-                    : `Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`
+                  !canAddImages
+                    ? `Adding images needs a linked Discord account. Once signed in, an image becomes part of the $ai command for ${name}.`
+                    : isNarrow
+                      ? `Add one and it becomes part of the $ai command for ${name}.`
+                      : `Add one — drop a file or an image from the web here, or use the button — and it becomes part of the $ai command for ${name}.`
                 }
                 action={
-                  <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
-                    Add image
-                  </Button>
+                  canAddImages ? (
+                    <Button size="sm" disabled={!!upload.progress} onClick={openCustomFilePicker}>
+                      Add image
+                    </Button>
+                  ) : (
+                    <SignInPrompt />
+                  )
                 }
               />
             )

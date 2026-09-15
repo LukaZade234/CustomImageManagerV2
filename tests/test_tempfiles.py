@@ -104,8 +104,11 @@ class TestAgainstAReadOnlyWorkingDirectory:
     """The production shape: code directory read-only, temp writable."""
 
     def test_an_upload_succeeds_with_the_working_directory_read_only(
-        self, client, clean_db, tmp_path, monkeypatch
+        self, client, clean_db, make_signed_in, tmp_path, monkeypatch
     ):
+        # Adding an image now needs a linked Discord account; this test is about
+        # the filesystem, so satisfy the gate and move on.
+        make_signed_in()
         code_dir = tmp_path / "opt"
         code_dir.mkdir()
         monkeypatch.chdir(code_dir)

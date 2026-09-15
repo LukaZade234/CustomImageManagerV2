@@ -132,3 +132,17 @@ def make_moderator(clean_db, identity_id):
             conn.execute("UPDATE identities SET role = ? WHERE id = ?", (role, identity_id))
 
     return promote
+
+
+@pytest.fixture
+def make_signed_in(clean_db, identity_id):
+    """Link a Discord account to the test client's identity. Returns the callable."""
+
+    def sign_in(discord_id="discord-test-user"):
+        clean_db.ensure_identity(identity_id)
+        with clean_db.transaction() as conn:
+            conn.execute(
+                "UPDATE identities SET discord_id = ? WHERE id = ?", (discord_id, identity_id)
+            )
+
+    return sign_in

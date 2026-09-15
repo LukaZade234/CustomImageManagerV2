@@ -1,6 +1,7 @@
 import ExistingCharacterCard from './ExistingCharacterCard'
 import { PoolFilterChips } from './PoolFilterChips'
 import SeriesSuggestInput from './SeriesSuggestInput'
+import SignInPrompt from './SignInPrompt'
 import { Button, Field, Input } from './ui'
 
 /**
@@ -26,6 +27,7 @@ export default function AddManualForm({ form }) {
     nameMatch,
     catalogImage,
     catalogImageSrc,
+    canAddImages = true,
     onNameChange,
     onSeriesChange,
     onRankChange,
@@ -89,6 +91,14 @@ export default function AddManualForm({ form }) {
               <p className="mudae-preview__hint">
                 The library&apos;s main image is used automatically and cannot be replaced.
               </p>
+            </div>
+          ) : !canAddImages ? (
+            <div className="add-char-photo-gate">
+              <p className="mudae-preview__hint">
+                Uploading a photo needs a linked Discord account. A character from the library can
+                still be added without one.
+              </p>
+              <SignInPrompt note="to upload a photo" />
             </div>
           ) : (
             <label className="file-upload-box" htmlFor="addCharImage">

@@ -32,6 +32,7 @@ export function CharacterHeader({
   pick,
   onPickPortrait,
   accent,
+  canAddImages = true,
 }) {
   const portrait = (
     <>
@@ -79,8 +80,14 @@ export function CharacterHeader({
           <button
             type="button"
             className={`image-wrapper edit-mode ${dragOver ? 'drag-over-main' : ''}`}
-            aria-label="Change the main image"
-            onClick={() => mainInputRef.current?.click()}
+            aria-label={
+              canAddImages
+                ? 'Change the main image'
+                : 'Sign in with Discord to change the main image'
+            }
+            title={canAddImages ? undefined : 'Sign in with Discord to change the main image'}
+            disabled={!canAddImages}
+            onClick={() => canAddImages && mainInputRef.current?.click()}
             onDragOver={(e) => {
               e.preventDefault()
               onDragOverChange(true)

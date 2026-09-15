@@ -261,6 +261,15 @@ secrets. Because no destructive action is available to *anyone* under §1, an ev
 by evading: the worst outcome is losing your own hidden set and your ability to remove your own
 past uploads.
 
+**Adding an image requires the Discord upgrade.** A cookie-only visitor may browse, save, hide,
+report, restore and edit metadata freely, but every endpoint that uploads bytes to ImgChest
+(`/api/custom-image`, `/api/import-custom-images-from-urls`, `/api/set-main-image`, `/upload`, and the
+file branch of `/api/add-character`) is behind `require_signed_in`. The reason is the one gap in the
+paragraph above: uploading is the only action that spends a shared resource (the ImgChest key), and
+a cookie is free to mint, so "who uploaded this" has to survive clearing it. It is also what makes a
+ban or a suspension mean anything at all — an account-level block on a cookie identity is walked
+around by deleting one cookie. A catalog portrait (a link, not an upload) still needs no account.
+
 **Implementation note:** Discord OAuth requires a **newly registered Discord application**. The
 existing `DISCORD_USER_TOKEN` is a self-bot account token and cannot be used for OAuth. The two
 are unrelated and must not be conflated.

@@ -79,6 +79,10 @@ class Identity:
     def is_owner(self) -> bool:
         return self.role == "owner"
 
+    @property
+    def is_signed_in(self) -> bool:
+        return self.discord_id is not None
+
 
 def new_identity_id() -> str:
     return secrets.token_urlsafe(16)
@@ -139,6 +143,33 @@ def require_owner(fn):
     def wrapper(*args, **kwargs):
         if not current_identity().is_owner:
             return jsonify({"error": "Not permitted"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def require_signed_in(fn):
+    """403 unless the caller has linked a Discord account.
+
+    A cookie-only visitor may browse and curate their own view freely, but adding
+    an image uploads bytes to ImgChest under our key. That action is tied to a
+    real account on purpose: it can be held to, and it is what makes a ban mean
+    something -- clearing a cookie mints a fresh pseudonym for free, so an
+    upload limit that ignores the account is no limit at all.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_identity().is_signed_in:
+            return (
+                jsonify(
+                    {
+                        "error": "Sign in with Discord to add images",
+                        "code": "discord_required",
+                    }
+                ),
+                403,
+            )
         return fn(*args, **kwargs)
 
     return wrapper

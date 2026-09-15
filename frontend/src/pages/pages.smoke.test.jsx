@@ -67,6 +67,8 @@ beforeEach(() => {
   })
   api.apiClient.getCustomImagesForChar.mockReset()
   api.apiClient.getCustomImagesForChar.mockResolvedValue({})
+  // Signed in, so the add-image controls render (they are hidden otherwise).
+  api.apiClient.getMe.mockResolvedValue({ signed_in: true, is_moderator: false })
   useStore.setState({
     savedCharacters: [{ name: 'Ayanami Rei', series: 'Neon Genesis Evangelion', image: 'rei.png' }],
     customImages: { 'Ayanami Rei': ['https://cdn.example/a.png'] },

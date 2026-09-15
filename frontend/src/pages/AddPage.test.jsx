@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   mudaeSeriesExtract: vi.fn(),
   mudaeSeriesExtractApply: vi.fn(),
   addCharacter: vi.fn(),
+  getMe: vi.fn(),
 }))
 
 vi.mock('../api', () => ({
@@ -60,6 +61,8 @@ beforeEach(() => {
   api.suggestCharacters.mockResolvedValue({ items: [] })
   api.suggestSeries.mockResolvedValue({ items: [] })
   api.findCatalogCharacter.mockResolvedValue({ found: false, character: null })
+  // The form offers the photo upload only to a signed-in visitor.
+  api.getMe.mockResolvedValue({ signed_in: true })
 })
 
 describe('AddPage catalog integration', () => {

@@ -388,10 +388,12 @@ logic.
 
 **Phase 2 — acting on a person.** **Promote and demote are done**: an owner-only route wrapping
 `db.set_role`, with the plus/minus control on the profile and a confirmation each way. **Warn,
-suspend and ban remain**, and the hard question is what they mean for a *cookie* identity: a ban that
-deletes the cookie is walked around by clearing it, and one that blocks an id is walked around by
-clearing it too. The design has to decide whether these act on the identity, the Discord account, or
-the IP, and say plainly what each buys.
+suspend and ban remain.** Bans are now meaningful in a way they were not: adding an image requires a
+linked Discord account (`require_signed_in`, `DECISIONS.md` §4), so a ban on that account removes the
+ability to upload — the action actually worth preventing — even though a fresh cookie can still be
+minted for browsing. What still needs deciding is the *shape* of each: whether a ban blocks the
+Discord account, the identity, or both; what "warn" does with no notification channel; and what a
+suspended account may still do.
 
 **Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
 Permanent delete does not, and it is the first irreversible action in the app: it would remove the

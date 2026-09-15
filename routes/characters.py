@@ -60,6 +60,7 @@ def record_view(name):
 
 
 @characters_bp.route("/upload", methods=["POST"])
+@identity.require_signed_in
 def upload():
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -205,6 +206,18 @@ def add_character():
         file = request.files["image"]
         fn = file.filename
         if fn:
+            # Uploading a portrait is adding an image, so it needs an account --
+            # the catalog URL path above does not upload and stays open.
+            if not identity.current_identity().is_signed_in:
+                return (
+                    jsonify(
+                        {
+                            "error": "Sign in with Discord to add images",
+                            "code": "discord_required",
+                        }
+                    ),
+                    403,
+                )
             temp_path = tempfiles.reserve("add", fn)
             file.save(temp_path)
             try:
@@ -316,6 +329,7 @@ def edit_character():
 
 
 @characters_bp.route("/api/set-main-image", methods=["POST"])
+@identity.require_signed_in
 @rate_limited("edit_character")
 def set_main_image():
     if "file" not in request.files:

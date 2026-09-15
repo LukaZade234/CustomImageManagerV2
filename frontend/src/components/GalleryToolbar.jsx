@@ -1,3 +1,4 @@
+import SignInPrompt from './SignInPrompt'
 import { Button } from './ui'
 
 /**
@@ -69,6 +70,7 @@ export function GalleryToolbar({
   onToggleShowHidden,
   onOpenRemovedDrawer,
   onAddImage,
+  canAddImages = true,
 }) {
   return (
     <div className="char-custom-toolbar-actions">
@@ -114,16 +116,20 @@ export function GalleryToolbar({
         <ReorderIcon />
         Reorder
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={uploadBusy}
-        onClick={onAddImage}
-        title="Add a custom image"
-      >
-        <PlusIcon />
-        Add image
-      </Button>
+      {canAddImages ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={uploadBusy}
+          onClick={onAddImage}
+          title="Add a custom image"
+        >
+          <PlusIcon />
+          Add image
+        </Button>
+      ) : (
+        <SignInPrompt />
+      )}
     </div>
   )
 }

@@ -162,6 +162,21 @@
 .accent-override__hint {
   color: var(--text-subtle);
 }
+/* Shown in place of an add-image control to a visitor without Discord linked. */
+.sign-in-prompt {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.sign-in-prompt__note {
+  color: var(--text-subtle);
+}
+.add-char-photo-gate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
 .char-page-actions .ui-btn {
   flex: 0 1 auto;
   justify-content: center;

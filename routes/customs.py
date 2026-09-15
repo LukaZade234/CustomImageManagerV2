@@ -192,6 +192,7 @@ def list_customs():
 
 
 @customs_bp.route("/api/custom-image", methods=["POST"])
+@identity.require_signed_in
 @rate_limited("upload")
 def add_custom_image():
     try:
@@ -289,6 +290,7 @@ def add_custom_image():
 
 
 @customs_bp.route("/api/import-custom-images-from-urls", methods=["POST"])
+@identity.require_signed_in
 @rate_limited("import_urls")
 def import_custom_images_from_urls():
     """Fetch image URLs server-side (drag-from-web: Pinterest, etc.) and add as custom images."""
