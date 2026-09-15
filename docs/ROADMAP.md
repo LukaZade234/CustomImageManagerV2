@@ -608,6 +608,25 @@ Not planned as a phase; it grew out of "the home page should look like a real si
 
 ---
 
+## Phase 13 — Moderation _(phase 1 done)_
+
+The roles from Phase 6 were real but had no screen, so answering *"what has this person been
+doing?"* meant guessing a character page or opening SQLite. This adds the surface, deliberately as
+**inspection, not a queue** — see `docs/MODERATION.md` for the full plan and `DECISIONS.md` §5 for
+why it does not contradict the anti-queue argument there.
+
+- [x] **The review surface** (`/moderation`, staff-only). A master list of every contributor who
+      added or removed an image, beside a detail pane of their additions or removals, filtered by
+      character and paged on the server. Read-only: no acting verbs, no pending count, no badge,
+      `image_reports` still unread. Backed by `GET /api/moderation/users` and
+      `/api/moderation/users/<ref>/images`, gated by a shared `require_moderator` decorator.
+- [ ] **Phase 2 — acting as staff.** Promote/demote, wrapping `db.set_role`, on an owner-only route;
+      and the question of whether removal/restore belong here or on the character page.
+- [ ] **Phase 3 — the reports question.** Whether `image_reports` should ever be readable, and
+      whether the honest case for it is a statistic rather than a queue.
+
+---
+
 ## Testing detail (harness set up in Phase 1)
 
 The harness goes up in Phase 1. These are the rules worth covering, in the order they become

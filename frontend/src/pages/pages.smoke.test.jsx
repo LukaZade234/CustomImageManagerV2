@@ -42,6 +42,7 @@ import AddPage from './AddPage'
 import CharacterPage from './CharacterPage'
 import CustomsPage from './CustomsPage'
 import HomePage from './HomePage'
+import ModerationPage from './moderation/ModerationPage'
 import SavedTab from './profile/SavedTab'
 import SearchResultsPage from './SearchResultsPage'
 
@@ -123,6 +124,13 @@ describe('page smoke tests', () => {
   it('renders the add page', () => {
     renderAt(<AddPage />)
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
+  })
+
+  it('renders the moderation page', async () => {
+    renderAt(<ModerationPage />, '/moderation')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /moderation/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders server search results from the URL', async () => {

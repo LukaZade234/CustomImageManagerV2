@@ -21,12 +21,13 @@ role must tolerate the row not existing yet.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 import secrets
 from dataclasses import dataclass
 
-from flask import g, request
+from flask import g, jsonify, request
 from itsdangerous import BadSignature, URLSafeSerializer
 
 COOKIE_NAME = "imid"
@@ -94,6 +95,37 @@ def handle_for(identity_id: str) -> str:
     adjective = _ADJECTIVES[digest[0] % len(_ADJECTIVES)]
     animal = _ANIMALS[digest[1] % len(_ANIMALS)]
     return f"{adjective.capitalize()} {animal.capitalize()}"
+
+
+def public_ref(identity_id: str) -> str:
+    """A stable, non-reversible reference for an identity, safe for a URL.
+
+    The identity id never reaches the client -- the cookie is HttpOnly and
+    `/api/me` deliberately omits it -- so surfaces that need to name a user in a
+    URL key off this hash instead. It is a one-way digest with a distinct
+    `person` string, so leaking a ref buys nothing and cannot collide with the
+    handle's derivation.
+    """
+    return hashlib.blake2b(
+        identity_id.encode("utf-8"), digest_size=8, person=b"modref"
+    ).hexdigest()
+
+
+def require_moderator(fn):
+    """403 unless the caller is a moderator or the owner.
+
+    The gate is a decorator rather than inlined per route so there is one
+    implementation to reason about. The frontend redirects non-staff away for a
+    clean experience, but this is the boundary that actually enforces the role.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_identity().is_moderator:
+            return jsonify({"error": "Not permitted"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def _serializer(secret_key: str) -> URLSafeSerializer:

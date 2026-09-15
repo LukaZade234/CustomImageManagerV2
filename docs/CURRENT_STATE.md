@@ -576,7 +576,10 @@ genuinely does not:
   on one. The per-person `show_nsfw` preference is recorded against that day
   arriving, and reads as such in the UI.
 - **A moderation queue.** Reports remove an image at two distinct reporters and
-  that is the whole mechanism; there is no review screen and no appeal.
+  that is the whole mechanism; there is no appeal. A staff-only *inspection*
+  surface now exists at `/moderation` — who added and removed what — but it is
+  not a queue: nothing is pending, `image_reports` stays unread, and the removal
+  and restore verbs stay on the character page.
 - **Server-side sessions.** Identity is a signed cookie and nothing else.
 - **A second origin.** One box serves everything; Cloudflare caches in front of
   it, and Litestream is the only redundancy.

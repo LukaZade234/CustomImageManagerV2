@@ -2435,6 +2435,173 @@ def get_identity(identity_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def identity_by_ref(ref: str) -> str | None:
+    """The identity id whose public ref is `ref`, or None.
+
+    A scan of the identities table rather than an indexed column: the table is
+    bounded by people who have written something, and the lookup happens once
+    per moderation page view, so a migration would be cost without benefit. If it
+    ever grows past a few thousand rows, add the column then. See
+    `identity.public_ref` for why the id is not simply passed in the URL.
+    """
+    import identity as identity_module
+
+    conn = get_connection()
+    for row in conn.execute("SELECT id FROM identities"):
+        if identity_module.public_ref(row["id"]) == ref:
+            return row["id"]
+    return None
+
+
+def list_contributors() -> list[dict]:
+    """Every identity that has added or removed at least one image.
+
+    Pseudonyms are included and the privacy flags are deliberately ignored: this
+    is a staff-only inspection surface, and a tool that honoured
+    `hide_from_leaderboard` would be blind to exactly the anonymous, unattributed
+    contributor it exists to investigate. The public contributor board is
+    untouched.
+
+    The counts match what the detail lists show -- `added` is *currently active*
+    images the person added, `removed` is images they removed -- so the detail
+    header is never at odds with the list beneath it. Someone who has only ever
+    removed something still appears, because the actor set is the union.
+    """
+    import identity as identity_module
+
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT actor AS identity_id,"
+        "       SUM(CASE WHEN is_add = 1 AND state = 'active' THEN 1 ELSE 0 END) AS added,"
+        "       SUM(CASE WHEN is_add = 0 AND state = 'removed' THEN 1 ELSE 0 END) AS removed,"
+        "       MAX(at) AS last_at"
+        "  FROM ("
+        "        SELECT added_by AS actor, 1 AS is_add, state, added_at AS at"
+        "          FROM custom_images WHERE added_by IS NOT NULL"
+        "        UNION ALL"
+        "        SELECT removed_by AS actor, 0 AS is_add, state, removed_at AS at"
+        "          FROM custom_images WHERE removed_by IS NOT NULL"
+        "       )"
+        " GROUP BY actor",
+    ).fetchall()
+
+    ids = [r["identity_id"] for r in rows]
+    people: dict[str, dict] = {}
+    if ids:
+        placeholders = ",".join("?" for _ in ids)
+        people = {
+            r["id"]: dict(r)
+            for r in conn.execute(
+                "SELECT id, handle, role, discord_id FROM identities"
+                f" WHERE id IN ({placeholders})",
+                ids,
+            )
+        }
+
+    items = []
+    for r in rows:
+        actor = r["identity_id"]
+        # An identity row is written lazily, so an actor may not have one yet;
+        # fall back to the derived handle rather than dropping them, matching
+        # current_identity()'s own tolerance.
+        person = people.get(actor)
+        items.append(
+            {
+                "ref": identity_module.public_ref(actor),
+                "handle": (person or {}).get("handle") or identity_module.handle_for(actor),
+                "role": (person or {}).get("role") or "user",
+                "signed_in": bool((person or {}).get("discord_id")),
+                "added": int(r["added"] or 0),
+                "removed": int(r["removed"] or 0),
+                "last_at": r["last_at"],
+            }
+        )
+    items.sort(key=lambda item: item["last_at"] or "", reverse=True)
+    return items
+
+
+def list_images_by_identity(
+    identity_id: str,
+    *,
+    state: str,
+    character: str | None = None,
+    page: int = 1,
+    per_page: int = 24,
+) -> dict:
+    """One page of an actor's active additions or removals, newest first.
+
+    Rows are shaped like `get_removed_by_identity` so the existing card grid can
+    render them unchanged. `character` narrows to one name. The `added`/`removed`
+    totals are returned alongside so the detail header is right before either
+    list has loaded, and they are the same numbers `list_contributors` reports.
+    """
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+
+    if state == "removed":
+        where = "i.removed_by = ? AND i.state = 'removed'"
+        order = "COALESCE(i.removed_at, i.added_at) DESC, i.id DESC"
+    else:
+        where = "i.added_by = ? AND i.state = 'active'"
+        order = "i.added_at DESC, i.id DESC"
+    params: list = [identity_id]
+    if character:
+        # A substring match, not an exact name: the filter is a text box, and
+        # typing "rem" should narrow to Rem rather than silently match nothing.
+        where += " AND c.name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        escaped = character.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params.append(f"%{escaped}%")
+
+    conn = get_connection()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where}",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        "SELECT i.id AS id, i.url AS url, i.width AS width, i.height AS height,"
+        "       c.name AS character, i.added_at AS added_at,"
+        "       i.removed_at AS removed_at, i.removed_reason AS removed_reason"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        f" WHERE {where}"
+        f" ORDER BY {order}"
+        " LIMIT ? OFFSET ?",
+        (*params, per_page, (page - 1) * per_page),
+    ).fetchall()
+
+    totals = conn.execute(
+        "SELECT"
+        "  SUM(CASE WHEN added_by = ? AND state = 'active' THEN 1 ELSE 0 END) AS added,"
+        "  SUM(CASE WHEN removed_by = ? AND state = 'removed' THEN 1 ELSE 0 END) AS removed"
+        "  FROM custom_images",
+        (identity_id, identity_id),
+    ).fetchone()
+
+    return {
+        "items": [
+            {
+                "id": r["id"],
+                "url": r["url"],
+                "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+                "width": r["width"],
+                "height": r["height"],
+                "character": r["character"],
+                "added_at": r["added_at"],
+                "removed_at": r["removed_at"],
+                "removed_reason": r["removed_reason"],
+            }
+            for r in rows
+        ],
+        "total": int(total),
+        "total_pages": max(1, (int(total) + per_page - 1) // per_page),
+        "added": int(totals["added"] or 0),
+        "removed": int(totals["removed"] or 0),
+    }
+
+
 def _merge_identity(conn: sqlite3.Connection, source: str, target: str) -> dict:
     """Move everything owned by `source` onto `target`, then delete `source`.
 

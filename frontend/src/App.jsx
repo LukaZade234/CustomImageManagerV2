@@ -1,12 +1,14 @@
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import RequireModerator from './components/RequireModerator'
 import Toast from './components/Toast'
 import { Button, Card } from './components/ui'
 import AddPage from './pages/AddPage'
 import CharacterPage from './pages/CharacterPage'
 import CustomsPage from './pages/CustomsPage'
 import HomePage from './pages/HomePage'
+import ModerationPage from './pages/moderation/ModerationPage'
 import HiddenTab from './pages/profile/HiddenTab'
 import HistoryTab from './pages/profile/HistoryTab'
 import ProfileLayout from './pages/profile/ProfileLayout'
@@ -68,6 +70,14 @@ function App() {
               <Route path="removed" element={<RemovedTab />} />
             </Route>
             <Route path="/search" element={<SearchResultsPage />} />
+            <Route
+              path="/moderation"
+              element={
+                <RequireModerator>
+                  <ModerationPage />
+                </RequireModerator>
+              }
+            />
             <Route path="/character/:name" element={<CharacterPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

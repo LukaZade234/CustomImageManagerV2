@@ -1539,6 +1539,91 @@ body.reorder-touch-dragging {
     display: none;
   }
 }
+
+/* ---- Moderation ----------------------------------------------------------
+ * A master-detail inspection surface, off any character page, so the Art
+ * Carries the Colour Rule is absolute: no tinted cards, no coloured headers,
+ * accent marks state only. Counts are figures that update in place, so they use
+ * tabular figures. Its responsive rules live here, not in a media-query pile at
+ * the end of the file — DESIGN.md names that split as a bug that already
+ * shipped once.
+ */
+.moderation {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+  margin-top: var(--space-5);
+}
+.moderation-lead {
+  max-width: 60ch;
+}
+.moderation-users {
+  min-width: 0;
+}
+.moderation-users__list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.moderation-user {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  text-align: left;
+}
+.moderation-user.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.moderation-user__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.moderation-user__counts {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+.moderation-user--skeleton {
+  height: 52px;
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+.moderation-detail {
+  min-width: 0;
+}
+.moderation-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.moderation-detail__header .section-heading {
+  margin: 0;
+}
+.moderation-detail__filter {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .moderation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .moderation-users__list {
+    max-height: 40vh;
+  }
+}
 /* ---- Character gallery: justified rows -----------------------------------
  * Every image is shown whole. Each row is scaled so it fills the width exactly,
  * which is the only layout that stays tidy across the mix of tall character art,

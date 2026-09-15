@@ -286,6 +286,14 @@ login, so there is no chicken-and-egg problem and no admin password to leak.
 **This is a fallback, not the design.** If routine operation requires moderators to act, something
 in §1 is wrong and should be fixed there instead.
 
+A staff-only **inspection surface** was added later (`/moderation`; see `MODERATION.md`). It does
+not contradict the paragraph above, because it is not a queue: it holds nothing, counts nothing
+pending, changes no chrome with site state, and carries no acting verbs — removal and restore stay
+on the character page where the image and its context are, and `image_reports` stays unread. It
+answers *"what has this person been doing?"* when the operator already has a reason to look, which
+is inspection rather than routine moderation. If a later phase ever adds a pending count, a badge,
+or an action to it, that is the signal to re-read §1 and fix what is generating the backlog.
+
 ---
 
 ## 6. Data model: real tables instead of JSONB blobs

@@ -67,6 +67,18 @@ export const apiClient = {
     if (q) params.set('q', q)
     return api(`/api/customs?${params}`)
   },
+  listModerationUsers: () => api('/api/moderation/users'),
+  listModerationUserImages: ({
+    ref,
+    state = 'active',
+    character = '',
+    page = 1,
+    perPage = 24,
+  } = {}) => {
+    const params = new URLSearchParams({ state, page, per_page: perPage })
+    if (character) params.set('char', character)
+    return api(`/api/moderation/users/${encodeURIComponent(ref)}/images?${params}`)
+  },
   suggestCharacters: (q = '', limit = 10, series = '', pools = []) => {
     const params = new URLSearchParams({ q, limit: String(limit) })
     if (series) params.set('series', series)

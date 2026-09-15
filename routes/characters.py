@@ -390,6 +390,7 @@ _ACCENT_SEED = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 @characters_bp.route("/api/accent-override", methods=["POST"])
+@identity.require_moderator
 @rate_limited("edit_character")
 def accent_override():
     """Set, clear, or pixel-pick a character's accent colour. Staff only.
@@ -400,8 +401,6 @@ def accent_override():
     (`image_id` or `portrait: true`, plus `u`/`v` in 0..1) to sample a pixel.
     """
     me = identity.current_identity()
-    if not me.is_moderator:
-        return jsonify({"error": "Not permitted"}), 403
 
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()

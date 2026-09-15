@@ -14,6 +14,8 @@ Three cases matter and are easy to get wrong:
 
 import json
 
+import identity as identity_module
+
 SOMEONE_ELSE = "another-identity"
 
 
@@ -310,3 +312,96 @@ class TestHidingUnknownImages:
         response = client.post("/api/hide-images", json={"image_ids": [image_id]})
         assert response.status_code == 200
         assert response.get_json()["hidden"] == 0
+
+
+class TestModerationReadSurface:
+    """The staff-only inspection surface — read-only, no acting verbs.
+
+    It answers "what has this person been doing?" without becoming a queue:
+    nothing here is pending, and owner/handle/ref are all it ever returns.
+    """
+
+    def _owned(self, db, char, urls, owner):
+        db.ensure_identity(owner)
+        db.add_custom_images(char, urls, added_by=owner)
+
+    def test_a_plain_user_is_refused_by_both_endpoints(self, client, clean_db, identity_id):
+        ref = identity_module.public_ref(identity_id)
+        assert client.get("/api/moderation/users").status_code == 403
+        assert client.get(f"/api/moderation/users/{ref}/images").status_code == 403
+
+    def test_a_moderator_sees_the_contributors(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
+        make_moderator()
+
+        body = client.get("/api/moderation/users").get_json()
+        assert body["total"] == 1
+        item = body["items"][0]
+        assert item["ref"] == identity_module.public_ref(identity_id)
+        assert item["added"] == 1
+        assert item["removed"] == 0
+
+    def test_someone_who_only_removed_something_still_appears(self, client, clean_db, make_moderator):
+        # They added one image and later removed it, so they have no *active*
+        # additions — but the actor set is a union, so they still show up.
+        clean_db.ensure_identity("remover")
+        clean_db.add_custom_images("Rem", ["https://cdn/x.png"], added_by="remover")
+        clean_db.remove_custom_images("Rem", ["https://cdn/x.png"], "remover")
+        make_moderator()
+
+        items = {item["ref"]: item for item in client.get("/api/moderation/users").get_json()["items"]}
+        remover = items[identity_module.public_ref("remover")]
+        assert remover["added"] == 0
+        assert remover["removed"] == 1
+
+    def test_the_detail_splits_additions_and_removals(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/kept.png"], identity_id)
+        self._owned(clean_db, "Rem", ["https://cdn/gone.png"], identity_id)
+        clean_db.remove_custom_images("Rem", ["https://cdn/gone.png"], identity_id)
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+
+        added = client.get(f"/api/moderation/users/{ref}/images?state=active").get_json()
+        assert [i["url"] for i in added["items"]] == ["https://cdn/kept.png"]
+        assert added["added"] == 1
+        assert added["removed"] == 1
+
+        removed = client.get(f"/api/moderation/users/{ref}/images?state=removed").get_json()
+        assert [i["url"] for i in removed["items"]] == ["https://cdn/gone.png"]
+        assert removed["added"] == 1
+        assert removed["removed"] == 1
+
+    def test_the_character_filter_trims_the_list(self, client, clean_db, identity_id, make_moderator):
+        self._owned(clean_db, "Rem", ["https://cdn/rem.png"], identity_id)
+        self._owned(clean_db, "Emilia", ["https://cdn/emilia.png"], identity_id)
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+
+        body = client.get(f"/api/moderation/users/{ref}/images?char=Rem").get_json()
+        assert [i["url"] for i in body["items"]] == ["https://cdn/rem.png"]
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert client.get("/api/moderation/users/notthere/images").status_code == 404
+
+    def test_an_invalid_state_is_400(self, client, clean_db, identity_id, make_moderator):
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+        assert client.get(f"/api/moderation/users/{ref}/images?state=bogus").status_code == 400
+
+    def test_the_raw_identity_id_never_appears(self, client, clean_db, identity_id, make_moderator):
+        """The ref exists precisely so the id stays server-side."""
+        self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
+        make_moderator()
+        ref = identity_module.public_ref(identity_id)
+
+        users = client.get("/api/moderation/users").get_json()
+        detail = client.get(f"/api/moderation/users/{ref}/images").get_json()
+        assert identity_id not in json.dumps(users)
+        assert identity_id not in json.dumps(detail)
+
+    def test_public_ref_round_trips(self, clean_db, identity_id):
+        clean_db.ensure_identity(identity_id)
+        ref = identity_module.public_ref(identity_id)
+        assert clean_db.identity_by_ref(ref) == identity_id
+        assert clean_db.identity_by_ref("0" * 16) is None
