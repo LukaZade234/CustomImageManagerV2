@@ -640,6 +640,10 @@ why it does not contradict the anti-queue argument there.
       every write for a restricted account while reads pass, a persistent banner tells the person why
       (there is no email), and only the owner lifts it. The ban follows the unique Discord id across
       cookies; a different Discord account is the accepted gap.
+- [x] **A network signal for the second-account case.** Every write records a keyed hash of the
+      client address (never the address), pruned after 90 days; a contributor seen on a network a
+      restricted account used is flagged on their profile. A lead for a human, not an automatic
+      restriction — an IP is a household or a carrier as often as it is one person.
 - [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
       that may not exist, a cascade, and a second confirmation. The first irreversible action.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and

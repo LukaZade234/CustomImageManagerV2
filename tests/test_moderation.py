@@ -724,3 +724,84 @@ class TestModerationRestrictions:
         ref = self._ref("target")
         assert self._suspend(client, ref).status_code == 403
         assert self._post(client, ref, "ban", title="x").status_code == 403
+
+
+class TestNetworkLinks:
+    """Sharing a network with a restricted account is a signal, not a rule.
+
+    It is deliberately weak: a shared IP is a household, a phone network or a VPN
+    exit as often as it is one person, so it is surfaced for a human to judge and
+    never triggers a restriction by itself.
+    """
+
+    def _owned(self, db, char, url, owner):
+        db.ensure_identity(owner)
+        db.add_custom_images(char, [url], added_by=owner)
+
+    def test_a_write_records_the_network_once_and_counts_hits(self, client, clean_db, identity_id):
+        base = {"REMOTE_ADDR": "203.0.113.7"}
+        client.post("/api/saved", json={"name": "Rem"}, environ_base=base)
+        client.post("/api/saved", json={"name": "Emilia"}, environ_base=base)
+
+        rows = (
+            clean_db.get_connection()
+            .execute(
+                "SELECT ip_hash, hits FROM identity_networks WHERE identity_id = ?", (identity_id,)
+            )
+            .fetchall()
+        )
+        assert len(rows) == 1
+        assert rows[0]["ip_hash"]
+        assert rows[0]["hits"] == 2
+
+        # A different network is a second row, not a second identity.
+        client.post(
+            "/api/saved", json={"name": "Rem"}, environ_base={"REMOTE_ADDR": "198.51.100.4"}
+        )
+        assert (
+            clean_db.get_connection()
+            .execute(
+                "SELECT COUNT(*) AS n FROM identity_networks WHERE identity_id = ?", (identity_id,)
+            )
+            .fetchone()["n"]
+            == 2
+        )
+
+    def test_an_account_that_shares_a_banned_network_is_flagged(self, clean_db):
+        self._owned(clean_db, "Rem", "https://cdn/banned.png", "banned")
+        self._owned(clean_db, "Rem", "https://cdn/other.png", "other")
+        clean_db.record_identity_network("banned", "shared")
+        clean_db.record_identity_network("other", "shared")
+        clean_db.set_moderation_status("banned", "banned", reason="spam")
+
+        items = {item["ref"]: item for item in clean_db.list_contributors()}
+        assert items[identity_module.public_ref("other")]["linked_restricted"] is True
+        # The restricted account is not "linked to itself".
+        assert items[identity_module.public_ref("banned")]["linked_restricted"] is False
+
+    def test_an_expired_suspension_does_not_link(self, clean_db):
+        self._owned(clean_db, "Rem", "https://cdn/old.png", "old")
+        self._owned(clean_db, "Rem", "https://cdn/other.png", "other")
+        clean_db.record_identity_network("old", "shared")
+        clean_db.record_identity_network("other", "shared")
+        clean_db.set_moderation_status("old", "suspended", until="2000-01-01T00:00:00.000Z")
+
+        items = {item["ref"]: item for item in clean_db.list_contributors()}
+        assert items[identity_module.public_ref("other")]["linked_restricted"] is False
+
+    def test_old_links_are_pruned(self, clean_db):
+        clean_db.ensure_identity("ghost")
+        with clean_db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO identity_networks (identity_id, ip_hash, first_seen, last_seen, hits)"
+                " VALUES ('ghost', 'stale', '2000-01-01T00:00:00.000Z',"
+                "         '2000-01-01T00:00:00.000Z', 1)"
+            )
+        # Writing again prunes anything past the retention window.
+        clean_db.record_identity_network("ghost", "fresh")
+        rows = (
+            clean_db.get_connection()
+            .execute("SELECT ip_hash FROM identity_networks WHERE identity_id = ?", ("ghost",))
+            .fetchall()
+        )
+        assert [r["ip_hash"] for r in rows] == ["fresh"]

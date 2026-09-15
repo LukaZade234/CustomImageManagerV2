@@ -291,6 +291,60 @@ def persist_identity(response):
     return response
 
 
+def client_ip() -> str:
+    """The caller's address, as best the deployment allows.
+
+    Cloudflare sets `CF-Connecting-IP`; `X-Forwarded-For`'s first hop is the next
+    best. Both are only meaningful when the origin is reached through the proxy,
+    which is the production shape; locally neither is present and the socket
+    address is the client. This feeds a moderation *signal*, never a gate, so the
+    spoofing caveat is acceptable.
+    """
+    forwarded = request.headers.get("CF-Connecting-IP")
+    if forwarded:
+        return forwarded.strip()
+    chain = request.headers.get("X-Forwarded-For")
+    if chain:
+        return chain.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
+def ip_hash(ip: str) -> str:
+    """A keyed digest of an address, so the address itself is never stored.
+
+    Keyed with SECRET_KEY: rotating the key invalidates every stored link, which
+    is the right failure mode for a short-lived signal.
+    """
+    from flask import current_app
+
+    key = current_app.config["SECRET_KEY"].encode("utf-8")[:64]
+    return hashlib.blake2b(ip.encode("utf-8"), key=key, digest_size=16).hexdigest()
+
+
+def record_network() -> None:
+    """before_request hook: remember which network an identity wrote from.
+
+    It runs before `block_restricted_writes` so a blocked attempt is still
+    recorded -- a restricted account coming back is exactly the link worth
+    seeing. Only non-GETs are recorded: a read says nothing about who is
+    contributing, and recording every page view would be a log of where everyone
+    browsed.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    identity_id = getattr(g, "identity_id", None)
+    if not identity_id:
+        return None
+    ip = client_ip()
+    if not ip:
+        return None
+
+    import db
+
+    db.record_identity_network(identity_id, ip_hash(ip))
+    return None
+
+
 # A restricted account may still read, so the few POSTs that are *reads* in
 # disguise stay open: leaving, reading the notice, fetching an image to download,
 # copying a command. Exact paths, not a prefix, so a future route is not opened

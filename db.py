@@ -2422,6 +2422,34 @@ def clear_moderation_status(identity_id: str) -> bool:
         return bool(cur.rowcount)
 
 
+# How long a network link is kept. Long enough to catch a return within a few
+# months, short enough that it is not a permanent record of where someone was.
+NETWORK_RETENTION_DAYS = 90
+
+
+def record_identity_network(
+    identity_id: str, ip_hash: str, *, retention_days: int = NETWORK_RETENTION_DAYS
+) -> None:
+    """Remember that an identity was seen from a network hash.
+
+    An upsert, so the table is bounded by (identity, network) pairs rather than
+    by requests, and anything past the retention window is pruned on the way
+    through -- the link is deliberately short-lived.
+    """
+    now = _now()
+    cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO identity_networks (identity_id, ip_hash, first_seen, last_seen, hits)"
+            " VALUES (?, ?, ?, ?, 1)"
+            " ON CONFLICT (identity_id, ip_hash) DO UPDATE SET"
+            "   last_seen = excluded.last_seen, hits = identity_networks.hits + 1",
+            (identity_id, ip_hash, now, now),
+        )
+        conn.execute("DELETE FROM identity_networks WHERE last_seen < ?", (cutoff,))
+
+
 def get_removed_for(char_name: str) -> list[dict]:
     """The Removed drawer: everything soft-deleted for this character."""
     conn = get_connection()
@@ -2848,6 +2876,38 @@ def list_contributors() -> list[dict]:
             )
         }
 
+    # The networks a currently-restricted account has used, and which other
+    # accounts share one. Computed only when there is something restricted, so
+    # the common case touches nothing.
+    restricted_ids = {
+        r["identity_id"]
+        for r in conn.execute(
+            "SELECT identity_id FROM moderation_status"
+            " WHERE status = 'banned' OR (status = 'suspended' AND (until IS NULL OR until > ?))",
+            (_now(),),
+        )
+    }
+    restricted_networks: set[str] = set()
+    networks: dict[str, set[str]] = {}
+    if restricted_ids:
+        placeholders = ",".join("?" for _ in restricted_ids)
+        restricted_networks = {
+            r["ip_hash"]
+            for r in conn.execute(
+                "SELECT DISTINCT ip_hash FROM identity_networks"
+                f" WHERE identity_id IN ({placeholders})",
+                list(restricted_ids),
+            )
+        }
+    if restricted_networks:
+        placeholders = ",".join("?" for _ in restricted_networks)
+        for r in conn.execute(
+            "SELECT identity_id, ip_hash FROM identity_networks"
+            f" WHERE ip_hash IN ({placeholders})",
+            list(restricted_networks),
+        ):
+            networks.setdefault(r["identity_id"], set()).add(r["ip_hash"])
+
     items = []
     for r in rows:
         actor = r["identity_id"]
@@ -2871,6 +2931,10 @@ def list_contributors() -> list[dict]:
                 "moderation_status": status,
                 "moderation_until": until,
                 "moderation_reason": (person or {}).get("moderation_reason") or "",
+                # A signal, not a rule: this account has been seen from a network
+                # a currently-restricted *other* account has used. A human judges.
+                "linked_restricted": actor not in restricted_ids
+                and bool(networks.get(actor, set()) & restricted_networks),
             }
         )
     items.sort(key=lambda item: item["last_at"] or "", reverse=True)

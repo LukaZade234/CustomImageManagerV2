@@ -584,3 +584,65 @@ describe('suspending and banning', () => {
     expect(screen.queryByRole('button', { name: /Lift/i })).not.toBeInTheDocument()
   })
 })
+
+describe('the linked-network signal', () => {
+  it('flags an account seen on a restricted network, without acting on it', async () => {
+    api.listModerationUsers.mockResolvedValue({
+      items: [{ ...USERS[0], linked_restricted: true }],
+      total: 1,
+    })
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    expect(screen.getByText('Linked network')).toBeInTheDocument()
+    expect(screen.getByText(/same network as a restricted account/i)).toBeInTheDocument()
+    // It is a signal: nothing is disabled by it.
+    expect(screen.getByRole('button', { name: 'Ban' })).toBeEnabled()
+  })
+
+  it('says nothing when the account shares no restricted network', async () => {
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    expect(screen.queryByText(/same network/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('sorting the finder', () => {
+  it('orders by account creation, newest first', async () => {
+    api.listModerationUsers.mockResolvedValue({
+      items: [
+        {
+          ref: 'ref-old',
+          handle: 'Old Timer',
+          role: 'user',
+          signed_in: false,
+          added: 1,
+          removed: 0,
+          created_at: '2020-01-01T00:00:00Z',
+          last_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          ref: 'ref-new',
+          handle: 'Newcomer',
+          role: 'user',
+          signed_in: false,
+          added: 1,
+          removed: 0,
+          created_at: '2026-01-01T00:00:00Z',
+          last_at: '2020-01-01T00:00:00Z',
+        },
+      ],
+      total: 2,
+    })
+    const user = userEvent.setup()
+    renderModeration()
+    await screen.findByRole('button', { name: /Old Timer/ })
+
+    await user.selectOptions(screen.getByLabelText('Sort'), 'joined')
+
+    const order = screen
+      .getAllByRole('button', { name: /Old Timer|Newcomer/ })
+      .map((el) => el.textContent)
+    expect(order[0]).toMatch(/Newcomer/)
+  })
+})

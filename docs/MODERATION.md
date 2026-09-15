@@ -281,7 +281,8 @@ profile and work. Copy the `useSearchParams` discipline from `CustomsPage.jsx` e
 **`ContributorFinder.jsx`** — the opening state. A prominent centred search with a row of facets
 beneath it, then the list. The list is small and fully loaded, which is the case
 `profile/useFilteredList.js` exists for: reuse it for query and sort (search by handle; *Most added* /
-*Most removed* / *Recent activity* / *Name*) rather than adding server-side search. The facets are
+*Most removed* / *Recent activity* / *Newest accounts* / *Name*) rather than adding server-side
+search. The facets are
 in-memory too — **Role** (staff only), **Account** (Discord only) and **History** (has removals) — each
 a labelled `Select`, because those are the questions worth asking before picking a name: are they
 staff, would a ban mean anything, and have they removed anything. Each row is a `Card` carrying the
@@ -511,6 +512,23 @@ identity.
   Discord binding it hangs on. This is why `DECISIONS.md` §4 says bans became meaningful once
   uploading required Discord.
 
+#### The second Discord account — a signal, not a rule
+
+The one evasion the identity anchor cannot catch is a person making a *new* Discord account. An IP
+looked like the tool for it, and was rejected as a restriction: an address is a mobile carrier, a
+household or a VPN exit as often as it is one person, it rotates, and it is evaded by a VPN — so an
+IP ban is both easy to escape and expensive in innocents. It is the worst shape of lever.
+
+What is kept instead is weaker and safer: every write records a **keyed hash** of the client address
+(never the address), tied to the identity and pruned after 90 days. When a contributor has been seen
+from a network a *currently restricted other* account used, their profile says so — a label for a
+moderator to weigh, not an action the app takes. Nothing is auto-restricted, no backlog accumulates,
+and a shared household network is a question rather than a sentence.
+
+The obvious caveats: the hash is only as trustworthy as the header it comes from (Cloudflare's
+`CF-Connecting-IP`, else the first `X-Forwarded-For` hop — meaningful only when the origin is reached
+through the proxy), and a VPN defeats it. It is a lead, not proof.
+
 ### Backend
 - Migration `017_moderation_actions.sql`:
   `moderation_actions(id, identity_id, actor_id, action, title, body, created_at)`, `action` in
@@ -520,14 +538,20 @@ identity.
   `moderation_status(identity_id PK, status, until, reason, actor_id, created_at)`, `status` in
   `suspended` / `banned`. `db.get_identity` joins it in and expires an old suspension;
   `db.set_moderation_status` / `db.clear_moderation_status` write it.
+- Migration `019_identity_networks.sql`:
+  `identity_networks(identity_id, ip_hash, first_seen, last_seen, hits)` keyed on
+  `(identity_id, ip_hash)`. `identity.record_network` (a `before_request` ahead of the guard) writes a
+  keyed hash of the client address on every non-GET; `db.record_identity_network` upserts it and prunes
+  past a 90-day window. `db.list_contributors` carries `linked_restricted`.
 - `db.moderate_identity` (log the action, deliver the message, return its id),
   `db.list_moderation_actions(identity_id)` (the log with the sender's handle) and
   `db.delete_moderation_action(id)` (owner-only at the route; the cascade removes the message).
   `db.list_notifications` joins the link to carry `moderation_action` on each item.
 - `identity.block_restricted_writes` — a `before_request` after `load_identity` that refuses every
-  non-GET for a restricted identity, allow-listing only `/api/auth/logout` and notifications
-  read/dismiss. `identity.Identity` carries `is_suspended` / `is_banned` / `is_restricted`, and
-  `/api/me` returns the status, its end and the reason.
+  non-GET for a restricted identity. It allow-lists the POSTs that are reads in disguise:
+  `/api/auth/logout`, notifications read/dismiss, `/api/download-image-proxy`, `/api/takes`, and
+  recording a page view. `identity.Identity` carries `is_suspended` / `is_banned` / `is_restricted`,
+  and `/api/me` returns the status, its end and the reason.
 - `routes/moderation.py`: `POST .../warn`, `.../suspend` (takes `days`), `.../ban` — any moderator,
   but the owner is never a target, you cannot target yourself, and a moderator cannot target another
   moderator (staff-on-staff restriction is an owner move) — `.../lift` (owner only), `GET .../history`,
@@ -538,7 +562,8 @@ identity.
   description, and a duration for a suspension. What the moderator writes is exactly what the
   recipient reads, and the lead names the difference a suspend or ban makes.
 - `UserProfile.jsx`: the three buttons, the current status as a badge (with a suspension's end date),
-  a disabled **Ban** once already banned, and an owner-only confirmed **Lift**.
+  a disabled **Ban** once already banned, an owner-only confirmed **Lift**, and the linked-network
+  signal when `linked_restricted`.
 - `RestrictionBanner.jsx`: the global notice, tinted from the status colour and rendered above the app
   shell; it disappears the moment the restriction is lifted.
 - `ModerationHistory.jsx`: the selected contributor's record, under their header — each line badged

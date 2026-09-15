@@ -21,6 +21,7 @@ const SORTS = {
   added: { label: 'Most added', compare: byAsc('added'), order: 'desc' },
   removed: { label: 'Most removed', compare: byAsc('removed'), order: 'desc' },
   recent: { label: 'Recent activity', compare: byAsc('last_at'), order: 'desc' },
+  joined: { label: 'Newest accounts', compare: byAsc('created_at'), order: 'desc' },
   name: { label: 'Name', compare: byText('handle'), order: 'asc' },
 }
 const FIELDS = ['handle']

@@ -188,6 +188,12 @@ export default function UserProfile({
         <p className="moderation-profile__note text-meta">
           Warn sends a message. Suspend and ban also stop the account changing anything.
         </p>
+        {user.linked_restricted && (
+          <p className="moderation-profile__link text-meta">
+            <Badge tone="caution">Linked network</Badge> Seen from the same network as a restricted
+            account.
+          </p>
+        )}
       </div>
 
       <dl className="moderation-profile__stats">
