@@ -2094,6 +2094,89 @@ def count_images_added_by(identity_id: str) -> int:
     ).fetchone()["n"]
 
 
+# --- Notifications -------------------------------------------------------
+#
+# One table, two producers: the app telling an account something about itself
+# (mechanical), and the owner addressing a group (broadcast). A broadcast is
+# fanned out to a row per recipient at send time, so read state is per row and
+# there is no separate dismissal table. See migration 014.
+
+
+def add_notification(
+    identity_id: str,
+    title: str,
+    body: str = "",
+    *,
+    kind: str = "mechanical",
+    created_by: str | None = None,
+) -> None:
+    """One message to one identity. The identity row is created if it is new."""
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO notifications (identity_id, kind, title, body, created_by, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (identity_id, kind, title, body, created_by, _now()),
+        )
+
+
+def list_notifications(identity_id: str, *, limit: int = 100) -> list[dict]:
+    """This identity's notifications, newest first."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, kind, title, body, created_at, read_at"
+        "  FROM notifications WHERE identity_id = ?"
+        " ORDER BY created_at DESC, id DESC LIMIT ?",
+        (identity_id, max(1, int(limit))),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_unread_notifications(identity_id: str) -> int:
+    conn = get_connection()
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM notifications WHERE identity_id = ? AND read_at IS NULL",
+        (identity_id,),
+    ).fetchone()["n"]
+
+
+def mark_notifications_read(identity_id: str) -> int:
+    """Clear the unread flag on everything this identity has. Returns how many."""
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE notifications SET read_at = ? WHERE identity_id = ? AND read_at IS NULL",
+            (_now(), identity_id),
+        )
+        return cur.rowcount
+
+
+def broadcast_notification(
+    title: str, body: str, audience: str, created_by: str | None = None
+) -> int:
+    """Fan a message out to a row per recipient. Returns the number sent.
+
+    `audience` is `everyone` or `moderators`. The fan-out is what keeps read
+    state trivial; the identity count is the bound.
+    """
+    with transaction() as conn:
+        if audience == "moderators":
+            ids = [
+                r["id"]
+                for r in conn.execute(
+                    "SELECT id FROM identities WHERE role IN ('moderator', 'owner')"
+                )
+            ]
+        else:
+            ids = [r["id"] for r in conn.execute("SELECT id FROM identities")]
+        now = _now()
+        conn.executemany(
+            "INSERT INTO notifications (identity_id, kind, title, body, created_by, created_at)"
+            " VALUES (?, 'broadcast', ?, ?, ?, ?)",
+            [(identity_id, title, body, created_by, now) for identity_id in ids],
+        )
+        return len(ids)
+
+
 def get_removed_for(char_name: str) -> list[dict]:
     """The Removed drawer: everything soft-deleted for this character."""
     conn = get_connection()

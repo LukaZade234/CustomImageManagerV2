@@ -27,6 +27,11 @@ above their work — the images they added or removed, with the verbs that act o
 permanent delete), and a character-level view of the same work sorted the way Browse Customs sorts
 characters.
 
+It lives **inside the profile**, as one more tab beside Saved, History, Hidden and Removed, and not
+in the topbar. It is something you go to; a permanent topbar entry for a staff tool is the queue's
+chrome by another route. The topbar instead carries **Notifications**, which is the channel the
+moderation plan needs (below).
+
 ### This is not the queue that DECISIONS argues against
 
 `DECISIONS.md` §1 lists "routine human moderation" as a non-goal, in these terms: *"If the design
@@ -316,13 +321,12 @@ they added and removed."*
 
 #### 9. Wiring
 
-- **`App.jsx`** — one route above the `*` catch-all:
-  `<Route path="/moderation" element={<RequireModerator><ModerationPage /></RequireModerator>} />`
-- **`Navbar.jsx`** — a fourth inline link in the end rail, wrapped in `{me?.is_moderator && …}`, as
-  `Button as={Link} variant="ghost" className="btn-nav"`. Ghost, not primary: Add Character already
-  owns the one solid button per screen, and this is a correction tool, not something every visitor
-  uses. The existing `navbar-role` badge is the precedent for role-conditional chrome. It must fold
-  into the hamburger below 960px like its siblings.
+- **`App.jsx`** — the route is a child of `/profile`, behind the guard:
+  `<Route path="moderation" element={<RequireModerator><ModerationPage /></RequireModerator>} />`.
+  `/moderation` stays as a redirect into it for old links.
+- **`ProfileLayout.jsx`** — a **Moderation** tab, added to the tab list only when `me.is_moderator`.
+- **`Navbar.jsx`** — no moderation entry. The end rail's fourth link is **Notifications** (see
+  below), because that is the thing every visitor has.
 - **`pages.css`** — a new `/* Moderation */` section after the existing "Identity and moderation"
   block. **Its responsive rules go in that same section**, not in a separate media-query pile at the
   end of the file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation`,
@@ -377,6 +381,48 @@ whose claims are already false teaches the next reader that the rules are decora
 6. Keyboard and theme: tab from the master through the profile stats and actions into the work panes
    with a visible ring on every stop (except the disabled buttons, which are correctly skipped);
    light, dark, and system with no stored preference; 480 / 768 / 960 / 1200.
+
+---
+
+## Notifications — the channel moderation needs
+
+The topbar carries **Notifications** (`/notifications`), because moderation needs a way to *tell*
+someone something. It is the missing half of "warn": without a channel, a warn button does nothing.
+
+**Shape.** A simple, hairline-separated list — a title, a date, and optional body text, newest first.
+Two sources:
+
+- **Mechanical** — the system telling you about your own account. The first is a role change:
+  promoted to moderator, or demoted. More hook onto the same `db.add_notification` call as the
+  actions that need them land (a moderator removing your image, a report threshold clearing it).
+- **Owner-authored** — the owner writes a message and sends it. The compose section sits at the top
+  of the page and is owner-only: choose an audience (**everyone**, or **moderators only**), a title
+  and a body, then send. Deliberately a small template, not a rich editor.
+
+**Fan-out, not audience resolution.** A broadcast inserts one row per recipient identity at send
+time, so a notification is always "this identity's row" and read state is a plain `read_at` on it.
+The alternative — an audience column resolved at read time — needs a second dismissal table to
+remember who has read what. The cost is that someone who arrives after a broadcast does not receive
+it, which is what "a message sent on a date" means anyway. The identity count is the bound, and it is
+small.
+
+**What it is not.** Not a queue, and not a second inbox to tend: nothing is assigned, nothing is
+counted as pending *work*, and the unread dot is only ever your own messages. Mechanical
+notifications are the app talking to one person about their own account; the owner's are an
+announcement. Nothing here is actionable — acting still happens where the thing happened.
+
+### Backend
+- Migration `014_notifications.sql`: `notifications(id, identity_id, kind, title, body, created_by,
+  created_at, read_at)`, `kind` in `mechanical` / `broadcast`, indexed on `(identity_id, created_at)`.
+- `db.add_notification`, `db.list_notifications`, `db.mark_notifications_read`,
+  `db.broadcast_notification(title, body, audience, created_by)`.
+- `routes/notifications.py`: `GET /api/notifications` (own list + unread count),
+  `POST /api/notifications/read` (mark all read), `POST /api/notifications/broadcast` (owner only).
+- The role-change route writes a mechanical notification to the target.
+
+### Frontend
+- `queries/notifications.js`; a Notifications entry in the navbar end rail with a small unread dot;
+  `/notifications`. The owner's compose form is the first card on the page, owner-only.
 
 ---
 

@@ -615,18 +615,22 @@ doing?"* meant guessing a character page or opening SQLite. This adds the surfac
 **inspection, not a queue** — see `docs/MODERATION.md` for the full plan and `DECISIONS.md` §5 for
 why it does not contradict the anti-queue argument there.
 
-- [x] **The review surface** (`/moderation`, staff-only). A master list of every contributor who
-      added or removed an image, beside a detail pane of their additions or removals, filtered by
-      character and paged on the server. Backed by `GET /api/moderation/users` and
+- [x] **The review surface** (staff-only). A master list of every contributor who added or removed
+      an image, beside a detail pane of their additions or removals, filtered by character and paged
+      on the server. Backed by `GET /api/moderation/users` and
       `/api/moderation/users/<ref>/images` and `/characters`, gated by a shared `require_moderator`
-      decorator. Later reshaped around a contributor profile with stats, a character-level view, and
-      image restore; role changes are owner-only.
+      decorator. Reshaped around a contributor profile with stats, a character-level view, and image
+      restore; role changes are owner-only. It is a **profile tab** (`/profile/moderation`), not a
+      topbar entry.
 - [x] **Restore an image from the moderation page.** Reuses the existing `/api/restore-images`.
 - [x] **Promote / demote a contributor (owner only).** `POST /api/moderation/users/<ref>/role`,
       wrapping `db.set_role`, with a plus/minus control and a confirmation. Moderators hold every
       other power but cannot change roles.
+- [x] **Notifications** (the moderation channel). A topbar entry beside a profile-tab moderation
+      surface: a plain list of messages to you, mechanical (a role change) and owner broadcasts
+      (everyone, or moderators only), fanned out per recipient. This is what "warn" will use.
 - [ ] **Phase 2 — warn / suspend / ban.** Still inert; needs a decision on what each means for a
-      cookie identity.
+      cookie identity, and now has the notification channel to say them through.
 - [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
       that may not exist, a cascade, and a second confirmation. The first irreversible action.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and

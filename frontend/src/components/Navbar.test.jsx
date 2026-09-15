@@ -289,3 +289,25 @@ describe('folding on a narrow viewport', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 })
+
+describe('notifications entry', () => {
+  it('carries Notifications and no moderation entry', () => {
+    useStore.setState({
+      me: {
+        handle: 'Amber Otter',
+        role: 'owner',
+        is_moderator: true,
+        is_owner: true,
+        signed_in: true,
+        discord_available: true,
+      },
+    })
+    renderNav()
+    expect(screen.getByRole('link', { name: /Notifications/i })).toHaveAttribute(
+      'href',
+      '/notifications',
+    )
+    // Moderation lives in the profile now, not the topbar.
+    expect(screen.queryByRole('link', { name: /Moderation/i })).not.toBeInTheDocument()
+  })
+})

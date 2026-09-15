@@ -98,6 +98,14 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
     }),
+  getNotifications: () => api('/api/notifications'),
+  markNotificationsRead: () => api('/api/notifications/read', { method: 'POST' }),
+  broadcastNotification: (data) =>
+    api('/api/notifications/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   suggestCharacters: (q = '', limit = 10, series = '', pools = []) => {
     const params = new URLSearchParams({ q, limit: String(limit) })
     if (series) params.set('series', series)

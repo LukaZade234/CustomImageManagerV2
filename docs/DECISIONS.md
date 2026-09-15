@@ -298,12 +298,15 @@ login, so there is no chicken-and-egg problem and no admin password to leak.
 **This is a fallback, not the design.** If routine operation requires moderators to act, something
 in §1 is wrong and should be fixed there instead.
 
-A staff-only **inspection surface** was added later (`/moderation`; see `MODERATION.md`). It does
-not contradict the paragraph above, because it is not a queue: it holds nothing, counts nothing
-pending, and changes no chrome with site state. It answers *"what has this person been doing?"* when
-the operator already has a reason to look, which is inspection rather than routine moderation. Two
-of its verbs are live — **restore** an image (already non-destructive) and the **owner-only**
-promote/demote of a contributor's role. The rest stay inert: permanent delete, and warn/suspend/ban,
+A staff-only **inspection surface** was added later (`/profile/moderation`; see `MODERATION.md`).
+It sits inside the profile as one more tab rather than in the topbar, and does not contradict the
+paragraph above, because it is not a queue: it holds nothing, counts nothing pending, and changes no
+chrome with site state. It answers *"what has this person been doing?"* when the operator already has
+a reason to look, which is inspection rather than routine moderation. Two of its verbs are live —
+**restore** an image (already non-destructive) and the **owner-only** promote/demote of a
+contributor's role. The topbar instead carries **Notifications**, the channel a future warn/suspend
+needs: the app messaging one account, and the owner messaging everyone or the moderators. It is a
+message log, not a worklist. The remaining verbs stay inert: permanent delete, and warn/suspend/ban,
 which have no meaning yet for a cookie identity. `image_reports` stays unread. Image verbs are placed
 here as well as on the character page because a pattern — the same person removing images across many
 characters — is only visible in one place; that still requires opening a contributor on purpose. If a

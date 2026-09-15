@@ -1728,6 +1728,61 @@ body.reorder-touch-dragging {
     max-height: 40vh;
   }
 }
+/* ---- Notifications -------------------------------------------------------
+ * A plain message log: rows separated by hairlines, unread marked in the
+ * accent. The owner's compose form is the first card, a small template rather
+ * than an editor.
+ */
+.notification-list {
+  margin-top: var(--space-4);
+}
+.notification {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+.notification:first-child {
+  border-top: 0;
+}
+.notification__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.notification__title {
+  margin: 0;
+  font-size: var(--type-section);
+  font-weight: var(--weight-medium);
+}
+.notification--unread .notification__title {
+  color: var(--accent);
+}
+.notification__date {
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+.notification__body {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+.notification-compose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.notification-compose__body {
+  resize: vertical;
+  font: inherit;
+}
+.navbar-notifications__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 /* ---- Character gallery: justified rows -----------------------------------
  * Every image is shown whole. Each row is scaled so it fills the width exactly,
  * which is the only layout that stays tidy across the mix of tall character art,

@@ -144,5 +144,19 @@ def moderation_set_role(ref):
 
     if not db.set_role(target_id, role):
         return jsonify({"error": "Could not change the role"}), 500
+    # Tell the person. This is the first mechanical notification; the channel it
+    # uses is the one the owner's broadcasts go out on (docs/MODERATION.md).
+    if role == "moderator":
+        db.add_notification(
+            target_id,
+            "You are now a moderator",
+            "You have been given access to the moderation surface, in your profile.",
+        )
+    else:
+        db.add_notification(
+            target_id,
+            "Your moderator role was removed",
+            "You no longer have access to the moderation surface.",
+        )
     log.info("moderation.role_changed", ref=ref, role=role)
     return jsonify({"success": True, "ref": ref, "role": role})

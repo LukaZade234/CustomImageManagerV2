@@ -35,6 +35,7 @@ SPA_INDEX = os.path.join(SPA_DIR, "index.html")
 @spa_bp.route("/customs")
 @spa_bp.route("/search")
 @spa_bp.route("/profile")
+@spa_bp.route("/notifications")
 @spa_bp.route("/moderation")
 @spa_bp.route("/character/<path:name>")
 def index(name=None):

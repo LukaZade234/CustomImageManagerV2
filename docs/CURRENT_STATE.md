@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the eleven migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the fourteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -168,7 +168,8 @@ because that had to stop being true.
 | `image_reports` | — | Two distinct reporters remove an image |
 | `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
-| `schema_migrations` | 11 | Which migrations have run |
+| `notifications` | — | Messages to one identity: mechanical, and owner broadcasts fanned out per recipient |
+| `schema_migrations` | 14 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),
@@ -392,6 +393,14 @@ limited per identity (`ratelimit.py`).
 | GET | `/api/catalog/series` | Series names for autocomplete. |
 | POST | `/api/catalog/add-character` | Promote a catalog entry into the working set. |
 
+**`notifications`**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/notifications` | This identity's messages, newest first, plus the unread count. |
+| POST | `/api/notifications/read` | Mark everything this identity has as read. |
+| POST | `/api/notifications/broadcast` | Owner only: fan a message out to everyone, or to moderators only. |
+
 **`spa`**
 
 | Method | Path | Purpose |
@@ -401,6 +410,10 @@ limited per identity (`ratelimit.py`).
 | GET | `/assets/<path:filename>` | — |
 | GET | `/character/<path:name>` | — |
 | GET | `/customs` | — |
+| GET | `/search` | — |
+| GET | `/profile` | — |
+| GET | `/notifications` | — |
+| GET | `/moderation` | — |
 | GET | `/saved` | — |
 
 **`upload_imgchest`**
