@@ -52,6 +52,7 @@ makes CORS subtle enough (no `*` with credentials) that hand-rolling it is a mis
   `CharacterPage.jsx` due to be split in Phase 10, the risk/benefit is wrong right now. The
   formatter is configured and matches the existing style (single quotes, no semicolons, 2-space);
   run `npm run format` as part of Phase 10, when the files are being rewritten anyway.
+  **Done:** `biome check src` (which includes the formatter) is clean across all 132 files.
 - **16 ruff and 19 biome findings that need judgement** (`SIM102`, `SIM103`, `B904`, `E741`,
   `useParseIntRadix`, `noArrayIndexKey`, `useExhaustiveDependencies`). These alter logic, so they
   wait for the Phase 1 test harness.
@@ -486,8 +487,12 @@ them. There are no v2 users yet, so this costs nothing now.
       rather than a production surprise.
 - [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671, now 963 after the mode and
       accent rework. The four mutually exclusive mode booleans became one `mode` value, and
-      `GalleryToolbar` and `CharacterHeader` moved out with tests of their own. `AddPage.jsx`
-      (745 lines) is still to do.
+      `GalleryToolbar` and `CharacterHeader` moved out with tests of their own.
+- [x] **Split `AddPage.jsx`** _(done)_ — 806 lines down to 253. The Mudae lookup and the manual
+      form are their own components (`AddMudaePanel` 519, `AddManualForm` 135) with tests of
+      their own; the page keeps only the catalog-match logic and the one record both panels
+      share, and hands a found character across with a single `onPrefill`. The name/series
+      comparison moved to `utils/normalizeSeries.js` so the two folds cannot drift.
 - [x] **Structured logging** _(done)_ — `logs.py`, logfmt to stdout, replacing all 99
       `print(..., flush=True)` calls except the four in the `__main__` CLI block, which are
       genuine terminal output. Identity and request path attach automatically via a logging

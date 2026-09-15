@@ -400,8 +400,9 @@ change in what the server is answering.
 
 `@types/react` and `@types/react-dom` are installed although the project contains no TypeScript.
 The decision is deliberately left open, but the timing is not: adopting TS is cheapest immediately
-before `AddPage.jsx` (745 lines, not yet split) is restructured, and considerably more expensive
-after. Either commit then, or remove the unused type packages.
+before a large component is restructured, and considerably more expensive after. `AddPage.jsx`
+(745 lines when this was written) has since been split, so that particular window has closed; the
+choice now stands on its own merits. Either commit, or remove the unused type packages.
 
 The same timing argument applies to the frontend major upgrades (React 18→19, react-router 6→7,
 zustand 4→5, Vite 5→8, which also clear 5 npm vulnerabilities): do them while the components are
