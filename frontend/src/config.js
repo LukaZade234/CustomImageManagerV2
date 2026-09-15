@@ -14,9 +14,11 @@
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 /**
- * Where the ~1000 default character images live. Empty means same origin, i.e.
- * Flask serving them off local disk, which is what production did in v1 and what
- * moving them to R2 fixes.
+ * Where the default character images live, i.e. the R2 bucket's custom domain.
+ * Empty means same origin. The committed copies are gone from the repo; the
+ * working rows now carry catalog `mudae.net` URLs and their R2 WebP mirrors, so
+ * this only matters as the fallback that `imageUrl` appends `/character_images/`
+ * to for a stored bare filename — of which there should be none left.
  */
 export const IMAGE_BASE = (import.meta.env.VITE_IMAGE_BASE_URL || '').replace(/\/$/, '')
 

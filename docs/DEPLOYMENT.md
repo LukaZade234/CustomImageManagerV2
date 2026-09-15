@@ -62,14 +62,7 @@ nothing responds until the app is running.
    makes objects publicly readable over HTTPS from the edge.
 3. **Manage R2 API Tokens** → create a token with **Object Read & Write**. Keep
    the access key id and secret; Litestream needs them too.
-4. Upload the default character images:
-
-   ```bash
-   R2_BUCKET=imgmanager-assets ./deploy/upload-character-images-to-r2.sh
-   curl -I https://images.<yourdomain>/character_images/Zero_Two.png   # expect 200
-   ```
-
-5. Mirror the catalog portraits. This needs the catalog imported first (the
+4. Mirror the catalog portraits. This needs the catalog imported first (the
    data step below), and `rclone` configured for the R2 bucket. It fetches each
    `mudae.net` portrait, encodes WebP, uploads under `portraits/` and records the
    key, so the app stops hotlinking Mudae. The working rows are then pointed at
@@ -95,7 +88,7 @@ nothing responds until the app is running.
    sudo chmod 600 /var/lib/imgmanager/.rclone.conf
    ```
 
-6. **Create a second bucket for backups**, e.g. `imgmanager-backups`. Keep it
+5. **Create a second bucket for backups**, e.g. `imgmanager-backups`. Keep it
    private — it holds your whole database.
 
 ## 2. Cloudflare: Tunnel to the origin

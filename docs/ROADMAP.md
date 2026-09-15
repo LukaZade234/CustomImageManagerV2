@@ -641,9 +641,12 @@ relevant — the concurrency test is written first, before Phase 2:
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).
-- **Retire the committed character PNGs.** The 1,000 `character_images/*.png` are ~149 MB and are
-  almost certainly the same 225×350 art the Mudae catalog now points at directly; replace them
-  with the catalog portraits (and their R2 WebP mirror) and drop them from the repo.
+- **Retire the committed character PNGs.** _(done)_ The 1,000 `character_images/*.png` (~151 MB)
+  are gone. Working rows were repointed from the bare filenames to their catalog `mudae.net`
+  portraits (aliases included), the R2 WebP mirrors already carried the display, and the
+  `/images` / `/character_images` routes, the local-file accent branch, the dev proxies and the
+  R2 upload script were all removed. Forward-only: `.git` still holds the blobs, so clones are
+  unchanged until a history rewrite.
 - **Per-user saved selections and personal ordering.** Deliberately deferred; hide-for-me is the
   minimum that solves the actual problem.
 - **Revisit retirement policy with real take data.** Take counts are being logged from Phase 6

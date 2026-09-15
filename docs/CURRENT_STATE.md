@@ -358,8 +358,6 @@ limited per identity (`ratelimit.py`).
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/download-image-proxy` | Fetch a remote image server-side so the browser can save it (avoids CORS on ImgChest URLs). |
-| GET | `/character_images/<path:filename>` | — |
-| GET | `/images/<filename>` | — |
 | GET | `/thumbs/<int:image_id>.webp` | A small WebP of one image, generated on first request and cached. |
 
 **`mudae`**
@@ -544,18 +542,14 @@ Python buildpack that cannot build the frontend. It is the source of the many "B
 
 ## 8. Repository weight
 
-| Item | Size |
-|---|---|
-| `.git` | 154 MB |
-| `character_images/` (1000 PNGs) | 151 MB |
-| `character_mapping.js` | 260 KB |
-| `frontend/dist` (committed) | 300 KB |
+The working tree is now small. `character_images/` — 1,000 default portraits, 151 MB — was
+**removed from the repo**: the working rows carry catalog `mudae.net` URLs and their R2 WebP
+mirrors, so nothing named the committed files, and the origin no longer serves them (the
+`/images` and `/character_images` routes are gone).
 
-`character_images/` holds default main images for the top 1000 characters by rank. They are not
-custom images and not what users take away — low value, and slated to move to ImgChest.
-
-`character_mapping.js` is **dead code**: it sets `window.CHARACTER_MAPPING` with Windows-style
-backslash paths from a pre-React era and has **zero references** anywhere in the repository.
+This was a **forward-only** removal. The blobs are still in history, so `.git` remains ~154 MB and
+a fresh clone is unchanged; reclaiming that needs a history rewrite (`git filter-repo`), which was
+deliberately not done.
 
 ---
 

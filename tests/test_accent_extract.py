@@ -252,16 +252,13 @@ needs_library = pytest.mark.skipif(
 )
 
 
-def _panel_portrait_fetch(character_id, main_image_url):
+def _panel_portrait_fetch(character_id, _main_image_url):
     """Portrait bytes without touching the network: the cached sample from the
-    old proxy if it survives, the local file if the portrait is local."""
+    old proxy if it survives, otherwise nothing. The committed PNGs the library
+    used to name are gone, so a local fallback no longer exists."""
     cached = REPO_ROOT / "data" / "portrait_samples" / f"{character_id}.webp"
     if cached.is_file():
         return cached.read_bytes()
-    if main_image_url and not main_image_url.startswith(("http://", "https://")):
-        local = REPO_ROOT / "character_images" / main_image_url
-        if local.is_file():
-            return local.read_bytes()
     return None
 
 

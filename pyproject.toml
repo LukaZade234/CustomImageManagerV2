@@ -31,7 +31,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-exclude = [".venv", "frontend", "character_images"]
+exclude = [".venv", "frontend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
@@ -43,7 +43,7 @@ ignore = [
 
 [tool.pyright]
 include = ["."]
-exclude = ["frontend", "**/node_modules", "**/__pycache__", ".venv", "character_images"]
+exclude = ["frontend", "**/node_modules", "**/__pycache__", ".venv"]
 pythonVersion = "3.13"
 reportMissingModuleSource = "none"
 
