@@ -121,6 +121,22 @@ VAL_PERCENTILE = 0.55
 # +/- degrees around the winning hue considered "the same colour".
 BAND_SPAN = 22.5
 
+# How much the portrait is trusted, by how many usable gallery images there are.
+#
+# A gallery wins because it is the community's consensus, but one or two images
+# are not a consensus -- they are whatever somebody uploaded first, and a single
+# wide banner could outvote a portrait that is unambiguously the character's
+# colour. So the portrait's share of the vote starts high (70% at one or two
+# images) and falls away as the gallery fills up (~20% at five, nothing by ten),
+# leaving the gallery to speak for the character once there is enough of it.
+#
+# At ten or more the portrait only joins when its own dominant hue matches the
+# gallery's, where it can reinforce the answer but never change it. Breakpoints
+# are (gallery images, portrait share), interpolated between.
+PORTRAIT_SHARE_POINTS = ((0, 1.0), (1, 0.70), (2, 0.70), (5, 0.20), (10, 0.0))
+# How close the portrait's hue must be to the gallery's to count as agreeing.
+PORTRAIT_AGREE_DEGREES = 40
+
 # Smoothing for the hue histogram: sigma in bins (8 degrees), truncated.
 _SMOOTH_SIGMA = 1.6
 _SMOOTH_RADIUS = 5
@@ -410,33 +426,93 @@ def _decide_from(entries: Sequence[tuple[ImageGrids, float]]) -> dict | None:
     return result
 
 
+def _portrait_share(gallery_count: int) -> float:
+    """The portrait's share of the vote for a gallery of `gallery_count` images.
+
+    Piecewise-linear through `PORTRAIT_SHARE_POINTS`: 1.0 with no gallery, then
+    the points that lower it as the gallery grows.
+    """
+    points = PORTRAIT_SHARE_POINTS
+    if gallery_count <= points[0][0]:
+        return points[0][1]
+    if gallery_count >= points[-1][0]:
+        return points[-1][1]
+    for (x0, y0), (x1, y1) in zip(points, points[1:], strict=False):
+        if x0 <= gallery_count <= x1:
+            if x1 == x0:
+                return y1
+            return y0 + (gallery_count - x0) / (x1 - x0) * (y1 - y0)
+    return points[-1][1]
+
+
 def decide(
     portrait: ImageGrids | None,
     gallery: Sequence[ImageGrids],
 ) -> dict | None:
     """The seed colour for one character, or None when the art declines.
 
-    The gallery decides when there is one: it is the community's consensus on
-    what colour this character is, and it is where characters like Audrey Hall
-    live -- her canon portrait is blonde and cream with a red accent, her eyes
-    the only green pixel in it, while her fan art wears the green dress
-    without exception. The portrait is the fallback for characters with no
-    gallery yet, and the last resort for galleries too small or too scattered
-    to decide.
+    The gallery decides when it can: it is the community's consensus on what
+    colour this character is, and it is where characters like Audrey Hall live --
+    her canon portrait is blonde and cream with a red accent, her eyes the only
+    green pixel in it, while her fan art wears the green dress without exception.
+
+    But a consensus needs more than one voice. The portrait's weight scales down
+    with the size of the gallery (`_portrait_share`): at one or two images it
+    carries most of the vote, by five it is a fifth, and by ten it is gone
+    unless its hue agrees with the gallery's, where it can reinforce but not
+    overturn. The portrait is also what remains when the gallery is empty or too
+    scattered to decide.
 
     `portrait` may be None (no portrait, or an unreadable one) and `gallery`
     may be empty; either alone can carry the answer.
     """
-    result = _decide_from([(g, 1.0) for g in gallery])
-    if result is not None:
-        result["source"] = "gallery"
-        return result
-    if portrait is not None:
-        result = _decide_from([(portrait, 1.0)])
-        if result is not None:
-            result["source"] = "portrait"
-            return result
-    return None
+    base = [(g, 1.0) for g in gallery]
+    gallery_result = _decide_from(base)
+
+    if portrait is None:
+        if gallery_result is not None:
+            gallery_result["source"] = "gallery"
+        return gallery_result
+
+    portrait_result = _decide_from([(portrait, 1.0)])
+
+    # Whichever side can decide alone owns the answer.
+    if gallery_result is None:
+        if portrait_result is not None:
+            portrait_result["source"] = "portrait"
+        return portrait_result
+    if portrait_result is None:
+        gallery_result["source"] = "gallery"
+        return gallery_result
+
+    share = _portrait_share(len(gallery))
+    if share <= 0.0:
+        # The gallery speaks for the character. The portrait only joins when it
+        # agrees, where it can firm up the same hue but never move it.
+        if (
+            _hue_distance(gallery_result["hue"], portrait_result["hue"])
+            > PORTRAIT_AGREE_DEGREES
+        ):
+            gallery_result["source"] = "gallery"
+            return gallery_result
+        weight = 1.0
+    else:
+        # share = weight / (weight + gallery_count), so invert for the weight.
+        weight = share / (1.0 - share) * len(gallery)
+
+    combined = _decide_from([*base, (portrait, weight)])
+    if combined is not None:
+        # Name the source after the hue the pool actually landed on.
+        d_portrait = _hue_distance(combined["hue"], portrait_result["hue"])
+        d_gallery = _hue_distance(combined["hue"], gallery_result["hue"])
+        combined["source"] = "portrait" if d_portrait < d_gallery else "gallery"
+        return combined
+
+    # The portrait and the gallery scattered each other into a two-colour pool.
+    # Whichever holds more of the vote is still a better answer than nothing.
+    winner = portrait_result if share >= 0.5 else gallery_result
+    winner["source"] = "portrait" if share >= 0.5 else "gallery"
+    return winner
 
 
 # ---- image loading ------------------------------------------------------------
