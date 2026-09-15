@@ -127,6 +127,9 @@ class TestRequestLifecycle:
             "signed_in",
             "discord_available",
             "settings",
+            "moderation_status",
+            "moderation_until",
+            "moderation_reason",
         }
         assert identity_id not in response.get_data(as_text=True)
 

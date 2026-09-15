@@ -70,6 +70,9 @@ class Identity:
     handle: str
     role: str = "user"
     discord_id: str | None = None
+    moderation_status: str | None = None
+    moderation_until: str | None = None
+    moderation_reason: str = ""
 
     @property
     def is_moderator(self) -> bool:
@@ -82,6 +85,20 @@ class Identity:
     @property
     def is_signed_in(self) -> bool:
         return self.discord_id is not None
+
+    @property
+    def is_suspended(self) -> bool:
+        # An expired suspension is normalised away by db.get_identity, so this is
+        # only ever the live kind.
+        return self.moderation_status == "suspended"
+
+    @property
+    def is_banned(self) -> bool:
+        return self.moderation_status == "banned"
+
+    @property
+    def is_restricted(self) -> bool:
+        return self.is_suspended or self.is_banned
 
 
 def new_identity_id() -> str:
@@ -274,6 +291,54 @@ def persist_identity(response):
     return response
 
 
+# A restricted account may still read, so the few POSTs that are *reads* in
+# disguise stay open: leaving, reading the notice, fetching an image to download,
+# copying a command. Exact paths, not a prefix, so a future route is not opened
+# by accident.
+_RESTRICTED_ALLOWLIST = frozenset(
+    {
+        "/api/auth/logout",
+        "/api/notifications/read",
+        "/api/notifications/dismiss",
+        "/api/download-image-proxy",
+        "/api/takes",
+    }
+)
+
+
+def _restricted_allowed(path: str) -> bool:
+    if path in _RESTRICTED_ALLOWLIST:
+        return True
+    # Recording a page view is part of browsing, not contributing; its path has a
+    # name in the middle, so it cannot live in the exact-match set.
+    return path.startswith("/api/characters/") and path.endswith("/view")
+
+
+def block_restricted_writes():
+    """before_request hook: a suspended or banned identity may read, not write.
+
+    Browsing is public and anonymous, so a restriction cannot hide the site and
+    does not try to -- it removes the ability to *change* anything, which is the
+    only lever a ban actually has. It is applied once, to every non-GET, rather
+    than by a decorator per endpoint: a new write route should be covered by
+    default, not only if its author remembers.
+
+    Sign-in is a GET (the Discord callback), so a banned person can still sign in
+    and be told why -- and the ban follows the unique Discord row across cookies.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    if _restricted_allowed(request.path):
+        return None
+
+    me = current_identity()
+    if not me.is_restricted:
+        return None
+
+    error = "Your account is banned." if me.is_banned else "Your account is suspended."
+    return jsonify({"error": error, "reason": me.moderation_reason, "restricted": True}), 403
+
+
 def adopt(identity_id: str) -> None:
     """Become a different identity for the rest of this request, and reissue the cookie.
 
@@ -309,6 +374,9 @@ def current_identity() -> Identity:
             handle=row.get("handle") or handle_for(identity_id),
             role=row.get("role") or "user",
             discord_id=row.get("discord_id"),
+            moderation_status=row.get("moderation_status"),
+            moderation_until=row.get("moderation_until"),
+            moderation_reason=row.get("moderation_reason") or "",
         )
     g.identity_loaded = loaded
     return loaded

@@ -1993,20 +1993,53 @@ body.reorder-touch-dragging {
   margin: 0;
 }
 
-/* ---- Warn dialog ------------------------------------------------------- */
-.warn-dialog {
+/* ---- Moderation dialog ------------------------------------------------- */
+.moderation-dialog {
   display: grid;
   gap: var(--space-4);
 }
-.warn-dialog__lead {
+.moderation-dialog__lead {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin: 0;
 }
-.warn-dialog__message {
+.moderation-dialog__message {
   min-height: 96px;
   resize: vertical;
+}
+
+/* ---- Restriction banner ------------------------------------------------
+ * The notice a suspended or banned account sees on every page, above the
+ * content. Tinted from its status colour, like the profile's cookie warning,
+ * with the base status colour as the text — never the -fg token, which is for
+ * the solid fill. */
+.restriction-banner {
+  font-size: var(--type-meta);
+}
+.restriction-banner--warning {
+  background: var(--warning-subtle);
+  color: var(--warning);
+}
+.restriction-banner--caution {
+  background: var(--caution-subtle);
+  color: var(--caution);
+}
+.restriction-banner--danger {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+.restriction-banner__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-5);
+}
+.restriction-banner__label {
+  font-weight: var(--weight-semibold);
 }
 
 /* The owner's notification composer, compacted. It used to be a heading, a

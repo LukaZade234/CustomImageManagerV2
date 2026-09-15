@@ -19,3 +19,13 @@ export const MODERATION_ACTIONS = {
 export function moderationAction(action) {
   return MODERATION_ACTIONS[action] ?? null
 }
+
+/**
+ * The same, for the account state rather than the verb that set it: the stored
+ * status is `suspended` / `banned`, the action is `suspend` / `ban`.
+ */
+export function moderationStatus(status) {
+  if (status === 'banned') return MODERATION_ACTIONS.ban
+  if (status === 'suspended') return MODERATION_ACTIONS.suspend
+  return null
+}

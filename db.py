@@ -2380,6 +2380,48 @@ def delete_moderation_action(action_id: int) -> bool:
         return bool(cur.rowcount)
 
 
+def _active_moderation(status: str | None, until: str | None) -> tuple[str | None, str | None]:
+    """Normalise a stored status, expiring a suspension that has passed.
+
+    A suspension lifts itself: nothing has to run for it to end, the next read
+    simply stops seeing it. An open-ended ban is returned as it stands; anything
+    with no `until` (or a missing status) is not a restriction.
+    """
+    if status == "suspended" and (not until or until <= _now()):
+        return None, None
+    return status, until
+
+
+def set_moderation_status(
+    identity_id: str,
+    status: str,
+    *,
+    until: str | None = None,
+    reason: str = "",
+    actor_id: str | None = None,
+) -> None:
+    """Suspend or ban an identity. One live status per identity; this replaces it."""
+    if status not in ("suspended", "banned"):
+        raise ValueError(f"Unknown moderation status: {status!r}")
+    with transaction() as conn:
+        _ensure_identity(conn, identity_id)
+        conn.execute(
+            "INSERT INTO moderation_status (identity_id, status, until, reason, actor_id, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT (identity_id) DO UPDATE SET"
+            "   status = excluded.status, until = excluded.until, reason = excluded.reason,"
+            "   actor_id = excluded.actor_id, created_at = excluded.created_at",
+            (identity_id, status, until, reason, actor_id, _now()),
+        )
+
+
+def clear_moderation_status(identity_id: str) -> bool:
+    """Lift a suspension or ban. False if there was nothing to lift."""
+    with transaction() as conn:
+        cur = conn.execute("DELETE FROM moderation_status WHERE identity_id = ?", (identity_id,))
+        return bool(cur.rowcount)
+
+
 def get_removed_for(char_name: str) -> list[dict]:
     """The Removed drawer: everything soft-deleted for this character."""
     conn = get_connection()
@@ -2712,13 +2754,31 @@ def ensure_identity(identity_id: str, handle: str | None = None) -> None:
 
 
 def get_identity(identity_id: str) -> dict | None:
-    """The stored row, or None if this identity has never written anything."""
+    """The stored row, or None if this identity has never written anything.
+
+    The current moderation status is joined in rather than fetched separately:
+    every request that reads a role reads this row anyway, and the restriction is
+    needed on the same path.
+    """
     conn = get_connection()
     row = conn.execute(
-        "SELECT id, handle, discord_id, role, created_at FROM identities WHERE id = ?",
+        "SELECT i.id, i.handle, i.discord_id, i.role, i.created_at,"
+        "       m.status AS moderation_status, m.until AS moderation_until,"
+        "       m.reason AS moderation_reason"
+        "  FROM identities i"
+        "  LEFT JOIN moderation_status m ON m.identity_id = i.id"
+        " WHERE i.id = ?",
         (identity_id,),
     ).fetchone()
-    return dict(row) if row else None
+    if row is None:
+        return None
+    data = dict(row)
+    # An expired suspension reads as no restriction, so callers never have to
+    # carry the clock.
+    data["moderation_status"], data["moderation_until"] = _active_moderation(
+        data.get("moderation_status"), data.get("moderation_until")
+    )
+    return data
 
 
 def identity_by_ref(ref: str) -> str | None:
@@ -2778,8 +2838,12 @@ def list_contributors() -> list[dict]:
         people = {
             r["id"]: dict(r)
             for r in conn.execute(
-                "SELECT id, handle, role, discord_id, created_at FROM identities"
-                f" WHERE id IN ({placeholders})",
+                "SELECT i.id, i.handle, i.role, i.discord_id, i.created_at,"
+                "       m.status AS moderation_status, m.until AS moderation_until,"
+                "       m.reason AS moderation_reason"
+                "  FROM identities i"
+                "  LEFT JOIN moderation_status m ON m.identity_id = i.id"
+                f" WHERE i.id IN ({placeholders})",
                 ids,
             )
         }
@@ -2791,6 +2855,9 @@ def list_contributors() -> list[dict]:
         # fall back to the derived handle rather than dropping them, matching
         # current_identity()'s own tolerance.
         person = people.get(actor)
+        status, until = _active_moderation(
+            (person or {}).get("moderation_status"), (person or {}).get("moderation_until")
+        )
         items.append(
             {
                 "ref": identity_module.public_ref(actor),
@@ -2801,6 +2868,9 @@ def list_contributors() -> list[dict]:
                 "added": int(r["added"] or 0),
                 "removed": int(r["removed"] or 0),
                 "last_at": r["last_at"],
+                "moderation_status": status,
+                "moderation_until": until,
+                "moderation_reason": (person or {}).get("moderation_reason") or "",
             }
         )
     items.sort(key=lambda item: item["last_at"] or "", reverse=True)

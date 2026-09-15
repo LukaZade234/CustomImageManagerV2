@@ -4,13 +4,16 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useMe } from '../../queries/me'
 import {
+  useBanModerationUser,
   useDeleteModerationHistory,
+  useLiftModerationUser,
   useModerationHistory,
   useModerationUserCharacters,
   useModerationUserImages,
   useModerationUsers,
   useRestoreModerationImage,
   useSetModerationRole,
+  useSuspendModerationUser,
   useWarnModerationUser,
 } from '../../queries/moderation'
 import { useStore } from '../../store/useStore'
@@ -155,6 +158,9 @@ export default function ModerationPage() {
   const restoreImage = useRestoreModerationImage()
   const setRole = useSetModerationRole()
   const warnUser = useWarnModerationUser()
+  const suspendUser = useSuspendModerationUser()
+  const banUser = useBanModerationUser()
+  const liftUser = useLiftModerationUser()
   const deleteHistory = useDeleteModerationHistory()
   const [historyToDelete, setHistoryToDelete] = useState(null)
 
@@ -190,6 +196,32 @@ export default function ModerationPage() {
       addToast(err.message, 'error')
       return false
     }
+  }
+  const handleSuspend = async (values) => {
+    try {
+      await suspendUser.mutateAsync({ ref: user, ...values })
+      addToast('Account suspended', 'success')
+      return true
+    } catch (err) {
+      addToast(err.message, 'error')
+      return false
+    }
+  }
+  const handleBan = async (values) => {
+    try {
+      await banUser.mutateAsync({ ref: user, ...values })
+      addToast('Account banned', 'success')
+      return true
+    } catch (err) {
+      addToast(err.message, 'error')
+      return false
+    }
+  }
+  const handleLift = () => {
+    liftUser.mutate(user, {
+      onSuccess: () => addToast('Restriction lifted', 'success'),
+      onError: (err) => addToast(err.message, 'error'),
+    })
   }
   const handleDeleteHistory = () => {
     const target = historyToDelete
@@ -267,6 +299,10 @@ export default function ModerationPage() {
                 canManageRoles={Boolean(me?.is_owner)}
                 onChangeRole={handleChangeRole}
                 onWarn={handleWarn}
+                onSuspend={handleSuspend}
+                onBan={handleBan}
+                onLift={handleLift}
+                canLift={Boolean(me?.is_owner)}
               />
               <ModerationHistory
                 items={historyQuery.data?.items}

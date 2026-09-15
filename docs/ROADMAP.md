@@ -634,10 +634,12 @@ why it does not contradict the anti-queue argument there.
 - [x] **Warn a contributor.** `POST /api/moderation/users/<ref>/warn` writes a `moderation_actions`
       record **and** delivers a badged, dismissible notification; the record survives the recipient
       dismissing the message, and only the owner can delete it (which takes the message with it). The
-      profile shows the contributor's full moderation history. Suspend and ban reuse the same record,
-      composer and colour ramp but stay inert until their effect is decided.
-- [ ] **Phase 2 — suspend / ban.** Still inert; needs a decision on what each means for a cookie
-      identity and what a suspended account may still do. The message side is built.
+      profile shows the contributor's full moderation history.
+- [x] **Suspend and ban a contributor.** A `moderation_status` row keyed by identity: `suspended`
+      (time-boxed, self-lifting) or `banned` (open-ended). `identity.block_restricted_writes` refuses
+      every write for a restricted account while reads pass, a persistent banner tells the person why
+      (there is no email), and only the owner lifts it. The ban follows the unique Discord id across
+      cookies; a different Discord account is the accepted gap.
 - [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
       that may not exist, a cascade, and a second confirmation. The first irreversible action.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and

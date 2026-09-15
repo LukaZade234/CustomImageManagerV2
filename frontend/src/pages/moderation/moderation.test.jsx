@@ -20,6 +20,9 @@ const api = vi.hoisted(() => ({
   restoreImages: vi.fn(),
   setModerationRole: vi.fn(),
   warnModerationUser: vi.fn(),
+  suspendModerationUser: vi.fn(),
+  banModerationUser: vi.fn(),
+  liftModerationUser: vi.fn(),
   deleteModerationHistory: vi.fn(),
 }))
 
@@ -91,6 +94,9 @@ beforeEach(() => {
   api.restoreImages.mockReset()
   api.setModerationRole.mockReset()
   api.warnModerationUser.mockReset()
+  api.suspendModerationUser.mockReset()
+  api.banModerationUser.mockReset()
+  api.liftModerationUser.mockReset()
   api.deleteModerationHistory.mockReset()
   api.getMe.mockResolvedValue({
     handle: 'Amber Otter',
@@ -111,6 +117,9 @@ beforeEach(() => {
   api.restoreImages.mockResolvedValue({ success: true, restored: 1 })
   api.setModerationRole.mockResolvedValue({ success: true })
   api.warnModerationUser.mockResolvedValue({ success: true, id: 1 })
+  api.suspendModerationUser.mockResolvedValue({ success: true, id: 2 })
+  api.banModerationUser.mockResolvedValue({ success: true, id: 3 })
+  api.liftModerationUser.mockResolvedValue({ success: true })
   api.deleteModerationHistory.mockResolvedValue({ success: true })
 })
 
@@ -272,12 +281,11 @@ describe('the profile and its work', () => {
     expect(within(profile).getByText('Last active')).toBeInTheDocument()
   })
 
-  it('renders the person actions, with Warn live and the rest inert', async () => {
+  it('renders the person actions, all of them live', async () => {
     renderModeration('/moderation?user=ref-ada')
     await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
-    expect(screen.getByRole('button', { name: 'Warn' })).toBeEnabled()
-    for (const name of ['Suspend', 'Ban']) {
-      expect(screen.getByRole('button', { name })).toBeDisabled()
+    for (const name of ['Warn', 'Suspend', 'Ban']) {
+      expect(screen.getByRole('button', { name })).toBeEnabled()
     }
   })
 
@@ -502,5 +510,77 @@ describe('the moderation history', () => {
 
     await screen.findByText('Keep it civil')
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+})
+
+describe('suspending and banning', () => {
+  it('suspends with a duration chosen in the dialog', async () => {
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    await user.click(screen.getByRole('button', { name: 'Suspend' }))
+    await user.type(await screen.findByLabelText('Title'), 'Cool off')
+    await user.selectOptions(screen.getByLabelText('Duration'), '7')
+    await user.click(screen.getByRole('button', { name: /Send suspension/i }))
+
+    await waitFor(() =>
+      expect(api.suspendModerationUser).toHaveBeenCalledWith('ref-ada', {
+        title: 'Cool off',
+        body: '',
+        days: 7,
+      }),
+    )
+  })
+
+  it('bans from the dialog', async () => {
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    await user.click(screen.getByRole('button', { name: 'Ban' }))
+    await user.type(await screen.findByLabelText('Title'), 'Enough')
+    await user.click(screen.getByRole('button', { name: /Send ban/i }))
+
+    await waitFor(() =>
+      expect(api.banModerationUser).toHaveBeenCalledWith('ref-ada', { title: 'Enough', body: '' }),
+    )
+  })
+
+  it('shows the status, blocks re-banning, and lets the owner lift it', async () => {
+    api.listModerationUsers.mockResolvedValue({
+      items: [{ ...USERS[0], moderation_status: 'banned', moderation_reason: 'spam' }],
+      total: 1,
+    })
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    expect(screen.getByText('Ban', { selector: '.ui-badge' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ban' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /Lift ban/i }))
+    await user.click(await screen.findByRole('button', { name: 'Lift' }))
+    await waitFor(() => expect(api.liftModerationUser).toHaveBeenCalledWith('ref-ada'))
+  })
+
+  it('does not offer Lift to a moderator, but shows the end date', async () => {
+    api.getMe.mockResolvedValue({
+      handle: 'Amber Otter',
+      role: 'moderator',
+      is_moderator: true,
+      is_owner: false,
+    })
+    api.listModerationUsers.mockResolvedValue({
+      items: [
+        { ...USERS[0], moderation_status: 'suspended', moderation_until: '2026-02-01T00:00:00Z' },
+      ],
+      total: 1,
+    })
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    expect(screen.getByText(/Suspended until/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Lift/i })).not.toBeInTheDocument()
   })
 })

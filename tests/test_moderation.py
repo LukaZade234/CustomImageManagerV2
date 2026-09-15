@@ -341,7 +341,9 @@ class TestModerationReadSurface:
         assert item["added"] == 1
         assert item["removed"] == 0
 
-    def test_someone_who_only_removed_something_still_appears(self, client, clean_db, make_moderator):
+    def test_someone_who_only_removed_something_still_appears(
+        self, client, clean_db, make_moderator
+    ):
         # They added one image and later removed it, so they have no *active*
         # additions — but the actor set is a union, so they still show up.
         clean_db.ensure_identity("remover")
@@ -349,12 +351,16 @@ class TestModerationReadSurface:
         clean_db.remove_custom_images("Rem", ["https://cdn/x.png"], "remover")
         make_moderator()
 
-        items = {item["ref"]: item for item in client.get("/api/moderation/users").get_json()["items"]}
+        items = {
+            item["ref"]: item for item in client.get("/api/moderation/users").get_json()["items"]
+        }
         remover = items[identity_module.public_ref("remover")]
         assert remover["added"] == 0
         assert remover["removed"] == 1
 
-    def test_the_detail_splits_additions_and_removals(self, client, clean_db, identity_id, make_moderator):
+    def test_the_detail_splits_additions_and_removals(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/kept.png"], identity_id)
         self._owned(clean_db, "Rem", ["https://cdn/gone.png"], identity_id)
         clean_db.remove_custom_images("Rem", ["https://cdn/gone.png"], identity_id)
@@ -371,7 +377,9 @@ class TestModerationReadSurface:
         assert removed["added"] == 1
         assert removed["removed"] == 1
 
-    def test_the_character_filter_trims_the_list(self, client, clean_db, identity_id, make_moderator):
+    def test_the_character_filter_trims_the_list(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/rem.png"], identity_id)
         self._owned(clean_db, "Emilia", ["https://cdn/emilia.png"], identity_id)
         make_moderator()
@@ -422,9 +430,14 @@ class TestModerationCharacterView:
         return identity_module.public_ref(identity_id)
 
     def test_a_plain_user_is_refused(self, client, clean_db, identity_id):
-        assert client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").status_code == 403
+        assert (
+            client.get(f"/api/moderation/users/{self._ref(identity_id)}/characters").status_code
+            == 403
+        )
 
-    def test_it_groups_by_character_with_counts(self, client, clean_db, identity_id, make_moderator):
+    def test_it_groups_by_character_with_counts(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/a.png", "https://cdn/b.png"], identity_id)
         self._owned(clean_db, "Emilia", ["https://cdn/c.png"], identity_id)
         make_moderator()
@@ -446,7 +459,9 @@ class TestModerationCharacterView:
         make_moderator()
         assert client.get("/api/moderation/users/notthere/characters").status_code == 404
 
-    def test_created_at_is_carried_on_the_contributor(self, client, clean_db, identity_id, make_moderator):
+    def test_created_at_is_carried_on_the_contributor(
+        self, client, clean_db, identity_id, make_moderator
+    ):
         self._owned(clean_db, "Rem", ["https://cdn/a.png"], identity_id)
         make_moderator()
         item = client.get("/api/moderation/users").get_json()["items"][0]
@@ -574,9 +589,125 @@ class TestModerationWarnings:
         # The message the record delivered goes with it.
         assert clean_db.list_notifications("target") == []
 
-    def test_a_warn_does_not_need_the_recipient_to_have_an_account(self, client, clean_db, make_moderator):
+    def test_a_warn_does_not_need_the_recipient_to_have_an_account(
+        self, client, clean_db, make_moderator
+    ):
         """A moderator needs a ref to warn, which means the target already exists
         in `identities` -- but only as a row, not a signed-in account."""
         clean_db.ensure_identity("target")
         make_moderator()
         assert self._warn(client, self._ref("target")).status_code == 200
+
+
+class TestModerationRestrictions:
+    """Suspension and ban: the state, not just the message.
+
+    The enforcement is global (identity.block_restricted_writes refuses every
+    non-GET for a restricted identity), so these pin the boundary rather than
+    each endpoint: a banned account can read and leave, and cannot write.
+    """
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def _post(self, client, ref, action, **payload):
+        return client.post(f"/api/moderation/users/{ref}/{action}", json=payload)
+
+    def _suspend(self, client, ref, days=3):
+        return self._post(client, ref, "suspend", title="Cool off", body="Three days.", days=days)
+
+    def test_a_banned_identity_can_read_but_not_write(self, client, clean_db, identity_id):
+        clean_db.set_moderation_status(identity_id, "banned", reason="spam")
+
+        # Reading still works, and says why.
+        me = client.get("/api/me")
+        assert me.status_code == 200
+        assert me.get_json()["moderation_status"] == "banned"
+
+        blocked = client.post("/api/saved", json={"name": "Rem"})
+        assert blocked.status_code == 403
+        assert blocked.get_json()["restricted"] is True
+        assert "banned" in blocked.get_json()["error"].lower()
+        # Using the product is not contributing: the notice, the way out, a page
+        # view and a command copy all stay open. (The view 404s here only because
+        # the character does not exist; what matters is the restriction did not
+        # intercept it.)
+        assert client.post("/api/notifications/read").status_code == 200
+        assert "banned" not in client.post("/api/characters/Rem/view").get_data(as_text=True)
+        takes = client.post("/api/takes", json={"kind": "copy_command", "ids": [1]})
+        assert "banned" not in takes.get_data(as_text=True)
+
+    def test_a_live_suspension_blocks_writes_too(self, client, clean_db, identity_id):
+        clean_db.set_moderation_status(identity_id, "suspended", until="2999-01-01T00:00:00.000Z")
+        assert client.post("/api/saved", json={"name": "Rem"}).status_code == 403
+
+    def test_an_expired_suspension_is_not_a_restriction(self, client, clean_db, identity_id):
+        clean_db.set_moderation_status(identity_id, "suspended", until="2000-01-01T00:00:00.000Z")
+        assert clean_db.get_identity(identity_id)["moderation_status"] is None
+        assert client.post("/api/saved", json={"name": "Rem"}).status_code != 403
+
+    def test_a_suspension_is_recorded_and_delivered(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+
+        res = self._suspend(client, self._ref("target"))
+        assert res.status_code == 200
+        assert res.get_json()["until"]
+
+        stored = clean_db.get_identity("target")
+        assert stored["moderation_status"] == "suspended"
+        assert stored["moderation_reason"] == "Three days."
+        assert clean_db.list_notifications("target")[0]["moderation_action"] == "suspend"
+
+    def test_a_ban_is_open_ended(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+
+        assert (
+            self._post(client, self._ref("target"), "ban", title="Bye", body="").status_code == 200
+        )
+        stored = clean_db.get_identity("target")
+        assert stored["moderation_status"] == "banned"
+        assert stored["moderation_until"] is None
+
+    def test_suspend_needs_a_sensible_number_of_days(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator()
+        ref = self._ref("target")
+        assert self._post(client, ref, "suspend", title="x", days=0).status_code == 400
+        assert self._post(client, ref, "suspend", title="x", days=9999).status_code == 400
+        assert self._post(client, ref, "suspend", title="x").status_code == 400
+        assert self._post(client, ref, "suspend", body="no title", days=1).status_code == 400
+
+    def test_the_owner_and_yourself_cannot_be_restricted(
+        self, client, clean_db, identity_id, make_moderator
+    ):
+        make_moderator("owner")
+        clean_db.ensure_identity("boss")
+        clean_db.set_role("boss", "owner")
+        assert self._post(client, self._ref("boss"), "ban", title="x").status_code == 400
+        assert self._post(client, self._ref(identity_id), "ban", title="x").status_code == 400
+
+    def test_only_the_owner_can_lift(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator("moderator")
+        ref = self._ref("target")
+        self._suspend(client, ref)
+
+        assert self._post(client, ref, "lift").status_code == 403
+
+        make_moderator("owner")
+        assert self._post(client, ref, "lift").status_code == 200
+        assert clean_db.get_identity("target")["moderation_status"] is None
+        assert clean_db.list_notifications("target")[0]["title"] == "Your account has been restored"
+
+    def test_lifting_nothing_is_a_bad_request(self, client, clean_db, make_moderator):
+        clean_db.ensure_identity("target")
+        make_moderator("owner")
+        assert self._post(client, self._ref("target"), "lift").status_code == 400
+
+    def test_a_plain_user_cannot_suspend_or_ban(self, client, clean_db):
+        clean_db.ensure_identity("target")
+        ref = self._ref("target")
+        assert self._suspend(client, ref).status_code == 403
+        assert self._post(client, ref, "ban", title="x").status_code == 403

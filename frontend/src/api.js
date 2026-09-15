@@ -104,6 +104,20 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, body }),
     }),
+  suspendModerationUser: (ref, { title, body, days }) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/suspend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body, days }),
+    }),
+  banModerationUser: (ref, { title, body }) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/ban`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, body }),
+    }),
+  liftModerationUser: (ref) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/lift`, { method: 'POST' }),
   listModerationHistory: (ref) => api(`/api/moderation/users/${encodeURIComponent(ref)}/history`),
   deleteModerationHistory: (id) =>
     api(`/api/moderation/history/${encodeURIComponent(id)}/delete`, { method: 'POST' }),

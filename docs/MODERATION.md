@@ -72,9 +72,10 @@ history; Images is their work, readable as a paged image grid (added or removed,
 character) or as a character-level list sorted by rank, image count, name or recency.
 
 **Phase 1 was the full UI and the `GET` endpoints behind it, with every acting button present and
-inert.** Two of those verbs are now live: **restore** an image, the **owner-only** promote/demote, and
-**warn** a person (below). **Suspend, ban and permanent delete stay inert** — each has a decision to
-settle first, so a button that would not do anything true stays disabled rather than firing.
+inert.** Four of those verbs are now live: **restore** an image, the **owner-only** promote/demote,
+**warn** a person (a message), and **suspend / ban** (a state, below). **Permanent delete stays
+inert** — removing the file from ImgChest is the app's first irreversible act and needs its own
+decision (and a second confirmation) first.
 
 ### Decisions taken
 
@@ -121,11 +122,9 @@ leak back onto a public surface from here.
 
 #### Named out of scope
 
-- **The remaining action logic.** Restore, promote/demote and warn are wired (see below). **Suspend
-  and ban** are still inert — they have a real design question (what does "suspended" even mean for a
-  cookie identity?) that has to be settled before they do anything, and a ban that only sent a notice
-  would be a lie. **Permanent delete** is inert too: it removes the image from ImgChest as well as the
-  row, and it is the first irreversible action in the app, so it needs its own decision (and a second
+- **The remaining action logic.** Restore, promote/demote, warn, suspend and ban are wired (see
+  below). **Permanent delete** is inert: it removes the image from ImgChest as well as the row, and
+  it is the first irreversible action in the app, so it needs its own decision (and a second
   confirmation) first.
 - **Reading `image_reports`** — see above.
 - **The ~8,547 unattributed images** (`added_by IS NULL`, migrated from v1). They have no actor, so
@@ -347,6 +346,7 @@ they added and removed."*
   file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation-finder`,
   `.moderation-finder__search`, `.moderation-finder__input`, `.moderation-finder__filters`,
   `.moderation-facet`, `.moderation-head`, `.moderation-back`, `.moderation-tabpanel`,
+  `.moderation-dialog`, `.restriction-banner`,
   `.moderation-users`, `.moderation-user`, `.moderation-user__counts`, `.moderation-profile`,
   `.moderation-profile__stats`, `.moderation-profile__actions`, `.moderation-work`,
   `.moderation-work__header`. The finder is a centred 720px column; below 768px the contributor list
@@ -486,31 +486,65 @@ notification points back at it with `moderation_action_id`, and that link is `ON
 the owner's delete runs from the record to the message and the two can never disagree about whether a
 warning was sent.
 
-Warn is the only verb wired today. Suspend and ban reuse the same record, the same composer and the
-same colour ramp, but each stays inert until its *effect* is decided — a ban that only sent a message
-would be a lie. The vocabulary is built once so they slot in without a second migration.
+All three verbs are wired. Warn is a message only. **Suspend and ban add a state** — and that change
+has to outlive the message, because dismissing the notification must not lift the restriction.
+
+### Suspension and ban — the state, not the message
+
+A restricted account may still **read** the site. A restriction cannot hide content that an anonymous
+visitor can read anyway, so it does not try; it removes the ability to *change* anything, which is the
+only lever a ban has. So the live state is its own row, `moderation_status` (migration 018), keyed by
+identity.
+
+- **Suspended** — time-boxed. `until` comes from the composer's duration; reads pass, writes are
+  refused, and it expires on its own at read time.
+- **Banned** — open-ended, same enforcement, no end. The anchor is the identity, whose `discord_id` is
+  unique: signing in on a fresh cookie finds the same row and adopts it, so the ban follows the
+  Discord account rather than the cookie.
+- **The person is told.** There is no email, so the account can still sign in and read a persistent,
+  non-dismissible **banner** on every page, plus the notification in their inbox. Only
+  `/api/auth/logout` and the notifications read/dismiss routes are allowed through while restricted;
+  everything else is refused, so they can read the notice and leave.
+- **Lifting** is owner-only, clears the state, and sends a notification.
+- **Limits, accepted deliberately.** A *different* Discord account slips past, and a cookie-only
+  identity (no Discord) can be blocked but evaded with a new cookie. A ban is only as durable as the
+  Discord binding it hangs on. This is why `DECISIONS.md` §4 says bans became meaningful once
+  uploading required Discord.
 
 ### Backend
 - Migration `017_moderation_actions.sql`:
   `moderation_actions(id, identity_id, actor_id, action, title, body, created_at)`, `action` in
   `warn` / `suspend` / `ban`, indexed on `(identity_id, created_at DESC)`; and
   `notifications.moderation_action_id` pointing at it with `ON DELETE CASCADE`.
+- Migration `018_moderation_status.sql`:
+  `moderation_status(identity_id PK, status, until, reason, actor_id, created_at)`, `status` in
+  `suspended` / `banned`. `db.get_identity` joins it in and expires an old suspension;
+  `db.set_moderation_status` / `db.clear_moderation_status` write it.
 - `db.moderate_identity` (log the action, deliver the message, return its id),
   `db.list_moderation_actions(identity_id)` (the log with the sender's handle) and
   `db.delete_moderation_action(id)` (owner-only at the route; the cascade removes the message).
   `db.list_notifications` joins the link to carry `moderation_action` on each item.
-- `routes/moderation.py`: `POST /api/moderation/users/<ref>/warn` (any moderator),
-  `GET /api/moderation/users/<ref>/history` (any moderator, view-only), and
+- `identity.block_restricted_writes` — a `before_request` after `load_identity` that refuses every
+  non-GET for a restricted identity, allow-listing only `/api/auth/logout` and notifications
+  read/dismiss. `identity.Identity` carries `is_suspended` / `is_banned` / `is_restricted`, and
+  `/api/me` returns the status, its end and the reason.
+- `routes/moderation.py`: `POST .../warn`, `.../suspend` (takes `days`), `.../ban` — any moderator,
+  with the owner and yourself refused — `.../lift` (owner only), `GET .../history`, and
   `POST /api/moderation/history/<int:action_id>/delete` (owner only).
 
 ### Frontend
-- `WarnDialog.jsx`: the popup — a title field (required) and a description — opened from **Warn** in
-  the profile. What the moderator writes is exactly what the recipient reads.
+- `ModerationDialog.jsx`: the one popup behind **Warn / Suspend / Ban** — a title (required), a
+  description, and a duration for a suspension. What the moderator writes is exactly what the
+  recipient reads, and the lead names the difference a suspend or ban makes.
+- `UserProfile.jsx`: the three buttons, the current status as a badge (with a suspension's end date),
+  a disabled **Ban** once already banned, and an owner-only confirmed **Lift**.
+- `RestrictionBanner.jsx`: the global notice, tinted from the status colour and rendered above the app
+  shell; it disappears the moment the restriction is lifted.
 - `ModerationHistory.jsx`: the selected contributor's record, under their header — each line badged
   and titled by severity, naming the sender. The owner gets a confirmed **Delete**; a moderator's is
-  view-only. `utils/moderationActions.js` is the one map from action to label and colour, used here
-  and in the inbox so the two never drift. It rides on `--caution`, the orange added to the status
-  palette in `tokens.css` for the middle severity.
+  view-only. `utils/moderationActions.js` is the one map from action (and status) to label and colour,
+  used here and in the inbox so the two never drift. It rides on `--caution`, the orange added to the
+  status palette in `tokens.css` for the middle severity.
 
 ---
 
@@ -520,14 +554,11 @@ Sketches only. Each needs its own decision before it is built, and none is commi
 The phase-1 buttons exist precisely so their placement and wording can be settled without their
 logic.
 
-**Phase 2 — acting on a person.** **Promote, demote and warn are done**: an owner-only route
-wrapping `db.set_role` with the plus/minus control, and a warn that delivers a badged message and
-keeps a record (see above). **Suspend and ban remain.** Bans are now meaningful in a way they were
-not: adding an image requires a linked Discord account (`require_signed_in`, `DECISIONS.md` §4), so a
-ban on that account removes the ability to upload — the action actually worth preventing — even
-though a fresh cookie can still be minted for browsing. What still needs deciding is the *shape* of
-each: whether a ban blocks the Discord account, the identity, or both; and what a suspended account
-may still do. The message side of both is already built; only the effect is missing.
+**Phase 2 — acting on a person. Done.** Promote/demote, warn, suspend and ban are all wired. A
+suspension is time-boxed and self-lifting; a ban is open-ended and anchored to the identity's unique
+Discord id, so it survives a new cookie. Both leave the account able to read and to be told why, and
+refuse every write. The owner alone lifts them. The one accepted gap is a *different* Discord account,
+which nothing in this design can stop.
 
 **Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
 Permanent delete does not, and it is the first irreversible action in the app: it would remove the

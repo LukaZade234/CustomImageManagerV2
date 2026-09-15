@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the seventeen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the eighteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -172,7 +172,8 @@ because that had to stop being true.
 | `pinned_notifications` | — | Owner announcements resolved by audience at read time, always visible, never dismissible |
 | `pinned_notification_reads` | — | Per-identity read state for a pin, so a new account sees it unread |
 | `moderation_actions` | — | Staff record of a warn/suspend/ban sent a contributor; the delivered notification points back at it |
-| `schema_migrations` | 17 | Which migrations have run |
+| `moderation_status` | — | The live restriction on an account: `suspended` (with an end) or `banned` (open-ended) |
+| `schema_migrations` | 18 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),

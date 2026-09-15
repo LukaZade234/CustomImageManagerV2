@@ -129,6 +129,9 @@ if cors_origins:
 # the way out. Registered here rather than per-blueprint so no route can
 # accidentally run without an identity available.
 app.before_request(identity.load_identity)
+# A restricted account reads but does not write. Runs after load_identity so the
+# caller is already resolved; see identity.block_restricted_writes.
+app.before_request(identity.block_restricted_writes)
 app.after_request(identity.persist_identity)
 
 # Blueprints. Each owns a subject, not a URL prefix -- paths are unchanged from

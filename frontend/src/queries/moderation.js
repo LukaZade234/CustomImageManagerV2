@@ -119,6 +119,45 @@ export function useWarnModerationUser() {
   })
 }
 
+/**
+ * Suspend or ban: the message and the record, plus the account state. The list
+ * carries the new status, so refresh it too.
+ */
+function useRestrictModerationUser(mutationFn) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: moderationHistoryKey(variables.ref) })
+      queryClient.invalidateQueries({ queryKey: moderationUsersKey })
+    },
+  })
+}
+
+export function useSuspendModerationUser() {
+  return useRestrictModerationUser(({ ref, title, body, days }) =>
+    apiClient.suspendModerationUser(ref, { title, body, days }),
+  )
+}
+
+export function useBanModerationUser() {
+  return useRestrictModerationUser(({ ref, title, body }) =>
+    apiClient.banModerationUser(ref, { title, body }),
+  )
+}
+
+/** Owner-only: lift a suspension or ban. */
+export function useLiftModerationUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ref) => apiClient.liftModerationUser(ref),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: moderationUsersKey })
+      queryClient.invalidateQueries({ queryKey: ['moderation-history'] })
+    },
+  })
+}
+
 /** Owner-only: remove a moderation record, and the message it delivered. */
 export function useDeleteModerationHistory() {
   const queryClient = useQueryClient()
