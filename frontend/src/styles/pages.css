@@ -1594,9 +1594,10 @@ body.reorder-touch-dragging {
 .moderation-back {
   margin-top: var(--space-4);
 }
-/* The tab bar is shared with the profile; only the space above it is this
-   page's. A second class rather than a descendant selector keeps the two at the
-   same specificity, so neither ordering can silently win. */
+/* The section tabs are the profile's own tab bar (`.profile-tabs`), shared here
+   rather than re-styled: History, Hidden and Moderation are the same kind of
+   place, so they should read the same way. Only the space above the row is this
+   page's. */
 .moderation-tabs {
   margin-top: var(--space-3);
 }
@@ -1639,6 +1640,82 @@ body.reorder-touch-dragging {
   height: 52px;
   border-radius: var(--radius-md);
   background: var(--surface-hover);
+}
+/* The ledger finder: the accepted layout. The facets collapse into one toolbar
+   row above a flat, hairline-ruled list, because the count is the column you
+   scan when you already know what you are looking for. Same card surface and
+   tokens as the rest of the page; only the arrangement changes. The card's own
+   `md` padding is the density this wants, so there is no override here. */
+.moderation-page--ledger > .page-title {
+  margin-bottom: var(--space-1);
+}
+.moderation-page--ledger > .moderation-lead {
+  max-width: none;
+  margin-bottom: var(--space-5);
+}
+.moderation-page--ledger .moderation-finder {
+  max-width: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.moderation-page--ledger .moderation-finder__search {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.moderation-page--ledger .moderation-finder__input {
+  flex: 1 1 240px;
+  min-height: var(--control-min-h);
+}
+.moderation-page--ledger .moderation-finder__filters {
+  flex: 2 1 460px;
+  gap: var(--space-2);
+}
+.moderation-page--ledger .moderation-facet {
+  flex: 1 1 110px;
+}
+.moderation-page--ledger .moderation-facet__label {
+  color: var(--text-subtle);
+}
+.moderation-page--ledger .moderation-users__list {
+  margin-top: 0;
+  gap: 0;
+  max-height: min(64vh, 640px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow-y: auto;
+  background: var(--surface);
+}
+.moderation-page--ledger .moderation-user {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.moderation-page--ledger .moderation-users__list > li + li > .moderation-user {
+  border-top: 1px solid var(--border);
+}
+.moderation-page--ledger .moderation-user:hover {
+  background: var(--surface-hover);
+}
+.moderation-page--ledger .moderation-user__counts {
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .moderation-page--ledger .moderation-user {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+  .moderation-page--ledger .moderation-users__list {
+    max-height: 40vh;
+  }
 }
 .moderation-profile {
   display: flex;
@@ -1864,6 +1941,47 @@ body.reorder-touch-dragging {
   flex-wrap: wrap;
   gap: var(--space-1);
   margin-top: var(--space-2);
+}
+/* The ledger detail: the contributor's identity and vitals stay a two-column
+ * sheet, but the moderation record becomes an aligned timeline — severity and
+ * title on the left, actor and date on the right, Delete at the row end — so a
+ * long history scans as rows rather than stacks. */
+.moderation-detail--ledger .moderation-profile--split {
+  gap: var(--space-3) var(--space-5);
+}
+.moderation-detail--ledger .moderation-profile--split .moderation-profile__stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-5);
+}
+.moderation-detail--ledger .moderation-profile--split .moderation-profile__stat {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+.moderation-detail--ledger .moderation-history {
+  margin-top: var(--space-5);
+}
+.moderation-detail--ledger .moderation-message {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+  padding: var(--space-3) 0;
+}
+.moderation-detail--ledger .moderation-message__head {
+  display: contents;
+}
+.moderation-detail--ledger .moderation-message__body {
+  grid-column: 1;
+  margin: 0;
+}
+.moderation-detail--ledger .moderation-message__actions {
+  grid-column: 2;
+  justify-content: flex-end;
+  margin: 0;
 }
 
 /* ---- Warn dialog ------------------------------------------------------- */

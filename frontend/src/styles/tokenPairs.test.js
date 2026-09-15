@@ -161,8 +161,9 @@ describe('DESIGN.md invariants', () => {
 
   it('expresses every border-radius as a token', () => {
     const values = [...all.matchAll(/border-radius:\s*([^;]+);/g)].map((m) => m[1].trim())
-    // 50% is a circle, which is a shape rather than a step on the radius scale.
-    const offScale = values.filter((v) => !v.startsWith('var(--') && v !== '50%')
+    // 50% is a circle and 0 is the absence of a radius: shapes, not steps on the
+    // scale. Anything else has to name a token, so no arbitrary pixel radius.
+    const offScale = values.filter((v) => !v.startsWith('var(--') && v !== '50%' && v !== '0')
     expect(offScale).toEqual([])
   })
 

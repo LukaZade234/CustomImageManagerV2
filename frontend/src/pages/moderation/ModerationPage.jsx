@@ -196,8 +196,8 @@ export default function ModerationPage() {
   const users = usersQuery.data?.items ?? []
   const selected = users.find((item) => item.ref === user) ?? null
 
-  return (
-    <Card as="section" padding="lg" className="moderation-page">
+  const pageBody = (
+    <>
       <h1 className="page-title">Moderation</h1>
 
       {!user ? (
@@ -310,6 +310,16 @@ export default function ModerationPage() {
           onCancel={() => setHistoryToDelete(null)}
         />
       )}
+    </>
+  )
+
+  return (
+    <Card
+      as="section"
+      padding="md"
+      className="moderation-page moderation-page--ledger moderation-detail--ledger"
+    >
+      {pageBody}
     </Card>
   )
 }
