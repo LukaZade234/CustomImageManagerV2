@@ -288,12 +288,14 @@ a labelled `Select`, because those are the questions worth asking before picking
 staff, would a ban mean anything, and have they removed anything. Each row is a `Card` carrying the
 handle, `Badge`s for role and Discord, and two counts in `.tabular`.
 
-**`ModerationPage.jsx`** — two states on one route. With no `?user`, the finder; with one, a back link
-and the **Info / Images** `role="tablist"` (the `profile-tabs` styling), then the tab's content. The
-work queries are gated to the Images tab (`enabled`), so opening someone on Info does not fetch their
-gallery; the history is fetched whenever a contributor is selected. Picking a contributor pushes and
-resets every filter that belonged to the last person; `?tab` replaces, so Back leaves the contributor
-rather than walking the tabs.
+**`ModerationPage.jsx`** — two states on one route. With no `?user`, the finder; with one, a way back
+and the **Info / Images** tabs, then the tab's content. The tabs are the profile's own tab bar
+(`profile-tabs`: anchors with the accent underline), not a second tab idiom — History, Hidden and
+Moderation are the same kind of place — and each is a real link whose `info` default is the absence
+of `?tab`. The work queries are gated to the Images tab (`enabled`), so opening someone on Info does
+not fetch their gallery; the history is fetched whenever a contributor is selected. Picking a
+contributor pushes and resets every filter that belonged to the last person; the tab links replace,
+so Back leaves the contributor rather than walking their tabs.
 
 **`UserProfile.jsx`** — the selected contributor. A header with the handle, a role `Badge`, and the
 stats: **total images** (active), **removed**, **account created** (`created_at`), **last activity**,
@@ -344,7 +346,7 @@ they added and removed."*
   responsive rules go in that same section**, not in a separate media-query pile at the end of the
   file; DESIGN.md names that as a bug that already shipped once. Classes: `.moderation-finder`,
   `.moderation-finder__search`, `.moderation-finder__input`, `.moderation-finder__filters`,
-  `.moderation-facet`, `.moderation-back`, `.moderation-tabs`, `.moderation-tabpanel`,
+  `.moderation-facet`, `.moderation-head`, `.moderation-back`, `.moderation-tabpanel`,
   `.moderation-users`, `.moderation-user`, `.moderation-user__counts`, `.moderation-profile`,
   `.moderation-profile__stats`, `.moderation-profile__actions`, `.moderation-work`,
   `.moderation-work__header`. The finder is a centred 720px column; below 768px the contributor list

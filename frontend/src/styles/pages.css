@@ -1591,16 +1591,28 @@ body.reorder-touch-dragging {
   flex: 1 1 140px;
   min-width: 0;
 }
+/* The title and the way back to the finder share one line; the section tabs sit
+   directly under them, like the profile's. */
+.moderation-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
 .moderation-back {
-  margin-top: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
 }
-/* The section tabs are the profile's own tab bar (`.profile-tabs`), shared here
-   rather than re-styled: History, Hidden and Moderation are the same kind of
-   place, so they should read the same way. Only the space above the row is this
-   page's. */
-.moderation-tabs {
-  margin-top: var(--space-3);
+.moderation-back:hover {
+  color: var(--text);
 }
+/* The section tabs are the profile's own tab bar (`profile-tabs`: anchors with
+   the accent underline), adopted as-is rather than re-styled. History, Hidden
+   and Moderation are the same kind of place, so they read the same way. */
 .moderation-tabpanel {
   margin-top: var(--space-5);
 }
@@ -1646,9 +1658,6 @@ body.reorder-touch-dragging {
    scan when you already know what you are looking for. Same card surface and
    tokens as the rest of the page; only the arrangement changes. The card's own
    `md` padding is the density this wants, so there is no override here. */
-.moderation-page--ledger > .page-title {
-  margin-bottom: var(--space-1);
-}
 .moderation-page--ledger > .moderation-lead {
   max-width: none;
   margin-bottom: var(--space-5);

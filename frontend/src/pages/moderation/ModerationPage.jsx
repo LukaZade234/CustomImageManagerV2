@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useMe } from '../../queries/me'
@@ -54,6 +54,7 @@ const TABS = [
 
 export default function ModerationPage() {
   const [params, setParams] = useSearchParams()
+  const { pathname } = useLocation()
   const user = params.get('user') ?? ''
   const tab = params.get('tab') === 'images' ? 'images' : 'info'
   const view = params.get('view') === 'characters' ? 'characters' : 'images'
@@ -97,9 +98,17 @@ export default function ModerationPage() {
     })
   const searchAnother = () =>
     update({ user: '', tab: '', view: '', state: '', char: '', sort: '', order: '', page: '' })
-  // A tab is a place within one contributor: replace, so Back leaves the
-  // contributor rather than walking the tabs.
-  const setTab = (value) => update({ tab: value === 'info' ? '' : value }, { replace: true })
+  // A tab is a place within one contributor, so it is a real link (the same tab
+  // bar the profile uses) that replaces rather than pushes: Back leaves the
+  // contributor rather than walking their tabs. `info` is the default, so it is
+  // the absence of the parameter.
+  const tabHref = (value) => {
+    const next = new URLSearchParams(params)
+    if (value === 'info') next.delete('tab')
+    else next.set('tab', value)
+    const query = next.toString()
+    return `${pathname}${query ? `?${query}` : ''}`
+  }
   // A filter change is a correction rather than a page you chose: it replaces,
   // and it sends the list back to its first page.
   const setView = (value) =>
@@ -198,7 +207,14 @@ export default function ModerationPage() {
 
   const pageBody = (
     <>
-      <h1 className="page-title">Moderation</h1>
+      <div className="moderation-head">
+        <h1 className="page-title">Moderation</h1>
+        {user && (
+          <Link className="moderation-back" to={pathname}>
+            ← Search another contributor
+          </Link>
+        )}
+      </div>
 
       {!user ? (
         <>
@@ -227,27 +243,22 @@ export default function ModerationPage() {
         )
       ) : (
         <>
-          <Button size="sm" variant="ghost" className="moderation-back" onClick={searchAnother}>
-            ← Search another contributor
-          </Button>
-          <div
-            className="profile-tabs moderation-tabs"
-            role="tablist"
-            aria-label="Contributor sections"
-          >
-            {TABS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                role="tab"
-                aria-selected={tab === item.value}
-                className={`profile-tab ${tab === item.value ? 'profile-tab--active' : ''}`}
-                onClick={() => setTab(item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <nav className="profile-tabs" aria-label="Contributor sections">
+            {TABS.map((item) => {
+              const active = tab === item.value
+              return (
+                <Link
+                  key={item.value}
+                  to={tabHref(item.value)}
+                  replace
+                  className={`profile-tab ${active ? 'profile-tab--active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </nav>
 
           {tab === 'info' ? (
             <div className="moderation-tabpanel">

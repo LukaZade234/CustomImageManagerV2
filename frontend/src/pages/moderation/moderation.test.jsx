@@ -136,14 +136,19 @@ describe('opening on the finder', () => {
     renderModeration()
 
     expect(await screen.findByLabelText('Search contributors by name')).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'Info' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Info' })).not.toBeInTheDocument()
 
     await user.click(await screen.findByRole('button', { name: /Ada Otter/ }))
-    expect(await screen.findByRole('tab', { name: 'Info' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    // The section tabs are the profile's own tab bar: links, with the active one
+    // marked in the URL and named for assistive tech.
+    expect(await screen.findByRole('link', { name: 'Info' })).toHaveAttribute(
+      'aria-current',
+      'page',
     )
-    expect(screen.getByRole('tab', { name: 'Images' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Images' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('tab=images'),
+    )
   })
 
   it('narrows the list by role', async () => {
@@ -171,7 +176,17 @@ describe('the URL is the source of truth', () => {
   it('opens on the finder when no contributor is selected', async () => {
     renderModeration('/moderation')
     expect(await screen.findByLabelText('Search contributors by name')).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'Info' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Info' })).not.toBeInTheDocument()
+  })
+
+  it('switches to the Images tab through the link', async () => {
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('link', { name: 'Images' })
+
+    await user.click(screen.getByRole('link', { name: 'Images' }))
+    await waitFor(() => expect(location()).toContain('tab=images'))
+    expect(await screen.findByLabelText('Filter by character')).toBeInTheDocument()
   })
 
   it('asks the server for removals rather than filtering in the browser', async () => {
