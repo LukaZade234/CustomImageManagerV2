@@ -1830,37 +1830,31 @@ body.reorder-touch-dragging {
     flex-basis: 100%;
   }
 }
-/* The bell stays in the rail when the bar folds, so it is icon-only there. Its
-   accessible name is the button's aria-label, not the hidden word, so dropping
-   the label changes nothing for a screen reader. */
-@media (max-width: 960px) {
-  .navbar-notifications__label {
-    display: none;
-  }
-}
 .navbar-notifications__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
 }
-/* Anything unread makes the whole control pulse in the accent. It is an
-   expanding, fading border ring on a pseudo-element rather than a shadow: the
+/* Anything unread makes the bell pulse in the accent. The ring is drawn on a
+   small square around the icon — not the whole control — so it stays a circle
+   whether or not the label is showing. It is a border rather than a shadow: the
    elevation vocabulary is fixed at two shadows, a scrim and one ring, and a
    pulse is none of those. The blanket reduced-motion guard in base.css stills
    it for anyone who asked for that. */
-.navbar-notifications {
+.navbar-notifications__bell {
   position: relative;
+  display: inline-flex;
 }
 .navbar-notifications--unread {
   color: var(--accent);
 }
-.navbar-notifications--unread::after {
+.navbar-notifications--unread .navbar-notifications__bell::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -6px;
   border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   pointer-events: none;
   animation: navbar-notifications-pulse 1.8s var(--ease) infinite;
 }

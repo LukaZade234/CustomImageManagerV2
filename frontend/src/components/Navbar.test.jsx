@@ -352,25 +352,20 @@ describe('the folded bar', () => {
 
   const me = () => ({ handle: 'Amber Otter', role: 'user', signed_in: false })
 
-  it('hides the bell until something is unread', () => {
-    useStore.setState({ me: me() })
-    renderFolded([
-      [['me'], me()],
-      [['notifications'], { items: [], unread: 0 }],
-    ])
-    // The links fold away, and with nothing unread the bell is gone too.
-    for (const name of [/Add Character/i, /Customs/i, /Amber Otter/, /Notifications/i]) {
-      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
-    }
-  })
-
-  it('shows the pulsing bell as soon as something is unread', () => {
+  it('keeps the bell with the links, hidden until the menu is expanded', async () => {
+    const user = userEvent.setup()
     useStore.setState({ me: me() })
     renderFolded([
       [['me'], me()],
       [['notifications'], { items: [], unread: 1 }],
     ])
-    const bell = screen.getByRole('link', { name: /Notifications, 1 unread/i })
-    expect(bell).toHaveClass('navbar-notifications--unread')
+
+    // Folded: the bell is behind the menu with every other link.
+    expect(screen.queryByRole('link', { name: /Notifications/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Show menu/i }))
+    expect(screen.getByRole('link', { name: /Notifications, 1 unread/i })).toHaveClass(
+      'navbar-notifications--unread',
+    )
   })
 })

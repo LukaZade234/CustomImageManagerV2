@@ -2204,6 +2204,9 @@ def mark_notifications_read(identity_id: str, *, is_staff: bool = False) -> int:
     audiences = ("everyone", "moderators") if is_staff else ("everyone",)
     placeholders = ",".join("?" for _ in audiences)
     with transaction() as conn:
+        # A cookie-only reader may have no identity row yet, and the read row
+        # references it -- without this the insert fails and nothing is marked.
+        _ensure_identity(conn, identity_id)
         cur = conn.execute(
             "UPDATE notifications SET read_at = ? WHERE identity_id = ? AND read_at IS NULL",
             (_now(), identity_id),

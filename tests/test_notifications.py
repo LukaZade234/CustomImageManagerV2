@@ -166,6 +166,31 @@ class TestPinned:
         assert clean_db.count_unread_notifications("plain") == 0
         assert clean_db.count_unread_notifications("plain", is_staff=True) == 1
 
+    def test_a_cookie_with_no_row_yet_can_still_read_a_pin(self, clean_db):
+        # The read row references an identity, and a cookie-only visitor has no
+        # row until their first write -- reading must create it, not fail.
+        clean_db.broadcast_notification("Notice", "", "everyone", None, pinned=True)
+        assert clean_db.count_unread_notifications("brand-new-cookie") == 1
+        clean_db.mark_notifications_read("brand-new-cookie")
+        assert clean_db.count_unread_notifications("brand-new-cookie") == 0
+
+    def test_a_signed_out_visitor_reading_a_pin_clears_the_pulse(
+        self, client, clean_db, make_moderator
+    ):
+        # The reported bug: an owner sends a pin, a signed-out cookie sees it
+        # unread, and opening the list must mark it read (it silently did not,
+        # because the read row's identity did not exist yet).
+        make_moderator("owner")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Notice", "pinned": True},
+        )
+        client.post("/api/auth/logout")
+
+        assert client.get("/api/notifications").get_json()["unread"] == 1
+        assert client.post("/api/notifications/read").status_code == 200
+        assert client.get("/api/notifications").get_json()["unread"] == 0
+
     def test_a_pin_cannot_be_dismissed(self, client, clean_db, identity_id, make_moderator):
         make_moderator("owner")
         client.post(

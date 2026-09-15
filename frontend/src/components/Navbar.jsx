@@ -101,6 +101,41 @@ export default function Navbar() {
                 </svg>
                 <span>Customs</span>
               </Button>
+              {/*
+                Left of the profile icon, and part of the same group: on a narrow
+                bar it is hidden with the rest until the menu is expanded. It
+                pulses in the accent while anything is unread.
+              */}
+              <Button
+                as={Link}
+                to="/notifications"
+                variant="ghost"
+                className={`btn-nav navbar-notifications ${
+                  unread > 0 ? 'navbar-notifications--unread' : ''
+                }`}
+                aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+              >
+                <span className="navbar-notifications__bell" aria-hidden="true">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                  </svg>
+                </span>
+                <span className="navbar-notifications__label" aria-hidden="true">
+                  Notifications
+                </span>
+                {unread > 0 && <span className="navbar-notifications__dot" aria-hidden="true" />}
+              </Button>
               <Link
                 className="ui-btn ui-btn--secondary ui-btn--md btn-nav navbar-profile"
                 to="/profile"
@@ -128,43 +163,6 @@ export default function Navbar() {
                 {me?.is_moderator && <span className="navbar-role">{me.role}</span>}
               </Link>
             </div>
-          )}
-          {/*
-            On a wide bar the bell is always in the rail, after the links. On a
-            folded bar it is not: it appears only while something is unread, as an
-            icon beside the menu button, and pulses in the accent. A notification
-            is the one thing you should not have to open a menu to find; with
-            nothing unread there is nothing to find.
-          */}
-          {(!compact || unread > 0) && (
-            <Button
-              as={Link}
-              to="/notifications"
-              variant="ghost"
-              className={`btn-nav navbar-notifications ${
-                unread > 0 ? 'navbar-notifications--unread' : ''
-              }`}
-              aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-              </svg>
-              <span className="navbar-notifications__label" aria-hidden="true">
-                Notifications
-              </span>
-              {unread > 0 && <span className="navbar-notifications__dot" aria-hidden="true" />}
-            </Button>
           )}
           {compact && (
             <button
