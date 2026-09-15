@@ -264,3 +264,26 @@ describe('DESIGN.md invariants', () => {
     expect(offenders).toEqual([])
   })
 })
+
+describe('the folded nav keeps its icons', () => {
+  /**
+   * On a narrow bar the nav buttons shed their word and become icon-only, via a
+   * blanket `.btn-nav span { display: none }`. The notification bell puts its
+   * `<svg>` inside a span (so the pulse ring can be a circle around just the
+   * icon), which that rule then hid — the button stayed but rendered as an empty
+   * square: clickable, spaced, and invisible, with the pulse on a hidden element.
+   * A span is not a label just because it is a span, so the hide must exempt it.
+   */
+  it('does not hide the notification bell wrapper with the word-labels', () => {
+    const hiders = rules(readFileSync(join(DIR, 'components.css'), 'utf8')).filter(
+      ({ selector, body }) =>
+        selector.includes('.btn-nav') && selector.includes('span') && /display:\s*none/.test(body),
+    )
+    expect(hiders.length, 'expected a rule that folds nav labels').toBeGreaterThan(0)
+    for (const { selector } of hiders) {
+      expect(selector, `"${selector}" would hide the bell icon and its pulse`).toContain(
+        '.navbar-notifications__bell',
+      )
+    }
+  })
+})

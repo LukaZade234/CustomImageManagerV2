@@ -296,7 +296,10 @@
 }
 /* Responsive layout — nav, search, main */
 @media (max-width: 1200px) {
-  .btn-nav span {
+  /* The nav buttons shed their word and become icon-only squares. Spans here
+     are labels — except the bell's wrapper, which holds the icon and the pulse
+     ring, so it must survive. */
+  .btn-nav span:not(.navbar-notifications__bell) {
     display: none;
   }
   .btn-nav {
