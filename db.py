@@ -2128,8 +2128,9 @@ def list_notifications(
     """This identity's normal notifications merged with the pinned ones it sees.
 
     Pinned rows have no per-identity copy, so they are resolved here by audience:
-    `everyone` always, `moderators` only for staff. They carry `pinned: true` and
-    are never unread (there is nowhere to record that) and never dismissible.
+    `everyone` always, `moderators` only for staff. Read state comes from the
+    `pinned_notification_reads` join table, so a new identity sees every visible
+    pin as unread until it has opened the list once. Pins are never dismissible.
     """
     limit = max(1, int(limit))
     conn = get_connection()
@@ -2144,10 +2145,13 @@ def list_notifications(
     audiences = ("everyone", "moderators") if is_staff else ("everyone",)
     placeholders = ",".join("?" for _ in audiences)
     pinned = conn.execute(
-        "SELECT id, title, body, created_at"
-        f"  FROM pinned_notifications WHERE audience IN ({placeholders})"
-        " ORDER BY created_at DESC, id DESC LIMIT ?",
-        (*audiences, limit),
+        "SELECT p.id, p.title, p.body, p.created_at, r.read_at AS read_at"
+        "  FROM pinned_notifications p"
+        "  LEFT JOIN pinned_notification_reads r"
+        "    ON r.pinned_id = p.id AND r.identity_id = ?"
+        f" WHERE p.audience IN ({placeholders})"
+        " ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
+        (identity_id, *audiences, limit),
     ).fetchall()
     items += [
         {
@@ -2156,7 +2160,7 @@ def list_notifications(
             "title": r["title"],
             "body": r["body"],
             "created_at": r["created_at"],
-            "read_at": None,
+            "read_at": r["read_at"],
             "group_id": None,
             "source": "pin",
             "pinned": True,
@@ -2167,21 +2171,48 @@ def list_notifications(
     return items[:limit]
 
 
-def count_unread_notifications(identity_id: str) -> int:
-    """Unread normal messages. Pinned ones never count — they are always visible."""
+def count_unread_notifications(identity_id: str, *, is_staff: bool = False) -> int:
+    """Unread normal messages plus the visible pins this identity has not read.
+
+    A pin counts until the identity reads it, which is what makes a message sent
+    before an account existed still arrive as unread.
+    """
     conn = get_connection()
-    return conn.execute(
+    unread = conn.execute(
         "SELECT COUNT(*) AS n FROM notifications WHERE identity_id = ? AND read_at IS NULL",
         (identity_id,),
     ).fetchone()["n"]
 
+    audiences = ("everyone", "moderators") if is_staff else ("everyone",)
+    placeholders = ",".join("?" for _ in audiences)
+    unread += conn.execute(
+        "SELECT COUNT(*) AS n FROM pinned_notifications p"
+        "  LEFT JOIN pinned_notification_reads r"
+        "    ON r.pinned_id = p.id AND r.identity_id = ?"
+        f" WHERE p.audience IN ({placeholders}) AND r.pinned_id IS NULL",
+        (identity_id, *audiences),
+    ).fetchone()["n"]
+    return unread
 
-def mark_notifications_read(identity_id: str) -> int:
-    """Clear the unread flag on everything this identity has. Returns how many."""
+
+def mark_notifications_read(identity_id: str, *, is_staff: bool = False) -> int:
+    """Read everything this identity can see. Returns how many normal rows it cleared.
+
+    Pins are marked read by inserting a row per visible pin that lacks one, which
+    also covers pins sent after this identity last looked.
+    """
+    audiences = ("everyone", "moderators") if is_staff else ("everyone",)
+    placeholders = ",".join("?" for _ in audiences)
     with transaction() as conn:
         cur = conn.execute(
             "UPDATE notifications SET read_at = ? WHERE identity_id = ? AND read_at IS NULL",
             (_now(), identity_id),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO pinned_notification_reads (identity_id, pinned_id, read_at)"
+            " SELECT ?, p.id, ? FROM pinned_notifications p"
+            f" WHERE p.audience IN ({placeholders})",
+            (identity_id, _now(), *audiences),
         )
         return cur.rowcount
 

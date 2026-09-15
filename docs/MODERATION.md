@@ -406,9 +406,10 @@ after the send does not receive it — which is what "a message sent on a date" 
 
 A **pin** cannot work that way. It must stay visible *including to an account created later*, and it
 cannot be dismissed, so it has no per-identity copy at all: it is one global row, resolved at read
-time by audience (`everyone`, or `moderators` for staff). That also gives pins their two defining
-properties for free — a new account sees them, and there is no row for anyone to delete. Pins do not
-count toward the unread dot; they are always visible, so "unread" would be meaningless.
+time by audience (`everyone`, or `moderators` for staff). Read state lives in a join table
+(`pinned_notification_reads`), so a pin counts as **unread** for an identity until that identity has
+opened the list once — which is what makes a message sent before an account existed still arrive
+unread for it. A pin still cannot be dismissed: there is no delete path for it, only read state.
 
 **Deleting.** The owner can remove any notification from everyone's inbox. An ordinary broadcast is
 deleted as a group (the rows share a `group_id`); a pin is a single row and simply goes; a mechanical
@@ -425,9 +426,13 @@ announcement. Nothing here is actionable — acting still happens where the thin
   created_at, read_at)`, `kind` in `mechanical` / `broadcast`, indexed on `(identity_id, created_at)`.
 - Migration `015_notification_pins.sql`: `notifications.group_id` (ties a broadcast together) and the
   global `pinned_notifications(id, audience, title, body, created_by, created_at)`.
+- Migration `016_pinned_notification_reads.sql`: `pinned_notification_reads(identity_id, pinned_id,
+  read_at)`, so a pin has per-identity read state without a per-identity copy.
 - `db.add_notification`, `db.list_notifications(identity_id, is_staff=…)` (own rows merged with the
-  pins the identity can see), `db.count_unread_notifications` (pins excluded),
-  `db.mark_notifications_read`, `db.dismiss_notification`, `db.delete_notification(source, id)`,
+  pins the identity can see, each pin carrying this identity's read state),
+  `db.count_unread_notifications(identity_id, is_staff=…)` (normal unread plus unread pins),
+  `db.mark_notifications_read` (marks normal rows and inserts a pin read row per visible pin),
+  `db.dismiss_notification`, `db.delete_notification(source, id)`,
   `db.broadcast_notification(…, pinned=…)`.
 - `routes/notifications.py`: `GET /api/notifications`, `POST /api/notifications/read`,
   `POST /api/notifications/dismiss` (own row), `POST /api/notifications/delete` (owner only), and
@@ -435,12 +440,12 @@ announcement. Nothing here is actionable — acting still happens where the thin
 - The role-change route writes a mechanical notification to the target.
 
 ### Frontend
-- `queries/notifications.js`; a Notifications entry in the navbar end rail; `/notifications`. The
-  entry is always in the rail — never inside the collapsed menu, so a phone shows it as an icon even
-  when every other link is folded — and it pulses in the accent while anything is unread. The owner's
-  compose form is the first card on the page, owner-only, with a pin checkbox. Ordinary rows carry
-  **Dismiss**; pins carry a **Pinned** badge and no dismiss; the owner additionally sees a confirmed
-  **Delete** on every row.
+- `queries/notifications.js`; a Notifications entry in the navbar; `/notifications`. On a wide bar it
+  is always in the rail; on a folded bar it appears **only while something is unread**, as an icon
+  beside the menu button that pulses in the accent — with nothing unread there is nothing to find. The
+  owner's compose form is the first card on the page, owner-only, with a pin checkbox. Ordinary rows
+  carry **Dismiss**; pins carry a **Pinned** badge and no dismiss; the owner additionally sees a
+  confirmed **Delete** on every row.
 
 ---
 

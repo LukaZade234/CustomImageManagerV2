@@ -341,19 +341,36 @@ describe('the folded bar', () => {
     removeEventListener: () => {},
   })
 
-  it('keeps the bell visible while the other links are behind the menu', () => {
-    useStore.setState({ me: { handle: 'Amber Otter', role: 'user', signed_in: false } })
+  const renderFolded = (queries) => {
     window.matchMedia = vi.fn().mockImplementation(() => mql(true))
     try {
-      renderNav()
+      return renderNav('/', queries)
     } finally {
       window.matchMedia = vi.fn().mockImplementation(() => mql(false))
     }
-    // The links fold away…
-    for (const name of [/Add Character/i, /Customs/i, /Amber Otter/]) {
+  }
+
+  const me = () => ({ handle: 'Amber Otter', role: 'user', signed_in: false })
+
+  it('hides the bell until something is unread', () => {
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 0 }],
+    ])
+    // The links fold away, and with nothing unread the bell is gone too.
+    for (const name of [/Add Character/i, /Customs/i, /Amber Otter/, /Notifications/i]) {
       expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
     }
-    // …but a notification should not need a menu to be seen.
-    expect(screen.getByRole('link', { name: /Notifications/i })).toBeInTheDocument()
+  })
+
+  it('shows the pulsing bell as soon as something is unread', () => {
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 1 }],
+    ])
+    const bell = screen.getByRole('link', { name: /Notifications, 1 unread/i })
+    expect(bell).toHaveClass('navbar-notifications--unread')
   })
 })

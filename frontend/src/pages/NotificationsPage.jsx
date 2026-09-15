@@ -221,9 +221,7 @@ export default function NotificationsPage() {
           items.map((notification) => (
             <article
               key={`${notification.source}-${notification.id}`}
-              className={`notification ${
-                !notification.pinned && !notification.read_at ? 'notification--unread' : ''
-              }`}
+              className={`notification ${!notification.read_at ? 'notification--unread' : ''}`}
             >
               <div className="notification__head">
                 <h2 className="notification__title">

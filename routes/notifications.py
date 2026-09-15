@@ -31,15 +31,16 @@ def list_notifications():
     return jsonify(
         {
             "items": db.list_notifications(me.id, is_staff=me.is_moderator),
-            "unread": db.count_unread_notifications(me.id),
+            "unread": db.count_unread_notifications(me.id, is_staff=me.is_moderator),
         }
     )
 
 
 @notifications_bp.route("/api/notifications/read", methods=["POST"])
 def mark_read():
-    """Clear the unread flag on everything this identity has."""
-    db.mark_notifications_read(identity.current_identity().id)
+    """Clear the unread flag on everything this identity has, pins included."""
+    me = identity.current_identity()
+    db.mark_notifications_read(me.id, is_staff=me.is_moderator)
     return jsonify({"success": True})
 
 

@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the fifteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the sixteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -170,7 +170,8 @@ because that had to stop being true.
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
 | `notifications` | — | A row per recipient: mechanical, and owner broadcasts (dismissible, grouped by `group_id`) |
 | `pinned_notifications` | — | Owner announcements resolved by audience at read time, always visible, never dismissible |
-| `schema_migrations` | 15 | Which migrations have run |
+| `pinned_notification_reads` | — | Per-identity read state for a pin, so a new account sees it unread |
+| `schema_migrations` | 16 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),

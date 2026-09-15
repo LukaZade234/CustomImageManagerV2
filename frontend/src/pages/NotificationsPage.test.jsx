@@ -182,6 +182,8 @@ describe('dismiss and delete', () => {
     expect(await screen.findByText('Welcome')).toBeInTheDocument()
     expect(screen.getByText('Pinned')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
+    // A pin the reader has not opened yet is unread like any other message.
+    expect(document.querySelector('.notification')).toHaveClass('notification--unread')
   })
 
   it('does not offer Delete to a non-owner', async () => {

@@ -136,13 +136,35 @@ class TestPinned:
             "Staff only"
         ]
 
-    def test_a_pin_does_not_count_as_unread(self, client, clean_db, identity_id, make_moderator):
+    def test_a_new_identity_sees_a_pin_as_unread(self, client, clean_db, identity_id, make_moderator):
         make_moderator("owner")
         client.post(
             "/api/notifications/broadcast",
             json={"audience": "everyone", "title": "Notice", "pinned": True},
         )
+        # A cookie made after the pin still arrives to it unread.
+        clean_db.ensure_identity("latecomer")
+        assert clean_db.count_unread_notifications("latecomer") == 1
+
+    def test_reading_clears_a_pin(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Notice", "pinned": True},
+        )
+        assert client.get("/api/notifications").get_json()["unread"] == 1
+        client.post("/api/notifications/read")
         assert client.get("/api/notifications").get_json()["unread"] == 0
+
+    def test_a_moderators_pin_is_unread_only_for_staff(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "moderators", "title": "Staff note", "pinned": True},
+        )
+        clean_db.ensure_identity("plain")
+        assert clean_db.count_unread_notifications("plain") == 0
+        assert clean_db.count_unread_notifications("plain", is_staff=True) == 1
 
     def test_a_pin_cannot_be_dismissed(self, client, clean_db, identity_id, make_moderator):
         make_moderator("owner")
