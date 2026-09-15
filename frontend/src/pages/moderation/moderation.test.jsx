@@ -61,6 +61,7 @@ function renderModeration(route = '/moderation') {
       <LocationProbe />
       <Routes>
         <Route path="/" element={<div>home</div>} />
+        <Route path="/character/:name" element={<div>character page</div>} />
         <Route
           path="/moderation"
           element={
@@ -264,5 +265,31 @@ describe('the profile and its work', () => {
         expect.objectContaining({ sort: 'rank', order: 'asc', page: 1 }),
       ),
     )
+  })
+
+  it('drills into a character as a filter rather than leaving the page', async () => {
+    api.listModerationUserCharacters.mockResolvedValue({
+      items: [
+        { name: 'Rem', series: 'Re:Zero', rank: '3', image: 'x.png', image_thumb: '', count: 2 },
+      ],
+      total: 1,
+      total_pages: 1,
+    })
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada&view=characters')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    api.listModerationUserImages.mockClear()
+    await user.click(await screen.findByRole('button', { name: /Rem/ }))
+
+    await waitFor(() =>
+      expect(api.listModerationUserImages).toHaveBeenCalledWith(
+        expect.objectContaining({ character: 'Rem', page: 1 }),
+      ),
+    )
+    expect(location()).toContain('char=Rem')
+    expect(location()).not.toContain('view=characters')
+    // It must not have navigated to the public character page.
+    expect(screen.queryByText('character page')).not.toBeInTheDocument()
   })
 })

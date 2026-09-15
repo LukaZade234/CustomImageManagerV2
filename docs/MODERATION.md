@@ -286,11 +286,16 @@ with a title saying so); owner-only promote/demote joins them in a later phase.
 
 - **Images** — the Added / Removed switch (counts read back), a character filter, and the grid:
   `profile/CardGrid.jsx` in its justified mode, so these are the same cards as the Hidden and Removed
-  profile tabs. Each card carries the image verbs as `action`s — **Restore** on a removed image,
-  **Permanently delete** on either — rendered and inert. Cards still link to `/character/<name>`.
+  profile tabs. Each card carries the image verbs in its top corner as **icons** — Restore on a
+  removed image, Delete permanently on either — rendered and inert. They are icons rather than words
+  because a narrow portrait has no room for two labels; they sit over the image, always visible, as
+  a hover reveal would hide the choice the grid exists to offer.
 - **Characters** — the same contributor's characters, grouped, each card carrying the name, series
   and image count, sorted with the Browse Customs vocabulary: *Most images* / *Rank* / *Name* /
   *Recent*. This is the "where is their work concentrated" answer the image grid cannot give.
+  **Clicking a character does not navigate to the public character page** — it switches to the Images
+  view filtered to that character, so the operator stays in context and sees this contributor's
+  images on it. The character is a filter here, not a destination.
 
 Both are server-paged, with the same four-arrow control as `customs-pagination`.
 
@@ -384,9 +389,11 @@ today — the only moderator is the `OWNER_DISCORD_ID` bootstrap.
 
 **Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
 Permanent delete does not, and it is the first irreversible action in the app: it would remove the
-row *and* the file from ImgChest. That needs a decision on its own — whether ImgChest even exposes a
-delete, what happens to `$ai` commands already copied out, and whether a two-step confirm (or a
-"recently destroyed" holding period) is warranted. The button is inert until then.
+row *and* the file from ImgChest. It **must require a second, explicit confirmation** — a popup the
+operator clicks through after the first — so a misclick can never destroy an image, and the button
+stays inert until that exists. The other decisions it needs: whether ImgChest even exposes a delete,
+what happens to `$ai` commands already copied out, and whether a "recently destroyed" holding period
+is warranted.
 
 **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, given that §1
 designed it to work *without* a human. The honest case for reading it is diagnostic rather than

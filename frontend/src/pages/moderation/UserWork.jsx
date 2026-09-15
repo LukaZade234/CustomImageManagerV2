@@ -16,7 +16,6 @@ import CardGrid, { cardRatio } from '../profile/CardGrid'
  * The verbs are inert in phase 1: rendered so the layout is real, wired later.
  * Nothing here mutates anything yet.
  */
-
 const SKELETON = [0, 1, 2, 3, 4, 5, 6, 7]
 
 const SORT_OPTIONS = [
@@ -26,16 +25,67 @@ const SORT_OPTIONS = [
   { value: 'recent', label: 'Recent' },
 ]
 
+/** Counter-clockwise arrow: put it back. */
+function RestoreIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  )
+}
+
+/** Trash: gone, not just hidden. */
+function DeleteIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  )
+}
+
+/**
+ * The per-image verbs. Inert in phase 1. Permanent delete will require a second
+ * confirm before it ever does anything — it is the app's first irreversible
+ * action (it removes the file from ImgChest too), so a single click must not
+ * reach it. See docs/MODERATION.md, later phases.
+ */
 const IMAGE_INERT_ACTIONS = (state) => [
-  ...(state === 'removed' ? [{ label: 'Restore', disabled: true, title: 'Not wired up yet' }] : []),
+  ...(state === 'removed'
+    ? [{ label: 'Restore', icon: <RestoreIcon />, disabled: true, title: 'Not wired up yet' }]
+    : []),
   {
     label: 'Delete permanently',
+    icon: <DeleteIcon />,
     variant: 'danger',
     disabled: true,
-    title: 'Not wired up yet',
+    title: 'Not wired up yet — this will ask you to confirm',
   },
 ]
-
 function Pagination({ page, totalPages, onPage }) {
   if (totalPages <= 1) return null
   return (
@@ -92,6 +142,7 @@ export default function UserWork({
   onCharacter,
   onSort,
   onPage,
+  onShowCharacter,
 }) {
   // The character box is local and debounced, so typing does not refetch every
   // keystroke; the URL is the source of truth once the value is applied.
@@ -124,7 +175,9 @@ export default function UserWork({
 
   const characterCards = items.map((row) => ({
     key: row.name,
-    href: `/character/${encodeURIComponent(row.name)}`,
+    // A character here is a filter, not a destination: clicking it shows this
+    // contributor's images on that character without leaving moderation.
+    onClick: () => onShowCharacter(row.name),
     image: getPortraitUrl(row.image, row.image_thumb),
     title: row.name,
     subtitle: [

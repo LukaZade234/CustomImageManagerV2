@@ -81,6 +81,10 @@ export default function ModerationPage() {
       { replace: true },
     )
   const setPage = (value) => update({ page: value <= 1 ? '' : String(value) })
+  // Clicking a character drills into this contributor's images on it, rather
+  // than leaving for the public character page. Pushed, so Back returns to the
+  // character list you came from.
+  const showCharacterImages = (name) => update({ view: '', char: name, page: '' })
 
   const usersQuery = useModerationUsers()
   const imagesQuery = useModerationUserImages({ ref: user, state, character, page })
@@ -145,6 +149,7 @@ export default function ModerationPage() {
                 onCharacter={setCharacter}
                 onSort={setSort}
                 onPage={setPage}
+                onShowCharacter={showCharacterImages}
               />
             </>
           )}
