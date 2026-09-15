@@ -1751,6 +1751,9 @@ body.reorder-touch-dragging {
   gap: var(--space-2);
 }
 .notification__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: var(--type-section);
   font-weight: var(--weight-medium);
@@ -1767,21 +1770,109 @@ body.reorder-touch-dragging {
   color: var(--text-muted);
   white-space: pre-wrap;
 }
-.notification-compose {
+.notification__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+/* The owner's notification composer, compacted. It used to be a heading, a
+   lead paragraph, three stacked fields and a bordered footer, which stood half a
+   screen tall while empty. Now it is one row — title, audience, Send — plus an
+   optional single-line message. The sentence about what the message is moved
+   into sr-only copy; a visual paragraph is not how someone learns that the box
+   sends a notification. */
+.nc-bar {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
 }
-.notification-compose__body {
-  resize: vertical;
-  font: inherit;
+.nc-bar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.nc-bar__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The message wraps and grows with its content: `rows={1}` plus the scrollHeight
+   the component sets keeps it one line until it needs two, and a long message
+   stops at the cap rather than pushing the list off the screen. */
+.nc-bar__msg {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  max-height: 40vh;
+  padding: var(--space-2) var(--space-3);
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
+}
+/* Pin is a property of the message being written, not a second control in the
+   row, so it sits under the body it applies to. */
+.nc-bar__pin {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+  cursor: pointer;
+}
+/* On a phone the row has three real controls in it; let the title take its own
+   line rather than squeezing the switch and Send into the remainder. */
+@media (max-width: 768px) {
+  .nc-bar__row {
+    flex-wrap: wrap;
+  }
+  .nc-bar__title {
+    flex-basis: 100%;
+  }
+}
+/* The bell stays in the rail when the bar folds, so it is icon-only there. Its
+   accessible name is the button's aria-label, not the hidden word, so dropping
+   the label changes nothing for a screen reader. */
+@media (max-width: 960px) {
+  .navbar-notifications__label {
+    display: none;
+  }
 }
 .navbar-notifications__dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
+}
+/* Anything unread makes the whole control pulse in the accent. It is an
+   expanding, fading border ring on a pseudo-element rather than a shadow: the
+   elevation vocabulary is fixed at two shadows, a scrim and one ring, and a
+   pulse is none of those. The blanket reduced-motion guard in base.css stills
+   it for anyone who asked for that. */
+.navbar-notifications {
+  position: relative;
+}
+.navbar-notifications--unread {
+  color: var(--accent);
+}
+.navbar-notifications--unread::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  animation: navbar-notifications-pulse 1.8s var(--ease) infinite;
+}
+@keyframes navbar-notifications-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
 }
 /* ---- Character gallery: justified rows -----------------------------------
  * Every image is shown whole. Each row is scaled so it fills the width exactly,

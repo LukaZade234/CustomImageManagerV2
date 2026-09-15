@@ -34,3 +34,21 @@ export function useBroadcastNotification() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: notificationsKey }),
   })
 }
+
+/** Remove one of your own normal notifications. Pinned ones have no row to remove. */
+export function useDismissNotification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => apiClient.dismissNotification(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: notificationsKey }),
+  })
+}
+
+/** Owner only: remove a notification from everyone's inbox. */
+export function useDeleteNotification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data) => apiClient.deleteNotification(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: notificationsKey }),
+  })
+}

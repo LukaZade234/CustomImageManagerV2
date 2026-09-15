@@ -30,12 +30,12 @@ import Navbar from './Navbar'
 
 // The navbar reads `me` from react-query now; the tests still describe it by
 // seeding the store, so hand that value to the query cache at render time.
-const renderNav = (route = '/') =>
+const renderNav = (route = '/', queries = [[['me'], useStore.getState().me]]) =>
   renderWithQueryClient(
     <MemoryRouter initialEntries={[route]}>
       <Navbar />
     </MemoryRouter>,
-    { queries: [[['me'], useStore.getState().me]] },
+    { queries },
   )
 
 beforeEach(() => {
@@ -309,5 +309,51 @@ describe('notifications entry', () => {
     )
     // Moderation lives in the profile now, not the topbar.
     expect(screen.queryByRole('link', { name: /Moderation/i })).not.toBeInTheDocument()
+  })
+
+  it('pulses the bell while something is unread', () => {
+    useStore.setState({ me: { handle: 'Amber Otter', role: 'user', signed_in: false } })
+    renderNav('/', [
+      [['me'], useStore.getState().me],
+      [['notifications'], { items: [], unread: 2 }],
+    ])
+    const bell = screen.getByRole('link', { name: /Notifications, 2 unread/i })
+    expect(bell).toHaveClass('navbar-notifications--unread')
+  })
+
+  it('does not pulse when nothing is unread', () => {
+    useStore.setState({ me: { handle: 'Amber Otter', role: 'user', signed_in: false } })
+    renderNav('/', [
+      [['me'], useStore.getState().me],
+      [['notifications'], { items: [], unread: 0 }],
+    ])
+    expect(screen.getByRole('link', { name: /Notifications/i })).not.toHaveClass(
+      'navbar-notifications--unread',
+    )
+  })
+})
+
+describe('the folded bar', () => {
+  const mql = (matches) => ({
+    matches,
+    media: '',
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })
+
+  it('keeps the bell visible while the other links are behind the menu', () => {
+    useStore.setState({ me: { handle: 'Amber Otter', role: 'user', signed_in: false } })
+    window.matchMedia = vi.fn().mockImplementation(() => mql(true))
+    try {
+      renderNav()
+    } finally {
+      window.matchMedia = vi.fn().mockImplementation(() => mql(false))
+    }
+    // The links fold away…
+    for (const name of [/Add Character/i, /Customs/i, /Amber Otter/]) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
+    // …but a notification should not need a menu to be seen.
+    expect(screen.getByRole('link', { name: /Notifications/i })).toBeInTheDocument()
   })
 })

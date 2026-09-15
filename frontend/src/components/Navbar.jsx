@@ -101,35 +101,6 @@ export default function Navbar() {
                 </svg>
                 <span>Customs</span>
               </Button>
-              <Button
-                as={Link}
-                to="/notifications"
-                variant="ghost"
-                className="btn-nav navbar-notifications"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                </svg>
-                <span>Notifications</span>
-                {unread > 0 && (
-                  <span
-                    className="navbar-notifications__dot"
-                    aria-label={`${unread} unread`}
-                    role="status"
-                  />
-                )}
-              </Button>
               <Link
                 className="ui-btn ui-btn--secondary ui-btn--md btn-nav navbar-profile"
                 to="/profile"
@@ -158,6 +129,40 @@ export default function Navbar() {
               </Link>
             </div>
           )}
+          {/*
+            Always in the rail, never inside the fold: a notification is the one
+            thing you should not have to open a menu to see. On a phone it is an
+            icon beside the menu button; on a wide bar it sits after the links
+            with its label. It pulses in the accent while anything is unread.
+          */}
+          <Button
+            as={Link}
+            to="/notifications"
+            variant="ghost"
+            className={`btn-nav navbar-notifications ${
+              unread > 0 ? 'navbar-notifications--unread' : ''
+            }`}
+            aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+            <span className="navbar-notifications__label" aria-hidden="true">
+              Notifications
+            </span>
+            {unread > 0 && <span className="navbar-notifications__dot" aria-hidden="true" />}
+          </Button>
           {compact && (
             <button
               type="button"

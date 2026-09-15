@@ -2096,10 +2096,12 @@ def count_images_added_by(identity_id: str) -> int:
 
 # --- Notifications -------------------------------------------------------
 #
-# One table, two producers: the app telling an account something about itself
-# (mechanical), and the owner addressing a group (broadcast). A broadcast is
-# fanned out to a row per recipient at send time, so read state is per row and
-# there is no separate dismissal table. See migration 014.
+# Two shapes. A **normal** notification is a row per recipient: delivered at send
+# time, dismissible by its recipient (a hard delete), and carrying a `group_id`
+# so the owner can remove one broadcast from every inbox at once. A **pinned**
+# one is a single global row resolved by audience at read time: it must reach an
+# account made later than the send, and it cannot be dismissed, so it has no
+# per-identity copy at all. See migrations 014 and 015.
 
 
 def add_notification(
@@ -2120,19 +2122,53 @@ def add_notification(
         )
 
 
-def list_notifications(identity_id: str, *, limit: int = 100) -> list[dict]:
-    """This identity's notifications, newest first."""
+def list_notifications(
+    identity_id: str, *, is_staff: bool = False, limit: int = 100
+) -> list[dict]:
+    """This identity's normal notifications merged with the pinned ones it sees.
+
+    Pinned rows have no per-identity copy, so they are resolved here by audience:
+    `everyone` always, `moderators` only for staff. They carry `pinned: true` and
+    are never unread (there is nowhere to record that) and never dismissible.
+    """
+    limit = max(1, int(limit))
     conn = get_connection()
     rows = conn.execute(
-        "SELECT id, kind, title, body, created_at, read_at"
+        "SELECT id, kind, title, body, created_at, read_at, group_id"
         "  FROM notifications WHERE identity_id = ?"
         " ORDER BY created_at DESC, id DESC LIMIT ?",
-        (identity_id, max(1, int(limit))),
+        (identity_id, limit),
     ).fetchall()
-    return [dict(r) for r in rows]
+    items = [{**dict(r), "source": "notification", "pinned": False} for r in rows]
+
+    audiences = ("everyone", "moderators") if is_staff else ("everyone",)
+    placeholders = ",".join("?" for _ in audiences)
+    pinned = conn.execute(
+        "SELECT id, title, body, created_at"
+        f"  FROM pinned_notifications WHERE audience IN ({placeholders})"
+        " ORDER BY created_at DESC, id DESC LIMIT ?",
+        (*audiences, limit),
+    ).fetchall()
+    items += [
+        {
+            "id": r["id"],
+            "kind": "broadcast",
+            "title": r["title"],
+            "body": r["body"],
+            "created_at": r["created_at"],
+            "read_at": None,
+            "group_id": None,
+            "source": "pin",
+            "pinned": True,
+        }
+        for r in pinned
+    ]
+    items.sort(key=lambda item: (item["created_at"] or "", item["id"]), reverse=True)
+    return items[:limit]
 
 
 def count_unread_notifications(identity_id: str) -> int:
+    """Unread normal messages. Pinned ones never count — they are always visible."""
     conn = get_connection()
     return conn.execute(
         "SELECT COUNT(*) AS n FROM notifications WHERE identity_id = ? AND read_at IS NULL",
@@ -2150,13 +2186,59 @@ def mark_notifications_read(identity_id: str) -> int:
         return cur.rowcount
 
 
-def broadcast_notification(
-    title: str, body: str, audience: str, created_by: str | None = None
-) -> int:
-    """Fan a message out to a row per recipient. Returns the number sent.
+def dismiss_notification(identity_id: str, notification_id: int) -> bool:
+    """Delete one of your own normal notifications. A pinned one has no row here.
 
-    `audience` is `everyone` or `moderators`. The fan-out is what keeps read
-    state trivial; the identity count is the bound.
+    Dismissal is a hard delete rather than a flag: the message is gone for this
+    recipient only, which is exactly what removing one row means.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "DELETE FROM notifications WHERE id = ? AND identity_id = ?",
+            (notification_id, identity_id),
+        )
+        return bool(cur.rowcount)
+
+
+def delete_notification(source: str, notification_id: int) -> int:
+    """Owner-only removal. Returns how many recipients it removed.
+
+    A pinned message is one global row, so deleting it removes it for everyone.
+    A normal broadcast shares a `group_id`, so deleting one copy deletes the whole
+    broadcast; a mechanical message has no group and is deleted on its own.
+    """
+    with transaction() as conn:
+        if source == "pin":
+            return conn.execute(
+                "DELETE FROM pinned_notifications WHERE id = ?", (notification_id,)
+            ).rowcount
+        row = conn.execute(
+            "SELECT group_id FROM notifications WHERE id = ?", (notification_id,)
+        ).fetchone()
+        if row is None:
+            return 0
+        if row["group_id"]:
+            return conn.execute(
+                "DELETE FROM notifications WHERE group_id = ?", (row["group_id"],)
+            ).rowcount
+        return conn.execute(
+            "DELETE FROM notifications WHERE id = ?", (notification_id,)
+        ).rowcount
+
+
+def broadcast_notification(
+    title: str,
+    body: str,
+    audience: str,
+    created_by: str | None = None,
+    *,
+    pinned: bool = False,
+) -> int:
+    """Send a message. Returns the number of recipients it reached.
+
+    `audience` is `everyone` or `moderators`. A normal message is fanned out to a
+    row per recipient; a pinned one is a single row that every current and future
+    member of the audience sees.
     """
     with transaction() as conn:
         if audience == "moderators":
@@ -2168,11 +2250,22 @@ def broadcast_notification(
             ]
         else:
             ids = [r["id"] for r in conn.execute("SELECT id FROM identities")]
+
+        if pinned:
+            conn.execute(
+                "INSERT INTO pinned_notifications (audience, title, body, created_by, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (audience, title, body, created_by, _now()),
+            )
+            return len(ids)
+
+        group_id = os.urandom(8).hex()
         now = _now()
         conn.executemany(
-            "INSERT INTO notifications (identity_id, kind, title, body, created_by, created_at)"
-            " VALUES (?, 'broadcast', ?, ?, ?, ?)",
-            [(identity_id, title, body, created_by, now) for identity_id in ids],
+            "INSERT INTO notifications"
+            " (identity_id, kind, title, body, created_by, created_at, group_id)"
+            " VALUES (?, 'broadcast', ?, ?, ?, ?, ?)",
+            [(identity_id, title, body, created_by, now, group_id) for identity_id in ids],
         )
         return len(ids)
 

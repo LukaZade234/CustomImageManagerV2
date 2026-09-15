@@ -89,3 +89,115 @@ class TestMechanicalOnRoleChange:
         client.post(f"/api/moderation/users/{ref}/role", json={"role": "user"})
         items = clean_db.list_notifications("worker")
         assert items and items[0]["title"] == "Your moderator role was removed"
+
+
+class TestDismiss:
+    def test_a_normal_notification_can_be_dismissed(self, client, clean_db, identity_id):
+        clean_db.add_notification(identity_id, "Remove me")
+        item = client.get("/api/notifications").get_json()["items"][0]
+        assert client.post("/api/notifications/dismiss", json={"id": item["id"]}).status_code == 200
+        assert client.get("/api/notifications").get_json()["items"] == []
+
+    def test_dismissing_someone_elses_is_404(self, client, clean_db):
+        clean_db.ensure_identity("someone")
+        clean_db.add_notification("someone", "Theirs")
+        their = clean_db.list_notifications("someone")[0]["id"]
+        assert client.post("/api/notifications/dismiss", json={"id": their}).status_code == 404
+        assert len(clean_db.list_notifications("someone")) == 1
+
+    def test_a_missing_id_is_400(self, client, clean_db):
+        assert client.post("/api/notifications/dismiss", json={}).status_code == 400
+
+
+class TestPinned:
+    def test_a_pin_reaches_an_account_made_later(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        res = client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Welcome", "body": "Read me", "pinned": True},
+        )
+        assert res.status_code == 200
+
+        # An account that did not exist when it was sent still sees it.
+        clean_db.ensure_identity("latecomer")
+        titles = [n["title"] for n in clean_db.list_notifications("latecomer")]
+        assert titles == ["Welcome"]
+        assert clean_db.list_notifications("latecomer")[0]["pinned"] is True
+
+    def test_a_moderator_pin_skips_a_later_plain_user(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "moderators", "title": "Staff only", "pinned": True},
+        )
+        clean_db.ensure_identity("plain")
+        assert clean_db.list_notifications("plain") == []
+        assert [n["title"] for n in clean_db.list_notifications("plain", is_staff=True)] == [
+            "Staff only"
+        ]
+
+    def test_a_pin_does_not_count_as_unread(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Notice", "pinned": True},
+        )
+        assert client.get("/api/notifications").get_json()["unread"] == 0
+
+    def test_a_pin_cannot_be_dismissed(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Notice", "pinned": True},
+        )
+        pin = client.get("/api/notifications").get_json()["items"][0]
+        # No normal row here shares the id, so nothing is removed and the pin stays.
+        client.post("/api/notifications/dismiss", json={"id": pin["id"]})
+        assert [n["title"] for n in clean_db.list_notifications(identity_id)] == ["Notice"]
+
+
+class TestOwnerDelete:
+    def test_deleting_a_broadcast_clears_it_for_everyone(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        clean_db.ensure_identity("alice")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Gone soon"},
+        )
+        alice_item = clean_db.list_notifications("alice")[0]
+        res = client.post(
+            "/api/notifications/delete",
+            json={"source": "notification", "id": alice_item["id"]},
+        )
+        assert res.status_code == 200
+        assert clean_db.list_notifications("alice") == []
+
+    def test_deleting_a_pin_removes_it_for_everyone(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        clean_db.ensure_identity("alice")
+        client.post(
+            "/api/notifications/broadcast",
+            json={"audience": "everyone", "title": "Pinned", "pinned": True},
+        )
+        pin = clean_db.list_notifications("alice")[0]
+        res = client.post("/api/notifications/delete", json={"source": "pin", "id": pin["id"]})
+        assert res.status_code == 200
+        assert clean_db.list_notifications("alice") == []
+
+    def test_only_the_owner_may_delete(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("moderator")
+        clean_db.add_notification(identity_id, "Mine")
+        item = clean_db.list_notifications(identity_id)[0]
+        res = client.post(
+            "/api/notifications/delete",
+            json={"source": "notification", "id": item["id"]},
+        )
+        assert res.status_code == 403
+        assert len(clean_db.list_notifications(identity_id)) == 1
+
+    def test_an_unknown_source_is_400(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        assert (
+            client.post("/api/notifications/delete", json={"source": "bogus", "id": 1}).status_code
+            == 400
+        )

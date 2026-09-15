@@ -100,6 +100,18 @@ export const apiClient = {
     }),
   getNotifications: () => api('/api/notifications'),
   markNotificationsRead: () => api('/api/notifications/read', { method: 'POST' }),
+  dismissNotification: (data) =>
+    api('/api/notifications/dismiss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  deleteNotification: (data) =>
+    api('/api/notifications/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   broadcastNotification: (data) =>
     api('/api/notifications/broadcast', {
       method: 'POST',

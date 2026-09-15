@@ -65,6 +65,8 @@ EXPECTED_ROUTES = {
     ("/api/mudae/status", "GET"),
     ("/api/notifications", "GET"),
     ("/api/notifications/broadcast", "POST"),
+    ("/api/notifications/delete", "POST"),
+    ("/api/notifications/dismiss", "POST"),
     ("/api/notifications/read", "POST"),
     ("/api/removed/<path:char_name>", "GET"),
     ("/api/reorder-custom-images", "POST"),

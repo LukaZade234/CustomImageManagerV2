@@ -628,7 +628,9 @@ why it does not contradict the anti-queue argument there.
       other power but cannot change roles.
 - [x] **Notifications** (the moderation channel). A topbar entry beside a profile-tab moderation
       surface: a plain list of messages to you, mechanical (a role change) and owner broadcasts
-      (everyone, or moderators only), fanned out per recipient. This is what "warn" will use.
+      (everyone, or moderators only). Ordinary messages are dismissible by their recipient and
+      deletable by the owner for everyone; **pinned** ones are global, always visible (including to
+      later accounts), and cannot be dismissed. This is what "warn" will use.
 - [ ] **Phase 2 — warn / suspend / ban.** Still inert; needs a decision on what each means for a
       cookie identity, and now has the notification channel to say them through.
 - [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete

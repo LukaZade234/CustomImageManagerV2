@@ -396,15 +396,24 @@ Two sources:
   promoted to moderator, or demoted. More hook onto the same `db.add_notification` call as the
   actions that need them land (a moderator removing your image, a report threshold clearing it).
 - **Owner-authored** — the owner writes a message and sends it. The compose section sits at the top
-  of the page and is owner-only: choose an audience (**everyone**, or **moderators only**), a title
-  and a body, then send. Deliberately a small template, not a rich editor.
+  of the page and is owner-only: choose an audience (**everyone**, or **moderators only**), a title,
+  a body, and whether to **pin** it. Deliberately a small template, not a rich editor.
 
-**Fan-out, not audience resolution.** A broadcast inserts one row per recipient identity at send
-time, so a notification is always "this identity's row" and read state is a plain `read_at` on it.
-The alternative — an audience column resolved at read time — needs a second dismissal table to
-remember who has read what. The cost is that someone who arrives after a broadcast does not receive
-it, which is what "a message sent on a date" means anyway. The identity count is the bound, and it is
-small.
+**Ordinary vs pinned — two different things.** An ordinary broadcast is fanned out to one row per
+recipient identity at send time: it is delivered, its `read_at` is per person, and each recipient can
+**dismiss** it (a hard delete of their own row). The cost of fan-out is that someone who arrives
+after the send does not receive it — which is what "a message sent on a date" means.
+
+A **pin** cannot work that way. It must stay visible *including to an account created later*, and it
+cannot be dismissed, so it has no per-identity copy at all: it is one global row, resolved at read
+time by audience (`everyone`, or `moderators` for staff). That also gives pins their two defining
+properties for free — a new account sees them, and there is no row for anyone to delete. Pins do not
+count toward the unread dot; they are always visible, so "unread" would be meaningless.
+
+**Deleting.** The owner can remove any notification from everyone's inbox. An ordinary broadcast is
+deleted as a group (the rows share a `group_id`); a pin is a single row and simply goes; a mechanical
+message has no group and is deleted on its own. The owner's delete is confirmed, because it is
+irreversible and reaches other people.
 
 **What it is not.** Not a queue, and not a second inbox to tend: nothing is assigned, nothing is
 counted as pending *work*, and the unread dot is only ever your own messages. Mechanical
@@ -414,15 +423,24 @@ announcement. Nothing here is actionable — acting still happens where the thin
 ### Backend
 - Migration `014_notifications.sql`: `notifications(id, identity_id, kind, title, body, created_by,
   created_at, read_at)`, `kind` in `mechanical` / `broadcast`, indexed on `(identity_id, created_at)`.
-- `db.add_notification`, `db.list_notifications`, `db.mark_notifications_read`,
-  `db.broadcast_notification(title, body, audience, created_by)`.
-- `routes/notifications.py`: `GET /api/notifications` (own list + unread count),
-  `POST /api/notifications/read` (mark all read), `POST /api/notifications/broadcast` (owner only).
+- Migration `015_notification_pins.sql`: `notifications.group_id` (ties a broadcast together) and the
+  global `pinned_notifications(id, audience, title, body, created_by, created_at)`.
+- `db.add_notification`, `db.list_notifications(identity_id, is_staff=…)` (own rows merged with the
+  pins the identity can see), `db.count_unread_notifications` (pins excluded),
+  `db.mark_notifications_read`, `db.dismiss_notification`, `db.delete_notification(source, id)`,
+  `db.broadcast_notification(…, pinned=…)`.
+- `routes/notifications.py`: `GET /api/notifications`, `POST /api/notifications/read`,
+  `POST /api/notifications/dismiss` (own row), `POST /api/notifications/delete` (owner only), and
+  `POST /api/notifications/broadcast` (owner only, takes `pinned`).
 - The role-change route writes a mechanical notification to the target.
 
 ### Frontend
-- `queries/notifications.js`; a Notifications entry in the navbar end rail with a small unread dot;
-  `/notifications`. The owner's compose form is the first card on the page, owner-only.
+- `queries/notifications.js`; a Notifications entry in the navbar end rail; `/notifications`. The
+  entry is always in the rail — never inside the collapsed menu, so a phone shows it as an icon even
+  when every other link is folded — and it pulses in the accent while anything is unread. The owner's
+  compose form is the first card on the page, owner-only, with a pin checkbox. Ordinary rows carry
+  **Dismiss**; pins carry a **Pinned** badge and no dismiss; the owner additionally sees a confirmed
+  **Delete** on every row.
 
 ---
 

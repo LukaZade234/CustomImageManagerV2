@@ -147,7 +147,7 @@ installed although the project contains no TypeScript.
 ## 4. Database
 
 SQLite, one file, replicated to R2 by Litestream. Eleven tables are created by
-the fourteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
+the fifteen migrations in `migrations/`, plus `schema_migrations`, which `db.py`
 creates itself; all are applied on first connect.
 
 The v1 shape was a single Postgres `kv_store` table holding four whole JSON
@@ -168,8 +168,9 @@ because that had to stop being true.
 | `image_reports` | — | Two distinct reporters remove an image |
 | `character_catalog` | — | The Mudae scrape: name, series, rank, pools, `mudae.net` portrait |
 | `catalog_series` | — | Series names seen in the catalog, for autocomplete |
-| `notifications` | — | Messages to one identity: mechanical, and owner broadcasts fanned out per recipient |
-| `schema_migrations` | 14 | Which migrations have run |
+| `notifications` | — | A row per recipient: mechanical, and owner broadcasts (dismissible, grouped by `group_id`) |
+| `pinned_notifications` | — | Owner announcements resolved by audience at read time, always visible, never dismissible |
+| `schema_migrations` | 15 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
 `idx_custom_images_hash` (duplicate detection by content, not URL),
@@ -399,7 +400,9 @@ limited per identity (`ratelimit.py`).
 |---|---|---|
 | GET | `/api/notifications` | This identity's messages, newest first, plus the unread count. |
 | POST | `/api/notifications/read` | Mark everything this identity has as read. |
-| POST | `/api/notifications/broadcast` | Owner only: fan a message out to everyone, or to moderators only. |
+| POST | `/api/notifications/dismiss` | Remove one normal notification from your own inbox. Pinned ones cannot be dismissed. |
+| POST | `/api/notifications/delete` | Owner only: remove a broadcast from every inbox, or delete a pin. |
+| POST | `/api/notifications/broadcast` | Owner only: fan a message out to everyone, or to moderators only; `pinned` makes it a permanent global announcement. |
 
 **`spa`**
 
