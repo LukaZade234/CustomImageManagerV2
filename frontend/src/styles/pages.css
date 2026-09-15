@@ -1836,6 +1836,11 @@ body.reorder-touch-dragging {
   border-radius: 50%;
   background: var(--accent);
 }
+/* The copy that sits on a folded bar has no room for the word, and its
+   accessible name is the button's aria-label anyway. */
+.navbar-notifications--icon-only .navbar-notifications__label {
+  display: none;
+}
 /* Anything unread makes the bell pulse in the accent. The ring is drawn on a
    small square around the icon — not the whole control — so it stays a circle
    whether or not the label is showing. It is a border rather than a shadow: the

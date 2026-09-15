@@ -16,6 +16,13 @@ export function useNotifications() {
   return useQuery({
     queryKey: notificationsKey,
     queryFn: () => apiClient.getNotifications(),
+    // The one query that must notice a change it did not cause. Everything else
+    // is invalidated by its own mutation, but a notification arrives from
+    // somewhere else, so poll while the tab is open and refetch when a phone
+    // comes back to it. The global defaults turn focus-refetch off precisely
+    // because of the big galleries; here it is the whole point.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   })
 }
 

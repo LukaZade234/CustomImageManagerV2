@@ -440,12 +440,14 @@ announcement. Nothing here is actionable — acting still happens where the thin
 - The role-change route writes a mechanical notification to the target.
 
 ### Frontend
-- `queries/notifications.js`; a Notifications entry in the navbar, in the end rail just left of the
-  profile link — so on a folded bar it is behind the menu with the other links, not on the bar. It
-  pulses (a circular accent ring around the bell) while anything is unread. The owner's compose form
-  is the first card on the page, owner-only, with a pin checkbox. Ordinary rows carry **Dismiss**;
-  pins carry a **Pinned** badge and no dismiss; the owner additionally sees a confirmed **Delete** on
-  every row.
+- `queries/notifications.js` polls every 60 seconds and refetches on focus — the one query whose change
+  comes from elsewhere, so it cannot rely on its own mutation to invalidate it. A Notifications entry
+  sits in the navbar's end rail just left of the profile link, so it rides with the links. On a folded
+  bar that group is behind the hamburger, so while something is unread an icon-only bell **also**
+  appears on the bar itself, left of the menu button, and pulses (a circular accent ring around the
+  bell); opening the menu swaps that bar copy for the labelled one. The owner's compose form is the
+  first card on the page, owner-only, with a pin checkbox. Ordinary rows carry **Dismiss**; pins carry
+  a **Pinned** badge and no dismiss; the owner additionally sees a confirmed **Delete** on every row.
 
 ---
 

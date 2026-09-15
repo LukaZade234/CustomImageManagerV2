@@ -352,7 +352,32 @@ describe('the folded bar', () => {
 
   const me = () => ({ handle: 'Amber Otter', role: 'user', signed_in: false })
 
-  it('keeps the bell with the links, hidden until the menu is expanded', async () => {
+  it('keeps the bell off the bar while nothing is unread', () => {
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 0 }],
+    ])
+    // The links fold away, and with nothing unread there is nothing to see.
+    for (const name of [/Add Character/i, /Customs/i, /Amber Otter/, /Notifications/i]) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
+  })
+
+  it('puts a pulsing bell on the bar as soon as something is unread', () => {
+    useStore.setState({ me: me() })
+    renderFolded([
+      [['me'], me()],
+      [['notifications'], { items: [], unread: 1 }],
+    ])
+    // Visible without opening the menu, and icon-only -- the links are still folded.
+    const bell = screen.getByRole('link', { name: /Notifications, 1 unread/i })
+    expect(bell).toHaveClass('navbar-notifications--unread')
+    expect(bell).toHaveClass('navbar-notifications--icon-only')
+    expect(screen.queryByRole('link', { name: /Add Character/i })).not.toBeInTheDocument()
+  })
+
+  it('swaps the bar bell for the labelled one when the menu opens', async () => {
     const user = userEvent.setup()
     useStore.setState({ me: me() })
     renderFolded([
@@ -360,12 +385,10 @@ describe('the folded bar', () => {
       [['notifications'], { items: [], unread: 1 }],
     ])
 
-    // Folded: the bell is behind the menu with every other link.
-    expect(screen.queryByRole('link', { name: /Notifications/i })).not.toBeInTheDocument()
-
     await user.click(screen.getByRole('button', { name: /Show menu/i }))
-    expect(screen.getByRole('link', { name: /Notifications, 1 unread/i })).toHaveClass(
-      'navbar-notifications--unread',
-    )
+    // One bell, not two: the bar copy steps aside for the one in the links.
+    const bell = screen.getByRole('link', { name: /Notifications, 1 unread/i })
+    expect(bell).not.toHaveClass('navbar-notifications--icon-only')
+    expect(screen.getByRole('link', { name: /Add Character/i })).toBeInTheDocument()
   })
 })

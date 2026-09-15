@@ -9,6 +9,50 @@ import { Button } from './ui'
 /** Below this the bar folds: the wordmark goes, the links go behind a button. */
 const COMPACT = '(max-width: 960px)'
 
+/**
+ * The notifications bell.
+ *
+ * It is drawn in two places for two jobs. In the links group it is a normal
+ * entry "Notifications", left of the profile icon. On a folded bar that group is
+ * behind the hamburger, so while something is unread a second, icon-only copy
+ * appears on the bar itself — a notification is the one thing you should not have
+ * to open a menu to discover.
+ */
+function NotificationsButton({ unread, iconOnly = false }) {
+  return (
+    <Button
+      as={Link}
+      to="/notifications"
+      variant="ghost"
+      className={`btn-nav navbar-notifications ${
+        unread > 0 ? 'navbar-notifications--unread' : ''
+      } ${iconOnly ? 'navbar-notifications--icon-only' : ''}`}
+      aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+    >
+      <span className="navbar-notifications__bell" aria-hidden="true">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+      </span>
+      <span className="navbar-notifications__label" aria-hidden="true">
+        Notifications
+      </span>
+      {unread > 0 && <span className="navbar-notifications__dot" aria-hidden="true" />}
+    </Button>
+  )
+}
+
 export default function Navbar() {
   const { data: me } = useMe()
   const { data: notifications } = useNotifications()
@@ -101,41 +145,7 @@ export default function Navbar() {
                 </svg>
                 <span>Customs</span>
               </Button>
-              {/*
-                Left of the profile icon, and part of the same group: on a narrow
-                bar it is hidden with the rest until the menu is expanded. It
-                pulses in the accent while anything is unread.
-              */}
-              <Button
-                as={Link}
-                to="/notifications"
-                variant="ghost"
-                className={`btn-nav navbar-notifications ${
-                  unread > 0 ? 'navbar-notifications--unread' : ''
-                }`}
-                aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-              >
-                <span className="navbar-notifications__bell" aria-hidden="true">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                  </svg>
-                </span>
-                <span className="navbar-notifications__label" aria-hidden="true">
-                  Notifications
-                </span>
-                {unread > 0 && <span className="navbar-notifications__dot" aria-hidden="true" />}
-              </Button>
+              <NotificationsButton unread={unread} />
               <Link
                 className="ui-btn ui-btn--secondary ui-btn--md btn-nav navbar-profile"
                 to="/profile"
@@ -164,6 +174,14 @@ export default function Navbar() {
               </Link>
             </div>
           )}
+          {/*
+            Folded, the links are behind the hamburger — but an unread
+            notification has to be visible without opening anything. This
+            icon-only copy sits on the bar, left of the menu button, and only
+            while there is something to see; with the menu open the labelled one
+            is already there, so this one steps aside.
+          */}
+          {compact && !menuOpen && unread > 0 && <NotificationsButton unread={unread} iconOnly />}
           {compact && (
             <button
               type="button"
