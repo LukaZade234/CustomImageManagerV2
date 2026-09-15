@@ -124,7 +124,9 @@ def upload():
 @characters_bp.route("/api/saved", methods=["GET"])
 def get_saved():
     try:
-        return jsonify(db.get_saved_characters())
+        # Per-identity: a bookmark is tied to the cookie (or the Discord account
+        # once signed in), so it follows the caller like every other list.
+        return jsonify(db.get_saved_characters(identity.current_identity().id))
     except Exception:
         log.exception("saved.list_failed")
     return jsonify([])
@@ -141,7 +143,7 @@ def save_character():
     if not ok:
         return jsonify({"error": err}), 400
     try:
-        if not db.save_character(char_name):
+        if not db.save_character(char_name, identity.current_identity().id):
             return jsonify({"error": "Character already saved"}), 400
         db.update_last_modified(char_name)
         return jsonify({"success": True, "message": "Character saved"})
@@ -265,7 +267,7 @@ def add_character():
 @characters_bp.route("/api/saved/<path:name>", methods=["DELETE"])
 def remove_saved(name):
     try:
-        if not db.unsave_character(name):
+        if not db.unsave_character(name, identity.current_identity().id):
             return jsonify({"error": "Character not found in saved list"}), 404
         return jsonify({"success": True, "message": "Character removed"})
     except Exception:

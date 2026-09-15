@@ -2383,7 +2383,7 @@ def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:
 # --- Bookmarks ----------------------------------------------------------
 
 
-def get_saved_characters(identity_id: str = LEGACY_IDENTITY_ID) -> list:
+def get_saved_characters(identity_id: str) -> list:
     """Bookmarks, most recently updated first.
 
     The timestamp comes back with each row so the client does not have to fetch
@@ -2785,7 +2785,7 @@ def set_role(identity_id: str, role: str) -> bool:
         return bool(cur.rowcount)
 
 
-def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:
+def save_character(char_name: str, identity_id: str) -> bool:
     """False if already bookmarked by this identity."""
     with transaction() as conn:
         _ensure_identity(conn, identity_id)
@@ -2798,7 +2798,7 @@ def save_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> boo
         return bool(cur.rowcount)
 
 
-def unsave_character(char_name: str, identity_id: str = LEGACY_IDENTITY_ID) -> bool:
+def unsave_character(char_name: str, identity_id: str) -> bool:
     """False if it was not bookmarked."""
     with transaction() as conn:
         char_id = _character_id(conn, char_name)
