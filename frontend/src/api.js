@@ -92,6 +92,12 @@ export const apiClient = {
     if (character) params.set('character', character)
     return api(`/api/moderation/users/${encodeURIComponent(ref)}/characters?${params}`)
   },
+  setModerationRole: (ref, role) =>
+    api(`/api/moderation/users/${encodeURIComponent(ref)}/role`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    }),
   suggestCharacters: (q = '', limit = 10, series = '', pools = []) => {
     const params = new URLSearchParams({ q, limit: String(limit) })
     if (series) params.set('series', series)

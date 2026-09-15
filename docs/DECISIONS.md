@@ -288,14 +288,15 @@ in §1 is wrong and should be fixed there instead.
 
 A staff-only **inspection surface** was added later (`/moderation`; see `MODERATION.md`). It does
 not contradict the paragraph above, because it is not a queue: it holds nothing, counts nothing
-pending, changes no chrome with site state, and carries no acting *logic* — the restore, permanent
-delete, warn, suspend and ban buttons are rendered and inert, and `image_reports` stays unread. It
-answers *"what has this person been doing?"* when the operator already has a reason to look, which
-is inspection rather than routine moderation. Image verbs are placed here as well as on the
-character page because a pattern — the same person removing images across many characters — is only
-visible in one place; that still requires opening a contributor on purpose. If a later phase ever
-adds a pending count, a badge, or live action logic driven by site state, that is the signal to
-re-read §1 and fix what is generating the backlog.
+pending, and changes no chrome with site state. It answers *"what has this person been doing?"* when
+the operator already has a reason to look, which is inspection rather than routine moderation. Two
+of its verbs are live — **restore** an image (already non-destructive) and the **owner-only**
+promote/demote of a contributor's role. The rest stay inert: permanent delete, and warn/suspend/ban,
+which have no meaning yet for a cookie identity. `image_reports` stays unread. Image verbs are placed
+here as well as on the character page because a pattern — the same person removing images across many
+characters — is only visible in one place; that still requires opening a contributor on purpose. If a
+later phase adds a pending count, a badge, or action logic driven by site state, that is the signal
+to re-read §1 and fix what is generating the backlog.
 
 ---
 

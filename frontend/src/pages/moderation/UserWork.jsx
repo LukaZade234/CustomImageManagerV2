@@ -69,23 +69,37 @@ function DeleteIcon() {
 }
 
 /**
- * The per-image verbs. Inert in phase 1. Permanent delete will require a second
- * confirm before it ever does anything — it is the app's first irreversible
- * action (it removes the file from ImgChest too), so a single click must not
- * reach it. See docs/MODERATION.md, later phases.
+ * The verbs on one image card.
+ *
+ * Restore is live: it reuses the same endpoint the profile's Removed tab does,
+ * and it is not destructive. Permanent delete stays inert — when it is wired it
+ * must require a second, explicit confirmation, because it is the app's first
+ * irreversible action (it removes the file from ImgChest too). A single click
+ * must never reach it. See docs/MODERATION.md, later phases.
  */
-const IMAGE_INERT_ACTIONS = (state) => [
-  ...(state === 'removed'
-    ? [{ label: 'Restore', icon: <RestoreIcon />, disabled: true, title: 'Not wired up yet' }]
-    : []),
-  {
-    label: 'Delete permanently',
-    icon: <DeleteIcon />,
-    variant: 'danger',
-    disabled: true,
-    title: 'Not wired up yet — this will ask you to confirm',
-  },
-]
+function imageActions(state, row, onRestore, restoringUrl) {
+  const busy = restoringUrl === row.url
+  return [
+    ...(state === 'removed'
+      ? [
+          {
+            label: 'Restore',
+            icon: <RestoreIcon />,
+            disabled: busy,
+            title: 'Put this image back',
+            onClick: () => onRestore(row),
+          },
+        ]
+      : []),
+    {
+      label: 'Delete permanently',
+      icon: <DeleteIcon />,
+      variant: 'danger',
+      disabled: true,
+      title: 'Not wired up yet — this will ask you to confirm',
+    },
+  ]
+}
 function Pagination({ page, totalPages, onPage }) {
   if (totalPages <= 1) return null
   return (
@@ -143,6 +157,8 @@ export default function UserWork({
   onSort,
   onPage,
   onShowCharacter,
+  onRestore,
+  restoringUrl,
 }) {
   // The character box is local and debounced, so typing does not refetch every
   // keystroke; the URL is the source of truth once the value is applied.
@@ -170,7 +186,7 @@ export default function UserWork({
     title: row.character,
     subtitle: row.removed_reason || '',
     ratio: cardRatio(row.width, row.height),
-    actions: IMAGE_INERT_ACTIONS(state),
+    actions: imageActions(state, row, onRestore, restoringUrl),
   }))
 
   const characterCards = items.map((row) => ({

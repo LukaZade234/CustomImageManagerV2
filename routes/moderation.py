@@ -13,8 +13,12 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 import db
-from identity import require_moderator
+import identity
+import logs
+from identity import require_moderator, require_owner
+from ratelimit import rate_limited
 
+log = logs.get(__name__)
 moderation_bp = Blueprint("moderation", __name__)
 
 # The detail lists can show additions or removals; anything else is a bad request
@@ -104,3 +108,41 @@ def moderation_user_characters(ref):
         per_page=per_page,
     )
     return jsonify(result)
+
+
+# The role a moderator may be moved between. `owner` is deliberately absent:
+# the owner is bootstrapped from OWNER_DISCORD_ID and there is only ever one, so
+# there is nobody to promote into it and no way to remove it from here.
+_ROLE_CHOICES = ("user", "moderator")
+
+
+@moderation_bp.route("/api/moderation/users/<ref>/role", methods=["POST"])
+@require_owner
+@rate_limited("edit_character")
+def moderation_set_role(ref):
+    """Promote a user to moderator, or demote a moderator back to user.
+
+    Owner only. A moderator has every other power the owner has, but may not
+    change anyone's role -- including their own or another moderator's.
+    """
+    target_id = db.identity_by_ref(ref)
+    if target_id is None:
+        return jsonify({"error": "Unknown contributor"}), 404
+
+    data = request.get_json(silent=True) or {}
+    role = data.get("role")
+    if role not in _ROLE_CHOICES:
+        return jsonify({"error": "role must be user or moderator"}), 400
+
+    target = db.get_identity(target_id)
+    if target is None:
+        return jsonify({"error": "Contributor has no identity yet"}), 404
+    if target["role"] == "owner":
+        return jsonify({"error": "The owner's role cannot be changed"}), 400
+    if target_id == identity.current_identity().id:
+        return jsonify({"error": "You cannot change your own role"}), 400
+
+    if not db.set_role(target_id, role):
+        return jsonify({"error": "Could not change the role"}), 500
+    log.info("moderation.role_changed", ref=ref, role=role)
+    return jsonify({"success": True, "ref": ref, "role": role})

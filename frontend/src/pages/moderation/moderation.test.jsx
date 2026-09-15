@@ -16,6 +16,8 @@ const api = vi.hoisted(() => ({
   listModerationUsers: vi.fn(),
   listModerationUserImages: vi.fn(),
   listModerationUserCharacters: vi.fn(),
+  restoreImages: vi.fn(),
+  setModerationRole: vi.fn(),
 }))
 
 vi.mock('../../api', () => ({
@@ -82,7 +84,14 @@ beforeEach(() => {
   api.listModerationUsers.mockReset()
   api.listModerationUserImages.mockReset()
   api.listModerationUserCharacters.mockReset()
-  api.getMe.mockResolvedValue({ handle: 'Amber Otter', role: 'moderator', is_moderator: true })
+  api.restoreImages.mockReset()
+  api.setModerationRole.mockReset()
+  api.getMe.mockResolvedValue({
+    handle: 'Amber Otter',
+    role: 'owner',
+    is_moderator: true,
+    is_owner: true,
+  })
   api.listModerationUsers.mockResolvedValue({ items: USERS, total: USERS.length })
   api.listModerationUserImages.mockResolvedValue({
     items: [],
@@ -92,6 +101,8 @@ beforeEach(() => {
     removed: 3,
   })
   api.listModerationUserCharacters.mockResolvedValue({ items: [], total: 0, total_pages: 1 })
+  api.restoreImages.mockResolvedValue({ success: true, restored: 1 })
+  api.setModerationRole.mockResolvedValue({ success: true })
 })
 
 describe('the staff gate', () => {
@@ -218,7 +229,7 @@ describe('the profile and its work', () => {
     }
   })
 
-  it('renders the image verbs on a removed image, inert', async () => {
+  it('renders the image verbs, with permanent delete inert', async () => {
     api.listModerationUserImages.mockResolvedValue({
       items: [
         {
@@ -238,7 +249,7 @@ describe('the profile and its work', () => {
       removed: 1,
     })
     renderModeration('/moderation?user=ref-ada&state=removed')
-    expect(await screen.findByRole('button', { name: 'Restore' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Restore' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled()
   })
 
@@ -291,5 +302,79 @@ describe('the profile and its work', () => {
     expect(location()).not.toContain('view=characters')
     // It must not have navigated to the public character page.
     expect(screen.queryByText('character page')).not.toBeInTheDocument()
+  })
+})
+
+describe('restore and role changes', () => {
+  const removedImage = {
+    id: 7,
+    url: 'https://cdn/x.png',
+    thumb: '/thumbs/7.webp',
+    width: 1,
+    height: 1,
+    character: 'Rem',
+    removed_at: '2026-01-01T00:00:00Z',
+    removed_reason: 'spam',
+  }
+
+  it('restores a removed image through the existing endpoint', async () => {
+    api.listModerationUserImages.mockResolvedValue({
+      items: [removedImage],
+      total: 1,
+      total_pages: 1,
+      added: 2,
+      removed: 1,
+    })
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada&state=removed')
+
+    await user.click(await screen.findByRole('button', { name: 'Restore' }))
+    await waitFor(() =>
+      expect(api.restoreImages).toHaveBeenCalledWith('Rem', ['https://cdn/x.png']),
+    )
+  })
+
+  it('promotes a user only after the confirmation', async () => {
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    await user.click(screen.getByRole('button', { name: 'Promote to moderator' }))
+    // Nothing fires until the dialog is confirmed.
+    expect(api.setModerationRole).not.toHaveBeenCalled()
+    await user.click(await screen.findByRole('button', { name: 'Promote' }))
+    await waitFor(() => expect(api.setModerationRole).toHaveBeenCalledWith('ref-ada', 'moderator'))
+  })
+
+  it('demotes a moderator only after the confirmation', async () => {
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-bob')
+    await screen.findByRole('heading', { level: 2, name: 'Bob Falcon' })
+
+    await user.click(screen.getByRole('button', { name: 'Remove moderator role' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(api.setModerationRole).toHaveBeenCalledWith('ref-bob', 'user'))
+  })
+
+  it('cancelling the dialog changes nothing', async () => {
+    const user = userEvent.setup()
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+
+    await user.click(screen.getByRole('button', { name: 'Promote to moderator' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(api.setModerationRole).not.toHaveBeenCalled()
+  })
+
+  it('does not offer a role change to a moderator', async () => {
+    api.getMe.mockResolvedValue({
+      handle: 'Amber Otter',
+      role: 'moderator',
+      is_moderator: true,
+      is_owner: false,
+    })
+    renderModeration('/moderation?user=ref-ada')
+    await screen.findByRole('heading', { level: 2, name: 'Ada Otter' })
+    expect(screen.queryByRole('button', { name: 'Promote to moderator' })).not.toBeInTheDocument()
   })
 })

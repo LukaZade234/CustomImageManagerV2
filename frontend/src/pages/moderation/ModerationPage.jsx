@@ -2,11 +2,15 @@ import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { Card, EmptyState } from '../../components/ui'
+import { useMe } from '../../queries/me'
 import {
   useModerationUserCharacters,
   useModerationUserImages,
   useModerationUsers,
+  useRestoreModerationImage,
+  useSetModerationRole,
 } from '../../queries/moderation'
+import { useStore } from '../../store/useStore'
 import UserList from './UserList'
 import UserProfile from './UserProfile'
 import UserWork from './UserWork'
@@ -97,6 +101,35 @@ export default function ModerationPage() {
     page,
   })
 
+  const { data: me } = useMe()
+  const addToast = useStore((s) => s.addToast)
+  const restoreImage = useRestoreModerationImage()
+  const setRole = useSetModerationRole()
+
+  const handleRestore = (row) => {
+    restoreImage.mutate(
+      { character: row.character, url: row.url },
+      {
+        onSuccess: () => addToast('Image restored', 'success'),
+        onError: (err) => addToast(err.message, 'error'),
+      },
+    )
+  }
+  const handleChangeRole = (role) => {
+    setRole.mutate(
+      { ref: user, role },
+      {
+        onSuccess: () =>
+          addToast(
+            role === 'moderator' ? 'Promoted to moderator' : 'Moderator role removed',
+            'success',
+          ),
+        onError: (err) => addToast(err.message, 'error'),
+      },
+    )
+  }
+  const restoringUrl = restoreImage.isPending ? (restoreImage.variables?.url ?? null) : null
+
   const users = usersQuery.data?.items ?? []
   const selected = users.find((item) => item.ref === user) ?? null
 
@@ -125,7 +158,11 @@ export default function ModerationPage() {
             />
           ) : (
             <>
-              <UserProfile user={selected} />
+              <UserProfile
+                user={selected}
+                canManageRoles={Boolean(me?.is_owner)}
+                onChangeRole={handleChangeRole}
+              />
               <UserWork
                 view={view}
                 state={state}
@@ -150,6 +187,8 @@ export default function ModerationPage() {
                 onSort={setSort}
                 onPage={setPage}
                 onShowCharacter={showCharacterImages}
+                onRestore={handleRestore}
+                restoringUrl={restoringUrl}
               />
             </>
           )}

@@ -1,12 +1,15 @@
-import { Badge, Button } from '../../components/ui'
+import { useState } from 'react'
+import { Badge, Button, ConfirmDialog, IconButton } from '../../components/ui'
 
 /**
- * The selected contributor's header: who they are, how much they have done, and
- * the actions that act on the *person*.
+ * The selected contributor's header: who they are, how much they have done, the
+ * actions that act on the *person*, and — for the owner alone — the role
+ * change.
  *
- * Every button is inert in phase 1 — the logic (what "suspended" even means for
- * a cookie identity) is its own decision, and the placement is worth settling
- * first. They are rendered disabled rather than hidden so the layout is real.
+ * The person actions are inert in phase 1. The role change is live, and
+ * owner-only: a moderator has every other power the owner has but may not
+ * change roles, so the control is not rendered for them at all (the backend
+ * enforces it regardless).
  */
 
 /** "12 Jan 2026" reads better than an ISO string in a stat block. */
@@ -30,9 +33,72 @@ function relativeDay(iso) {
   return months === 1 ? 'a month ago' : `${months} months ago`
 }
 
+/** The role change offered for this account, if any. The owner is not mutable. */
+function roleChangeFor(user) {
+  if (user.role === 'user') {
+    return {
+      to: 'moderator',
+      label: 'Promote to moderator',
+      confirmLabel: 'Promote',
+      variant: 'primary',
+      title: 'Promote to moderator?',
+      body: `${user.handle} will get the moderation surface and all its powers.`,
+    }
+  }
+  if (user.role === 'moderator') {
+    return {
+      to: 'user',
+      label: 'Remove moderator role',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+      title: 'Remove moderator role?',
+      body: `${user.handle} will lose access to the moderation surface.`,
+    }
+  }
+  return null
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+function MinusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
 const ACTIONS = [{ label: 'Warn' }, { label: 'Suspend' }, { label: 'Ban', variant: 'danger' }]
 
-export default function UserProfile({ user }) {
+export default function UserProfile({ user, canManageRoles = false, onChangeRole }) {
+  const [confirming, setConfirming] = useState(false)
+  const roleChange = roleChangeFor(user)
+
   const stats = [
     { label: 'Images', value: user.added },
     { label: 'Removed', value: user.removed },
@@ -47,6 +113,15 @@ export default function UserProfile({ user }) {
           <h2 className="section-heading moderation-profile__name">{user.handle}</h2>
           {user.role !== 'user' && <Badge tone="neutral">{user.role}</Badge>}
           {user.signed_in && <Badge tone="neutral">Discord</Badge>}
+          {canManageRoles && roleChange && (
+            <IconButton
+              label={roleChange.label}
+              variant={roleChange.to === 'moderator' ? 'secondary' : 'danger'}
+              onClick={() => setConfirming(true)}
+            >
+              {roleChange.to === 'moderator' ? <PlusIcon /> : <MinusIcon />}
+            </IconButton>
+          )}
         </div>
 
         <div className="moderation-profile__actions">
@@ -74,6 +149,20 @@ export default function UserProfile({ user }) {
           </div>
         ))}
       </dl>
+
+      {confirming && roleChange && (
+        <ConfirmDialog
+          title={roleChange.title}
+          body={roleChange.body}
+          confirmLabel={roleChange.confirmLabel}
+          variant={roleChange.variant}
+          onConfirm={() => {
+            setConfirming(false)
+            onChangeRole(roleChange.to)
+          }}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
     </div>
   )
 }

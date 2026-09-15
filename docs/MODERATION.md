@@ -113,11 +113,11 @@ leak back onto a public surface from here.
 
 #### Named out of scope
 
-- **The action logic.** Every acting button exists and is inert. Warn/suspend/ban are a later phase
-  with a real design question (what does "suspended" mean for a cookie identity?), and permanent
-  delete — which removes the image from ImgChest too, not just the row — is its own decision because
-  it is the first irreversible action in the app. `db.set_role` likewise stays a test-only function
-  until the owner-only promote/demote route is built.
+- **The remaining action logic.** Restore and promote/demote are wired (see below). **Warn, suspend
+  and ban** are still inert — they have a real design question (what does "suspended" even mean for a
+  cookie identity?) that has to be settled before they do anything. **Permanent delete** is inert too:
+  it removes the image from ImgChest as well as the row, and it is the first irreversible action in
+  the app, so it needs its own decision (and a second confirmation) first.
 - **Reading `image_reports`** — see above.
 - **The ~8,547 unattributed images** (`added_by IS NULL`, migrated from v1). They have no actor, so
   they cannot appear under a contributor, and they are not a moderation concern — they are the
@@ -211,10 +211,11 @@ A new blueprint, registered in `upload_imgchest.py` beside the other seven.
 | `GET /api/moderation/users` | `{items: [{ref, handle, role, signed_in, added, removed, last_at, created_at}], total}` |
 | `GET /api/moderation/users/<ref>/images?state=&character=&page=&per_page=` | Paged gallery rows for one actor, plus `{added, removed}` totals so the profile header is right before either list loads |
 | `GET /api/moderation/users/<ref>/characters?state=&character=&sort=&order=&page=&per_page=` | Paged character rows (count, series, rank, portrait) for the character view |
+| `POST /api/moderation/users/<ref>/role` | Owner only: set `role` to `moderator` (promote) or `user` (demote). Refuses `owner`, your own role, and the owner's |
 
-All `@require_moderator`. Unknown `ref` → 404. `state` whitelisted to `active` / `removed`, `sort` to
-the known keys, anything else 400 — the same shape of validation `sort` already gets in
-`routes/customs.py`.
+All `@require_moderator` except the role route, which is `@require_owner`. Unknown `ref` → 404.
+`state` whitelisted to `active` / `removed`, `sort` to the known keys, `role` to `user` / `moderator`,
+anything else 400 — the same shape of validation `sort` already gets in `routes/customs.py`.
 
 #### 5. `routes/spa.py`
 
@@ -279,17 +280,22 @@ Name/Series choice here — and sort options *Most added* / *Most removed* / *Re
 **`UserProfile.jsx`** — the selected contributor. A header with the handle, a role `Badge`, and the
 stats: **total images** (active), **removed**, **account created** (`created_at`), **last activity**,
 and whether they are Discord-signed-in, all counts in `.tabular`. Below them the person-level
-actions — **Warn**, **Suspend**, **Ban** — rendered as buttons and **inert in phase 1** (`disabled`,
-with a title saying so); owner-only promote/demote joins them in a later phase.
+actions — **Warn**, **Suspend**, **Ban** — rendered as buttons and **inert** (`disabled`, with a
+title saying so).
+
+For the **owner alone**, a plus/minus `IconButton` sits beside the name: plus for a `user` (promote),
+minus for a `moderator` (demote), nothing for the `owner`. Either opens a `ConfirmDialog`, and only
+the confirm calls the route. Moderators do not see the control at all — they hold every other power
+the owner has, but not this one.
 
 **`UserWork.jsx`** — the contributor's work, in two views behind a `SegmentedControl`:
 
 - **Images** — the Added / Removed switch (counts read back), a character filter, and the grid:
   `profile/CardGrid.jsx` in its justified mode, so these are the same cards as the Hidden and Removed
-  profile tabs. Each card carries the image verbs in its top corner as **icons** — Restore on a
-  removed image, Delete permanently on either — rendered and inert. They are icons rather than words
-  because a narrow portrait has no room for two labels; they sit over the image, always visible, as
-  a hover reveal would hide the choice the grid exists to offer.
+  profile tabs. Each card carries the image verbs in its top corner as **icons** — **Restore** on a
+  removed image (live, reusing `/api/restore-images`), **Delete permanently** on either (inert) — the
+  icons rather than words because a narrow portrait has no room for two labels, over the image and
+  always visible as a hover reveal would hide the choice the grid exists to offer.
 - **Characters** — the same contributor's characters, grouped, each card carrying the name, series
   and image count, sorted with the Browse Customs vocabulary: *Most images* / *Rank* / *Name* /
   *Recent*. This is the "where is their work concentrated" answer the image grid cannot give.
@@ -380,12 +386,12 @@ Sketches only. Each needs its own decision before it is built, and none is commi
 The phase-1 buttons exist precisely so their placement and wording can be settled without their
 logic.
 
-**Phase 2 — acting on a person.** Warn, suspend, ban, and (owner-only) promote/demote wrapping the
-already-written `db.set_role`. The hard question is what these mean for a *cookie* identity: a ban
-that deletes the cookie is walked around by clearing it, and one that blocks an id is walked around
-by clearing it too. So the design has to decide whether these act on the identity, the Discord
-account, or the IP, and say plainly what each buys. Promote/demote is the piece with no fallback
-today — the only moderator is the `OWNER_DISCORD_ID` bootstrap.
+**Phase 2 — acting on a person.** **Promote and demote are done**: an owner-only route wrapping
+`db.set_role`, with the plus/minus control on the profile and a confirmation each way. **Warn,
+suspend and ban remain**, and the hard question is what they mean for a *cookie* identity: a ban that
+deletes the cookie is walked around by clearing it, and one that blocks an id is walked around by
+clearing it too. The design has to decide whether these act on the identity, the Discord account, or
+the IP, and say plainly what each buys.
 
 **Phase 3 — acting on an image, including permanent delete.** Restore already exists server-side.
 Permanent delete does not, and it is the first irreversible action in the app: it would remove the

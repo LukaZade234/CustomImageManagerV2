@@ -617,12 +617,19 @@ why it does not contradict the anti-queue argument there.
 
 - [x] **The review surface** (`/moderation`, staff-only). A master list of every contributor who
       added or removed an image, beside a detail pane of their additions or removals, filtered by
-      character and paged on the server. Read-only: no acting verbs, no pending count, no badge,
-      `image_reports` still unread. Backed by `GET /api/moderation/users` and
-      `/api/moderation/users/<ref>/images`, gated by a shared `require_moderator` decorator.
-- [ ] **Phase 2 — acting as staff.** Promote/demote, wrapping `db.set_role`, on an owner-only route;
-      and the question of whether removal/restore belong here or on the character page.
-- [ ] **Phase 3 — the reports question.** Whether `image_reports` should ever be readable, and
+      character and paged on the server. Backed by `GET /api/moderation/users` and
+      `/api/moderation/users/<ref>/images` and `/characters`, gated by a shared `require_moderator`
+      decorator. Later reshaped around a contributor profile with stats, a character-level view, and
+      image restore; role changes are owner-only.
+- [x] **Restore an image from the moderation page.** Reuses the existing `/api/restore-images`.
+- [x] **Promote / demote a contributor (owner only).** `POST /api/moderation/users/<ref>/role`,
+      wrapping `db.set_role`, with a plus/minus control and a confirmation. Moderators hold every
+      other power but cannot change roles.
+- [ ] **Phase 2 — warn / suspend / ban.** Still inert; needs a decision on what each means for a
+      cookie identity.
+- [ ] **Phase 3 — permanent delete.** Removes the file from ImgChest too; needs an ImgChest delete
+      that may not exist, a cascade, and a second confirmation. The first irreversible action.
+- [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and
       whether the honest case for it is a statistic rather than a queue.
 
 ---

@@ -128,6 +128,22 @@ def require_moderator(fn):
     return wrapper
 
 
+def require_owner(fn):
+    """403 unless the caller is the owner.
+
+    A stricter gate than `require_moderator`, for the one class of action a
+    moderator may not take: changing anyone's role.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_identity().is_owner:
+            return jsonify({"error": "Not permitted"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
 def _serializer(secret_key: str) -> URLSafeSerializer:
     return URLSafeSerializer(secret_key, salt=_SALT)
 

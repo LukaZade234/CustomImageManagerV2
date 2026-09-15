@@ -451,3 +451,65 @@ class TestModerationCharacterView:
         make_moderator()
         item = client.get("/api/moderation/users").get_json()["items"][0]
         assert item["created_at"], "the account's age drives the profile stat"
+
+
+class TestModerationRoleChanges:
+    """Only the owner may promote or demote; moderators hold every other power.
+
+    A moderator can do everything an owner can on this surface except change
+    roles -- including their own and another moderator's.
+    """
+
+    def _ref(self, identity_id):
+        return identity_module.public_ref(identity_id)
+
+    def _seed_role(self, db, identity_id, role):
+        db.ensure_identity(identity_id)
+        db.set_role(identity_id, role)
+
+    def _post(self, client, ref, role):
+        return client.post(f"/api/moderation/users/{ref}/role", json={"role": role})
+
+    def test_the_owner_can_promote_a_user(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "worker", "user")
+        res = self._post(client, self._ref("worker"), "moderator")
+        assert res.status_code == 200
+        assert res.get_json()["role"] == "moderator"
+        assert clean_db.get_identity("worker")["role"] == "moderator"
+
+    def test_the_owner_can_demote_a_moderator(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "worker", "moderator")
+        res = self._post(client, self._ref("worker"), "user")
+        assert res.status_code == 200
+        assert clean_db.get_identity("worker")["role"] == "user"
+
+    def test_a_moderator_cannot_change_roles(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("moderator")
+        self._seed_role(clean_db, "worker", "user")
+        assert self._post(client, self._ref("worker"), "moderator").status_code == 403
+        assert clean_db.get_identity("worker")["role"] == "user"
+
+    def test_a_plain_user_cannot_change_roles(self, client, clean_db):
+        self._seed_role(clean_db, "worker", "user")
+        assert self._post(client, self._ref("worker"), "moderator").status_code == 403
+
+    def test_owner_is_not_an_assignable_role(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "worker", "user")
+        assert self._post(client, self._ref("worker"), "owner").status_code == 400
+        assert self._post(client, self._ref("worker"), "bogus").status_code == 400
+
+    def test_an_unknown_ref_is_404(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        assert self._post(client, "notthere", "moderator").status_code == 404
+
+    def test_the_owner_cannot_be_demoted(self, client, clean_db, make_moderator):
+        make_moderator("owner")
+        self._seed_role(clean_db, "boss", "owner")
+        assert self._post(client, self._ref("boss"), "moderator").status_code == 400
+
+    def test_you_cannot_change_your_own_role(self, client, clean_db, identity_id, make_moderator):
+        make_moderator("owner")
+        assert self._post(client, self._ref(identity_id), "moderator").status_code == 400
