@@ -71,9 +71,7 @@ EXPECTED_ROUTES = {
     ("/api/unhide-images", "POST"),
     ("/assets/<path:filename>", "GET"),
     ("/character/<path:name>", "GET"),
-    ("/character_images/<path:filename>", "GET"),
     ("/customs", "GET"),
-    ("/images/<filename>", "GET"),
     ("/saved", "GET"),
     ("/static/<path:filename>", "GET"),
     ("/thumbs/<int:image_id>.webp", "GET"),
@@ -131,10 +129,3 @@ class TestPathsSurviveTheModuleLayout:
         )
         assert os.path.basename(os.path.dirname(spa.SPA_DIR)) == "frontend"
         assert spa.SPA_DIR.startswith(_repo_root()), f"SPA_DIR escaped the repo: {spa.SPA_DIR}"
-
-    def test_static_images_resolve_from_the_app_root(self):
-        """send_from_directory takes these relative to the app's root_path."""
-        root = upload_imgchest.app.root_path
-        assert os.path.isdir(os.path.join(root, "character_images")), (
-            f"character_images not found under app.root_path={root}"
-        )

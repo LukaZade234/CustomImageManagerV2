@@ -13,8 +13,6 @@ export default defineConfig({
       '/api': 'http://localhost:5000',
       '/thumbs': 'http://localhost:5000',
       '/characters': 'http://localhost:5000',
-      '/character_images': 'http://localhost:5000',
-      '/images': 'http://localhost:5000',
     },
   },
   build: {

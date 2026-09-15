@@ -1,12 +1,11 @@
 """Serving image bytes.
 
-Three different things, all of which end up as an <img> src:
+Two different things, both of which end up as an <img> src:
 
 - `/thumbs/<id>.webp` renders a small WebP of an ImgChest image on first
   request and caches it on disk. The images themselves must stay PNGs on
   ImgChest because Mudae's $ai command accepts nothing else, but nothing
   requires a browser to download a 1.9 MB PNG to draw a 220px row.
-- `/images` and `/character_images` serve the default portraits off local disk.
 - `/api/download-image-proxy` fetches a remote image on the caller's behalf, so
   it goes through the same SSRF guards as any other URL a visitor supplies.
 
@@ -73,17 +72,6 @@ def _thumbnail_response(path):
     # and the origin sees each thumbnail once, globally.
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
-
-
-@media_bp.route("/images/<filename>")
-@media_bp.route("/character_images/<path:filename>")
-def get_character_image(filename):
-    """The default portraits off local disk.
-
-    `/images/<filename>` is the older single-segment spelling, kept as an alias;
-    both resolve to the same files.
-    """
-    return send_from_directory("character_images", filename)
 
 
 @media_bp.route("/api/download-image-proxy", methods=["POST"])

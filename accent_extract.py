@@ -59,9 +59,6 @@ from remote_images import (
 
 log = logs.get(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parent
-CHARACTER_IMAGES_DIR = _REPO_ROOT / "character_images"
-
 HUE_BINS = 72  # 5 degrees per bin
 SAT_STEPS = 20  # 0.05 per step
 VAL_STEPS = 20
@@ -477,15 +474,11 @@ def _prepare(img: Image.Image) -> Image.Image:
 
 
 def fetch_portrait_bytes(main_image_url: str) -> bytes | None:
-    """Raw bytes of a character's portrait, local or remote. None on any failure."""
+    """Raw bytes of a character's portrait, fetched remotely. None on any failure."""
     if not main_image_url:
         return None
     if not main_image_url.startswith(("http://", "https://")):
-        path = CHARACTER_IMAGES_DIR / main_image_url
-        try:
-            return path.read_bytes()
-        except OSError:
-            return None
+        return None
     if not _allowed_portrait_url(main_image_url):
         return None
     try:
