@@ -227,6 +227,9 @@ export default function AddPage() {
     catalogImage,
     catalogImageSrc,
     canAddImages: Boolean(me?.signed_in),
+    // A brand-new character needs an account; a name the catalog already knows
+    // is "from the library" and may be added from a cookie alone.
+    canAddNewCharacter: Boolean(me?.signed_in) || Boolean(matchedExactly && nameMatch),
     onNameChange: setName,
     onSeriesChange: setSeries,
     onRankChange: (value) => {

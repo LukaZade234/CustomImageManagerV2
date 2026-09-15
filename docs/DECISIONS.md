@@ -264,11 +264,14 @@ past uploads.
 **Adding an image requires the Discord upgrade.** A cookie-only visitor may browse, save, hide,
 report, restore and edit metadata freely, but every endpoint that uploads bytes to ImgChest
 (`/api/custom-image`, `/api/import-custom-images-from-urls`, `/api/set-main-image`, `/upload`, and the
-file branch of `/api/add-character`) is behind `require_signed_in`. The reason is the one gap in the
-paragraph above: uploading is the only action that spends a shared resource (the ImgChest key), and
-a cookie is free to mint, so "who uploaded this" has to survive clearing it. It is also what makes a
-ban or a suspension mean anything at all — an account-level block on a cookie identity is walked
-around by deleting one cookie. A catalog portrait (a link, not an upload) still needs no account.
+file branch of `/api/add-character`) is behind `require_signed_in`. **Creating a brand-new character
+is gated too**: `/api/add-character` accepts a name the catalog already knows and refuses an unknown
+one to a cookie-only caller, so the library grows from Discord-linked accounts while
+`/api/catalog/add-character` (a known character, no upload) stays open. The reason is the one gap in
+the paragraph above: uploading is the only action that spends a shared resource (the ImgChest key),
+and adding arbitrary entries is the other way the library can be shaped from an anonymous cookie. A
+cookie is free to mint, so "who did this" has to survive clearing it — which is also what makes a ban
+or a suspension mean anything at all.
 
 **Implementation note:** Discord OAuth requires a **newly registered Discord application**. The
 existing `DISCORD_USER_TOKEN` is a self-bot account token and cannot be used for OAuth. The two

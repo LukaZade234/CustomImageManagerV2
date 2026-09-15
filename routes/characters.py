@@ -196,6 +196,20 @@ def add_character():
     if existing and existing["in_library"]:
         return jsonify({"error": f'Character "{existing["name"]}" already exists'}), 400
 
+    # A cookie-only visitor may add a character the catalog already knows; making
+    # a brand-new entry needs a linked Discord account (DECISIONS.md §4). The
+    # catalog add route is the "from the library" path and stays open.
+    if existing is None and not identity.current_identity().is_signed_in:
+        return (
+            jsonify(
+                {
+                    "error": "Sign in with Discord to add a new character",
+                    "code": "discord_required",
+                }
+            ),
+            403,
+        )
+
     image_url = ""
     if provided_image_url:
         if not _allowed_portrait_url(provided_image_url):

@@ -186,14 +186,17 @@ and it is what makes removal cheap to undo and the Removed tab possible.
 Every visitor gets a row in `identities` lazily, on their first write. The id
 lives in an HttpOnly cookie and is never returned by the API; clients get a
 handle and a per-image `is_mine`. Signing in with Discord binds an existing
-pseudonym to an account, merging the two identities. **Adding an image requires
-that upgrade**: browsing, saving, hiding, reporting, restoring and metadata edits
-are open to a cookie-only visitor, but the endpoints that upload to ImgChest
-(`/api/custom-image`, `/api/import-custom-images-from-urls`, `/api/set-main-image`,
-`/upload`, and the file branch of `/api/add-character`) are behind
-`identity.require_signed_in` and answer `403` with `code: discord_required`.
-Uploading is the one action that spends the shared ImgChest key, and tying it to
-an account is also what makes a ban meaningful.
+pseudonym to an account, merging the two identities. **Adding an image, or a
+brand-new character, requires that upgrade**: browsing, saving, hiding,
+reporting, restoring and metadata edits are open to a cookie-only visitor, but
+the endpoints that upload to ImgChest (`/api/custom-image`,
+`/api/import-custom-images-from-urls`, `/api/set-main-image`, `/upload`, and the
+file branch of `/api/add-character`) are behind `identity.require_signed_in` and
+answer `403` with `code: discord_required`. `/api/add-character` also refuses a
+name the catalog does not know, so a cookie-only visitor can add characters
+*from the library* but cannot invent one; `/api/catalog/add-character` stays
+open. Uploading is the one action that spends the shared ImgChest key, and tying
+this to an account is also what makes a ban meaningful.
 
 `hide_attribution` and `hide_from_leaderboard` are *display* preferences applied
 when rendering. Ownership is always recorded, because removal is

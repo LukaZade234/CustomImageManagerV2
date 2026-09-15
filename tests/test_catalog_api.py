@@ -356,7 +356,10 @@ class TestManualAdd:
     def _seed(self, clean_db):
         clean_db.add_character("Seed", "Some Series", "1", "")
 
-    def test_accepts_a_mudae_portrait_url(self, client, clean_db):
+    def test_accepts_a_mudae_portrait_url(self, client, clean_db, make_signed_in):
+        # A brand-new character needs an account now; this test is about the
+        # portrait URL, so satisfy the gate.
+        make_signed_in()
         self._seed(clean_db)
         res = client.post(
             "/api/add-character",
@@ -375,7 +378,8 @@ class TestManualAdd:
         )
         assert row["main_image_url"] == "https://mudae.net/uploads/1/a~b.png"
 
-    def test_refuses_a_portrait_url_from_an_unexpected_host(self, client, clean_db):
+    def test_refuses_a_portrait_url_from_an_unexpected_host(self, client, clean_db, make_signed_in):
+        make_signed_in()
         self._seed(clean_db)
         res = client.post(
             "/api/add-character",

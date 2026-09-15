@@ -12,12 +12,27 @@ import io
 
 from PIL import Image
 
+import catalog_import
+
 
 def _png():
     buf = io.BytesIO()
     Image.new("RGB", (40, 40), "red").save(buf, "PNG")
     buf.seek(0)
     return buf
+
+
+def _catalog_row(name, series, rank):
+    return {
+        "name": name,
+        "name_key": catalog_import.name_key(name),
+        "series": series,
+        "rank": rank,
+        "mudae_image_url": f"https://mudae.net/uploads/{rank}/a~b.png",
+        "pool": "wa",
+        "is_waifu": True,
+        "is_anime": True,
+    }
 
 
 class TestCookieOnlyIsRefused:
@@ -94,11 +109,31 @@ class TestSignedInIsAllowed:
         )
         assert res.status_code == 200
 
-    def test_catalog_add_without_a_file_needs_no_account(self, client, clean_db):
-        # A catalog portrait is a link, not an upload, so the gate does not apply.
+
+class TestAddingACharacter:
+    """A cookie-only visitor may add a catalog character, not invent one."""
+
+    def test_a_cookie_only_visitor_cannot_add_a_brand_new_character(self, client, clean_db):
         clean_db.add_character("Seed", "S", "1", "")
+        res = client.post("/api/add-character", data={"name": "Brand New", "series": "S"})
+        assert res.status_code == 403
+        assert res.get_json()["code"] == "discord_required"
+
+    def test_a_cookie_only_visitor_can_add_one_from_the_catalog(self, client, clean_db):
+        clean_db.add_character("Seed", "S", "1", "")
+        clean_db.upsert_catalog_characters(
+            [_catalog_row("Known One", "S", "10")],
+            scraped_at="2026-01-01T00:00:00Z",
+            source_batch="test",
+        )
         res = client.post(
             "/api/add-character",
-            data={"name": "Newcomer", "series": "S", "image_url": "https://mudae.net/x.png"},
+            data={"name": "Known One", "series": "S", "image_url": "https://mudae.net/x.png"},
         )
-        assert res.status_code == 200
+        assert res.status_code == 200, res.get_json()
+
+    def test_a_signed_in_visitor_can_add_a_brand_new_character(self, client, clean_db, make_signed_in):
+        make_signed_in()
+        clean_db.add_character("Seed", "S", "1", "")
+        res = client.post("/api/add-character", data={"name": "Brand New", "series": "S"})
+        assert res.status_code == 200, res.get_json()

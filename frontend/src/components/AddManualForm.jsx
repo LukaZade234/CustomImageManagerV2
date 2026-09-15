@@ -28,6 +28,7 @@ export default function AddManualForm({ form }) {
     catalogImage,
     catalogImageSrc,
     canAddImages = true,
+    canAddNewCharacter = true,
     onNameChange,
     onSeriesChange,
     onRankChange,
@@ -130,10 +131,21 @@ export default function AddManualForm({ form }) {
           )}
         </Field>
         <div className="edit-actions add-char-actions">
-          <Button variant="primary" type="submit" disabled={loading}>
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={loading || !canAddNewCharacter}
+            title={canAddNewCharacter ? undefined : 'Sign in with Discord to add a new character'}
+          >
             {loading ? 'Adding...' : 'Add Character'}
           </Button>
         </div>
+        {!canAddNewCharacter && (
+          <p className="text-meta">
+            Adding a new character needs a linked Discord account. Characters already in the library
+            can be added without one.
+          </p>
+        )}
         {status?.type === 'error' && (
           <div id="addCharStatus" className="form-error" role="alert">
             {status.message}
