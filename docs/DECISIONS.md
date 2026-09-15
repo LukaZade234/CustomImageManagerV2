@@ -128,7 +128,7 @@ duplicate — and every one of those has a right answer that requires no consens
    reports.
 4. **Nothing is destroyed by the ordinary verbs.** Removals are soft; a Removed drawer restores in one
    click. This is nearly free because ImgChest was assumed never to delete the underlying file (see
-   §2). A later owner-only **permanent delete** is the sole exception: it removes the ImgChest post,
+   §2). A later staff **permanent delete** is the sole exception: it removes the ImgChest post,
    which the API does allow, and keeps the row as a tombstone so the record survives.
 5. **Take counts are logged but drive nothing**, except an opt-in "sort by popular" toggle.
    Collecting them costs nothing and commits to nothing, and it means that if bloat ever does

@@ -324,7 +324,7 @@ describe('the profile and its work', () => {
     )
   })
 
-  it('keeps permanent delete out of a moderator’s hands', async () => {
+  it('lets a moderator permanently delete too', async () => {
     api.getMe.mockResolvedValue({
       handle: 'Amber Otter',
       role: 'moderator',
@@ -349,8 +349,16 @@ describe('the profile and its work', () => {
       added: 1,
       removed: 0,
     })
+    const user = userEvent.setup()
     renderModeration('/moderation?user=ref-ada&tab=images')
-    expect(await screen.findByRole('button', { name: 'Delete permanently' })).toBeDisabled()
+
+    const button = await screen.findByRole('button', { name: 'Delete permanently' })
+    expect(button).toBeEnabled()
+    await user.click(button)
+    await user.click(await screen.findByRole('button', { name: 'Delete forever' }))
+    await waitFor(() =>
+      expect(api.purgeCustomImage).toHaveBeenCalledWith('Rem', 'https://cdn/x.png'),
+    )
   })
 
   it('renders the character view and refetches with the chosen sort', async () => {

@@ -644,7 +644,7 @@ why it does not contradict the anti-queue argument there.
       client address (never the address), pruned after 90 days; a contributor seen on a network a
       restricted account used is flagged on their profile. A lead for a human, not an automatic
       restriction — an IP is a household or a carrier as often as it is one person.
-- [x] **Permanent delete (owner only).** ImgChest refuses to delete the only image in a post, so the
+- [x] **Permanent delete (staff).** ImgChest refuses to delete the only image in a post, so the
       post goes (`DELETE /v1/post/{id}`, verified live) — or, for a post with several images, just the
       file (`DELETE /v1/file/{id}`), decided per purge from the post's image count. The post id is
       captured at upload and backfilled for the old library from `GET /v1/user/{username}/posts` (the

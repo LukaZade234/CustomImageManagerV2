@@ -353,7 +353,7 @@ export default function ModerationPage() {
                 onRestore={handleRestore}
                 restoringUrl={restoringUrl}
                 onPurge={handlePurge}
-                canPurge={Boolean(me?.is_owner)}
+                canPurge={Boolean(me?.is_moderator)}
               />
             </div>
           )}

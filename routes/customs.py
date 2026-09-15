@@ -553,12 +553,12 @@ def restore_images():
 
 
 @customs_bp.route("/api/purge-custom-image", methods=["POST"])
-@identity.require_owner
+@identity.require_moderator
 @rate_limited("remove")
 def purge_custom_image():
     """Permanently delete one image from ImgChest, then tombstone the row.
 
-    Owner only, and the one irreversible act in the app. The post's image count
+    Staff only, and the one irreversible act in the app. The post's image count
     decides the call: a single-image post is deleted whole, a post with siblings
     loses only the file, so nothing else goes with it.
     """

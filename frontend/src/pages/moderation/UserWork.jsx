@@ -98,7 +98,7 @@ function imageActions(state, row, onRestore, restoringUrl, onPurge, canPurge) {
       disabled: !canPurge,
       title: canPurge
         ? 'Remove the file from ImgChest too — this asks you to confirm'
-        : 'Only the owner can permanently delete',
+        : 'Moderators only',
       onClick: canPurge ? () => onPurge(row) : undefined,
     },
   ]

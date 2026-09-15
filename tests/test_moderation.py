@@ -850,6 +850,15 @@ class TestPermanentDelete:
         self._seed(clean_db, post_id="post-1")
         assert self._purge(client).status_code == 403
 
+    def test_a_moderator_can_purge(self, client, clean_db, make_moderator, monkeypatch):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("moderator")
+        calls = self._patch(monkeypatch, image_count=1)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": ["post-1"], "file": []}
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
+
     def test_a_single_image_post_is_deleted_whole(
         self, client, clean_db, make_moderator, monkeypatch
     ):

@@ -74,8 +74,8 @@ character) or as a character-level list sorted by rank, image count, name or rec
 **Phase 1 was the full UI and the `GET` endpoints behind it, with every acting button present and
 inert.** All of those verbs are now live: **restore** an image, the **owner-only** promote/demote,
 **warn** a person (a message), **suspend / ban** (a state, below), and **permanent delete** (the one
-irreversible act, below). The last is owner-only and reachable only for images uploaded after the
-change; the rest of the library cannot be purged and says so.
+irreversible act, below). The last is staff, and a one-time backfill brings the whole old library
+within reach.
 
 ### Decisions taken
 
@@ -123,8 +123,8 @@ leak back onto a public surface from here.
 #### Named out of scope
 
 - **The remaining action logic.** Restore, promote/demote, warn, suspend, ban and permanent delete are
-  all wired (see below). The last is owner-only and limited to images uploaded after it shipped; the
-  rest of the library has no stored ImgChest post id and cannot be purged.
+  all wired (see below). The last is staff, and a one-off backfill recovers the post ids the old
+  library never had.
 - **Reading `image_reports`** — see above.
 - **The ~8,547 unattributed images** (`added_by IS NULL`, migrated from v1). They have no actor, so
   they cannot appear under a contributor, and they are not a moderation concern — they are the
@@ -590,7 +590,7 @@ and nothing risky.
 
 **So:** new uploads store `imgchest_post_id` directly; old rows get theirs from
 `scripts/backfill_imgchest_post_ids.py` (a one-time pass: ~141 page calls for 14k posts, which matched
-**8,579 of 8,581** library rows). A purge then deletes the post. Owner-only, and behind a second,
+**8,579 of 8,581** library rows). A purge then deletes the post. Staff, and behind a second,
 explicit confirmation — an `$ai` command already copied into Discord breaks, and only a holding period
 could soften that (none is built).
 
@@ -615,7 +615,7 @@ bring the image back. The cached thumbnail goes with it. The API's own `state` C
   `delete_imgchest_file`, and `file_id_from_url` — all `DELETE`/`GET` on the documented API, with the
   upload's retry/backoff; a `404` counts as success.
 - `db.get_image_for_purge`, `db.purge_custom_image`, and `add_custom_images(..., post_ids=…)`.
-- `routes/customs.py`: `POST /api/purge-custom-image` (`character_name`, `url`), owner-only: verify,
+- `routes/customs.py`: `POST /api/purge-custom-image` (`character_name`, `url`), staff only: verify,
   pick file vs post from the image count (falling back to a file delete when there is no post id),
   tombstone, drop the thumbnail.
 - `scripts/backfill_imgchest_post_ids.py --username NAME [--dry-run]` — the one-off mapping pass.
@@ -646,15 +646,15 @@ Discord id, so it survives a new cookie. Both leave the account able to read and
 refuse every write. The owner alone lifts them. The one accepted gap is a *different* Discord account,
 which nothing in this design can stop.
 
-**Phase 3 — acting on an image, including permanent delete. Done, for images we can reach.** Research
-settled what was unknown: ImgChest exposes `DELETE /v1/post/{id}` (its `file` delete refuses to remove
-the only image in a post, and every upload here is a single-image post). So the *post* is what goes,
-and it needs the post id — captured from the create response (`data.id`) and stored per image from now
-on. Existing rows have none, and there is no file→post lookup, so they cannot be purged; the route
-refuses them with an explanation rather than pretending. It is owner-only and the app's one
-irreversible act: a second, explicit confirmation, and a tombstone (`purged_at`) so the record does not
-silently vanish. The known cost stands — an `$ai` command already copied into Discord breaks — which is
-the argument a holding period would answer, and none is built.
+**Phase 3 — acting on an image, including permanent delete. Done.** ImgChest exposes
+`DELETE /v1/post/{id}` (its `file` delete refuses to remove the only image in a post, and every upload
+here is a single-image post). The post id is captured from the create response (`data.id`) for new
+uploads and recovered for the old library from `GET /v1/user/{username}/posts` — the documented API,
+no session and no merge. A purge reads the post and deletes the file when it has siblings, the post
+when it does not. It is **staff-only** and the app's one irreversible act: a second, explicit
+confirmation, and a tombstone (`purged_at`) so the record does not silently vanish. The known cost
+stands — an `$ai` command already copied into Discord breaks — which is the argument a holding period
+would answer, and none is built.
 
 **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, given that §1
 designed it to work *without* a human. The honest case for reading it is diagnostic rather than
