@@ -556,12 +556,11 @@ def restore_images():
 @identity.require_owner
 @rate_limited("remove")
 def purge_custom_image():
-    """Permanently delete one image: the ImgChest post, then a tombstone.
+    """Permanently delete one image from ImgChest, then tombstone the row.
 
-    Owner only, and the one irreversible act in the app. ImgChest refuses to
-    delete the only image in a post, so the whole post goes -- which means an
-    image uploaded before permanent delete existed (no stored post id) cannot be
-    purged, and this says so rather than pretending.
+    Owner only, and the one irreversible act in the app. The post's image count
+    decides the call: a single-image post is deleted whole, a post with siblings
+    loses only the file, so nothing else goes with it.
     """
     data = request.get_json(silent=True) or {}
     char_name = (data.get("character_name") or "").strip()
@@ -574,31 +573,46 @@ def purge_custom_image():
         return jsonify({"error": "Image not found"}), 404
     if row["purged_at"]:
         return jsonify({"error": "Already permanently deleted"}), 400
-    if not row["imgchest_post_id"]:
-        return (
-            jsonify(
-                {
-                    "error": "This image was uploaded before permanent delete existed, so it "
-                    "cannot be removed from ImgChest."
-                }
-            ),
-            400,
-        )
 
+    file_id = file_id_from_url(url)
     try:
-        # A post with more than one image must lose only the one file, or its
-        # siblings go with it. A single-image post -- every upload this app made
-        # before merging existed -- is deleted whole. A post that is already gone
-        # makes the post delete below a no-op.
-        post = fetch_imgchest_post(row["imgchest_post_id"])
-        image_count = (post or {}).get("image_count") or len((post or {}).get("images") or [])
-        if image_count > 1:
-            file_id = file_id_from_url(url)
-            if not file_id:
-                return jsonify({"error": "Could not read the file id from this image's URL."}), 500
-            delete_imgchest_file(file_id)
+        if row["imgchest_post_id"]:
+            # A post with more than one image must lose only the one file, or its
+            # siblings go with it; a single-image post is deleted whole. A post
+            # that is already gone makes the post delete a no-op.
+            post = fetch_imgchest_post(row["imgchest_post_id"])
+            image_count = (post or {}).get("image_count") or len((post or {}).get("images") or [])
+            if image_count > 1:
+                if not file_id:
+                    return (
+                        jsonify({"error": "Could not read the file id from this image's URL."}),
+                        500,
+                    )
+                delete_imgchest_file(file_id)
+            else:
+                delete_imgchest_post(row["imgchest_post_id"])
+        elif file_id:
+            # No post id: either a non-first image of a multi-image post -- the
+            # listing only exposes the first, so the backfill missed it -- or one
+            # we could never map. A file delete settles it, because it succeeds
+            # exactly when the post has siblings. The only-image refusal means a
+            # single-image post whose id we do not know, which we cannot touch.
+            try:
+                delete_imgchest_file(file_id)
+            except ImgChestError as e:
+                if "only image" in str(e).lower():
+                    return (
+                        jsonify(
+                            {
+                                "error": "This image is the only one in a post we could not "
+                                "identify, so it cannot be removed from ImgChest."
+                            }
+                        ),
+                        400,
+                    )
+                raise
         else:
-            delete_imgchest_post(row["imgchest_post_id"])
+            return jsonify({"error": "Could not read the file id from this image's URL."}), 500
     except ImgChestError as e:
         return jsonify({"error": str(e)}), 502
 

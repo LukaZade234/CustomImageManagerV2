@@ -595,9 +595,12 @@ explicit confirmation — an `$ai` command already copied into Discord breaks, a
 could soften that (none is built).
 
 **Image-count aware.** The listing only exposes a post's *first* image, so a post that holds several
-(possible only if posts were merged by hand) would lose its siblings if deleted whole. So a purge
-reads the post first: one image → `DELETE /v1/post/{id}`; more than one → `DELETE /v1/file/{file_id}`
-with the id taken from the stored URL, which leaves the rest alone.
+(possible only if posts were merged by hand) would lose its siblings if deleted whole — and its
+non-first images have no post id at all, since nothing maps them. So a purge reads the post where it
+can and decides: one image → `DELETE /v1/post/{id}`; more than one → `DELETE /v1/file/{file_id}` with
+the id taken from the stored URL. Where there is **no** post id, it goes straight to the file delete,
+which succeeds exactly when the post has siblings; only a single-image post we could not identify is
+refused, and it says so.
 
 **The tombstone.** The row is not deleted. It goes to `state='removed'` with `purged_at` set, hidden
 from every removed list and refused by restore: the record survives for the audit, but nothing can
@@ -613,7 +616,8 @@ bring the image back. The cached thumbnail goes with it. The API's own `state` C
   upload's retry/backoff; a `404` counts as success.
 - `db.get_image_for_purge`, `db.purge_custom_image`, and `add_custom_images(..., post_ids=…)`.
 - `routes/customs.py`: `POST /api/purge-custom-image` (`character_name`, `url`), owner-only: verify,
-  read the post, delete the file or the post, tombstone, drop the thumbnail.
+  pick file vs post from the image count (falling back to a file delete when there is no post id),
+  tombstone, drop the thumbnail.
 - `scripts/backfill_imgchest_post_ids.py --username NAME [--dry-run]` — the one-off mapping pass.
 
 ### Frontend

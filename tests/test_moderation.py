@@ -889,12 +889,40 @@ class TestPermanentDelete:
         assert self._purge(client).status_code == 200
         assert calls == {"post": ["post-1"], "file": []}
 
-    def test_an_image_with_no_post_id_is_refused(self, client, clean_db, make_moderator):
+    def test_an_unmapped_image_is_purged_by_file_delete(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        # The listing only exposes a post's *first* image, so a non-first image in a
+        # multi-image post has no post id -- but a file delete works, because the
+        # post has siblings. This is the case that used to refuse.
         self._seed(clean_db, post_id=None)
         make_moderator("owner")
+        calls = self._patch(monkeypatch, fetch=lambda pid: None)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": [], "file": [self.FILE_ID]}
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
+
+    def test_an_unmapped_single_image_post_is_refused(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        from imgchest_utils import ImgChestError
+
+        self._seed(clean_db, post_id=None)
+        make_moderator("owner")
+        monkeypatch.setattr("routes.customs.fetch_imgchest_post", lambda pid: None)
+        monkeypatch.setattr("routes.customs.delete_imgchest_post", lambda pid: None)
+
+        def only_image(_file_id):
+            raise ImgChestError(
+                "Image hosting refused the delete (HTTP 500): You can't delete the only "
+                "image on a post. Please delete your post instead."
+            )
+
+        monkeypatch.setattr("routes.customs.delete_imgchest_file", only_image)
         res = self._purge(client)
         assert res.status_code == 400
-        assert "before permanent delete" in res.get_json()["error"]
+        assert "only one" in res.get_json()["error"]
         assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is None
 
     def test_a_failed_delete_leaves_the_row_alone(
