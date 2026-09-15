@@ -39,7 +39,7 @@ def discord_auth_start():
         return jsonify({"error": "Discord sign-in is not configured"}), 503
     next_path = discord_auth.safe_next_path(request.args.get("next"))
     state = discord_auth.sign_state(current_app.config["SECRET_KEY"], next_path)
-    return redirect(discord_auth.authorize_url(state))
+    return redirect(discord_auth.authorize_url(state, origin=request.host_url))
 
 
 @auth_bp.route("/api/auth/discord/callback", methods=["GET"])
@@ -69,7 +69,7 @@ def discord_auth_callback():
         return redirect(f"{base}{next_path}?signin=failed")
 
     try:
-        profile = discord_auth.fetch_user(discord_auth.exchange_code(code))
+        profile = discord_auth.fetch_user(discord_auth.exchange_code(code, origin=request.host_url))
     except (ValueError, requests.RequestException) as e:
         log.warning("auth.signin_failed", error=str(e))
         return redirect(f"{base}{next_path}?signin=failed")

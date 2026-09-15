@@ -30,7 +30,7 @@ def discord_says(monkeypatch):
     """Stub the two outbound calls. Returns a setter for the profile."""
 
     def _set(discord_id, name="Someone"):
-        monkeypatch.setattr(discord_auth, "exchange_code", lambda code: "token")
+        monkeypatch.setattr(discord_auth, "exchange_code", lambda code, origin=None: "token")
         monkeypatch.setattr(
             discord_auth, "fetch_user", lambda token: {"id": discord_id, "name": name}
         )
@@ -78,6 +78,69 @@ class TestState:
         a = discord_auth.sign_state(self.KEY, "/")
         b = discord_auth.sign_state(self.KEY, "/")
         assert a != b
+
+
+class TestRedirectUri:
+    """One person, two origins: a laptop on localhost, a phone on Tailscale."""
+
+    def test_a_single_configured_uri_is_used_whatever_the_origin(self, monkeypatch):
+        monkeypatch.setenv("DISCORD_REDIRECT_URI", "https://api.example/api/auth/discord/callback")
+        assert discord_auth.redirect_uri() == "https://api.example/api/auth/discord/callback"
+        assert (
+            discord_auth.redirect_uri(origin="http://localhost:3000")
+            == "https://api.example/api/auth/discord/callback"
+        )
+
+    def test_the_origin_selects_its_own_callback_from_the_list(self, monkeypatch):
+        monkeypatch.setenv(
+            "DISCORD_REDIRECT_URI",
+            "http://localhost:3000/api/auth/discord/callback,"
+            "http://100.101.11.17:3000/api/auth/discord/callback",
+        )
+        assert (
+            discord_auth.redirect_uri(origin="http://100.101.11.17:3000")
+            == "http://100.101.11.17:3000/api/auth/discord/callback"
+        )
+        assert (
+            discord_auth.redirect_uri(origin="http://localhost:3000")
+            == "http://localhost:3000/api/auth/discord/callback"
+        )
+
+    def test_a_trailing_slash_on_the_origin_still_matches(self, monkeypatch):
+        monkeypatch.setenv(
+            "DISCORD_REDIRECT_URI",
+            "http://localhost:3000/api/auth/discord/callback,"
+            "http://100.101.11.17:3000/api/auth/discord/callback",
+        )
+        assert (
+            discord_auth.redirect_uri(origin="http://localhost:3000/")
+            == "http://localhost:3000/api/auth/discord/callback"
+        )
+
+    def test_an_unlisted_origin_falls_back_to_the_first(self, monkeypatch):
+        monkeypatch.setenv(
+            "DISCORD_REDIRECT_URI",
+            "https://api.example/api/auth/discord/callback,"
+            "https://other.example/api/auth/discord/callback",
+        )
+        assert (
+            discord_auth.redirect_uri(origin="http://localhost:8080")
+            == "https://api.example/api/auth/discord/callback"
+        )
+
+    def test_the_default_is_localhost_when_unset(self, monkeypatch):
+        monkeypatch.delenv("DISCORD_REDIRECT_URI", raising=False)
+        assert discord_auth.redirect_uri() == "http://localhost:5000/api/auth/discord/callback"
+
+    def test_blank_entries_are_ignored(self, monkeypatch):
+        monkeypatch.setenv(
+            "DISCORD_REDIRECT_URI",
+            " http://localhost:3000/api/auth/discord/callback , ",
+        )
+        assert (
+            discord_auth.redirect_uri(origin="http://localhost:3000")
+            == "http://localhost:3000/api/auth/discord/callback"
+        )
 
 
 class TestStartEndpoint:
