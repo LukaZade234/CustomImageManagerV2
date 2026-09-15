@@ -1,4 +1,5 @@
 import { getPortraitUrl } from '../api'
+import AccentOverrideControl from './AccentOverrideControl'
 import { GenderMarks } from './GenderMarks'
 import { PoolFilterChips } from './PoolFilterChips'
 import { Button, Field, Input } from './ui'
@@ -28,6 +29,9 @@ export function CharacterHeader({
   customCount,
   edit,
   mudae,
+  pick,
+  onPickPortrait,
+  accent,
 }) {
   const portrait = (
     <>
@@ -83,6 +87,15 @@ export function CharacterHeader({
             }}
             onDragLeave={() => onDragOverChange(false)}
             onDrop={onMainImageDrop}
+          >
+            {portrait}
+          </button>
+        ) : pick ? (
+          <button
+            type="button"
+            className="image-wrapper pick-mode"
+            aria-label="Pick the accent colour from the portrait"
+            onClick={onPickPortrait}
           >
             {portrait}
           </button>
@@ -244,6 +257,7 @@ export function CharacterHeader({
               </svg>
               $ai command
             </Button>
+            <AccentOverrideControl accent={accent} />
           </div>
         )}
       </div>

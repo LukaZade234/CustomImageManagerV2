@@ -326,6 +326,7 @@ limited per identity (`ratelimit.py`).
 
 | Method | Path | Purpose |
 |---|---|---|
+| POST | `/api/accent-override` | Set, clear, or pixel-pick a character's accent colour (staff only). |
 | POST | `/api/add-character` | Add a new character. |
 | POST | `/api/characters/<path:name>/view` | Note that the caller looked at this character. |
 | POST | `/api/edit-character` | — |
@@ -519,6 +520,14 @@ prefers it via `portraitUrl` — falling back to the original URL, which is also
 what a development build does, where the mirror has no host.
 
 One character page went from **488 MB** to **548 KB** across those changes.
+
+**Accent override.** The measured accent can be overruled. A moderator or the
+owner arms a picker in the character header and clicks a pixel on the portrait
+or a gallery image; the server samples that pixel and stores it in
+`characters.accent_override` (migration 013), written through to `accent_seed`
+so every read path shows it. The extractor returns it and refuses to recompute
+over it, including `scripts/recompute_accents.py`; clearing drops both and the
+next visit measures afresh. The picks double as a labelled calibration set.
 
 ---
 

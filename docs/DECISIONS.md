@@ -573,6 +573,35 @@ never clear. The distinction is the source — a card that arrived sparse is not
 person pressing Save is. An edit stays on the working row (`is_female`, `is_male`, `pools`); the
 catalog's facets are the scrape and are left alone, so search filtering still reads the catalog.
 
+### A hand-picked accent override
+
+The measured accent is the dominant chromatic colour the art agrees on. It is occasionally wrong
+in a way no statistic can fix: the colour a community reads as a character's is sometimes not the
+one with the most pixels. Audrey Hall is blonde-haired and green-dressed, and gold wins on area,
+in every variant of the pooling tried — mass-pooled, per-image top-K vote, coarse hue buckets.
+
+So the accent can be **overridden**: a moderator or the owner arms a picker on the character page
+and clicks a pixel on the portrait or a gallery image, and that colour becomes the character's
+(one endpoint, saved on the click). The pick is taken server-side, from the thumbnail file or the
+portrait URL keyed by row id — the client sends only the point within the image, never a URL — so
+the sample is the actual pixel that was clicked.
+
+Two design choices worth holding:
+
+- **Write-through, one source.** The override is written to `accent_override` *and* to
+  `accent_seed`, so the many read paths that already show a character's colour (the list, saved
+  rows, the gallery) need no change. `accent_override` is the flag; `accent_extract` returns it
+  and refuses to recompute over it, including the batch `recompute_accents.py`. Clearing nulls
+  both, and the next visit measures afresh.
+- **Staff-only.** The accent is one value on the character row that every visitor sees, so it is
+  not a per-identity preference. Everyone else keeps the measured colour.
+
+The picks are also the calibration set for any future rework of the extractor: each one is a real
+character with a human-chosen target, which is exactly what a threshold search or a small model
+would need. The remaining open problem is the opposite direction — inferring the *subject* colour
+when a dominant background or hair out-votes it — for which foreground segmentation is the
+promising route, not more colour statistics.
+
 ### Bulk-adding a series: one DM, then review
 
 Bulk-adding used to run `$ima` for the series and then one `$im` per character, which is both slow

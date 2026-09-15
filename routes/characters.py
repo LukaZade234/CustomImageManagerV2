@@ -12,13 +12,17 @@ the visitor has signed in with Discord.
 from __future__ import annotations
 
 import os
+import re
 
 from flask import Blueprint, jsonify, request
+from PIL import Image
 
+import accent_extract
 import db
 import identity
 import logs
 import tempfiles
+import thumbnails
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from ratelimit import rate_limited
@@ -380,3 +384,90 @@ def set_main_image():
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+_ACCENT_SEED = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+@characters_bp.route("/api/accent-override", methods=["POST"])
+@rate_limited("edit_character")
+def accent_override():
+    """Set, clear, or pixel-pick a character's accent colour. Staff only.
+
+    The accent is one value on the character row that every visitor sees, so
+    this is not a per-identity preference: it is a moderator/owner action. A
+    request either names a `seed`, clears with `clear: true`, or names a point
+    (`image_id` or `portrait: true`, plus `u`/`v` in 0..1) to sample a pixel.
+    """
+    me = identity.current_identity()
+    if not me.is_moderator:
+        return jsonify({"error": "Not permitted"}), 403
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Character name is required"}), 400
+
+    if data.get("clear"):
+        if not db.clear_accent_override(name):
+            return jsonify({"error": "Character not found"}), 404
+        return jsonify({"success": True, "seed": None, "manual": False})
+
+    seed = data.get("seed")
+    if seed is None:
+        try:
+            u = float(data["u"])
+            v = float(data["v"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"error": "A point (u, v) is required"}), 400
+        if not (0.0 <= u <= 1.0 and 0.0 <= v <= 1.0):
+            return jsonify({"error": "Point is outside the image"}), 400
+        image = _image_for_point(name, data)
+        if image is None:
+            return jsonify({"error": "Could not read that image"}), 502
+        seed = accent_extract.hex_at_point(image, u, v)
+    else:
+        if not isinstance(seed, str) or not _ACCENT_SEED.match(seed):
+            return jsonify({"error": "seed must be a #rrggbb colour"}), 400
+        seed = seed.lower()
+
+    if not db.set_accent_override(name, seed, me.id):
+        return jsonify({"error": "Character not found"}), 404
+    return jsonify({"success": True, "seed": seed, "manual": True})
+
+
+def _image_for_point(name, data):
+    """The full-resolution image a pick refers to, or None.
+
+    A gallery pick names an `image_id`, which resolves to the cached thumbnail
+    the grid is showing (materialised if it has never been viewed). A portrait
+    pick uses the character's own main image. Either way the URL is looked up
+    from the database by name/id, never supplied by the caller, so this can only
+    ever be asked for an image already in the library.
+    """
+    image_id = data.get("image_id")
+    if image_id is not None:
+        try:
+            image_id = int(image_id)
+        except (TypeError, ValueError):
+            return None
+        path = thumbnails.cache_path(image_id)
+        if not path.is_file():
+            accent_extract._materialise_thumbnail(image_id)
+        if not path.is_file():
+            return None
+        try:
+            with Image.open(path) as img:
+                img.load()
+                return img.convert("RGB")
+        except Exception:
+            log.warning("characters.accent_pick_unreadable", image_id=image_id)
+            return None
+
+    portrait = db.get_character_portrait(name)
+    if not portrait:
+        return None
+    raw = accent_extract.fetch_portrait_bytes(portrait[1])
+    if raw is None:
+        return None
+    return accent_extract.open_image_bytes(raw)

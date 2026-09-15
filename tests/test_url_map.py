@@ -26,6 +26,7 @@ def _repo_root():
 EXPECTED_ROUTES = {
     ("/", "GET"),
     ("/add", "GET"),
+    ("/api/accent-override", "POST"),
     ("/api/add-character", "POST"),
     ("/api/auth/discord/callback", "GET"),
     ("/api/auth/discord/start", "GET"),

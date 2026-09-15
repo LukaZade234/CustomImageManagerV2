@@ -138,6 +138,30 @@
   gap: var(--space-2);
   min-width: 0;
 }
+/* The staff accent picker: a swatch, whether the colour is manual or measured,
+   and the pick/clear verbs. Presentational; all state lives on the page. */
+.accent-override {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  /* Pushed to the far end of the actions row, away from the visitor verbs. */
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+.accent-override__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.accent-override__swatch.is-empty {
+  background-color: var(--surface-hover);
+}
+.accent-override__hint {
+  color: var(--text-subtle);
+}
 .char-page-actions .ui-btn {
   flex: 0 1 auto;
   justify-content: center;
@@ -789,6 +813,22 @@ body.reorder-touch-dragging {
   border-color: var(--success);
   transform: scale(1.02);
 }
+/* Pixel-pick mode: the portrait and the gallery become a sampler. The portrait
+   button drops its chrome and shows a crosshair, so the next click reads as
+   "choose a colour here". */
+.image-wrapper.pick-mode {
+  cursor: crosshair;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+.image-wrapper.pick-mode img {
+  border: 3px dashed var(--accent);
+  opacity: 0.9;
+}
 .selected-text {
   font-size: var(--type-meta);
   color: var(--text-muted);
@@ -1327,6 +1367,10 @@ body.reorder-touch-dragging {
   transition:
     opacity var(--duration) var(--ease),
     border-color var(--duration) var(--ease);
+}
+/* Pixel-pick mode wins over the base cursor above by coming after it. */
+.gallery-item-wrapper.pick-mode .custom-image-full {
+  cursor: crosshair;
 }
 /* Selection indicator — one, for one selection mode.
 

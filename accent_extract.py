@@ -531,6 +531,31 @@ def load_image_bytes(raw: bytes) -> Image.Image | None:
         return None
 
 
+def open_image_bytes(raw: bytes) -> Image.Image | None:
+    """Full-resolution RGB of encoded bytes, for sampling one pixel.
+
+    Unlike `load_image_bytes` this does not downsample, because a hand-picked
+    colour should be the pixel that was actually clicked rather than a 200px
+    average of it.
+    """
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            img.load()
+            return img.convert("RGB")
+    except Exception:
+        return None
+
+
+def hex_at_point(image: Image.Image, u: float, v: float) -> str:
+    """The hex colour at a normalized point (0..1, top-left origin) of an image."""
+    img = image.convert("RGB")
+    width, height = img.size
+    x = _clamp(int(round(u * (width - 1))), 0, width - 1)
+    y = _clamp(int(round(v * (height - 1))), 0, height - 1)
+    r, g, b = img.getpixel((x, y))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 def _prepare(img: Image.Image) -> Image.Image:
     # Transparent PNGs must resolve against white, the surface the portrait
     # sits on in the page, or every transparent pixel reads as black and drags
@@ -630,7 +655,8 @@ def accent_state(char_name: str) -> dict | None:
     conn = db.get_connection()
     row = conn.execute(
         "SELECT accent_seed, accent_hue, accent_gallery_count, accent_gallery_latest,"
-        "       accent_portrait_url, accent_partial, accent_updated_at, main_image_url"
+        "       accent_portrait_url, accent_partial, accent_updated_at, main_image_url,"
+        "       accent_override"
         "  FROM characters WHERE name = ?",
         (char_name,),
     ).fetchone()
@@ -674,8 +700,14 @@ def recompute_accent(char_name: str, *, fetch_missing: bool = False) -> dict | N
     would be far worse than a seed that upgrades itself on a later visit (which
     is what `accent_partial` records). `fetch_missing=True` is for the offline
     backfill script, which has all the time in the world.
+
+    A hand-picked override is never overwritten: the character keeps the colour
+    somebody chose for it (see migration 013). Returns None in that case.
     """
     import db
+
+    if db.get_accent_override(char_name):
+        return None
 
     portrait = db.get_character_portrait(char_name)
     portrait_url = portrait[1] if portrait else None
@@ -745,6 +777,10 @@ def ensure_accent(char_name: str) -> str | None:
     state = accent_state(char_name)
     if state is None:
         return None
+
+    # A hand-picked colour is the answer, whatever the art would measure.
+    if state["accent_override"]:
+        return state["accent_seed"]
 
     count, latest, _ = gallery_fingerprint(char_name)
     fresh = (

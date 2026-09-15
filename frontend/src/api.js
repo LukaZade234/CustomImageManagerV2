@@ -267,6 +267,12 @@ export const apiClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
+  setAccentOverride: (data) =>
+    api('/api/accent-override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   addCharacter: (formData) =>
     fetch(`${API_BASE}/api/add-character`, {
       method: 'POST',

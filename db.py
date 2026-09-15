@@ -192,6 +192,51 @@ def get_character_portrait(name: str) -> tuple[int, str] | None:
     return int(row["id"]), row["main_image_url"]
 
 
+def get_accent_override(name: str) -> str | None:
+    """The hand-picked accent seed, or None when the colour is the measured one."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT accent_override FROM characters WHERE name = ?", (name,)
+    ).fetchone()
+    return row["accent_override"] if row else None
+
+
+def set_accent_override(name: str, seed: str, identity_id: str | None) -> bool:
+    """Record a hand-picked accent. False if the character is unknown.
+
+    The seed is written through to `accent_seed` so the many read paths that
+    already show a character's colour need no change; `accent_override` is what
+    marks it as chosen and stops `accent_extract` recomputing over it.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE characters"
+            "   SET accent_override = ?, accent_override_by = ?, accent_override_at = ?,"
+            "       accent_seed = ?, accent_source = 'manual', accent_updated_at = ?"
+            " WHERE name = ?",
+            (seed, identity_id, _now(), seed, _now(), name),
+        )
+        return cur.rowcount > 0
+
+
+def clear_accent_override(name: str) -> bool:
+    """Drop the override and the measured seed, so the next visit measures again.
+
+    `accent_updated_at` is cleared too: leaving it set would let a stale seed
+    read as fresh. False if the character is unknown.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE characters"
+            "   SET accent_override = NULL, accent_override_by = NULL,"
+            "       accent_override_at = NULL, accent_seed = NULL, accent_source = NULL,"
+            "       accent_updated_at = NULL"
+            " WHERE name = ?",
+            (name,),
+        )
+        return cur.rowcount > 0
+
+
 def _name_key(name: str) -> str:
     """The folded match key. `catalog_import` owns the folding rules."""
     import catalog_import

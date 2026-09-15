@@ -3,6 +3,7 @@ import { apiUrl } from '../config'
 import { useMasonryColumns } from '../hooks/useMasonryColumns'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { FILLERS, ratioFor } from '../utils/galleryRatios'
+import { pickPixel } from '../utils/imagePick'
 
 /** Below this, uniform columns beat uniform rows. See useMasonryColumns. */
 const NARROW = '(max-width: 768px)'
@@ -68,6 +69,8 @@ export default function CustomImageGallery({
   onDragOver,
   empty,
   loading = false,
+  pick = false,
+  onPick,
 }) {
   const { select, reorder: reordering } = modes
   const selecting = select || reordering
@@ -115,6 +118,7 @@ export default function CustomImageGallery({
           'gallery-item-wrapper',
           select && 'select-mode',
           reordering && 'reorder-mode',
+          pick && 'pick-mode',
           selectedUrls.includes(row.url) && 'selected',
           isDropTarget && 'reorder-drop-target',
           isDragSource && 'reorder-drag-source',
@@ -141,13 +145,19 @@ export default function CustomImageGallery({
             style={{ '--ratio': ratio, ...column.style }}
             className={classes}
             title={attributionFor(row)}
-            aria-label={labelFor(row, index, selecting)}
+            aria-label={
+              pick
+                ? `Pick the accent colour from image ${index + 1}`
+                : labelFor(row, index, selecting)
+            }
             aria-pressed={selecting ? selectedUrls.includes(row.url) : undefined}
-            onClick={() => {
+            onClick={(e) => {
               // A drag ends with a synthetic click on whatever the pointer was
               // over; that must not toggle a selection.
               if (reorder.consumeClickAfterDrag()) return
-              if (selecting) onToggleSelect(row.url)
+              if (pick) {
+                onPick(row, pickPixel(e.currentTarget.querySelector('img'), e.clientX, e.clientY))
+              } else if (selecting) onToggleSelect(row.url)
               else onOpenImage(index)
             }}
             {...reorder.itemProps(index)}
