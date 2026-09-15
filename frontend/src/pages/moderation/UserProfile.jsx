@@ -41,11 +41,29 @@ export default function UserProfile({ user }) {
   ]
 
   return (
-    <div className="moderation-profile">
-      <div className="moderation-profile__header">
-        <h2 className="section-heading">{user.handle}</h2>
-        {user.role !== 'user' && <Badge tone="neutral">{user.role}</Badge>}
-        {user.signed_in && <Badge tone="neutral">Discord</Badge>}
+    <div className="moderation-profile moderation-profile--split">
+      <div className="moderation-profile__identity">
+        <div className="moderation-profile__id">
+          <h2 className="section-heading moderation-profile__name">{user.handle}</h2>
+          {user.role !== 'user' && <Badge tone="neutral">{user.role}</Badge>}
+          {user.signed_in && <Badge tone="neutral">Discord</Badge>}
+        </div>
+
+        <div className="moderation-profile__actions">
+          {ACTIONS.map((action) => (
+            <Button
+              key={action.label}
+              size="sm"
+              variant={action.variant ?? 'secondary'}
+              disabled
+              title="Not wired up yet"
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+
+        <p className="moderation-profile__note text-meta">Actions are not wired up yet.</p>
       </div>
 
       <dl className="moderation-profile__stats">
@@ -56,21 +74,6 @@ export default function UserProfile({ user }) {
           </div>
         ))}
       </dl>
-
-      <div className="moderation-profile__actions">
-        {ACTIONS.map((action) => (
-          <Button
-            key={action.label}
-            size="sm"
-            variant={action.variant ?? 'secondary'}
-            disabled
-            title="Not wired up yet"
-          >
-            {action.label}
-          </Button>
-        ))}
-        <span className="moderation-profile__note text-meta">Actions are not wired up yet.</span>
-      </div>
     </div>
   )
 }

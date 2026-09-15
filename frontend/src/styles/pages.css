@@ -1648,6 +1648,49 @@ body.reorder-touch-dragging {
 .moderation-profile__note {
   color: var(--text-subtle);
 }
+/* The selected contributor as a two-column sheet: identity and its actions in
+ * the left column, the record as a 2x2 grid of ruled figures on the right. The
+ * split gives the numbers their own column instead of stacking them under the
+ * name, so the profile reads alongside the work below rather than above it. */
+.moderation-profile--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4) var(--space-6);
+}
+.moderation-profile__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.moderation-profile__id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.moderation-profile__name {
+  margin: 0;
+}
+.moderation-profile--split .moderation-profile__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+.moderation-profile--split .moderation-profile__stat {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.moderation-profile--split :where(.moderation-profile__stat) dd {
+  font-weight: var(--weight-semibold);
+}
+@media (max-width: 768px) {
+  .moderation-profile--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .moderation-work {
   min-width: 0;
 }
