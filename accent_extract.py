@@ -130,12 +130,12 @@ BAND_SPAN = 22.5
 # images) and falls away as the gallery fills up (~20% at five, nothing by ten),
 # leaving the gallery to speak for the character once there is enough of it.
 #
-# At ten or more the portrait only joins when its own dominant hue matches the
-# gallery's, where it can reinforce the answer but never change it. Breakpoints
-# are (gallery images, portrait share), interpolated between.
+# At ten or more the portrait steps aside entirely. It used to be allowed to
+# join when its hue agreed, but even a tiny weight could flip the pale-versus-
+# saturated branch and swing a confident dark red to a pale pink (Artoria
+# Pendragon (Alter)), which is a change, not a reinforcement. Breakpoints are
+# (gallery images, portrait share), interpolated between.
 PORTRAIT_SHARE_POINTS = ((0, 1.0), (1, 0.70), (2, 0.70), (5, 0.20), (10, 0.0))
-# How close the portrait's hue must be to the gallery's to count as agreeing.
-PORTRAIT_AGREE_DEGREES = 40
 
 # Smoothing for the hue histogram: sigma in bins (8 degrees), truncated.
 _SMOOTH_SIGMA = 1.6
@@ -458,10 +458,9 @@ def decide(
 
     But a consensus needs more than one voice. The portrait's weight scales down
     with the size of the gallery (`_portrait_share`): at one or two images it
-    carries most of the vote, by five it is a fifth, and by ten it is gone
-    unless its hue agrees with the gallery's, where it can reinforce but not
-    overturn. The portrait is also what remains when the gallery is empty or too
-    scattered to decide.
+    carries most of the vote, by five it is a fifth, and by ten it has stepped
+    aside entirely so the gallery owns the answer. The portrait is also what
+    remains when the gallery is empty or too scattered to decide.
 
     `portrait` may be None (no portrait, or an unreadable one) and `gallery`
     may be empty; either alone can carry the answer.
@@ -487,18 +486,14 @@ def decide(
 
     share = _portrait_share(len(gallery))
     if share <= 0.0:
-        # The gallery speaks for the character. The portrait only joins when it
-        # agrees, where it can firm up the same hue but never move it.
-        if (
-            _hue_distance(gallery_result["hue"], portrait_result["hue"])
-            > PORTRAIT_AGREE_DEGREES
-        ):
-            gallery_result["source"] = "gallery"
-            return gallery_result
-        weight = 1.0
-    else:
-        # share = weight / (weight + gallery_count), so invert for the weight.
-        weight = share / (1.0 - share) * len(gallery)
+        # Ten usable images is a consensus. The portrait does not join at all --
+        # even a tiny weight can re-decide the pale-versus-saturated pool, which
+        # is a different colour rather than a firmer one.
+        gallery_result["source"] = "gallery"
+        return gallery_result
+
+    # share = weight / (weight + gallery_count), so invert for the weight.
+    weight = share / (1.0 - share) * len(gallery)
 
     combined = _decide_from([*base, (portrait, weight)])
     if combined is not None:
