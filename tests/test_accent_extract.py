@@ -147,6 +147,70 @@ class TestDecision:
         assert result["lightness"] < 0.7
 
 
+class TestPortraitWeighting:
+    """The portrait's say shrinks as the gallery grows."""
+
+    # An orange portrait and a blue gallery: far enough apart that the winner
+    # is unambiguous, which is what makes the source assertion meaningful.
+    portrait_colour = (220, 110, 40)
+    gallery_colour = (40, 70, 200)
+
+    def _parts(self):
+        portrait = _grids_of(_png(self.portrait_colour))
+        gallery = _grids_of(_png(self.gallery_colour))
+        return portrait, gallery
+
+    def test_the_share_falls_off_with_gallery_size(self):
+        assert ax._portrait_share(0) == 1.0
+        assert ax._portrait_share(1) == 0.70
+        assert ax._portrait_share(2) == 0.70
+        assert ax._portrait_share(5) == 0.20
+        assert ax._portrait_share(10) == 0.0
+        assert ax._portrait_share(50) == 0.0
+        shares = [ax._portrait_share(n) for n in range(0, 12)]
+        assert shares == sorted(shares, reverse=True)
+
+    def test_the_portrait_outvotes_a_lone_gallery_image(self):
+        portrait, gallery = self._parts()
+        portrait_alone = ax.decide(portrait, [])
+        gallery_alone = ax.decide(None, [gallery])
+        result = ax.decide(portrait, [gallery])
+        assert result is not None
+        assert result["source"] == "portrait"
+        assert _hue_gap(_hue(result), _hue(portrait_alone)) < _hue_gap(
+            _hue(result), _hue(gallery_alone)
+        )
+
+    def test_the_gallery_outvotes_the_portrait_once_it_is_large_enough(self):
+        portrait, gallery = self._parts()
+        portrait_alone = ax.decide(portrait, [])
+        gallery_alone = ax.decide(None, [gallery] * 5)
+        result = ax.decide(portrait, [gallery] * 5)
+        assert result is not None
+        assert result["source"] == "gallery"
+        assert _hue_gap(_hue(result), _hue(gallery_alone)) < _hue_gap(
+            _hue(result), _hue(portrait_alone)
+        )
+
+    def test_a_disagreeing_portrait_is_dropped_at_ten_images(self):
+        portrait, gallery = self._parts()
+        gallery_alone = ax.decide(None, [gallery] * 10)
+        result = ax.decide(portrait, [gallery] * 10)
+        assert result is not None
+        assert result["source"] == "gallery"
+        assert _hue_gap(_hue(result), _hue(gallery_alone)) < 5
+
+    def test_an_agreeing_portrait_only_reinforces_at_ten_images(self):
+        gallery = _grids_of(_png(self.gallery_colour))
+        portrait = _grids_of(_png((48, 74, 198)))  # the same blue, a shade off
+        gallery_alone = ax.decide(None, [gallery] * 10)
+        result = ax.decide(portrait, [gallery] * 10)
+        assert result is not None
+        assert result["source"] == "gallery"
+        assert _hue_gap(_hue(result), _hue(gallery_alone)) < 10
+
+
+
 class TestFingerprint:
     def test_a_stored_seed_is_not_remeasured_while_inputs_match(self, clean_db, monkeypatch):
         import db
