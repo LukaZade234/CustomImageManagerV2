@@ -22,6 +22,7 @@ import catalog_import
 import db
 import logs
 import mudae_discord
+import portrait_mirror
 from image_utils import validate_image_file
 from imgchest_utils import ImgChestError, upload_to_imgchest
 from mudae_discord import MudaeError
@@ -79,6 +80,43 @@ def _mudae_main_image_url(image_url, character_name):
     if _allowed_portrait_url(image_url):
         return image_url
     return _upload_remote_image_to_imgchest(image_url, character_name)
+
+
+def _read_image_bytes(image_url):
+    """Raw bytes of a remote image, fetched through the import SSRF guards."""
+    temp_path, _ = _fetch_image_from_url_for_import(image_url)
+    try:
+        with open(temp_path, "rb") as handle:
+            return handle.read()
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _refresh_main_portrait(char_name, info):
+    """Set a character's main image from a live `$im` card, mirroring it to R2.
+
+    The fresh portrait is written to the catalog and mirrored under the same
+    content-hashed key the batch script uses, so the page serves it from the CDN
+    rather than ImgChest. When the mirror cannot run (rclone or its config absent
+    in this runtime), it falls back to the previous behaviour -- store the Mudae
+    URL, or re-host on ImgChest for a non-durable host -- and leaves the catalog
+    row needing a mirror for the next batch run, so the refresh never fails over
+    the CDN. Returns (stored_url, mirror_key) or None if the row vanished.
+    """
+    image_url = info.image_url
+    catalog = db.refresh_catalog_portrait(info.name or char_name, info.series, info.rank, image_url)
+    if catalog:
+        catalog_id, name_key = catalog
+        raw = _read_image_bytes(image_url)
+        key = portrait_mirror.mirror(catalog_id, raw) if raw else None
+        if key:
+            db.record_catalog_portrait_mirrors([(name_key, key)])
+            if db.set_main_image(char_name, image_url):
+                return image_url, key
+    if db.set_main_image(char_name, _mudae_main_image_url(image_url, char_name)):
+        return image_url, None
+    return None
 
 
 def _persist_mudae_character(info, *, overwrite_main=False):
@@ -370,7 +408,7 @@ def mudae_series_extract_apply():
     result["rejected"] = rejected
     message = (
         f'Series "{series}" — added {result["created"]}, '
-        f'updated {result["updated"]}, unchanged {result["unchanged"]}'
+        f"updated {result['updated']}, unchanged {result['unchanged']}"
     )
     return jsonify({"success": True, "series": series, "message": message, **result})
 
@@ -403,9 +441,10 @@ def mudae_refresh_main_image():
         if not info.image_url:
             return jsonify({"error": "Mudae reply had no image"}), 502
 
-        image_url = _mudae_main_image_url(info.image_url, char_name)
-        if not db.set_main_image(char_name, image_url):
+        result = _refresh_main_portrait(char_name, info)
+        if result is None:
             return jsonify({"error": "Character not found"}), 404
+        image_url, mirror_key = result
         # The same card carries the gender and pools, so refresh those too.
         db.set_character_traits(
             char_name,
@@ -419,6 +458,7 @@ def mudae_refresh_main_image():
                 "success": True,
                 "message": "Main image updated from Mudae",
                 "image_url": image_url,
+                "image_thumb": mirror_key or "",
                 "character": info.to_dict(),
             }
         )

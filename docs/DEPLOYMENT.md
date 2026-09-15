@@ -72,11 +72,27 @@ nothing responds until the app is running.
 5. Mirror the catalog portraits. This needs the catalog imported first (the
    data step below), and `rclone` configured for the R2 bucket. It fetches each
    `mudae.net` portrait, encodes WebP, uploads under `portraits/` and records the
-   key, so the app stops hotlinking Mudae:
+   key, so the app stops hotlinking Mudae. The working rows are then pointed at
+   that mirror automatically (the main image is display-only, so the canonical
+   Mudae art wins over any hand-uploaded one):
 
    ```bash
    R2_BUCKET=imgmanager-assets uv run python scripts/mirror_portraits_to_r2.py --dry-run
    R2_BUCKET=imgmanager-assets uv run python scripts/mirror_portraits_to_r2.py
+   ```
+
+   Re-run `--resync-thumbs` any time after (no re-fetch) to re-point working rows
+   at mirrors that already exist — e.g. rows added since the last run.
+
+   The script reads rclone's config from wherever you normally put it, but the
+   API process also mirrors a single portrait in-request when you click "Update
+   main from Mudae". Give that process its own readable copy and tell the service
+   where it is (the unit already sets `RCLONE_CONFIG` to this path):
+
+   ```bash
+   sudo cp /home/<you>/.config/rclone/rclone.conf /var/lib/imgmanager/.rclone.conf
+   sudo chown imgmanager:imgmanager /var/lib/imgmanager/.rclone.conf
+   sudo chmod 600 /var/lib/imgmanager/.rclone.conf
    ```
 
 6. **Create a second bucket for backups**, e.g. `imgmanager-backups`. Keep it

@@ -14,6 +14,7 @@ import pytest
 from PIL import Image
 
 import mudae_discord
+import portrait_mirror
 from imgchest_utils import ImgChestError
 from routes import mudae as mudae_routes
 
@@ -113,3 +114,47 @@ class TestPersistMudaeCharacterImage:
 
         assert action == "added"
         assert image_url == "https://cdn.imgchest.com/x.png"
+
+
+class TestRefreshMainPortrait:
+    """`$im` re-fetch must land on R2, not ImgChest."""
+
+    def test_a_fresh_portrait_is_mirrored_and_served(self, clean_db, tmp_path, monkeypatch):
+        clean_db.add_character("Rem", "Re:Zero", "3", "https://cdn.imgchest.com/old.png")
+        monkeypatch.setattr(
+            mudae_routes, "_fetch_image_from_url_for_import", _fake_download(tmp_path)
+        )
+        monkeypatch.setattr(
+            portrait_mirror, "mirror", lambda cid, raw, **kw: f"portraits/{cid}-cafe0000.webp"
+        )
+        info = mudae_discord.CharacterInfo(
+            name="Rem", series="Re:Zero", rank="3", image_url="https://mudae.net/uploads/5/new.png"
+        )
+
+        stored, key = mudae_routes._refresh_main_portrait("Rem", info)
+
+        assert stored == "https://mudae.net/uploads/5/new.png"
+        assert key and key.startswith("portraits/")
+        row = clean_db.find_character("Rem")
+        assert row["image"] == "https://mudae.net/uploads/5/new.png"
+        assert row["image_thumb"] == key
+
+    def test_falls_back_when_the_mirror_cannot_run(self, clean_db, tmp_path, monkeypatch):
+        # No rclone in this runtime: the fresh Mudae URL is stored as-is and the
+        # row is left needing a mirror, rather than the refresh failing.
+        clean_db.add_character("Rem", "Re:Zero", "3", "https://cdn.imgchest.com/old.png")
+        monkeypatch.setattr(
+            mudae_routes, "_fetch_image_from_url_for_import", _fake_download(tmp_path)
+        )
+        monkeypatch.setattr(portrait_mirror, "mirror", lambda *a, **kw: None)
+        info = mudae_discord.CharacterInfo(
+            name="Rem", series="Re:Zero", rank="3", image_url="https://mudae.net/uploads/5/new.png"
+        )
+
+        stored, key = mudae_routes._refresh_main_portrait("Rem", info)
+
+        assert stored == "https://mudae.net/uploads/5/new.png"
+        assert key is None
+        row = clean_db.find_character("Rem")
+        assert row["image"] == "https://mudae.net/uploads/5/new.png"
+        assert row["image_thumb"] == ""
