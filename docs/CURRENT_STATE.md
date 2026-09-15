@@ -458,13 +458,15 @@ notes this. The account can be banned, which would take out all Mudae features.
 
 ## 6. Frontend
 
-React 19 + react-router-dom 7 + zustand 5 + Vite 8. 8,879 lines of source
-across 106 files (14,062 including tests).
+React 19 + react-router-dom 7 + zustand 5 + Vite 8. 9,332 lines of source
+across 85 files (15,081 including tests).
 
 | Area | Lines | Notes |
 |---|---|---|
 | `pages/CharacterPage.jsx` | 963 | The gallery and its three modes. Was 1,611 |
-| `pages/AddPage.jsx` | 780 | Add character + Mudae series import + pool-filtered suggestions. Not yet split |
+| `pages/AddPage.jsx` | 253 | The Add workbench: catalog matching only. Was 806 |
+| `components/AddMudaePanel.jsx` | 519 | Mudae lookup and bulk series import, lifted out of AddPage |
+| `components/AddManualForm.jsx` | 135 | The hand-typed add form, lifted out of AddPage |
 | `pages/HomePage.jsx` | 577 | Totals, just-added ticker, most-visited, popular characters, series ledger, contributor board |
 | `pages/CustomsPage.jsx` | 410 | Browse all customs, filtered server-side |
 | `hooks/useGalleryReorder.js` | 316 | Pointer-events drag-to-reorder, mouse and touch, plus arrow-key moves |
