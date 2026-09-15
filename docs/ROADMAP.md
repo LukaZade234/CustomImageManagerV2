@@ -644,10 +644,14 @@ why it does not contradict the anti-queue argument there.
       client address (never the address), pruned after 90 days; a contributor seen on a network a
       restricted account used is flagged on their profile. A lead for a human, not an automatic
       restriction — an IP is a household or a carrier as often as it is one person.
-- [x] **Permanent delete (owner only), for images we can reach.** ImgChest refuses to delete the only
-      image in a post, so the post goes (`DELETE /v1/post/{id}`, verified live); the post id is captured
-      at upload from here on. Existing rows have none and cannot be purged. Tombstoned
-      (`purged_at`), behind a second confirmation, and the cached thumbnail is dropped.
+- [x] **Permanent delete (owner only).** ImgChest refuses to delete the only image in a post, so the
+      post goes (`DELETE /v1/post/{id}`, verified live) — or, for a post with several images, just the
+      file (`DELETE /v1/file/{id}`), decided per purge from the post's image count. The post id is
+      captured at upload and backfilled for the old library from `GET /v1/user/{username}/posts` (the
+      documented API; no session, no merge) — 8,579 of 8,581 rows matched. Tombstoned (`purged_at`),
+      behind a second confirmation, cached thumbnail dropped.
+- [ ] **Later: the multi-image audit.** How many posts hold more than one image, and how large (one
+      `GET /v1/post/{slug}` per post, ~4h at 60/min). Informational; the purge is safe either way.
 - [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and
       whether the honest case for it is a statistic rather than a queue.
 

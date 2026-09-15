@@ -29,7 +29,14 @@ from image_utils import (
     read_image_dimensions,
     validate_image_file,
 )
-from imgchest_utils import ImgChestError, delete_imgchest_post, upload_to_imgchest
+from imgchest_utils import (
+    ImgChestError,
+    delete_imgchest_file,
+    delete_imgchest_post,
+    fetch_imgchest_post,
+    file_id_from_url,
+    upload_to_imgchest,
+)
 from ratelimit import rate_limited
 from remote_images import (
     MAX_FILE_SIZE,
@@ -579,7 +586,19 @@ def purge_custom_image():
         )
 
     try:
-        delete_imgchest_post(row["imgchest_post_id"])
+        # A post with more than one image must lose only the one file, or its
+        # siblings go with it. A single-image post -- every upload this app made
+        # before merging existed -- is deleted whole. A post that is already gone
+        # makes the post delete below a no-op.
+        post = fetch_imgchest_post(row["imgchest_post_id"])
+        image_count = (post or {}).get("image_count") or len((post or {}).get("images") or [])
+        if image_count > 1:
+            file_id = file_id_from_url(url)
+            if not file_id:
+                return jsonify({"error": "Could not read the file id from this image's URL."}), 500
+            delete_imgchest_file(file_id)
+        else:
+            delete_imgchest_post(row["imgchest_post_id"])
     except ImgChestError as e:
         return jsonify({"error": str(e)}), 502
 

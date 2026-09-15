@@ -579,16 +579,25 @@ The app's one irreversible act, and the exception to "nothing is ever hard-delet
 
 **What research settled.** ImgChest does expose deletion, but not the one we wanted: `DELETE
 /v1/file/{id}` is refused with *"You can't delete the only image on a post"*, and every upload here is
-a single-image post. The reachable lever is `DELETE /v1/post/{id}`, which removes the post and its
-files — so the **post id** is what a purge needs. The create-post response carries it as `data.id`; the
-uploader already had it and threw it away. There is **no file→post lookup** (`GET /v1/file/{id}`
-returns an empty `200`), so an image whose post id was never stored cannot be purged. We probed for an
-undocumented merge endpoint too — it is a website-only, session-authenticated feature, not on the API.
+a single-image post. The reachable lever is `DELETE /v1/post/{id}`. The create-post response carries
+the post id as `data.id`; the uploader already had it and threw it away. There is **no file→post
+lookup** (`GET /v1/file/{id}` returns an empty `200`). A merge route exists, but only on the website —
+session-authenticated, undocumented — and it turned out to be unnecessary: `GET
+/v1/user/{username}/posts` (documented API, the token we already hold) lists every post, hidden ones
+included, with its `slug` and its first image's file id as `thumbnail.id`. Since every stored URL is
+`cdn.imgchest.com/files/{id}.ext`, that maps the whole old library back to its posts with no session
+and nothing risky.
 
-**So:** new uploads store `imgchest_post_id`; a purge deletes that post. Existing rows have none and
-the route refuses them, naming the reason, rather than pretending. Owner-only, and behind a second,
+**So:** new uploads store `imgchest_post_id` directly; old rows get theirs from
+`scripts/backfill_imgchest_post_ids.py` (a one-time pass: ~141 page calls for 14k posts, which matched
+**8,579 of 8,581** library rows). A purge then deletes the post. Owner-only, and behind a second,
 explicit confirmation — an `$ai` command already copied into Discord breaks, and only a holding period
 could soften that (none is built).
+
+**Image-count aware.** The listing only exposes a post's *first* image, so a post that holds several
+(possible only if posts were merged by hand) would lose its siblings if deleted whole. So a purge
+reads the post first: one image → `DELETE /v1/post/{id}`; more than one → `DELETE /v1/file/{file_id}`
+with the id taken from the stored URL, which leaves the rest alone.
 
 **The tombstone.** The row is not deleted. It goes to `state='removed'` with `purged_at` set, hidden
 from every removed list and refused by restore: the record survives for the audit, but nothing can
@@ -599,16 +608,25 @@ bring the image back. The cached thumbnail goes with it. The API's own `state` C
 - Migration `020_permanent_delete.sql`: `custom_images.imgchest_post_id` (the purge handle) and
   `custom_images.purged_at` (the tombstone). Every `state='removed'` query gained `purged_at IS NULL`,
   and restore refuses a purged row.
-- `imgchest_utils.delete_imgchest_post` — `DELETE /v1/post/{id}` with the same retry/backoff as the
-  upload; a `404` counts as success (already gone), a real refusal raises.
+- `imgchest_utils`: `fetch_imgchest_post` (read the image count), `delete_imgchest_post`,
+  `delete_imgchest_file`, and `file_id_from_url` — all `DELETE`/`GET` on the documented API, with the
+  upload's retry/backoff; a `404` counts as success.
 - `db.get_image_for_purge`, `db.purge_custom_image`, and `add_custom_images(..., post_ids=…)`.
 - `routes/customs.py`: `POST /api/purge-custom-image` (`character_name`, `url`), owner-only: verify,
-  delete the post, tombstone, drop the thumbnail.
+  read the post, delete the file or the post, tombstone, drop the thumbnail.
+- `scripts/backfill_imgchest_post_ids.py --username NAME [--dry-run]` — the one-off mapping pass.
 
 ### Frontend
 - `UserWork.jsx`: **Delete permanently** is enabled for the owner, opens a confirmed `ConfirmDialog`
   ("Delete forever"), and is disabled with a reason for anyone else. `queries/moderation.js` adds
   `usePurgeModerationImage`, which refreshes both work views and the contributor counts.
+
+### Later: the multi-image audit
+We did not scan how many posts hold more than one image, or how large they are. It would need one
+`GET /v1/post/{slug}` per post — 14,072 calls at the API's 60/min, roughly four hours — so it was set
+aside. It is informational: the purge is already image-count aware and safe either way. Run it if a
+merged post ever looks suspect, or if a future pass wants to know the shape of the account.
+
 
 ---
 

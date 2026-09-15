@@ -808,20 +808,38 @@ class TestNetworkLinks:
 
 
 class TestPermanentDelete:
-    """The one irreversible act: delete the ImgChest post, tombstone the row.
+    """The one irreversible act: delete from ImgChest, tombstone the row.
 
-    Owner only. ImgChest will not delete the only image in a post, so the post
-    is deleted whole, which is why an image with no stored post id cannot be
-    purged and is refused with an explanation rather than a lie.
+    Owner only, and image-count aware: a single-image post is deleted whole,
+    while a post with several (only possible via a hand merge) loses just the one
+    file, so siblings survive. The file id is read from the stored URL.
     """
 
-    URL = "https://cdn.imgchest.com/files/purge-me.png"
+    FILE_ID = "deadbeef1234"
+    URL = f"https://cdn.imgchest.com/files/{FILE_ID}.png"
 
     def _seed(self, db, *, post_id):
         db.ensure_identity("adder")
         db.add_custom_images(
             "Rem", [self.URL], added_by="adder", post_ids={self.URL: post_id} if post_id else None
         )
+
+    def _patch(self, monkeypatch, *, image_count=1, fetch=None):
+        calls = {"post": [], "file": []}
+        if fetch is not None:
+            monkeypatch.setattr("routes.customs.fetch_imgchest_post", fetch)
+        else:
+            monkeypatch.setattr(
+                "routes.customs.fetch_imgchest_post",
+                lambda pid: {"image_count": image_count, "images": [{}] * image_count},
+            )
+        monkeypatch.setattr(
+            "routes.customs.delete_imgchest_post", lambda pid: calls["post"].append(pid)
+        )
+        monkeypatch.setattr(
+            "routes.customs.delete_imgchest_file", lambda fid: calls["file"].append(fid)
+        )
+        return calls
 
     def _purge(self, client):
         return client.post(
@@ -832,16 +850,15 @@ class TestPermanentDelete:
         self._seed(clean_db, post_id="post-1")
         assert self._purge(client).status_code == 403
 
-    def test_the_owner_deletes_the_post_and_tombstones_the_row(
+    def test_a_single_image_post_is_deleted_whole(
         self, client, clean_db, make_moderator, monkeypatch
     ):
         self._seed(clean_db, post_id="post-1")
         make_moderator("owner")
-        calls = []
-        monkeypatch.setattr("routes.customs.delete_imgchest_post", lambda pid: calls.append(pid))
+        calls = self._patch(monkeypatch, image_count=1)
 
         assert self._purge(client).status_code == 200
-        assert calls == ["post-1"]
+        assert calls == {"post": ["post-1"], "file": []}
 
         row = clean_db.get_image_for_purge("Rem", self.URL)
         assert row["state"] == "removed"
@@ -849,6 +866,28 @@ class TestPermanentDelete:
         # Gone from the Removed drawer, and it cannot be restored.
         assert clean_db.get_removed_for("Rem") == []
         assert clean_db.restore_custom_images("Rem", [self.URL]) == 0
+
+    def test_a_multi_image_post_loses_only_the_file(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        calls = self._patch(monkeypatch, image_count=3)
+
+        assert self._purge(client).status_code == 200
+        # The post is left alone; only the file goes, so siblings survive.
+        assert calls == {"post": [], "file": [self.FILE_ID]}
+        assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
+
+    def test_a_post_that_is_already_gone_is_a_success(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("owner")
+        calls = self._patch(monkeypatch, fetch=lambda pid: None)
+
+        assert self._purge(client).status_code == 200
+        assert calls == {"post": ["post-1"], "file": []}
 
     def test_an_image_with_no_post_id_is_refused(self, client, clean_db, make_moderator):
         self._seed(clean_db, post_id=None)
@@ -869,14 +908,14 @@ class TestPermanentDelete:
         def boom(_pid):
             raise ImgChestError("Image hosting refused the delete (HTTP 500).")
 
-        monkeypatch.setattr("routes.customs.delete_imgchest_post", boom)
+        self._patch(monkeypatch, fetch=boom)
         assert self._purge(client).status_code == 502
         assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is None
 
     def test_purging_twice_and_unknown_images(self, client, clean_db, make_moderator, monkeypatch):
         self._seed(clean_db, post_id="post-1")
         make_moderator("owner")
-        monkeypatch.setattr("routes.customs.delete_imgchest_post", lambda pid: None)
+        self._patch(monkeypatch, image_count=1)
 
         assert self._purge(client).status_code == 200
         assert self._purge(client).status_code == 400  # already purged
