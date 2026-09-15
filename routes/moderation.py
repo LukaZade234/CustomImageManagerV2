@@ -188,14 +188,23 @@ def _read_message(data: dict) -> tuple[str, str, str | None]:
 
 
 def _refuse_restricting(target_id: str):
-    """Shared guards for suspend and ban: the owner and yourself are off limits."""
+    """Shared guards for suspend and ban.
+
+    The owner is never a target, you cannot target yourself, and a moderator
+    cannot target another moderator -- staff-on-staff restriction is an owner
+    move. A moderator may still restrict ordinary users.
+    """
     target = db.get_identity(target_id)
     if target is None:
         return jsonify({"error": "Contributor has no identity yet"}), 404
+
+    actor = identity.current_identity()
     if target["role"] == "owner":
         return jsonify({"error": "The owner cannot be restricted"}), 400
-    if target_id == identity.current_identity().id:
+    if target_id == actor.id:
         return jsonify({"error": "You cannot restrict your own account"}), 400
+    if target["role"] == "moderator" and not actor.is_owner:
+        return jsonify({"error": "Only the owner can restrict a moderator"}), 403
     return None
 
 

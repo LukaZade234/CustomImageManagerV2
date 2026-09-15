@@ -688,6 +688,19 @@ class TestModerationRestrictions:
         assert self._post(client, self._ref("boss"), "ban", title="x").status_code == 400
         assert self._post(client, self._ref(identity_id), "ban", title="x").status_code == 400
 
+    def test_a_moderator_cannot_restrict_another_moderator(self, client, clean_db, make_moderator):
+        make_moderator("moderator")
+        clean_db.ensure_identity("peer")
+        clean_db.set_role("peer", "moderator")
+        ref = self._ref("peer")
+
+        assert self._post(client, ref, "ban", title="x").status_code == 403
+        assert self._post(client, ref, "suspend", title="x", days=1).status_code == 403
+
+        # The owner is the one who moves staff.
+        make_moderator("owner")
+        assert self._post(client, ref, "ban", title="x").status_code == 200
+
     def test_only_the_owner_can_lift(self, client, clean_db, make_moderator):
         clean_db.ensure_identity("target")
         make_moderator("moderator")

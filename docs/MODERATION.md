@@ -529,8 +529,9 @@ identity.
   read/dismiss. `identity.Identity` carries `is_suspended` / `is_banned` / `is_restricted`, and
   `/api/me` returns the status, its end and the reason.
 - `routes/moderation.py`: `POST .../warn`, `.../suspend` (takes `days`), `.../ban` — any moderator,
-  with the owner and yourself refused — `.../lift` (owner only), `GET .../history`, and
-  `POST /api/moderation/history/<int:action_id>/delete` (owner only).
+  but the owner is never a target, you cannot target yourself, and a moderator cannot target another
+  moderator (staff-on-staff restriction is an owner move) — `.../lift` (owner only), `GET .../history`,
+  and `POST /api/moderation/history/<int:action_id>/delete` (owner only).
 
 ### Frontend
 - `ModerationDialog.jsx`: the one popup behind **Warn / Suspend / Ban** — a title (required), a
