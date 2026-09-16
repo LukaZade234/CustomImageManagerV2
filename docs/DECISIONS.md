@@ -600,7 +600,13 @@ repeats are dropped, and when two captures disagree the better (lower) rank wins
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
 **Deferred, not rejected.** Retiring the self-bot to gap-filling and refreshes, and series pages, are
-natural next phases. Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the PNGs,
+natural next phases. Gap-fill means fetching *by series* only what the catalog lacks or has let
+drift — a series with no rows at all, rows with an empty rank/series/portrait/pool, and ranks that
+have moved — and merging it through the existing idempotent upsert, so the pasted extracts remain
+the seeding path rather than the ongoing one. Each `$imartsmi-` is one Discord identify, so it is
+run deliberately, not on a timer.
+
+Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the PNGs,
 free egress) has since landed: `scripts/mirror_portraits_to_r2.py` fetches each `mudae.net` portrait,
 encodes WebP, uploads to R2 and records the key in `characters.main_image_thumb` /
 `character_catalog.mudae_image_thumb`, and the frontend prefers it via `portraitUrl`. Because the main
