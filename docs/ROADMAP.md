@@ -723,9 +723,13 @@ re-verified against the tree on 2026-09-16 and held.
       narrowed `MudaeError` / `ImgChestError` / `ValueError` messages, whose text
       is written for the caller), and added migration `022_actor_indexes.sql` with
       the two partial indexes.
-- [ ] **`ui/` primitive tests (#9).** Ten of eleven primitives are untested; they
-      are the most-reused components, so a regression lands everywhere at once.
-      Tests only — contracts, not classes — in the review's order.
+- [x] **`ui/` primitive tests (#9).** _Done._ Only `Modal` was tested; the other
+      ten primitives now have a file each, asserting the contract — what a user
+      sees, what a screen reader is told, what happens on interaction — not class
+      names. The load-bearing ones: a loading `Button` cannot be pressed again,
+      `Field` wires the label and hint to the control, `SegmentedControl` keeps
+      the full word in the accessible name when the drawn label is shortened, and
+      `ConfirmDialog` treats a dismissal as cancel. No component was changed.
 - [ ] **Data-fetching consistency (#7), scoped.** `HiddenTab` and `RemovedTab`
       move to react-query (the `SavedTab` template), and `CustomsPage`'s
       `reloadKey` becomes `refetch()`. `AddPage` / `CharacterPage` raw fetches wait
