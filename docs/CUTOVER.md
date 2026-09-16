@@ -415,6 +415,60 @@ files the earlier backfills still need to read:
    longer a separate step.
 6. **Accents** — from local thumbnails, after the cache has warmed.
 
+### Running it
+
+**Run it on the origin box, not locally.** Two reasons, and neither is optional: it
+plans against the database it can see, so a laptop would use a stale copy, and it
+writes the preview file the owner-only tab reads, which has to be the one on the
+server. It also needs `IMGCHEST_API_KEY`, which lives in the server's secrets, not on
+a development machine.
+
+The Discord export is not in the repository — it is operator data. Copy it over, and
+put it somewhere writable rather than in the read-only code tree:
+
+```bash
+scp discord-in-use.txt imgmanager:/tmp/discord-in-use.txt
+```
+
+Then, on the box. The first command writes the preview and deletes nothing; it is the
+one to run and read before anything else:
+
+```bash
+ssh imgmanager
+cd /opt/imgmanager
+sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env | sed -n 's/^IMGCHEST_API_KEY=//p')" \
+  uv run python scripts/imgchest_cleanup.py \
+    --username <IMGCHEST_USERNAME> \
+    --export /tmp/discord-in-use.txt \
+    --preview /var/lib/imgmanager/imgchest-cleanup-preview.json
+```
+
+Open the owner-only **Cut-over** tab (Moderation → Cut-over) and read both lists. If
+anything is wrong, fix the export or pass `--rescue URL` and re-run; nothing has been
+deleted. When the preview looks right, do a small trial first — `--limit` caps the
+deletions, and this one really deletes:
+
+```bash
+sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env | sed -n 's/^IMGCHEST_API_KEY=//p')" \
+  uv run python scripts/imgchest_cleanup.py \
+    --username <IMGCHEST_USERNAME> \
+    --export /tmp/discord-in-use.txt \
+    --preview /var/lib/imgmanager/imgchest-cleanup-preview.json \
+    --limit 2 --execute
+```
+
+Confirm in ImgChest that the two files are gone and that a recovered image appears in
+the Removed drawer, then run the whole thing by dropping `--limit`.
+
+The key is read out of `/etc/imgmanager/secrets.env` on the spot rather than typed
+into the command, so it never lands in the shell history. Only that one line is
+extracted, so the file's other values (`SECRET_KEY`, `THUMB_DIR`) do not leak into the
+script's environment.
+
+> A dry-run from a development machine is fine as a rehearsal of the *script* — it
+> parses the export, lists the account, and writes a preview in the same format — but
+> its counts come from the local database, so do not read them as the real plan.
+
 ---
 
 ## Rollback
