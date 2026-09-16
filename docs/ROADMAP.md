@@ -302,8 +302,17 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
 - [ ] **Decide the cut-over.** Both sites are live now and **their data has forked** — anything
       added on v1 from this point does not appear on v2, and because the migration is insert-only,
       anything *deleted* on v1 is not removed from v2 either. The procedure, the rollback boundary
-      and the three decisions it forces are in **[CUTOVER.md](CUTOVER.md)**.
+      and the decisions it forces are in **[CUTOVER.md](CUTOVER.md)**.
 - [ ] **Decommission** the DigitalOcean app and the Neon database, only after the above.
+- [ ] **Rebuild the derived layers after the import.** The v1 dump carries only names,
+      image URLs and bookmarks; the catalog, portrait mirrors, thumbnail cache (which
+      *must* be cleared, since thumbnails are keyed by row id), accents, dimensions,
+      ImgChest post ids and traits are rebuilt afterwards. See **CUTOVER.md**.
+- [ ] **Reconcile ImgChest.** A planned one-off: keep every image that is in use in
+      Discord or on the site, delete the rest — which also clears the griefed uploads
+      from before moderation existed — and re-add the in-use images that were
+      wrongfully removed so they can be restored. It must show a preview of both lists
+      before deleting. See **CUTOVER.md**.
 - [x] **Removed `flask-compress`** (`5c62b9c`). Cloudflare is in front and does Brotli, so
       origin-side gzip only spent CPU.
 
@@ -471,8 +480,18 @@ them. There are no v2 users yet, so this costs nothing now.
       keeps only UI state: theme, toasts, current character, search/sort preferences.
 - [x] **Serve character images from the CDN.** Long since live: `VITE_IMAGE_BASE_URL` points at
       `images.lukazade.dev` (R2) and `config.js` appends `/character_images/`; the bucket serves
-      with `immutable`. Still open: generated thumbnails could move to R2 by the same route, which
-      would also make them a backup rather than derived data the origin has to hold.
+      with `immutable`.
+- [x] **Move generated thumbnails to R2** (`thumbnails.py`, `routes/media.py`, migration 021).
+      They were origin-only: generated on first request, cached under `THUMB_DIR`, served by the
+      API. Each one is now uploaded to the bucket as it is generated, under
+      `thumbs/<id>-<hash>.webp`, and the key is recorded on the row (`custom_images.thumb_key`).
+      List endpoints return the key, so the grid loads straight from the CDN and the origin is no
+      longer in the path of a cold request; the object is also a backup, where before it was
+      derived data on one box. Unmirrored rows keep the `/thumbs/<id>.webp` path, which renders
+      and mirrors on the way through, so there is one mechanism rather than two. The key carries a
+      content hash because the object is served `immutable`. The local cache stays, because the
+      accent extractor measures from it. `scripts/backfill_thumbnails_to_r2.py` mirrors the
+      thumbnails already on disk, and a permanent delete removes the mirror with its source.
 - [x] **Reconsidered gzip, and dropped it** (`5c62b9c`). `flask-compress` ran on the origin; with
       Cloudflare in front the edge compresses instead, and does it better.
 

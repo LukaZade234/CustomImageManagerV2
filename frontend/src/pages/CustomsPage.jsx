@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { apiClient, getImageUrl, getPortraitUrl } from '../api'
 import FilterBar from '../components/FilterBar'
 import { Badge, Button, Card, EmptyState } from '../components/ui'
-import { apiUrl } from '../config'
+import { thumbUrl } from '../config'
 import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
@@ -322,7 +322,7 @@ export default function CustomsPage() {
                     {c.previews.map((p) => (
                       <img
                         key={p.id ?? p.url}
-                        src={p.thumb ? apiUrl(p.thumb) : getImageUrl(p.url)}
+                        src={p.thumb ? thumbUrl(p.thumb) : getImageUrl(p.url)}
                         alt=""
                         className="customs-preview-thumb"
                         width="80"

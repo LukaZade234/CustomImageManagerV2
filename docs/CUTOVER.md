@@ -78,6 +78,21 @@ added. This is deliberate — the alternative is letting any visitor wipe the in
 library — but it will generate questions on day one. Moderators can still remove
 them, and reports still work.
 
+### Decision 4 — the ImgChest cleanup
+
+The cut-over is the one moment to reconcile the ImgChest account against what is
+actually used and delete the rest — including griefed or otherwise inappropriate
+uploads made before moderation existed. It needs a Discord export of the images in
+use, a preview before anything is removed, and an explicit go-ahead. It is planned
+but not built; see **[ImgChest cleanup](#imgchest-cleanup-planned)**.
+
+- [ ] **Run the cleanup with the cut-over.**
+- [ ] **Skip it, and leave ImgChest as it is.**
+
+Note the interaction with Decision 2: the cleanup's "on the site" set is the
+*database after the import*, so an **exact copy** makes v2-only uploads deletable
+(unless they are in use), while a **union** keeps them.
+
 ---
 
 ## Pre-flight
@@ -112,7 +127,7 @@ sudo -u imgmanager sqlite3 /var/lib/imgmanager/imgmanager.db \
   "SELECT name FROM schema_migrations ORDER BY name;"
 ```
 
-Expect `001_initial.sql` and `002_rate_limits.sql`.
+Expect all twenty, `001_initial.sql` through `020_permanent_delete.sql`.
 
 **4. A Litestream restore actually works.**
 
@@ -176,8 +191,15 @@ sudo -u imgmanager DATABASE_PATH=/var/lib/imgmanager/imgmanager.db \
 ```
 
 The script reports what it did and verifies its own image count. The schema is
-recreated from the migrations on first connection, so both `001_initial.sql` and
-`002_rate_limits.sql` are applied automatically.
+recreated from the migrations on first connection, so all twenty — `001_initial.sql`
+through `020_permanent_delete.sql` — are applied automatically.
+
+> **The dump is only the v1 half.** It carries names, image URLs and bookmarks; every
+> other column and table is either *derived* or a v2-era feature with no v1 source.
+> Migrations build the schema in full, so the imported database is structurally
+> complete and semantically thin. The rebuild is its own section below — see
+> **[After the import](#after-the-import-the-derived-layers)** — and it is where the
+> thumbnail cache, in particular, must be dealt with.
 
 ```bash
 sudo systemctl start imgmanager
@@ -242,6 +264,115 @@ sudo systemctl start imgmanager-update.timer
 
 ---
 
+## After the import: the derived layers
+
+The v1 snapshot holds only names, the flat list of image URLs per name, the global
+bookmarks and the timestamps. Everything else v2 stores was either *derived* from
+those or is a v2-era feature with no v1 source. Migrations build the schema in full,
+so the imported database is structurally complete and semantically thin; the steps
+below refill it. None is needed for the site to *serve*, but several are what keep it
+pleasant.
+
+**The one that must happen, not can: the thumbnail cache.** Thumbnails are keyed by
+`custom_images.id` and live on the box (`THUMB_DIR`) — not in the database. A fresh
+import reassigns ids, so any file that survives is keyed to the *wrong* row and would
+show the wrong image, which is worse than a miss. **Clear `THUMB_DIR`.** They
+regenerate lazily on first view, by design (a batch would pull ~16 GB out of ImgChest
+in one go); expect a fetch spike as people browse, cached at the edge after the first
+hit. There is no pre-generation step, and none should be added. Each one is mirrored
+to R2 as it is generated (`thumb_key`, migration 021), so the import also resets that
+column; the bucket objects left over from before are keyed by the old ids and content
+hash, so nothing points at them and they can be swept whenever convenient.
+
+Then, roughly in this order:
+
+1. **Catalog — re-import the Mudae extracts.** `character_catalog` is a v2 table and
+   is empty. It restores search and autocomplete, and it is the source for traits and
+   portrait mirroring.
+2. **Portraits — repoint or re-mirror.** The dump has no `main_image_thumb`, so every
+   row would hotlink `mudae.net`. If R2's portraits survived the wipe, run the mirror
+   script in resync mode: no fetch, just re-point rows at objects that already exist.
+   If R2 was emptied too, run the full mirror (fetch, encode WebP, upload under
+   `portraits/`, record the key). The API process also needs its own rclone config, for
+   the in-request "update main from Mudae" flow.
+3. **Accents — rebuild.** Lost with the column. Recomputed on visit, but the backfill
+   script walks the library once — and it measures *only from thumbnails already on
+   disk*, so run it after the thumbnail cache has warmed, or accept partial accents
+   that upgrade on the first visit. Overrides made on v2 before the wipe are gone with
+   everything else v2-only.
+4. **Image dimensions — run the backfill.** Headers only, ~8.5k images, resumable.
+   Without it the gallery reflows on load (the browser falls back to measuring), so it
+   is visible rather than breaking.
+5. **ImgChest post ids — run the backfill.** Staff permanent delete needs them; without
+   them a purge falls back to the file-delete path, which only works on a post with
+   siblings. One rate-limited listing pass over the account (60/min).
+6. **Traits — run after the catalog.** Gender and pool badges. Cosmetic.
+
+Config that must match rather than data: `CORS_ORIGINS` on the origin and
+`VITE_API_BASE_URL` / `VITE_IMAGE_BASE_URL` in the Pages build. Portrait keys are
+host-relative, so nothing in the database changes if the domains stay the same.
+
+Naturally empty, and correct that way: takes, views, hidden, reports, notifications,
+moderation actions/status/networks, rate-limit counters, and per-identity saved. These
+are v2-era features with no v1 source, so the moderation surface starts on a clean
+slate.
+
+---
+
+## ImgChest cleanup (planned)
+
+Every image this app ever uploaded is still live on ImgChest — nothing was ever
+deleted (that was v1's constraint, kept in v2). That includes images no longer in any
+database, and griefed or otherwise inappropriate uploads made before moderation
+existed. The cut-over is the one moment to reconcile the account against what is
+actually used, and to remove the rest.
+
+**This is planned, not built.** `scripts/` will gain a one-off cleanup, and it is
+deliberately gated.
+
+**The input is ground truth from Discord.** The operator will export the list of every
+image currently used in the servers — the URLs actually named in Mudae's `$ai` lists.
+The cleanup then treats two sets as keepers:
+
+- **In use** — present in that Discord export.
+- **On the site** — present in the imported `custom_images`, in any state.
+
+Every ImgChest object in **neither** set is a candidate for permanent deletion. That is
+what clears the griefed uploads: they are not in use and (if the exact-copy import is
+chosen) not in the database, so nothing keeps them.
+
+**The preview is the gate.** Before anything is deleted the script prints two lists for
+review:
+
+- **Will stay, but is not on the app** — in-use images the database does not have.
+  This is where the *wrongfully removed* surface: images a user, a report or a moderator
+  removed, but that are still in play in Discord. The operator confirms the list is real
+  user content and nothing surprising.
+- **Will be permanently deleted** — everything in neither set.
+
+Nothing is deleted until the operator has seen both lists and given an explicit
+go-ahead. The preview is also the pause point: if either list looks wrong, stop and
+change the keep set — rescue an image by adding it — before running again. The script
+must be rate-limit aware (60/min), resumable, and safe to re-run.
+
+**Repointing what was wrongfully removed.** Deleting is only half of it. The in-use
+images the site does not have are re-added to `custom_images`, in the `removed` state,
+so they appear in the Removed drawer and can be restored — the point being that people
+who want an image removed in error get it back at migration time rather than losing it.
+They land as ordinary migrated rows, which means `added_by IS NULL` like everything
+else from v1: **staff restore them, not the original uploader.** If that is not good
+enough, the alternative is to seed ownership from the Discord export — possible only
+where the export names who ran the command.
+
+**Two constraints to design around.** Mudae accepts only ImgChest and Imgur URLs, so
+only images on our own ImgChest account can be re-added; an in-use URL from anywhere
+else can be kept but not represented as ours. And ImgChest deletes by *post*, while a
+post's listing exposes only its *first* image's file id — so the cleanup plans per post
+(keep a post if any of its images is a keeper, delete the rest file-by-file) and must
+surface any hand-merged multi-image post the preview cannot fully resolve.
+
+---
+
 ## Rollback
 
 **Before the first real user write to v2:** revert the DNS change (5a) or the
@@ -275,6 +406,11 @@ data that has ever existed. That is the reason pre-flight step 4 is a gate.
 
 ## Afterwards
 
+- [ ] **Rebuild the derived layers** — catalog, portrait mirrors, thumbnail cache,
+  accents, dimensions, ImgChest post ids, traits. See
+  [After the import](#after-the-import-the-derived-layers).
+- [ ] **Reconcile ImgChest** — review the cleanup preview and run it, if Decision 4
+  was to proceed. See [ImgChest cleanup](#imgchest-cleanup-planned).
 - [ ] Update `CURRENT_STATE.md` — it describes v1 in the present tense throughout.
 - [ ] Close out the Phase 5 "Outstanding" items in `ROADMAP.md`.
 - [x] Remove `flask-compress` — done ahead of the cut-over in `5c62b9c`, once

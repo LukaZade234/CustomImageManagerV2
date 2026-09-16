@@ -29,7 +29,11 @@ vi.mock('../../api', () => ({
   getImageUrl: (p) => p || '',
   getPortraitUrl: (p) => p || '',
 }))
-vi.mock('../../config', () => ({ apiUrl: (p) => p, signInUrl: (n) => `/start?next=${n}` }))
+vi.mock('../../config', () => ({
+  apiUrl: (p) => p,
+  thumbUrl: (t) => t,
+  signInUrl: (n) => `/start?next=${n}`,
+}))
 
 import { useStore } from '../../store/useStore'
 import { renderWithQueryClient } from '../../test/renderWithQueryClient'

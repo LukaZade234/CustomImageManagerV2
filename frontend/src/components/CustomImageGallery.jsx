@@ -1,5 +1,5 @@
 import { getImageUrl } from '../api'
-import { apiUrl } from '../config'
+import { thumbUrl } from '../config'
 import { useMasonryColumns } from '../hooks/useMasonryColumns'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { FILLERS, ratioFor } from '../utils/galleryRatios'
@@ -172,7 +172,7 @@ export default function CustomImageGallery({
                 command use, because Mudae accepts nothing else. GIFs are not
                 thumbnailed and fall back to the original.
               */
-              src={row.thumb ? apiUrl(row.thumb) : getImageUrl(row.url)}
+              src={row.thumb ? thumbUrl(row.thumb) : getImageUrl(row.url)}
               alt=""
               draggable={false}
               className="custom-image-full"

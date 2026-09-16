@@ -17,7 +17,7 @@ vi.mock('../api', () => ({
   getPortraitUrl: (p) => p || '',
   apiClient: api,
 }))
-vi.mock('../config', () => ({ apiUrl: (p) => p }))
+vi.mock('../config', () => ({ apiUrl: (p) => p, thumbUrl: (t) => t }))
 
 import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import HomePage from './HomePage'

@@ -624,6 +624,16 @@ def purge_custom_image():
     except OSError as e:
         log.warning("customs.purge_thumb_failed", image_id=row["id"], error=str(e))
 
+    # And the mirrored copy: a permanent delete has to take the derived WebP with
+    # it, or it outlives the source it was made from. Best effort, and the row's
+    # key is already cleared by the tombstone above, so a failure here leaves an
+    # inert object rather than a dangling reference. Note that the edge cache is
+    # out of reach either way -- the URL is served `immutable`, so a copy
+    # Cloudflare has already cached can outlive the delete by up to a year, the
+    # same exposure the origin-only thumbnail always had.
+    if row["thumb_key"]:
+        thumbnails.delete_mirror(row["thumb_key"])
+
     log.info("customs.purged", character=char_name, image_id=row["id"])
     return jsonify({"success": True})
 
