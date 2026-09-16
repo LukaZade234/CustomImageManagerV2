@@ -434,8 +434,9 @@ them. There are no v2 users yet, so this costs nothing now.
       Discord client and serializes jobs (FIFO, 4 deep) over a Unix socket at `MUDAE_SOCKET`; the
       web workers are thin clients and no longer hold the token. `deploy/imgmanager-mudae.service`
       runs it, and `deploy/update.sh` restarts it best-effort so a Mudae problem cannot roll back a
-      deploy. When `MUDAE_SOCKET` is unset the old in-process path is still used (local dev and the
-      one-release rollback); remove it once the service is confirmed.
+      deploy. `MUDAE_SOCKET` is now required for Mudae features and the in-process fallback has
+      been removed, so the API process never holds the token; the token lives only in the mudae
+      unit's `/etc/imgmanager/mudae.env`.
 - [x] **A persistent connection, but not a permanent one.** _Done._ The service connects on the
       first job, reuses the session across queued jobs, and disconnects after `MUDAE_IDLE_SECONDS`
       (10 minutes) with an empty queue — deliberately **not** a client that sits online around the

@@ -4,10 +4,11 @@ On-demand Discord user client for querying Mudae ($im / $imartsmi-) via discord.
 Requires DISCORD_USER_TOKEN + DISCORD_CHANNEL_ID. Automating a user account
 violates Discord ToS — use a dedicated alt only.
 
-When `MUDAE_SOCKET` is set the module does not connect at all: it forwards jobs
-to the dedicated `mudae_service` process that owns the connection, so the web
-workers never hold the token and never race each other. Unset it and the old
-in-process path is used (local development, or the rollback escape hatch).
+The web app never signs in itself. It forwards jobs to the dedicated
+`mudae_service` process over the socket named by `MUDAE_SOCKET`, so the token
+lives only in that process and the web workers cannot race each other. Without
+`MUDAE_SOCKET`, Mudae features are simply unavailable (a clean 503) — there is
+deliberately no in-process fallback that would put the token back in the API.
 """
 
 from __future__ import annotations
@@ -17,9 +18,7 @@ import json
 import os
 import re
 import socket
-import threading
 import time
-from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -114,9 +113,6 @@ class LookupResult:
         )
 
 
-_lock = threading.Lock()
-
-
 def _log_mudae_error(context: str, exc: Exception) -> None:
     log.warning("mudae.error", context=context, error=f"{type(exc).__name__}: {exc}")
 
@@ -185,13 +181,11 @@ def _mudae_id() -> int:
 def configured() -> bool:
     """Whether Mudae features are available.
 
-    In service mode the web app cannot see the token (the service owns it), so
-    "configured" means "pointed at a service". Use `status()` for whether that
-    service is actually reachable and connected.
+    The web app never holds the token, so "configured" only means "pointed at a
+    service". Use `status()` for whether that service is actually reachable and
+    connected.
     """
-    if service_mode():
-        return True
-    return bool(_token() and _channel_id())
+    return service_mode()
 
 
 def require_configured() -> None:
@@ -1169,19 +1163,21 @@ class _MudaeSession:
         return parse_im_message(msg)
 
 
-def _run_async(coro):
-    return asyncio.run(coro)
-
-
 # --- Service client -----------------------------------------------------
 #
 # One request, one connection, one JSON line each way. The job itself may wait
 # behind others, so the socket timeout has to outlast the service's own queue
 # deadline; the service answers with an error reply rather than dropping us.
+#
+# The web app has no other way to reach Mudae: the token lives only in the
+# service process, and there is deliberately no in-process fallback to fall back
+# to.
 
 
 def _service_call(op: str, args: dict[str, Any] | None = None) -> Any:
     path = socket_path()
+    if not path:
+        raise MudaeError("Mudae is not configured (MUDAE_SOCKET is not set). See DEPLOY.md.")
     payload = (json.dumps({"op": op, "args": args or {}}) + "\n").encode()
     timeout = job_timeout() + 30.0
     chunks: list[bytes] = []
@@ -1217,56 +1213,25 @@ def _service_call(op: str, args: dict[str, Any] | None = None) -> Any:
 def status() -> dict[str, Any]:
     """What Mudae can do right now, for the status endpoint.
 
-    In service mode this asks the service, so it reflects the real connection
-    state (and the queue) rather than whether some environment variable is set.
+    This asks the service, so it reflects the real connection state (and the
+    queue) rather than whether some environment variable is set.
     """
-    if service_mode():
-        try:
-            data = _service_call("status")
-        except MudaeError as e:
-            return {"configured": False, "mode": "service", "error": str(e)}
-        return {"configured": True, "mode": "service", **(data or {})}
-    return {"configured": configured(), "mode": "in-process"}
-
-
-def with_discord_lock(fn: Callable[[], Any]) -> Any:
-    require_configured()
-    acquired = _lock.acquire(blocking=False)
-    if not acquired:
-        raise MudaeError("Another Mudae request is already in progress; try again shortly")
+    if not service_mode():
+        return {"configured": False, "mode": "service", "error": "MUDAE_SOCKET is not set"}
     try:
-        return fn()
-    finally:
-        _lock.release()
+        data = _service_call("status")
+    except MudaeError as e:
+        return {"configured": False, "mode": "service", "error": str(e)}
+    return {"configured": True, "mode": "service", **(data or {})}
 
 
 def lookup_character(name: str) -> LookupResult:
-    if service_mode():
-        return LookupResult.from_dict(_service_call("lookup", {"name": name}))
-
-    def _do():
-        async def _inner():
-            async with _MudaeSession() as session:
-                return await session.lookup_im(name)
-
-        return _run_async(_inner())
-
-    return with_discord_lock(_do)
+    return LookupResult.from_dict(_service_call("lookup", {"name": name}))
 
 
 def fetch_series_extract(series: str) -> str:
     """$imartsmi- a series and return the raw DM body for the caller to parse."""
-    if service_mode():
-        return str(_service_call("series_extract", {"series": series}))
-
-    def _do():
-        async def _inner():
-            async with _MudaeSession() as session:
-                return await session.fetch_series_extract_dm(series)
-
-        return _run_async(_inner())
-
-    return with_discord_lock(_do)
+    return str(_service_call("series_extract", {"series": series}))
 
 
 def lookup_character_exact(name: str) -> CharacterInfo:

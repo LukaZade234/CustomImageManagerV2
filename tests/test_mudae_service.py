@@ -277,26 +277,16 @@ class TestWebClient:
         assert status["configured"] is False
         assert status["mode"] == "service"
 
-    def test_without_a_socket_the_in_process_path_remains(self, monkeypatch):
+    def test_without_a_socket_mudae_is_unavailable(self, monkeypatch):
         monkeypatch.delenv("MUDAE_SOCKET", raising=False)
-        monkeypatch.setenv("DISCORD_USER_TOKEN", "token")
-        monkeypatch.setenv("DISCORD_CHANNEL_ID", "123")
 
-        class _InProcess:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *exc):
-                return None
-
-            async def lookup_im(self, name):
-                return mudae_discord.LookupResult(
-                    type="character", character=mudae_discord.CharacterInfo(name=name)
-                )
-
-        monkeypatch.setattr(mudae_discord, "_MudaeSession", _InProcess)
-
-        result = mudae_discord.lookup_character("Rem")
-
-        assert result.character.name == "Rem"
-        assert mudae_discord.status() == {"configured": True, "mode": "in-process"}
+        assert mudae_discord.configured() is False
+        assert mudae_discord.status() == {
+            "configured": False,
+            "mode": "service",
+            "error": "MUDAE_SOCKET is not set",
+        }
+        with pytest.raises(mudae_discord.MudaeError):
+            mudae_discord.lookup_character("Rem")
+        with pytest.raises(mudae_discord.MudaeError):
+            mudae_discord.fetch_series_extract("Bleach")

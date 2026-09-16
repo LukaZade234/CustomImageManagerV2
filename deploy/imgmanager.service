@@ -29,9 +29,8 @@ Environment=RCLONE_CONFIG=/var/lib/imgmanager/.rclone.conf
 # credentials; see the CORS block in upload_imgchest.py.
 Environment=CORS_ORIGINS=https://<YOUR_PAGES_DOMAIN>
 # Talk to the dedicated Mudae worker instead of signing into Discord here. The
-# token therefore does not need to be in this unit's environment; remove
-# DISCORD_USER_TOKEN / DISCORD_CHANNEL_ID from secrets.env once the service has
-# been verified running (leaving them is the one-release in-process fallback).
+# token is not, and must not be, in this unit's environment: it lives only in
+# /etc/imgmanager/mudae.env, which only imgmanager-mudae.service loads.
 Environment=MUDAE_SOCKET=/var/lib/imgmanager/mudae.sock
 # Must be a stable secret: it signs the identity cookies. If it changes, every
 # visitor silently becomes a new person.

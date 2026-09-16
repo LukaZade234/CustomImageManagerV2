@@ -31,9 +31,10 @@ Environment=MUDAE_SOCKET=/var/lib/imgmanager/mudae.sock
 # is always online is the most visible thing a self-bot can be. The cost of a
 # short window is one Discord identify on the next lookup.
 Environment=MUDAE_IDLE_SECONDS=600
-# DISCORD_USER_TOKEN / DISCORD_CHANNEL_ID live here and *only* here. The web
-# unit does not need them once it points at the socket.
-EnvironmentFile=/etc/imgmanager/secrets.env
+# DISCORD_USER_TOKEN / DISCORD_CHANNEL_ID live here and *only* here. The API
+# unit does not load this file, so the web process can never sign in as the
+# account. Create it mode 600, owned by imgmanager.
+EnvironmentFile=/etc/imgmanager/mudae.env
 
 ExecStart=/opt/imgmanager/.venv/bin/python /opt/imgmanager/mudae_service.py \
     --socket /var/lib/imgmanager/mudae.sock
