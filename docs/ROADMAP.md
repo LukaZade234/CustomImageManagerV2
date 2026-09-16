@@ -730,10 +730,16 @@ re-verified against the tree on 2026-09-16 and held.
       `Field` wires the label and hint to the control, `SegmentedControl` keeps
       the full word in the accessible name when the drawn label is shortened, and
       `ConfirmDialog` treats a dismissal as cancel. No component was changed.
-- [ ] **Data-fetching consistency (#7), scoped.** `HiddenTab` and `RemovedTab`
-      move to react-query (the `SavedTab` template), and `CustomsPage`'s
-      `reloadKey` becomes `refetch()`. `AddPage` / `CharacterPage` raw fetches wait
-      for #3 rather than being churned twice.
+- [x] **Data-fetching consistency (#7), scoped.** _Done._ `HiddenTab` and
+      `RemovedTab` are react-query now (`queries/hidden.js`, `queries/removed.js`,
+      following the `SavedTab` template), so they take part in the app's
+      invalidation — the concrete bug was that signing out left the previous
+      identity's list on screen, and there is a test for it. `CustomsPage`'s
+      `reloadKey` is gone: it is a `useQuery` with `keepPreviousData` and the
+      shared `useDebouncedValue` (`staleTime: 0`, so the list revalidates on every
+      mount while cached data still paints instantly). `AddPage` / `CharacterPage`
+      raw fetches were left for #3 on purpose, so those files are not churned
+      twice.
 - [ ] **`CharacterPage.jsx` decomposition (#3).** 1,113 lines and 26 `useState`
       in one function, with three test files because no single setup covers it.
       Behaviour-preserving and incremental (lightbox → edit → gallery-selection

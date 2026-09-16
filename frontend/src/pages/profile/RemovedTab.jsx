@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
-import { apiClient, getImageUrl } from '../../api'
+import { useState } from 'react'
+import { getImageUrl } from '../../api'
 import { thumbUrl } from '../../config'
+import { useRemovedImages, useRestoreImage } from '../../queries/removed'
 import { useStore } from '../../store/useStore'
 import CardGrid, { cardRatio } from './CardGrid'
 import ListTab from './ListTab'
@@ -20,25 +21,18 @@ const FIELDS = ['character', 'removed_reason']
 
 export default function RemovedTab() {
   const addToast = useStore((s) => s.addToast)
-  const [rows, setRows] = useState(null)
+  const { data, isPending } = useRemovedImages()
+  const restoreImage = useRestoreImage()
   const [busyId, setBusyId] = useState(null)
 
-  const load = useCallback(async () => {
-    setRows(await apiClient.getMyRemoved().catch(() => []))
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
+  // `null`, not `[]`, is the "not loaded yet" signal ListTab draws as skeletons.
+  const rows = isPending ? null : (data ?? [])
   const filter = useFilteredList(rows, FIELDS, SORTS)
 
   const restore = async (row) => {
     setBusyId(row.id)
     try {
-      // Restore is addressed by character and URL, not by image id.
-      await apiClient.restoreImages(row.character, [row.url])
-      setRows((list) => list.filter((r) => r.id !== row.id))
+      await restoreImage.mutateAsync({ character: row.character, url: row.url })
       addToast(`Restored to ${row.character}`, 'success')
     } catch (e) {
       addToast(e.message || 'Could not restore that image', 'error')

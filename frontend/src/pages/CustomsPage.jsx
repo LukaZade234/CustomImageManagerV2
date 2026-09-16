@@ -1,9 +1,11 @@
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiClient, getImageUrl, getPortraitUrl } from '../api'
 import FilterBar from '../components/FilterBar'
 import { Badge, Button, Card, EmptyState } from '../components/ui'
 import { thumbUrl } from '../config'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useStore } from '../store/useStore'
 
 const PAGE_SIZE = 20
@@ -90,48 +92,43 @@ export default function CustomsPage() {
   const [pageJumpEditing, setPageJumpEditing] = useState(false)
   const [pageJumpValue, setPageJumpValue] = useState('1')
   const pageJumpInputRef = useRef(null)
-  // Bumped by "Try again" to refetch the same page without treating it as a
-  // page move (which would add a history entry for a retry).
-  const [reloadKey, setReloadKey] = useState(0)
+
+  // Debounced so typing does not fire a request per keystroke. Seeded from the
+  // URL query, so arriving on a linked or restored search fetches it at once
+  // rather than flashing the unfiltered list first.
+  const debouncedSearch = useDebouncedValue(search.trim(), 250)
 
   // Searching, sorting and paging all happen in SQL now. The page used to pull
   // the entire library into memory and do the work here, which cost ~475 KB on
   // every visit and would stop working outright once the roster grows.
-  const [result, setResult] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  // Debounced so typing does not fire a request per keystroke. Seeded from the
-  // URL query so arriving on a linked or restored search fetches it at once
-  // rather than flashing the unfiltered list first.
-  const [debouncedSearch, setDebouncedSearch] = useState(() => search.trim())
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250)
-    return () => clearTimeout(timer)
-  }, [search])
-
-  // `reloadKey` is a trigger, not an input: "Try again" refetches the same page.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger, not an input
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    apiClient
-      .listCustoms({ page, perPage: PAGE_SIZE, q: debouncedSearch, by: searchMode, sort: sortKey })
-      .then((data) => {
-        if (cancelled) return
-        setResult(data)
-        setError(null)
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [page, debouncedSearch, searchMode, sortKey, reloadKey])
+  //
+  // This is server state rather than a hand-rolled effect, so "Try again" is a
+  // refetch instead of a bespoke counter, and the query takes part in the app's
+  // invalidation. keepPreviousData holds the current page on screen while the
+  // next one loads, which is what the `is-refetching` dimming relies on.
+  const {
+    data: result,
+    isPending,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['customs', page, debouncedSearch, searchMode, sortKey],
+    queryFn: () =>
+      apiClient.listCustoms({
+        page,
+        perPage: PAGE_SIZE,
+        q: debouncedSearch,
+        by: searchMode,
+        sort: sortKey,
+      }),
+    placeholderData: keepPreviousData,
+    // The list changes whenever anyone uploads, so revalidate on every mount
+    // rather than trusting the app's 30s window. Cached data still paints
+    // instantly on a back-navigation; this just refreshes it underneath.
+    staleTime: 0,
+  })
+  const errorMessage = error?.message
 
   const items = result?.items ?? []
   const total = result?.total ?? 0
@@ -244,15 +241,15 @@ export default function CustomsPage() {
         />
       </div>
 
-      {error && (
+      {errorMessage && (
         <EmptyState
           title="Could not load the list"
-          description={error}
-          action={<Button onClick={() => setReloadKey((k) => k + 1)}>Try again</Button>}
+          description={errorMessage}
+          action={<Button onClick={() => refetch()}>Try again</Button>}
         />
       )}
 
-      {loading && !result && (
+      {isPending && !result && (
         <div className="customs-list" aria-busy="true" aria-live="polite">
           <p className="sr-only">Loading customs…</p>
           {Array.from({ length: 6 }, (_, i) => i).map((i) => (
@@ -292,7 +289,7 @@ export default function CustomsPage() {
       )}
 
       {result && !totalGlobalEmpty && !emptySearchNoMatches && (
-        <div className={loading ? 'is-refetching' : undefined}>
+        <div className={isFetching ? 'is-refetching' : undefined}>
           <p id="customsCount" className="text-meta customs-count-line">
             {total} characters with custom images. Showing page {page} of {totalPages}.
           </p>

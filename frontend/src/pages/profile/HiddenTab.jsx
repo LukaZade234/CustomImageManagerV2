@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
-import { apiClient, getImageUrl } from '../../api'
+import { useState } from 'react'
+import { getImageUrl } from '../../api'
 import { thumbUrl } from '../../config'
+import { useHiddenImages, useUnhideImage } from '../../queries/hidden'
 import { useStore } from '../../store/useStore'
 import CardGrid, { cardRatio } from './CardGrid'
 import ListTab from './ListTab'
@@ -21,24 +22,18 @@ const FIELDS = ['character']
 
 export default function HiddenTab() {
   const addToast = useStore((s) => s.addToast)
-  const [rows, setRows] = useState(null)
+  const { data, isPending } = useHiddenImages()
+  const unhideImage = useUnhideImage()
   const [busyId, setBusyId] = useState(null)
 
-  const load = useCallback(async () => {
-    setRows(await apiClient.getMyHidden().catch(() => []))
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
+  // `null`, not `[]`, is the "not loaded yet" signal ListTab draws as skeletons.
+  const rows = isPending ? null : (data ?? [])
   const filter = useFilteredList(rows, FIELDS, SORTS)
 
   const unhide = async (row) => {
     setBusyId(row.id)
     try {
-      await apiClient.unhideImages([row.id])
-      setRows((list) => list.filter((r) => r.id !== row.id))
+      await unhideImage.mutateAsync(row.id)
       addToast('Image is visible to you again', 'success')
     } catch (e) {
       addToast(e.message || 'Could not unhide that image', 'error')
