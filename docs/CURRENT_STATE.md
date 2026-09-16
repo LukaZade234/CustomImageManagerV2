@@ -174,10 +174,11 @@ because that had to stop being true.
 | `moderation_actions` | — | Staff record of a warn/suspend/ban sent a contributor; the delivered notification points back at it |
 | `moderation_status` | — | The live restriction on an account: `suspended` (with an end) or `banned` (open-ended) |
 | `identity_networks` | — | Keyed hashes of the networks each identity has written from, pruned after 90 days — a moderation lead, not a rule |
-| `schema_migrations` | 20 | Which migrations have run |
+| `schema_migrations` | 21 | Which migrations have run |
 
 Indexes worth knowing: `idx_characters_name_nocase` (case-insensitive lookup),
-`idx_custom_images_hash` (duplicate detection by content, not URL),
+`idx_custom_images_hash` (duplicate detection by content, not URL, checked before the ImgChest
+upload),
 `idx_character_views_identity` and `idx_character_views_recent` (history, and
 the popularity window).
 

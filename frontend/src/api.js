@@ -68,6 +68,8 @@ export const apiClient = {
     return api(`/api/customs?${params}`)
   },
   listModerationUsers: () => api('/api/moderation/users'),
+  listModerationDuplicates: (limit = 200) =>
+    api(`/api/moderation/duplicates?limit=${encodeURIComponent(limit)}`),
   listModerationUserImages: ({
     ref,
     state = 'active',
@@ -297,12 +299,16 @@ export const apiClient = {
     api(`/api/characters/${encodeURIComponent(name)}/view`, { method: 'POST' }).catch(() => null),
   getMyRemoved: () => api('/api/me/removed'),
   getMyContributions: () => api('/api/me/contributions'),
-  importCustomImagesFromUrls: (characterName, urls) =>
+  importCustomImagesFromUrls: (characterName, urls, { allowDuplicates = false } = {}) =>
     fetch(`${API_BASE}/api/import-custom-images-from-urls`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: CREDENTIALS,
-      body: JSON.stringify({ character_name: characterName, urls }),
+      body: JSON.stringify({
+        character_name: characterName,
+        urls,
+        allow_duplicates: allowDuplicates,
+      }),
     })
       .catch((e) => {
         throw toNetworkError(e)

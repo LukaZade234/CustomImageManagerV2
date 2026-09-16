@@ -6,6 +6,7 @@ import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import { CharacterHeader } from '../components/CharacterHeader'
 import CharacterLoadingState from '../components/CharacterLoadingState'
 import CustomImageGallery from '../components/CustomImageGallery'
+import DuplicateDialog from '../components/DuplicateDialog'
 import { GallerySelectionBar } from '../components/GallerySelectionBar'
 import { GalleryToolbar } from '../components/GalleryToolbar'
 import ImageModal from '../components/ImageModal'
@@ -1080,6 +1081,23 @@ export default function CharacterPage() {
           title="Upload issue"
           body={upload.errorReport}
           onClose={upload.dismissErrorReport}
+        />
+      )}
+      {upload.duplicates && (
+        <DuplicateDialog
+          items={upload.duplicates.items}
+          onSkip={upload.dismissDuplicates}
+          onUploadAnyway={upload.uploadDuplicatesAnyway}
+          onRestore={async (existing) => {
+            try {
+              await apiClient.restoreImages(existing.character, [existing.url])
+              await refreshImages()
+              addToast('Image restored', 'success')
+              upload.resolveDuplicate(existing.id)
+            } catch (err) {
+              addToast(err.message || 'Could not restore that image', 'error')
+            }
+          }}
         />
       )}
       {aiLimitDialog && (

@@ -142,7 +142,11 @@ describe('dropping', () => {
     await act(async () => {
       await view.result.current.onDrop(dropEvent([], 'https://example.com/pic.png'))
     })
-    expect(importCustomImagesFromUrls).toHaveBeenCalledWith('Rem', ['https://example.com/pic.png'])
+    expect(importCustomImagesFromUrls).toHaveBeenCalledWith(
+      'Rem',
+      ['https://example.com/pic.png'],
+      { allowDuplicates: false },
+    )
   })
 
   it('says something useful when the drop was not an image', async () => {
@@ -164,5 +168,101 @@ describe('dropping', () => {
       }),
     )
     expect(view.result.current.dragOver).toBe(true)
+  })
+})
+
+describe('duplicates', () => {
+  const existing = { id: 7, character: 'Rem', url: 'https://cdn/a.png', state: 'active' }
+
+  it('holds a refused file instead of counting it as uploaded', async () => {
+    addCustomImage.mockResolvedValue({ links: [], duplicates: [{ existing, also_on: [] }] })
+    const { view, onUploaded } = setup()
+    await act(async () => {
+      await view.result.current.onFileInputChange({ target: { files: [file('a.png')] } })
+    })
+    expect(onUploaded).not.toHaveBeenCalled()
+    expect(view.result.current.duplicates.kind).toBe('files')
+    expect(view.result.current.duplicates.items[0].existing).toEqual(existing)
+    expect(view.result.current.duplicates.items[0].file.name).toBe('a.png')
+  })
+
+  it('re-sends the held file with the override', async () => {
+    addCustomImage
+      .mockResolvedValueOnce({ links: [], duplicates: [{ existing, also_on: [] }] })
+      .mockResolvedValueOnce({ links: ['https://cdn/a.png'] })
+    const { view, onUploaded } = setup()
+    await act(async () => {
+      await view.result.current.onFileInputChange({ target: { files: [file('a.png')] } })
+    })
+    await act(async () => {
+      await view.result.current.uploadDuplicatesAnyway()
+    })
+    expect(addCustomImage).toHaveBeenCalledTimes(2)
+    const secondBody = addCustomImage.mock.calls[1][0]
+    expect(secondBody.get('allow_duplicates')).toBe('1')
+    expect(onUploaded).toHaveBeenCalledWith('Rem', ['https://cdn/a.png'])
+    expect(view.result.current.duplicates).toBeNull()
+  })
+
+  it('holds a refused import and re-imports it with the override', async () => {
+    importCustomImagesFromUrls
+      .mockResolvedValueOnce({
+        links: [],
+        duplicates: [{ url: 'https://example.com/pic.png', filename: 'pic.png', existing }],
+      })
+      .mockResolvedValueOnce({ links: ['https://cdn/b.png'] })
+    const { view } = setup()
+    await act(async () => {
+      await view.result.current.onDrop({
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        dataTransfer: {
+          files: [],
+          types: ['text/uri-list'],
+          getData: () => 'https://example.com/pic.png',
+          items: [],
+        },
+      })
+    })
+    expect(view.result.current.duplicates.kind).toBe('urls')
+
+    await act(async () => {
+      await view.result.current.uploadDuplicatesAnyway()
+    })
+    expect(importCustomImagesFromUrls).toHaveBeenLastCalledWith(
+      'Rem',
+      ['https://example.com/pic.png'],
+      { allowDuplicates: true },
+    )
+  })
+
+  it('dismisses without uploading', async () => {
+    addCustomImage.mockResolvedValue({ links: [], duplicates: [{ existing, also_on: [] }] })
+    const { view } = setup()
+    await act(async () => {
+      await view.result.current.onFileInputChange({ target: { files: [file('a.png')] } })
+    })
+    act(() => view.result.current.dismissDuplicates())
+    expect(view.result.current.duplicates).toBeNull()
+    expect(addCustomImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears one resolved refusal and keeps the rest', async () => {
+    const other = { ...existing, id: 8, character: 'Emilia' }
+    addCustomImage.mockResolvedValue({
+      links: [],
+      duplicates: [
+        { existing, also_on: [] },
+        { existing: other, also_on: [] },
+      ],
+    })
+    const { view } = setup()
+    await act(async () => {
+      await view.result.current.onFileInputChange({ target: { files: [file('a.png')] } })
+    })
+    act(() => view.result.current.resolveDuplicate(other.id))
+    expect(view.result.current.duplicates.items.map((i) => i.existing.id)).toEqual([existing.id])
+    act(() => view.result.current.resolveDuplicate(existing.id))
+    expect(view.result.current.duplicates).toBeNull()
   })
 })

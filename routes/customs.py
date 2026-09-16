@@ -13,6 +13,7 @@ reporters before anything happens to someone else's image.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass, field
 
 from flask import Blueprint, jsonify, request
 
@@ -23,6 +24,7 @@ import logs
 import tempfiles
 import thumbnails
 from image_utils import (
+    content_hash,
     detect_format,
     is_animated,
     prepare_for_upload,
@@ -51,12 +53,42 @@ log = logs.get(__name__)
 customs_bp = Blueprint("customs", __name__)
 
 
-def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name=None):
+@dataclass
+class _UploadOutcome:
+    """What one upload produced.
+
+    Exactly one of `direct_link`, `error` and `duplicate` is meaningful: a link
+    on success, a message on failure, or the copy already here when the bytes
+    were recognised and the upload was refused.
     """
-    Validate, convert, upload one temp file to ImgChest.
-    Returns (direct_link, error, dimensions, post_id); direct_link is None on
-    failure. The post id is what a later permanent delete needs. Removes temp
-    files when done.
+
+    direct_link: str | None = None
+    error: str | None = None
+    dimensions: tuple[int, int] | None = None
+    post_id: str | None = None
+    content_hash: str | None = None
+    duplicate: dict | None = None
+    also_on: list = field(default_factory=list)
+
+
+def _run_single_custom_upload_from_temp(
+    temp_path,
+    display_filename,
+    upload_name=None,
+    *,
+    char_name=None,
+    allow_duplicates=False,
+):
+    """Validate, convert, fingerprint and upload one temp file to ImgChest.
+
+    The fingerprint is taken from the bytes we are about to send -- the
+    normalised WebP, not the raw upload. That is deliberate: it is the same
+    value the backfill gets by downloading the image again later, whereas
+    hashing the raw upload would be unmatchable once the original is gone.
+
+    A same-character duplicate returns `_UploadOutcome(duplicate=...)` and never
+    reaches ImgChest, because a post whose only image is a duplicate cannot be
+    deleted there. Removes temp files when done, including on that path.
     """
     conversion_created_new_file = False
     final_path = temp_path
@@ -75,18 +107,18 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             limit_mb = MAX_FILE_SIZE / (1024 * 1024)
-            return (
-                None,
-                f"{display_filename}: File is {file_size_mb:.2f} MB; maximum allowed is {limit_mb:.0f} MB.",
-                None,
-                None,
+            return _UploadOutcome(
+                error=(
+                    f"{display_filename}: File is {file_size_mb:.2f} MB; "
+                    f"maximum allowed is {limit_mb:.0f} MB."
+                )
             )
 
         ok, val_err = validate_image_file(temp_path)
         if not ok:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-            return None, f"{display_filename}: {val_err}", None, None
+            return _UploadOutcome(error=f"{display_filename}: {val_err}")
 
         # Animated GIFs pass through: re-encoding them costs the animation, which
         # is usually the reason the image was chosen. Everything else is
@@ -106,7 +138,7 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
                 )
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-                return None, err_msg, None, None
+                return _UploadOutcome(error=err_msg)
 
         final_size = os.path.getsize(final_path)
         if final_size > MAX_FILE_SIZE:
@@ -118,13 +150,20 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
                 reason="too_large_after_processing",
                 bytes=final_size,
             )
-            return (
-                None,
-                f"{display_filename}: After processing the file is {final_mb:.2f} MB, which exceeds "
-                f"ImgChest's limit of {limit_mb:.0f} MB.",
-                None,
-                None,
+            return _UploadOutcome(
+                error=(
+                    f"{display_filename}: After processing the file is {final_mb:.2f} MB, "
+                    f"which exceeds ImgChest's limit of {limit_mb:.0f} MB."
+                )
             )
+
+        # The duplicate check sits here: after normalisation, so the fingerprint
+        # matches a backfilled one, and before the upload, so a refused copy is
+        # never orphaned on ImgChest.
+        digest = content_hash(final_path)
+        blocked, elsewhere = _find_duplicate(char_name, digest, allow_duplicates)
+        if blocked:
+            return _UploadOutcome(content_hash=digest, duplicate=blocked, also_on=elsewhere)
 
         # Measured here because the file is already on disk; the alternative is
         # every browser rediscovering it by downloading the image, which is what
@@ -137,22 +176,27 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
             if result:
                 post_link, direct_link, post_id = result
                 log.info("upload.succeeded", filename=display_filename)
-                return direct_link, None, dimensions, post_id
+                return _UploadOutcome(
+                    direct_link=direct_link,
+                    dimensions=dimensions,
+                    post_id=post_id,
+                    content_hash=digest,
+                    also_on=elsewhere,
+                )
             log.warning("upload.failed", filename=display_filename, reason="imgchest_no_result")
-            return (
-                None,
-                f"{display_filename}: Image host did not return a link (unexpected). Try again.",
-                None,
-                None,
+            return _UploadOutcome(
+                error=(
+                    f"{display_filename}: Image host did not return a link (unexpected). Try again."
+                )
             )
         except ImgChestError as e:
             log.warning(
                 "upload.failed", filename=display_filename, reason="imgchest_error", error=str(e)
             )
-            return None, str(e), None, None
+            return _UploadOutcome(error=str(e))
         except Exception as e:
             log.exception("upload.failed", filename=display_filename, reason="unexpected")
-            return None, f"Error uploading {display_filename}: {str(e)}", None, None
+            return _UploadOutcome(error=f"Error uploading {display_filename}: {str(e)}")
     finally:
         if os.path.exists(temp_path):
             try:
@@ -166,6 +210,61 @@ def _run_single_custom_upload_from_temp(temp_path, display_filename, upload_name
                 log.debug("upload.temp_removed", path=final_path)
             except Exception as cleanup_e:
                 log.warning("upload.temp_orphaned", path=final_path, error=str(cleanup_e))
+
+
+def _allow_duplicates(value) -> bool:
+    """Whether the caller explicitly chose to add a copy anyway.
+
+    Accepts the shapes a form field or JSON body actually arrive in. Anything
+    else -- missing, empty, "0" -- means no, because the safe default for a
+    duplicate is to stop.
+    """
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _add_summary(added: int, skipped: int) -> str:
+    """One line for the toast: what landed, and what was already here."""
+    parts = []
+    if added:
+        parts.append(f"{added} image{'s' if added != 1 else ''} added")
+    if skipped:
+        parts.append(f"{skipped} already in this gallery")
+    return ", ".join(parts) or "Nothing to add"
+
+
+def _dedupe_matches(matches: list[dict]) -> list[dict]:
+    """The same row can match several files in a batch; report it once."""
+    seen = set()
+    out = []
+    for match in matches:
+        if match["id"] in seen:
+            continue
+        seen.add(match["id"])
+        out.append(match)
+    return out
+
+
+def _find_duplicate(char_name, digest, allow_duplicates):
+    """The same picture, already here? Returns (blocked, also_on).
+
+    One fingerprint lookup against the whole library, then split: a match on
+    *this* character blocks (unless the caller overrode it), and a match
+    elsewhere is only a note, because the same art on a second character is
+    usually deliberate.
+
+    The digest is of the file as it will be stored, so this catches the same
+    picture added twice -- not a re-encoded or resized copy. That is the
+    documented scope; see DECISIONS.md, "Uploading the same picture twice".
+    """
+    if not digest or not char_name:
+        return None, []
+    matches = db.find_images_by_content_hash(digest)
+    wanted = char_name.casefold()
+    same = [m for m in matches if (m["character"] or "").casefold() == wanted]
+    elsewhere = [m for m in matches if (m["character"] or "").casefold() != wanted]
+    if same and not allow_duplicates:
+        return same[0], elsewhere
+    return None, elsewhere
 
 
 @customs_bp.route("/api/customs", methods=["GET"])
@@ -215,6 +314,7 @@ def add_custom_image():
         ok, err = validate_character_name(char_name)
         if not ok:
             return jsonify({"error": err}), 400
+        allow_duplicates = _allow_duplicates(request.form.get("allow_duplicates"))
 
         # Handle multiple files
         files = request.files.getlist("files")
@@ -231,6 +331,9 @@ def add_custom_image():
         uploaded_links = []
         uploaded_dimensions = {}
         uploaded_post_ids = {}
+        uploaded_hashes = {}
+        duplicates = []
+        also_on = []
         errors = []
         processed = 0
         # Numbering continues from every image this character has ever had, not
@@ -255,19 +358,42 @@ def add_custom_image():
             temp_path = tempfiles.reserve("custom", fn)
             file.save(temp_path)
 
-            direct_link, one_err, dimensions, post_id = _run_single_custom_upload_from_temp(
-                temp_path, fn, upload_name=imgchest_filename(char_name, next_index)
+            # The helper fingerprints the stored bytes and refuses a duplicate
+            # before it reaches ImgChest, where it would be undeletable alone.
+            outcome = _run_single_custom_upload_from_temp(
+                temp_path,
+                fn,
+                upload_name=imgchest_filename(char_name, next_index),
+                char_name=char_name,
+                allow_duplicates=allow_duplicates,
             )
-            if direct_link:
+            also_on.extend(outcome.also_on)
+            if outcome.duplicate:
+                duplicates.append(
+                    {"filename": fn, "existing": outcome.duplicate, "also_on": outcome.also_on}
+                )
+                log.info(
+                    "upload.duplicate_skipped",
+                    character=char_name,
+                    index=processed,
+                    filename=fn,
+                    existing_id=outcome.duplicate["id"],
+                )
+                continue
+
+            if outcome.direct_link:
                 next_index += 1
+                direct_link = outcome.direct_link
                 uploaded_links.append(direct_link)
-                if dimensions:
-                    uploaded_dimensions[direct_link] = dimensions
-                if post_id:
-                    uploaded_post_ids[direct_link] = post_id
+                if outcome.dimensions:
+                    uploaded_dimensions[direct_link] = outcome.dimensions
+                if outcome.post_id:
+                    uploaded_post_ids[direct_link] = outcome.post_id
+                if outcome.content_hash:
+                    uploaded_hashes[direct_link] = outcome.content_hash
                 log.debug("upload.batch_item_ok", character=char_name, index=processed, filename=fn)
             else:
-                errors.append(one_err or "Unknown error")
+                errors.append(outcome.error or "Unknown error")
                 log.info(
                     "upload.batch_item_failed", character=char_name, index=processed, filename=fn
                 )
@@ -276,28 +402,33 @@ def add_custom_image():
             "upload.batch_finished",
             character=char_name,
             succeeded=len(uploaded_links),
+            duplicates=len(duplicates),
             failed=len(errors),
         )
-        if not uploaded_links:
+        if not uploaded_links and not duplicates:
             main_error = errors[0] if errors else "No files were successfully uploaded"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.add_custom_images(
-            char_name,
-            uploaded_links,
-            added_by=identity.current_identity().id,
-            dimensions=uploaded_dimensions,
-            post_ids=uploaded_post_ids,
-        )
-        db.update_last_modified(char_name)
-        log.info("customs.added", character=char_name, count=len(uploaded_links))
+        if uploaded_links:
+            db.add_custom_images(
+                char_name,
+                uploaded_links,
+                added_by=identity.current_identity().id,
+                dimensions=uploaded_dimensions,
+                post_ids=uploaded_post_ids,
+                content_hashes=uploaded_hashes,
+            )
+            db.update_last_modified(char_name)
+            log.info("customs.added", character=char_name, count=len(uploaded_links))
 
         return jsonify(
             {
                 "success": True,
-                "message": f"{len(uploaded_links)} images added",
+                "message": _add_summary(len(uploaded_links), len(duplicates)),
                 "links": uploaded_links,
                 "errors": errors,
+                "duplicates": duplicates,
+                "also_on": _dedupe_matches(also_on),
             }
         )
     except Exception as e:
@@ -323,10 +454,14 @@ def import_custom_images_from_urls():
         urls = _dedupe_import_urls_preserve_order(urls)[:MAX_IMPORT_URLS]
         if not urls:
             return jsonify({"error": "No valid URLs"}), 400
+        allow_duplicates = _allow_duplicates(data.get("allow_duplicates"))
 
         uploaded_links = []
         uploaded_dimensions = {}
         uploaded_post_ids = {}
+        uploaded_hashes = {}
+        duplicates = []
+        also_on = []
         errors = []
         next_index = db.count_custom_images_ever(char_name) + 1
         for idx, url in enumerate(urls):
@@ -339,47 +474,78 @@ def import_custom_images_from_urls():
             except Exception as e:
                 errors.append(f"{url}: {str(e)}")
                 continue
-            direct_link, one_err, dimensions, post_id = _run_single_custom_upload_from_temp(
-                temp_path, display_filename, upload_name=imgchest_filename(char_name, next_index)
+
+            outcome = _run_single_custom_upload_from_temp(
+                temp_path,
+                display_filename,
+                upload_name=imgchest_filename(char_name, next_index),
+                char_name=char_name,
+                allow_duplicates=allow_duplicates,
             )
-            if direct_link:
+            also_on.extend(outcome.also_on)
+            if outcome.duplicate:
+                duplicates.append(
+                    {
+                        "url": url,
+                        "filename": display_filename,
+                        "existing": outcome.duplicate,
+                        "also_on": outcome.also_on,
+                    }
+                )
+                log.info(
+                    "import.duplicate_skipped",
+                    character=char_name,
+                    index=idx + 1,
+                    existing_id=outcome.duplicate["id"],
+                )
+                continue
+
+            if outcome.direct_link:
                 next_index += 1
+                direct_link = outcome.direct_link
                 uploaded_links.append(direct_link)
-                if dimensions:
-                    uploaded_dimensions[direct_link] = dimensions
-                if post_id:
-                    uploaded_post_ids[direct_link] = post_id
+                if outcome.dimensions:
+                    uploaded_dimensions[direct_link] = outcome.dimensions
+                if outcome.post_id:
+                    uploaded_post_ids[direct_link] = outcome.post_id
+                if outcome.content_hash:
+                    uploaded_hashes[direct_link] = outcome.content_hash
             else:
-                errors.append(one_err or "Unknown error")
+                errors.append(outcome.error or "Unknown error")
 
         log.info(
             "import.batch_finished",
             character=char_name,
             succeeded=len(uploaded_links),
+            duplicates=len(duplicates),
             failed=len(errors),
         )
-        if not uploaded_links:
+        if not uploaded_links and not duplicates:
             main_error = errors[0] if errors else "No images were imported"
             return jsonify({"error": main_error, "details": errors}), 500
 
-        db.add_custom_images(
-            char_name,
-            uploaded_links,
-            added_by=identity.current_identity().id,
-            dimensions=uploaded_dimensions,
-            post_ids=uploaded_post_ids,
-        )
-        db.update_last_modified(char_name)
-        log.info(
-            "customs.added", character=char_name, count=len(uploaded_links), source="url_import"
-        )
+        if uploaded_links:
+            db.add_custom_images(
+                char_name,
+                uploaded_links,
+                added_by=identity.current_identity().id,
+                dimensions=uploaded_dimensions,
+                post_ids=uploaded_post_ids,
+                content_hashes=uploaded_hashes,
+            )
+            db.update_last_modified(char_name)
+            log.info(
+                "customs.added", character=char_name, count=len(uploaded_links), source="url_import"
+            )
 
         return jsonify(
             {
                 "success": True,
-                "message": f"{len(uploaded_links)} images added",
+                "message": _add_summary(len(uploaded_links), len(duplicates)),
                 "links": uploaded_links,
                 "errors": errors,
+                "duplicates": duplicates,
+                "also_on": _dedupe_matches(also_on),
             }
         )
     except Exception as e:

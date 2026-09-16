@@ -1707,12 +1707,157 @@ def get_custom_images_for(char_name: str) -> list[str]:
     return [row["url"] for row in get_custom_image_rows(char_name)]
 
 
+def find_images_by_content_hash(
+    content_hash: str,
+    *,
+    char_name: str | None = None,
+    include_purged: bool = False,
+) -> list[dict]:
+    """Rows whose bytes match this fingerprint, newest last.
+
+    Scoped to one character when `char_name` is given, otherwise the whole
+    library — the caller decides whether a cross-character match is a block or
+    just a note. Purged rows are excluded by default: their source is gone from
+    ImgChest, so reporting "you already added this" would leave the visitor with
+    nothing to restore and no way to add their copy.
+
+    Removed (soft-deleted) rows *are* included, because that copy still exists
+    and restoring it is the right answer; the row carries `state` so the caller
+    can say so.
+
+    Owner attribution follows the same rule as the gallery: a hidden owner is
+    reported as unowned to everyone here, since this is a lookup, not a profile.
+    """
+    conn = get_connection()
+    sql = (
+        "SELECT i.id AS id, i.url AS url, i.thumb_key AS thumb_key,"
+        "       i.state AS state, i.added_by AS added_by, i.added_at AS added_at,"
+        "       c.name AS character,"
+        "       owner.handle AS owner_handle,"
+        "       COALESCE(owner.hide_attribution, 0) AS owner_hides"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        "  LEFT JOIN identities owner ON owner.id = i.added_by"
+        " WHERE i.content_hash = ?"
+    )
+    params: list = [content_hash]
+    if char_name is not None:
+        sql += " AND c.name = ?"
+        params.append(char_name)
+    if not include_purged:
+        sql += " AND i.purged_at IS NULL"
+    sql += " ORDER BY i.state, i.id"
+    rows = conn.execute(sql, params).fetchall()
+    return [
+        {
+            "id": r["id"],
+            # Named so the dialog can say *where* the copy already lives, which
+            # is the whole difference between "stop" and "wait, that is mine".
+            "character": r["character"],
+            "url": r["url"],
+            "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
+            "state": r["state"],
+            "owner": _visible_owner(r, None, False),
+            "added_at": r["added_at"],
+        }
+        for r in rows
+    ]
+
+
+def set_content_hash(image_id: int, content_hash: str) -> bool:
+    """Record one image's fingerprint. False if the row is gone."""
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE custom_images SET content_hash = ? WHERE id = ?",
+            (content_hash, image_id),
+        )
+        return bool(cur.rowcount)
+
+
+def images_missing_content_hash(limit: int = 500, after_id: int = 0) -> list[dict]:
+    """Rows the backfill has not fingerprinted yet, oldest id first.
+
+    Keyset pagination rather than an ever-growing exclusion list: a run that
+    fails on some rows must still make progress past them, and a later run
+    revisits whatever is still NULL. Purged rows are skipped — they are excluded
+    from duplicate matching anyway, so downloading them would be pure waste.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.id AS id, i.url AS url, c.name AS character"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE i.content_hash IS NULL AND i.purged_at IS NULL AND i.id > ?"
+        " ORDER BY i.id"
+        " LIMIT ?",
+        (after_id, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_duplicate_clusters(limit: int = 200) -> list[dict]:
+    """Groups of images that share a fingerprint — the audit's input.
+
+    Only unpurged rows count, since a purged row cannot be viewed or restored.
+    A cluster carries every copy, removed ones included: seeing that a picture
+    was removed and re-added is exactly the history a reviewer needs. Owner
+    attribution is shown as staff, because only a moderator can reach this.
+    """
+    conn = get_connection()
+    groups = conn.execute(
+        "SELECT i.content_hash AS content_hash, COUNT(*) AS n"
+        "  FROM custom_images i"
+        " WHERE i.content_hash IS NOT NULL AND i.purged_at IS NULL"
+        " GROUP BY i.content_hash"
+        " HAVING COUNT(*) > 1"
+        " ORDER BY n DESC, i.content_hash"
+        " LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+    clusters = []
+    for group in groups:
+        rows = conn.execute(
+            "SELECT i.id AS id, i.url AS url, i.thumb_key AS thumb_key,"
+            "       i.state AS state, i.added_by AS added_by, i.added_at AS added_at,"
+            "       c.name AS character,"
+            "       owner.handle AS owner_handle,"
+            "       COALESCE(owner.hide_attribution, 0) AS owner_hides"
+            "  FROM custom_images i"
+            "  JOIN characters c ON c.id = i.character_id"
+            "  LEFT JOIN identities owner ON owner.id = i.added_by"
+            " WHERE i.content_hash = ? AND i.purged_at IS NULL"
+            " ORDER BY i.state, i.id",
+            (group["content_hash"],),
+        ).fetchall()
+        clusters.append(
+            {
+                "hash": group["content_hash"],
+                "count": int(group["n"]),
+                "images": [
+                    {
+                        "id": r["id"],
+                        "character": r["character"],
+                        "url": r["url"],
+                        "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
+                        "state": r["state"],
+                        "owner": _visible_owner(r, None, True),
+                        "added_at": r["added_at"],
+                    }
+                    for r in rows
+                ],
+            }
+        )
+    return clusters
+
+
 def add_custom_images(
     char_name: str,
     urls: Iterable[str],
     added_by: str | None = None,
     dimensions: dict[str, tuple[int, int]] | None = None,
     post_ids: dict[str, str] | None = None,
+    content_hashes: dict[str, str] | None = None,
 ) -> int:
     """Append images, skipping any URL already present. Returns how many landed.
 
@@ -1725,6 +1870,10 @@ def add_custom_images(
     `post_ids` maps url -> the ImgChest post id, which is what a later permanent
     delete needs. Optional for the same reason dimensions is, and absent
     entirely for rows that predate permanent delete.
+
+    `content_hashes` maps url -> the sha256 of the uploaded bytes, the duplicate
+    fingerprint. Optional so the many call sites that only seed a gallery keep
+    working; rows without one simply are not matched against later uploads.
     """
     with transaction() as conn:
         char_id = _ensure_character(conn, char_name)
@@ -1740,13 +1889,25 @@ def add_custom_images(
         added = 0
         sizes = dimensions or {}
         posts = post_ids or {}
+        hashes = content_hashes or {}
         for url in urls:
             width, height = sizes.get(url, (None, None))
             cur = conn.execute(
                 "INSERT INTO custom_images"
-                " (character_id, url, position, added_by, added_at, width, height, imgchest_post_id)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
-                (char_id, url, position, added_by, _now(), width, height, posts.get(url)),
+                " (character_id, url, position, added_by, added_at, width, height,"
+                "  imgchest_post_id, content_hash)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (character_id, url) DO NOTHING",
+                (
+                    char_id,
+                    url,
+                    position,
+                    added_by,
+                    _now(),
+                    width,
+                    height,
+                    posts.get(url),
+                    hashes.get(url),
+                ),
             )
             if cur.rowcount:
                 position += 1

@@ -510,6 +510,42 @@ Three consequences worth stating:
 The Phase 2 advisory lock can go once images are rows: two inserts into `custom_images` do not
 contend, so there is nothing left to serialise.
 
+### Uploading the same picture twice
+
+`custom_images.content_hash` was declared in Phase 1 and left unwired. It holds the **sha256 of the
+stored file** — the normalised WebP that ImgChest actually receives, not the raw upload — and the
+upload path checks it *before* calling ImgChest. Both halves matter. Before, because ImgChest
+refuses to delete the only image in a post, so a duplicate that reached it would be permanently
+orphaned, not merely redundant (see "Permanent delete" below). Of the stored file, because that is
+the only version the backfill can ever see: hashing the raw upload would make every pre-existing
+image unmatchable forever. Encoder drift is the accepted cost, and the fingerprint is recomputable.
+
+The rules:
+
+- **Same character is a block, by default.** The upload is skipped and reported, and the client
+  shows the copy already there beside the one being added. The visitor can override
+  (`allow_duplicates`), because refusing outright would be wrong when the repeat is intentional —
+  but the default for an accident is to stop.
+- **Another character is a note, never a block.** The same art on a second character is usually
+  deliberate; the response says where else it lives and gets out of the way.
+- **Exact bytes only.** A re-encoded, resized or re-compressed copy hashes differently and is not
+  matched. That is deliberate: a perceptual hash on the add path would occasionally refuse a
+  genuinely new picture, so the fuzzy match belongs to a moderation *review* surface (a planned
+  Phase 2 addition), not to the upload gate.
+- **Purged rows do not block.** Their source is gone from ImgChest, so there is nothing to restore;
+  blocking would make the picture impossible to re-add.
+- **Removed rows do block, and say so.** The copy still exists and can be restored, so the dialog
+  offers a **Restore it** button that puts the original back rather than adding a second one.
+
+The check is server-side for both entry points — file upload and web-URL import — because the
+import path fetches the bytes on the server, where the client has nothing to hash. The existing
+`content_hash` and `idx_custom_images_hash` carry it; no migration was needed. For the library that
+predates the gate, `scripts/backfill_content_hashes.py` fills the fingerprint in (it has to
+download each image, which is exactly why the hash is of the stored file), and the moderator
+**Duplicate images** review at `/profile/moderation/duplicates` groups by it, with a soft remove or
+restore per copy. The add-time gate only ever sees a fingerprint that already exists; the backfill
+is what gives the old rows one.
+
 ### 50,000 characters: searchable names, pages on demand
 
 If the full Mudae roster is seeded, most of those characters will never receive a custom image.

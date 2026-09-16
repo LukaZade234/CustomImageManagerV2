@@ -252,9 +252,13 @@ export default function ModerationPage() {
     <>
       <div className="moderation-head">
         <h1 className="page-title">Moderation</h1>
-        {user && (
+        {user ? (
           <Link className="moderation-back" to={pathname}>
             ← Search another contributor
+          </Link>
+        ) : (
+          <Link className="moderation-back" to="/profile/moderation/duplicates">
+            Duplicate images →
           </Link>
         )}
       </div>

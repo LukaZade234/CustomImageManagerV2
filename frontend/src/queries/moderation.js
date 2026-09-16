@@ -27,6 +27,38 @@ export function useModerationUsers() {
   })
 }
 
+/**
+ * The duplicate audit: every fingerprint shared by more than one image. Not
+ * paged — a cluster is a mistake, and the count should be small enough to look
+ * at; if it is not, the list is itself the finding.
+ */
+export const moderationDuplicatesKey = ['moderation-duplicates']
+
+export function useModerationDuplicates() {
+  return useQuery({
+    queryKey: moderationDuplicatesKey,
+    queryFn: () => apiClient.listModerationDuplicates(),
+  })
+}
+
+/**
+ * Remove one copy of a duplicate (soft, like every removal). Reuses the
+ * owner-or-moderator remove endpoint; the audit and the contributor lists have
+ * both changed, so refresh them.
+ */
+export function useRemoveDuplicateImage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ character, url }) => apiClient.deleteCustomImage(character, url),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: moderationDuplicatesKey })
+      queryClient.invalidateQueries({ queryKey: ['moderation-user-images'] })
+      queryClient.invalidateQueries({ queryKey: ['moderation-user-characters'] })
+      queryClient.invalidateQueries({ queryKey: moderationUsersKey })
+    },
+  })
+}
+
 export function useModerationUserImages({ ref, state, character, page, enabled = true }) {
   return useQuery({
     queryKey: moderationUserImagesKey(ref, { state, character, page }),

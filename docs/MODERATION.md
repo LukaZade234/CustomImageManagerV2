@@ -634,6 +634,35 @@ merged post ever looks suspect, or if a future pass wants to know the shape of t
 
 ---
 
+## Duplicate review
+
+Duplicate detection belongs to uploads, not to this surface: the same file is recognised by a sha256
+of its stored bytes, checked before it ever reaches ImgChest, and a same-character match is refused
+with a dialog offering **Upload anyway** or, for a removed copy, **Restore it** (see `DECISIONS.md`,
+"Uploading the same picture twice"). This section is the moderation half — seeing the duplicates
+that are already in the library, from before that gate existed.
+
+### Backend
+- `db.find_images_by_content_hash` is the add-time gate; `db.images_missing_content_hash` /
+  `db.set_content_hash` are the backfill; `db.list_duplicate_clusters` is the audit — unpurged rows
+  sharing a fingerprint, biggest cluster first, owner attribution shown as staff.
+- `scripts/backfill_content_hashes.py [--dry-run] [--limit N]` downloads each unfingerprinted image
+  and records the sha256 of the stored file. Resumable and keyset-paginated; a failure (usually a
+  dead link) leaves the row NULL for a later run.
+- `GET /api/moderation/duplicates` (`require_moderator`) returns `{clusters, total}`.
+
+### Frontend
+- `/profile/moderation/duplicates` (`DuplicatesPage.jsx`), linked from the finder. Each cluster is a
+  Card of its copies: thumbnail, character link, state, adder, date. **Remove** (soft, through the
+  existing owner-or-moderator delete endpoint) for an active copy, **Restore** for a removed one.
+  `queries/moderation.js` adds `useModerationDuplicates` and `useRemoveDuplicateImage`.
+
+Nothing here purges. A duplicate is a mistake to correct, not an image to destroy, and a soft remove
+stays reversible from the character's Removed list.
+
+
+---
+
 ## Later phases
 
 Sketches only. Each needs its own decision before it is built, and none is committed to by phase 1.
