@@ -20,6 +20,7 @@ import { useCharacterEdit } from '../hooks/useCharacterEdit'
 import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
+import { useGallerySelection } from '../hooks/useGallerySelection'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import {
   applyOrderToCache,
@@ -131,19 +132,29 @@ export default function CharacterPage() {
   const [mudaeMainBusy, setMudaeMainBusy] = useState(false)
   const [mudaeConfigured, setMudaeConfigured] = useState(false)
   /**
-   * The gallery is in exactly one mode at a time. Four independent booleans made
-   * eleven of the sixteen combinations nonsense and needed twelve hand-written
-   * "turn the others off" lines to stay consistent; one value cannot be wrong.
+   * The gallery is in exactly one mode at a time, and its selection and discard
+   * confirmation belong to that machine rather than to separate flags. See
+   * useGallerySelection.
    */
-  const [mode, setMode] = useState('browse')
-  const selectMode = mode === 'select'
-  const reorderMode = mode === 'reorder'
+  const {
+    mode,
+    selectMode,
+    reorderMode,
+    selectedUrls,
+    confirmDiscardOrder,
+    reset: resetSelection,
+    enterSelect,
+    enterReorder,
+    toggleUrl,
+    setSelection,
+    askDiscard,
+    cancelDiscard,
+  } = useGallerySelection()
   // Arming the accent picker turns the portrait and gallery into a pixel
   // sampler: the next click sets the character's colour (staff only).
   const [accentPick, setAccentPick] = useState(false)
   const [accentBusy, setAccentBusy] = useState(false)
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
-  const [selectedUrls, setSelectedUrls] = useState([])
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
   const [removedDrawer, setRemovedDrawer] = useState(null)
@@ -171,7 +182,6 @@ export default function CharacterPage() {
    * reload. Null whenever reorder mode is closed.
    */
   const reorderSessionRef = useRef(null)
-  const [confirmDiscardOrder, setConfirmDiscardOrder] = useState(false)
 
   // Measure image ratios off the onLoad event, which fires once per image in
   // its own tick — a 256-image gallery meant 256 full re-renders of the grid
@@ -220,11 +230,10 @@ export default function CharacterPage() {
   }, [name])
 
   const resetModes = useCallback(() => {
-    setMode('browse')
-    setSelectedUrls([])
+    resetSelection()
     setAiLimitDialog(null)
     reorderSessionRef.current = null
-  }, [])
+  }, [resetSelection])
 
   /**
    * One selection mode, entered before any verb is chosen.
@@ -242,33 +251,30 @@ export default function CharacterPage() {
    */
   const enterSelectMode = useCallback(
     (preselect = []) => {
-      resetModes()
-      setSelectedUrls(preselect)
-      setMode('select')
+      setAiLimitDialog(null)
+      reorderSessionRef.current = null
+      enterSelect(preselect)
     },
-    [resetModes],
+    [enterSelect],
   )
 
   const enterReorderMode = useCallback(() => {
-    setSelectedUrls([])
     reorderSessionRef.current = {
       baseline: [...customs],
       dirty: false,
       failed: false,
       save: Promise.resolve(),
     }
-    setMode('reorder')
-  }, [customs])
+    enterReorder()
+  }, [customs, enterReorder])
 
   /** The file picker behind both "Add image" buttons — toolbar and empty state. */
   const openCustomFilePicker = useCallback(() => customInputRef.current?.click(), [])
 
   const exitReorderMode = useCallback(() => {
     reorderSessionRef.current = null
-    setConfirmDiscardOrder(false)
-    setMode('browse')
-    setSelectedUrls([])
-  }, [])
+    resetSelection()
+  }, [resetSelection])
 
   /**
    * Put the order back the way it was when the session opened.
@@ -314,8 +320,8 @@ export default function CharacterPage() {
       exitReorderMode()
       return
     }
-    setConfirmDiscardOrder(true)
-  }, [exitReorderMode])
+    askDiscard()
+  }, [exitReorderMode, askDiscard])
 
   const doneReorder = useCallback(async () => {
     const session = reorderSessionRef.current
@@ -687,14 +693,12 @@ export default function CharacterPage() {
 
   const toggleSelect = (url) => {
     if (mode !== 'browse') {
-      setSelectedUrls((prev) =>
-        prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
-      )
+      toggleUrl(url)
     }
   }
 
   const selectAllImages = () => {
-    setSelectedUrls([...customs])
+    setSelection([...customs])
   }
 
   /**
@@ -706,7 +710,7 @@ export default function CharacterPage() {
    * over.
    */
   const selectMineImages = () => {
-    setSelectedUrls(rows.filter((row) => row.is_mine).map((row) => row.url))
+    setSelection(rows.filter((row) => row.is_mine).map((row) => row.url))
   }
 
   /**
@@ -1007,7 +1011,7 @@ export default function CharacterPage() {
           othersSelectedCount={othersSelected.length}
           onSelectAll={selectAllImages}
           onSelectMine={selectMineImages}
-          onClearSelection={() => setSelectedUrls([])}
+          onClearSelection={() => setSelection([])}
           onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
           onDownloadSelected={handleDownloadSelected}
           onRemoveSelected={handleRemoveSelected}
@@ -1055,7 +1059,7 @@ export default function CharacterPage() {
           confirmLabel="Discard"
           variant="danger"
           onConfirm={discardReorder}
-          onCancel={() => setConfirmDiscardOrder(false)}
+          onCancel={cancelDiscard}
         />
       )}
       {reportTarget && (
