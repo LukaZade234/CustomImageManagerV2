@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { getImageUrl, getPortraitUrl } from '../api'
 import HomeLoadingState from '../components/HomeLoadingState'
 import { Card } from '../components/ui'
-import { apiUrl } from '../config'
+import { thumbUrl } from '../config'
 import { useDragScroll } from '../hooks/useDragScroll'
 import { useStats } from '../queries/stats'
 
@@ -54,7 +54,7 @@ function RecentCard({ row, clone = false }) {
       >
         <img
           className="home-recent__thumb"
-          src={row.thumb ? apiUrl(row.thumb) : getImageUrl(row.url)}
+          src={row.thumb ? thumbUrl(row.thumb) : getImageUrl(row.url)}
           alt=""
           loading="lazy"
           decoding="async"

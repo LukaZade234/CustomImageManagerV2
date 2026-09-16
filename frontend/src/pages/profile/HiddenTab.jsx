@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiClient, getImageUrl } from '../../api'
-import { apiUrl } from '../../config'
+import { thumbUrl } from '../../config'
 import { useStore } from '../../store/useStore'
 import CardGrid, { cardRatio } from './CardGrid'
 import ListTab from './ListTab'
@@ -62,7 +62,7 @@ export default function HiddenTab() {
           items={items.map((row) => ({
             key: row.id,
             href: `/character/${encodeURIComponent(row.character)}`,
-            image: row.thumb ? apiUrl(row.thumb) : getImageUrl(row.url),
+            image: row.thumb ? thumbUrl(row.thumb) : getImageUrl(row.url),
             ratio: cardRatio(row.width, row.height),
             title: row.character,
             subtitle: row.removed_reason,

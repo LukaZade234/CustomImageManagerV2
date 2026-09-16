@@ -44,6 +44,22 @@ export function apiUrl(path) {
   return `${API_BASE}${path}`
 }
 
+/**
+ * Where to show a gallery thumbnail.
+ *
+ * The server sends one of two forms. A mirrored thumbnail is the R2 key
+ * ("thumbs/…", no leading slash) and loads from the image origin; an unmirrored
+ * one is the API path ("/thumbs/…") that renders and mirrors it on the way
+ * through. The leading slash is the signal. With no image origin (dev) even a
+ * mirrored key resolves through the API, which serves the same bytes from its
+ * local cache.
+ */
+export function thumbUrl(thumb) {
+  if (!thumb) return ''
+  if (thumb.startsWith('/')) return apiUrl(thumb)
+  return `${IMAGE_BASE || API_BASE}/${thumb.replace(/^\/+/, '')}`
+}
+
 /** Absolute URL for a character image, given a stored filename or full URL. */
 export function imageUrl(imagePath) {
   if (!imagePath) return ''

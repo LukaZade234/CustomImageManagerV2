@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getImageUrl, getPortraitUrl } from '../../api'
 import { Button, ConfirmDialog, EmptyState, Input, SegmentedControl } from '../../components/ui'
-import { apiUrl } from '../../config'
+import { thumbUrl } from '../../config'
 import CardGrid, { cardRatio } from '../profile/CardGrid'
 
 /**
@@ -188,7 +188,7 @@ export default function UserWork({
   const imageCards = items.map((row) => ({
     key: row.id,
     href: `/character/${encodeURIComponent(row.character)}`,
-    image: row.thumb ? apiUrl(row.thumb) : getImageUrl(row.url),
+    image: row.thumb ? thumbUrl(row.thumb) : getImageUrl(row.url),
     title: row.character,
     subtitle: row.removed_reason || '',
     ratio: cardRatio(row.width, row.height),

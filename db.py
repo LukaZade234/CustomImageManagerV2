@@ -1433,14 +1433,15 @@ def get_home_highlights(limit: int = 8, contributor_limit: int = 10) -> dict:
         {
             "id": r["id"],
             "url": r["url"],
+            "thumb_key": r["thumb_key"],
             "width": r["width"],
             "height": r["height"],
             "character": r["name"],
             "added_at": r["added_at"],
         }
         for r in conn.execute(
-            "SELECT id, url, width, height, added_at, name FROM ("
-            "  SELECT ci.id, ci.url, ci.width, ci.height, ci.added_at, c.name,"
+            "SELECT id, url, thumb_key, width, height, added_at, name FROM ("
+            "  SELECT ci.id, ci.url, ci.thumb_key, ci.width, ci.height, ci.added_at, c.name,"
             "         ROW_NUMBER() OVER ("
             "           PARTITION BY ci.character_id"
             "           ORDER BY ci.added_at DESC, ci.id DESC"
@@ -1579,7 +1580,7 @@ def list_characters_with_customs(
         by_id: dict[int, list[dict]] = {i: [] for i in ids}
         placeholders = ",".join("?" for _ in ids)
         previews = conn.execute(
-            "SELECT character_id, id, url FROM custom_images"
+            "SELECT character_id, id, url, thumb_key FROM custom_images"
             f" WHERE state = 'active' AND character_id IN ({placeholders})"
             " ORDER BY character_id, position, id",
             ids,
@@ -1593,7 +1594,7 @@ def list_characters_with_customs(
                         "url": row["url"],
                         # The row draws the WebP, not the 1.9 MB original the
                         # canonical url points at; see thumbnails.py.
-                        "thumb": thumbnails.thumb_url(row["id"], row["url"]),
+                        "thumb": thumbnails.thumb_url(row["id"], row["url"], row["thumb_key"]),
                     }
                 )
         for item, r in zip(items, rows, strict=True):
@@ -1665,7 +1666,7 @@ def get_custom_image_rows(
     conn = get_connection()
     rows = conn.execute(
         "SELECT i.id AS id, i.url AS url, i.added_by AS added_by,"
-        "       i.width AS width, i.height AS height,"
+        "       i.width AS width, i.height AS height, i.thumb_key AS thumb_key,"
         "       owner.handle AS owner_handle,"
         "       COALESCE(owner.hide_attribution, 0) AS owner_hides,"
         "       (hidden.image_id IS NOT NULL) AS is_hidden"
@@ -1689,7 +1690,7 @@ def get_custom_image_rows(
             # What the grid renders. The `url` above stays canonical: it is what
             # every $ai command, download and lightbox uses, because Mudae
             # accepts nothing else.
-            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+            "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
             # NULL for images migrated from v1 (nobody owns them, so nobody can
             # remove them except a moderator or the report threshold), and NULL
             # for an owner who asked not to be named.
@@ -1829,6 +1830,37 @@ def get_image_url(image_id: int) -> str | None:
     conn = get_connection()
     row = conn.execute("SELECT url FROM custom_images WHERE id = ?", (image_id,)).fetchone()
     return row["url"] if row else None
+
+
+def set_thumb_key(image_id: int, key: str) -> bool:
+    """Record the R2 key a thumbnail was mirrored to. False for an unknown row."""
+    with transaction() as conn:
+        cur = conn.execute("UPDATE custom_images SET thumb_key = ? WHERE id = ?", (key, image_id))
+        return bool(cur.rowcount)
+
+
+def images_missing_thumb_key(limit: int = 500, exclude_ids: Iterable[int] = ()) -> list[dict]:
+    """Rows whose thumbnail has not been mirrored to R2 yet.
+
+    `exclude_ids` skips rows already tried and failed in this run, so a row whose
+    local thumbnail is missing is not retried once per batch for the whole run.
+    """
+    skip = list(dict.fromkeys(exclude_ids))
+    conn = get_connection()
+    if skip:
+        placeholders = ",".join("?" for _ in skip)
+        rows = conn.execute(
+            "SELECT id, url FROM custom_images"
+            f" WHERE thumb_key IS NULL AND id NOT IN ({placeholders})"
+            " LIMIT ?",
+            (*skip, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, url FROM custom_images WHERE thumb_key IS NULL LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"id": r["id"], "url": r["url"]} for r in rows]
 
 
 def images_missing_dimensions(limit: int = 500, exclude_ids: Iterable[int] = ()) -> list[dict]:
@@ -2038,7 +2070,8 @@ def get_hidden_for_identity(identity_id: str) -> list[dict]:
     """
     conn = get_connection()
     rows = conn.execute(
-        "SELECT i.id, i.url, i.width, i.height, c.name AS character, h.hidden_at"
+        "SELECT i.id, i.url, i.width, i.height, i.thumb_key, c.name AS character,"
+        "       h.hidden_at"
         "  FROM user_hidden h"
         "  JOIN custom_images i ON i.id = h.image_id"
         "  JOIN characters c ON c.id = i.character_id"
@@ -2050,7 +2083,7 @@ def get_hidden_for_identity(identity_id: str) -> list[dict]:
         {
             "id": r["id"],
             "url": r["url"],
-            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+            "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
             "width": r["width"],
             "height": r["height"],
             "character": r["character"],
@@ -2069,8 +2102,8 @@ def get_removed_by_identity(identity_id: str) -> list[dict]:
     """
     conn = get_connection()
     rows = conn.execute(
-        "SELECT i.id, i.url, i.width, i.height, i.removed_at, i.removed_reason,"
-        "       c.name AS character"
+        "SELECT i.id, i.url, i.width, i.height, i.thumb_key, i.removed_at,"
+        "       i.removed_reason, c.name AS character"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
         " WHERE i.removed_by = ? AND i.state = 'removed' AND i.purged_at IS NULL"
@@ -2081,7 +2114,7 @@ def get_removed_by_identity(identity_id: str) -> list[dict]:
         {
             "id": r["id"],
             "url": r["url"],
-            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+            "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
             "width": r["width"],
             "height": r["height"],
             "character": r["character"],
@@ -2461,7 +2494,7 @@ def get_removed_for(char_name: str) -> list[dict]:
     conn = get_connection()
     rows = conn.execute(
         "SELECT i.id AS id, i.url AS url, i.removed_at AS removed_at,"
-        "       i.removed_reason AS removed_reason,"
+        "       i.removed_reason AS removed_reason, i.thumb_key AS thumb_key,"
         "       remover.handle AS removed_by_handle"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
@@ -2474,7 +2507,7 @@ def get_removed_for(char_name: str) -> list[dict]:
         {
             "id": r["id"],
             "url": r["url"],
-            "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+            "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
             "removed_by": r["removed_by_handle"],
             "removed_at": r["removed_at"],
             "reason": r["removed_reason"],
@@ -2520,7 +2553,7 @@ def get_image_for_purge(char_name: str, url: str) -> dict | None:
     """The row a permanent delete is about, with the handle it needs."""
     conn = get_connection()
     row = conn.execute(
-        "SELECT i.id, i.url, i.state, i.purged_at, i.imgchest_post_id"
+        "SELECT i.id, i.url, i.state, i.purged_at, i.imgchest_post_id, i.thumb_key"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
         " WHERE c.name = ? AND i.url = ?",
@@ -2544,7 +2577,8 @@ def purge_custom_image(char_name: str, url: str, actor_id: str) -> bool:
         cur = conn.execute(
             "UPDATE custom_images"
             "   SET state = 'removed', purged_at = ?, removed_by = ?,"
-            "       removed_at = ?, removed_reason = 'permanently deleted'"
+            "       removed_at = ?, removed_reason = 'permanently deleted',"
+            "       thumb_key = NULL"
             " WHERE character_id = ? AND url = ? AND purged_at IS NULL",
             (now, actor_id, now, char_id, url),
         )
@@ -3033,7 +3067,7 @@ def list_images_by_identity(
 
     rows = conn.execute(
         "SELECT i.id AS id, i.url AS url, i.width AS width, i.height AS height,"
-        "       c.name AS character, i.added_at AS added_at,"
+        "       i.thumb_key AS thumb_key, c.name AS character, i.added_at AS added_at,"
         "       i.removed_at AS removed_at, i.removed_reason AS removed_reason"
         "  FROM custom_images i"
         "  JOIN characters c ON c.id = i.character_id"
@@ -3056,7 +3090,7 @@ def list_images_by_identity(
             {
                 "id": r["id"],
                 "url": r["url"],
-                "thumb": thumbnails.thumb_url(r["id"], r["url"]),
+                "thumb": thumbnails.thumb_url(r["id"], r["url"], r["thumb_key"]),
                 "width": r["width"],
                 "height": r["height"],
                 "character": r["character"],

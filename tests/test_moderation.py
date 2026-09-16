@@ -859,6 +859,25 @@ class TestPermanentDelete:
         assert calls == {"post": ["post-1"], "file": []}
         assert clean_db.get_image_for_purge("Rem", self.URL)["purged_at"] is not None
 
+    def test_a_purge_takes_the_mirrored_thumbnail_with_it(
+        self, client, clean_db, make_moderator, monkeypatch
+    ):
+        # The derived WebP must not outlive the source it was made from.
+        self._seed(clean_db, post_id="post-1")
+        make_moderator("moderator")
+        self._patch(monkeypatch, image_count=1)
+        image_id = clean_db.get_custom_image_rows("Rem")[0]["id"]
+        clean_db.set_thumb_key(image_id, "thumbs/1-abc.webp")
+        deleted = []
+        monkeypatch.setattr(
+            "routes.customs.thumbnails.delete_mirror",
+            lambda key: deleted.append(key) or True,
+        )
+
+        assert self._purge(client).status_code == 200
+        assert deleted == ["thumbs/1-abc.webp"]
+        assert clean_db.get_image_for_purge("Rem", self.URL)["thumb_key"] is None
+
     def test_a_single_image_post_is_deleted_whole(
         self, client, clean_db, make_moderator, monkeypatch
     ):

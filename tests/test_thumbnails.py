@@ -77,6 +77,27 @@ class TestNaming:
         """So the endpoint can only be asked for images already in the database."""
         assert thumbnails.thumb_url(42, "https://anything/at/all.png") == "/thumbs/42.webp"
 
+    def test_a_mirrored_row_returns_its_r2_key(self):
+        """No leading slash: that is how the client knows to use the image origin."""
+        assert thumbnails.thumb_url(7, "https://cdn/x.png", "thumbs/7-abcd.webp") == (
+            "thumbs/7-abcd.webp"
+        )
+
+    def test_a_gif_has_no_thumbnail_even_with_a_key(self):
+        assert thumbnails.thumb_url(7, "https://cdn/x.gif", "thumbs/7-abcd.webp") is None
+
+
+class TestMirrorKey:
+    def test_is_deterministic_and_carries_the_row_id(self):
+        key = thumbnails.object_key(42, b"webp-bytes")
+        assert key.startswith("thumbs/42-")
+        assert key.endswith(".webp")
+        assert key == thumbnails.object_key(42, b"webp-bytes")
+
+    def test_changes_when_the_bytes_change(self):
+        """A re-render must be a new object, or the edge serves the old one for a year."""
+        assert thumbnails.object_key(42, b"a") != thumbnails.object_key(42, b"b")
+
 
 class TestStore:
     def test_writes_and_leaves_no_partial_files(self, thumb_dir):
@@ -88,6 +109,25 @@ class TestStore:
         assert not thumb_dir.exists()
         thumbnails.store(1, b"x")
         assert thumb_dir.is_dir()
+
+
+class TestThumbKeyStorage:
+    def test_recording_a_key_changes_what_the_row_reports(self, clean_db):
+        clean_db.add_custom_images("Rem", ["https://cdn/a.png"])
+        image_id = clean_db.get_custom_image_rows("Rem")[0]["id"]
+
+        assert clean_db.set_thumb_key(image_id, "thumbs/1-abc.webp") is True
+        assert clean_db.get_custom_image_rows("Rem")[0]["thumb"] == "thumbs/1-abc.webp"
+        assert clean_db.images_missing_thumb_key() == []
+
+    def test_missing_lists_only_unmirrored_rows(self, clean_db):
+        clean_db.add_custom_images("Rem", ["https://cdn/a.png", "https://cdn/b.png"])
+        rows = clean_db.images_missing_thumb_key()
+        assert len(rows) == 2
+
+        clean_db.set_thumb_key(rows[0]["id"], "thumbs/1-abc.webp")
+        remaining = clean_db.images_missing_thumb_key()
+        assert [r["id"] for r in remaining] == [rows[1]["id"]]
 
 
 class TestEndpoint:
@@ -123,6 +163,41 @@ class TestEndpoint:
         assert not thumbnails.cache_path(image_id).exists()
         assert client.get(f"/thumbs/{image_id}.webp").status_code == 200
         assert thumbnails.cache_path(image_id).is_file()
+
+    def test_it_mirrors_and_records_the_key_on_generation(self, client, clean_db, monkeypatch):
+        """The grid only moves to the CDN once the key is on the row."""
+        image_id = self._seed(clean_db)
+
+        class _Response:
+            status_code = 200
+            content = _png(1000, 1500)
+
+        monkeypatch.setattr(
+            "routes.media._get_with_validated_redirects", lambda url, **kw: _Response()
+        )
+        monkeypatch.setattr(
+            thumbnails, "mirror", lambda image_id, data: f"thumbs/{image_id}-deadbeef.webp"
+        )
+
+        assert client.get(f"/thumbs/{image_id}.webp").status_code == 200
+        row = clean_db.get_custom_image_rows("Rem")[0]
+        assert row["thumb"] == f"thumbs/{image_id}-deadbeef.webp"
+
+    def test_a_missing_mirror_leaves_it_on_the_api_path(self, client, clean_db, monkeypatch):
+        """No rclone (or a failed upload) must not cost the thumbnail, only the CDN."""
+        image_id = self._seed(clean_db)
+
+        class _Response:
+            status_code = 200
+            content = _png(1000, 1500)
+
+        monkeypatch.setattr(
+            "routes.media._get_with_validated_redirects", lambda url, **kw: _Response()
+        )
+        monkeypatch.setattr(thumbnails, "mirror", lambda image_id, data: None)
+
+        assert client.get(f"/thumbs/{image_id}.webp").status_code == 200
+        assert clean_db.get_custom_image_rows("Rem")[0]["thumb"] == f"/thumbs/{image_id}.webp"
 
     def test_a_gif_redirects_to_the_original(self, client, clean_db):
         image_id = self._seed(clean_db, "https://cdn/a.gif")

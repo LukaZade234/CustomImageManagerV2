@@ -207,8 +207,9 @@ class TestRefreshCatalogPortrait:
 class TestUploadObject:
     def test_reports_failure_without_rclone(self, clean_db, monkeypatch):
         import portrait_mirror
+        import r2_storage
 
-        monkeypatch.setattr(portrait_mirror.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(r2_storage.shutil, "which", lambda _name: None)
         assert portrait_mirror.upload_object(b"bytes", "portraits/1-x.webp") is False
 
 

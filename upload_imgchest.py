@@ -259,7 +259,7 @@ def get_stats():
     try:
         highlights = db.get_home_highlights()
         highlights["recent"] = [
-            {**row, "thumb": thumbnails.thumb_url(row["id"], row["url"])}
+            {**row, "thumb": thumbnails.thumb_url(row["id"], row["url"], row["thumb_key"])}
             for row in highlights["recent"]
         ]
     except Exception:

@@ -175,6 +175,12 @@ sudo -u imgmanager DATABASE_PATH=/var/lib/imgmanager/imgmanager.db \
 The script reports what it did and verifies its own image count. It is idempotent,
 so re-running to pick up late changes before cut-over is safe.
 
+That is only the v1 half. The dump carries names, image URLs and bookmarks — nothing
+derived — so the catalog, portrait mirrors, thumbnail cache, accents, image
+dimensions, ImgChest post ids and traits are rebuilt afterwards. The ImgChest account
+can also be reconciled against what Discord actually uses, deleting what is neither
+in use nor on the site. Both are in **[CUTOVER.md](CUTOVER.md)**.
+
 ## 5. Cloudflare: Pages
 
 1. **Workers & Pages → Create → Pages → Connect to Git**, choose this repository.
@@ -205,7 +211,7 @@ so re-running to pick up late changes before cut-over is safe.
 
 See **[CUTOVER.md](CUTOVER.md)** — it is the only operation here that happens once
 and cannot be fully undone, so it has its own runbook with the pre-flight gates, the
-rollback boundary, and the three decisions it forces.
+rollback boundary, and the decisions it forces.
 
 In outline: freeze v1 writes, take a final snapshot, re-run the migration, verify,
 switch, soak, and only then delete the DigitalOcean app and the Neon database.

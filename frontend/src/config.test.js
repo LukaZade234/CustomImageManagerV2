@@ -67,6 +67,36 @@ describe('imageUrl', () => {
   })
 })
 
+describe('thumbUrl', () => {
+  it('loads a mirrored thumbnail from the image origin', async () => {
+    const { thumbUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: 'https://img.example.com' })
+    expect(thumbUrl('thumbs/9-abcd1234.webp')).toBe(
+      'https://img.example.com/thumbs/9-abcd1234.webp',
+    )
+  })
+
+  it('keeps an unmirrored thumbnail on the API origin', async () => {
+    // A leading slash is the signal: the API renders, mirrors and serves it.
+    const { thumbUrl } = await loadConfig({
+      VITE_IMAGE_BASE_URL: 'https://img.example.com',
+      VITE_API_BASE_URL: 'https://api.example.com',
+    })
+    expect(thumbUrl('/thumbs/9.webp')).toBe('https://api.example.com/thumbs/9.webp')
+  })
+
+  it('resolves a mirror through the API when no image origin is set (dev)', async () => {
+    const { thumbUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: '', VITE_API_BASE_URL: '' })
+    expect(thumbUrl('thumbs/9-abcd1234.webp')).toBe('/thumbs/9-abcd1234.webp')
+  })
+
+  it('returns empty for a missing thumbnail', async () => {
+    const { thumbUrl } = await loadConfig()
+    expect(thumbUrl(null)).toBe('')
+    expect(thumbUrl(undefined)).toBe('')
+    expect(thumbUrl('')).toBe('')
+  })
+})
+
 describe('portraitUrl', () => {
   it('prefers the mirrored WebP under the configured image origin', async () => {
     const { portraitUrl } = await loadConfig({ VITE_IMAGE_BASE_URL: 'https://img.example.com' })
