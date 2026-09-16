@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({
   listModerationDuplicates: vi.fn(),
-  deleteCustomImage: vi.fn(),
+  purgeCustomImage: vi.fn(),
   restoreImages: vi.fn(),
 }))
 
@@ -65,7 +65,7 @@ function renderPage() {
 
 beforeEach(() => {
   api.listModerationDuplicates.mockReset().mockResolvedValue(CLUSTERS)
-  api.deleteCustomImage.mockReset().mockResolvedValue({})
+  api.purgeCustomImage.mockReset().mockResolvedValue({})
   api.restoreImages.mockReset().mockResolvedValue({})
 })
 
@@ -84,11 +84,13 @@ describe('DuplicatesPage', () => {
     expect(thumbs[0]).toHaveAttribute('href', '/character/Rem')
   })
 
-  it('removes the active copy', async () => {
+  it('permanently deletes the active copy after a confirmation', async () => {
     renderPage()
-    await userEvent.click(await screen.findByRole('button', { name: /remove/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /^delete$/i }))
+    expect(api.purgeCustomImage).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /delete forever/i }))
     await waitFor(() =>
-      expect(api.deleteCustomImage).toHaveBeenCalledWith('Rem', 'https://cdn/a.png'),
+      expect(api.purgeCustomImage).toHaveBeenCalledWith('Rem', 'https://cdn/a.png'),
     )
   })
 

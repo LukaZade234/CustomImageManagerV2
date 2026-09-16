@@ -66,6 +66,33 @@ def moderation_duplicates():
     )
 
 
+@moderation_bp.route("/api/moderation/reports")
+@require_moderator
+def moderation_reports():
+    """Reported images, split by whether the threshold has removed them.
+
+    `status=reported` (the default) is images still live with at least one
+    report; `status=removed` is images two distinct reports already took down;
+    `status=all` is both. Read-only, like the rest of the surface — the acting
+    verbs stay on the character page.
+    """
+    status = request.args.get("status", default="reported", type=str)
+    if status == "all":
+        status = None
+    elif status not in ("reported", "removed"):
+        return jsonify({"error": "Unknown status"}), 400
+
+    items = db.list_reported_images(status=status)
+    return jsonify(
+        {
+            "status": status or "all",
+            "counts": db.reported_image_counts(),
+            "items": items,
+            "total": len(items),
+        }
+    )
+
+
 @moderation_bp.route("/api/moderation/users/<ref>/images")
 @require_moderator
 def moderation_user_images(ref):

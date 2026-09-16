@@ -544,8 +544,10 @@ predates the gate, `scripts/backfill_content_hashes.py` fills the fingerprint in
 download each image, which is exactly why the hash is of the stored file), and the moderator
 **Duplicate images** review at `/profile/moderation/duplicates` groups each character's own copies
 by it — the same file twice on one character — because the same picture on several characters is
-usually deliberate. Each copy can be soft-removed or restored. The add-time gate only ever sees a
-fingerprint that already exists; the backfill is what gives the old rows one.
+usually deliberate. An extra copy is deleted for good (ImgChest file included) by staff, owner
+included, since it is a genuinely redundant upload rather than someone's work; a copy already removed
+can be restored instead. The add-time gate only ever sees a fingerprint that already exists; the
+backfill is what gives the old rows one.
 
 ### 50,000 characters: searchable names, pages on demand
 

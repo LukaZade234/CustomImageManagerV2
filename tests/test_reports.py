@@ -7,6 +7,8 @@ reporter must not be able to reach it alone. DECISIONS.md section 1.
 
 import json
 
+import pytest
+
 OTHER = "another-identity"
 
 
@@ -129,3 +131,85 @@ class TestTakes:
         image_id = _seed_one(clean_db)
         r = _post(client, "/api/takes", {"image_ids": [image_id], "kind": "admired"})
         assert r.status_code == 400
+
+
+class TestReportQueue:
+    """The moderation Reports tab: reported images split by whether they were removed."""
+
+    def _open_one(self, clean_db):
+        image_id = _seed_one(clean_db, char="Rem", url="https://cdn/open.png")
+        clean_db.report_image(image_id, OTHER, "nsfw")
+        return image_id
+
+    def _removed_one(self, clean_db):
+        image_id = _seed_one(clean_db, char="Emilia", url="https://cdn/removed.png")
+        clean_db.report_image(image_id, OTHER, "nsfw")
+        clean_db.report_image(image_id, "third-identity", "wrong_character")
+        return image_id
+
+    def test_counts_split_by_state(self, clean_db):
+        self._open_one(clean_db)
+        self._removed_one(clean_db)
+        assert clean_db.reported_image_counts() == {"reported": 1, "removed": 1}
+
+    def test_the_reported_filter_is_still_live(self, clean_db):
+        self._open_one(clean_db)
+        self._removed_one(clean_db)
+        items = clean_db.list_reported_images(status="reported")
+        assert [item["state"] for item in items] == ["active"]
+        assert items[0]["report_count"] == 1
+
+    def test_the_removed_filter_is_what_the_threshold_took_down(self, clean_db):
+        self._open_one(clean_db)
+        self._removed_one(clean_db)
+        items = clean_db.list_reported_images(status="removed")
+        assert [item["state"] for item in items] == ["removed"]
+        assert items[0]["report_count"] == 2
+        assert items[0]["removed_reason"] == "reported: wrong_character"
+
+    def test_reports_carry_their_reason_and_reporter(self, clean_db, identity_id):
+        image_id = _seed_one(clean_db)
+        clean_db.report_image(image_id, identity_id, "nsfw")
+        report = clean_db.list_reported_images(status="reported")[0]["reports"][0]
+        assert report["reason"] == "nsfw"
+        assert report["reporter"]
+
+    def test_unreported_images_are_absent(self, clean_db):
+        _seed_one(clean_db)
+        assert clean_db.list_reported_images() == []
+        assert clean_db.reported_image_counts() == {"reported": 0, "removed": 0}
+
+    def test_a_bad_status_is_rejected(self, clean_db):
+        with pytest.raises(ValueError):
+            clean_db.list_reported_images(status="nope")
+
+
+class TestReportsApi:
+    def test_moderators_only(self, client, clean_db, make_moderator):
+        assert client.get("/api/moderation/reports").status_code == 403
+
+        make_moderator()
+        body = client.get("/api/moderation/reports").get_json()
+        assert body == {
+            "status": "reported",
+            "counts": {"reported": 0, "removed": 0},
+            "items": [],
+            "total": 0,
+        }
+
+    def test_the_status_filter_reaches_the_query(self, client, clean_db, make_moderator):
+        open_id = _seed_one(clean_db, char="Rem", url="https://cdn/open.png")
+        clean_db.report_image(open_id, OTHER, "nsfw")
+        removed_id = _seed_one(clean_db, char="Emilia", url="https://cdn/removed.png")
+        clean_db.report_image(removed_id, OTHER, "nsfw")
+        clean_db.report_image(removed_id, "third-identity", "wrong_character")
+        make_moderator()
+
+        removed = client.get("/api/moderation/reports?status=removed").get_json()
+        assert removed["status"] == "removed"
+        assert [item["state"] for item in removed["items"]] == ["removed"]
+        assert removed["counts"] == {"reported": 1, "removed": 1}
+
+    def test_an_unknown_status_is_400(self, client, clean_db, make_moderator):
+        make_moderator()
+        assert client.get("/api/moderation/reports?status=nope").status_code == 400

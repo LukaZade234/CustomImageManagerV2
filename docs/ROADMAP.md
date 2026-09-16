@@ -678,8 +678,10 @@ why it does not contradict the anti-queue argument there.
       behind a second confirmation, cached thumbnail dropped.
 - [ ] **Later: the multi-image audit.** How many posts hold more than one image, and how large (one
       `GET /v1/post/{slug}` per post, ~4h at 60/min). Informational; the purge is safe either way.
-- [ ] **Phase 4 — the reports question.** Whether `image_reports` should ever be readable, and
-      whether the honest case for it is a statistic rather than a queue.
+- [x] **Phase 4 — the reports question, answered.** `image_reports` is readable now: the moderation
+      **Reports** tab lists reported images, split into those still live and those the two-report
+      threshold already removed, each with its reasons and reporters. Read-only, and a human still
+      makes any call — the queue informs, it does not act.
 
 ---
 
