@@ -12,11 +12,20 @@ set -uo pipefail
 APP_DIR="${APP_DIR:-/opt/imgmanager}"
 APP_USER="${APP_USER:-imgmanager}"
 SERVICE="${SERVICE:-imgmanager}"
+MUDAE_SERVICE="${MUDAE_SERVICE:-imgmanager-mudae}"
 HEALTH_URL="${HEALTH_URL:-http://localhost:8080/api/health}"
 BRANCH="${BRANCH:-main}"
 UV="${UV:-/usr/local/bin/uv}"
 
 log() { echo "[$(date -Is)] $*"; }
+
+# The Mudae worker is optional and must never gate a deploy: Discord having a bad
+# minute is not a reason to roll the site back. Restart it if installed, ignore
+# its absence and its health.
+restart_mudae() {
+    systemctl restart "$MUDAE_SERVICE" 2>/dev/null \
+        || log "note: $MUDAE_SERVICE not installed or not restarted (Mudae features only)"
+}
 
 # One deploy at a time. The timer could otherwise fire again mid-run.
 exec 9>/var/lock/imgmanager-update.lock
@@ -66,11 +75,13 @@ if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
         as_app reset --hard "$LOCAL" --quiet
         sudo -u "$APP_USER" -H "$UV" sync --locked --no-dev --directory "$APP_DIR" || true
         systemctl restart "$SERVICE"
+        restart_mudae
         exit 1
     fi
 fi
 
 systemctl restart "$SERVICE"
+restart_mudae
 
 if health_ok; then
     log "deployed ${REMOTE:0:8} successfully"
@@ -85,6 +96,7 @@ if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
     sudo -u "$APP_USER" -H "$UV" sync --locked --no-dev --directory "$APP_DIR" || true
 fi
 systemctl restart "$SERVICE"
+restart_mudae
 
 if health_ok; then
     log "rollback to ${LOCAL:0:8} succeeded; site is up on the previous commit"

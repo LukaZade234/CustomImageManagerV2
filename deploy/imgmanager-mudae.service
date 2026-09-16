@@ -1,0 +1,52 @@
+# systemd unit for the dedicated Mudae worker. Install to
+# /etc/systemd/system/imgmanager-mudae.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now imgmanager-mudae
+#
+# This process is the only thing that signs into Discord. It is separate from
+# imgmanager.service on purpose: gunicorn runs two workers, so an in-process
+# lock could not stop them both connecting, and every lookup there burned a
+# fresh Discord identify. The web app talks to it over the Unix socket below and
+# never touches the token.
+#
+# Unlike the API it is not wrapped in Litestream -- it does not touch the
+# database. It connects to Discord lazily, when a job arrives, and disconnects
+# after MUDAE_IDLE_SECONDS of an empty queue, so the account is not a constant
+# self-bot presence.
+
+[Unit]
+Description=ImgManager Mudae worker (Discord self-bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=imgmanager
+Group=imgmanager
+WorkingDirectory=/opt/imgmanager
+
+# Where the web workers look for us, and where the service listens.
+Environment=MUDAE_SOCKET=/var/lib/imgmanager/mudae.sock
+# How long to stay connected with nothing to do. Keep it short: an account that
+# is always online is the most visible thing a self-bot can be. The cost of a
+# short window is one Discord identify on the next lookup.
+Environment=MUDAE_IDLE_SECONDS=600
+# DISCORD_USER_TOKEN / DISCORD_CHANNEL_ID live here and *only* here. The web
+# unit does not need them once it points at the socket.
+EnvironmentFile=/etc/imgmanager/secrets.env
+
+ExecStart=/opt/imgmanager/.venv/bin/python /opt/imgmanager/mudae_service.py \
+    --socket /var/lib/imgmanager/mudae.sock
+
+Restart=always
+RestartSec=5
+
+# Same hardening as the API: read the code, write only the socket/state dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/imgmanager
+
+[Install]
+WantedBy=multi-user.target

@@ -1,15 +1,22 @@
 """
-On-demand Discord user client for querying Mudae ($im / $ima) via discord.py-self.
+On-demand Discord user client for querying Mudae ($im / $imartsmi-) via discord.py-self.
 
 Requires DISCORD_USER_TOKEN + DISCORD_CHANNEL_ID. Automating a user account
 violates Discord ToS — use a dedicated alt only.
+
+When `MUDAE_SOCKET` is set the module does not connect at all: it forwards jobs
+to the dedicated `mudae_service` process that owns the connection, so the web
+workers never hold the token and never race each other. Unset it and the old
+in-process path is used (local development, or the rollback escape hatch).
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+import socket
 import threading
 import time
 from collections.abc import Callable
@@ -37,10 +44,6 @@ DM_MAX_WAIT_S = 90.0
 
 class MudaeError(Exception):
     """User-facing Mudae / Discord client error."""
-
-
-class MudaeCancelled(MudaeError):
-    """Raised when a bulk series import is stopped by the user."""
 
 
 @dataclass
@@ -95,31 +98,62 @@ class LookupResult:
             d["candidates"] = self.candidates
         return d
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> LookupResult:
+        """Rebuild the result the service sent over the socket."""
+        data = data or {}
+        character = data.get("character")
+        return cls(
+            type=data.get("type") or "candidates",
+            character=CharacterInfo(**character) if character else None,
+            candidates=list(data.get("candidates") or []),
+            candidate_matches=[
+                CandidateMatch(name=m.get("name", ""), series=m.get("series", ""))
+                for m in (data.get("candidate_matches") or [])
+            ],
+        )
+
 
 _lock = threading.Lock()
-_series_cancel = threading.Event()
-
-
-def is_series_cancelled() -> bool:
-    return _series_cancel.is_set()
-
-
-def _raise_if_series_cancelled() -> None:
-    if is_series_cancelled():
-        raise MudaeCancelled("Series import cancelled by user")
-
-
-async def _cancellable_sleep(seconds: float) -> None:
-    if seconds <= 0:
-        return
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        _raise_if_series_cancelled()
-        await asyncio.sleep(min(0.25, deadline - time.monotonic()))
 
 
 def _log_mudae_error(context: str, exc: Exception) -> None:
     log.warning("mudae.error", context=context, error=f"{type(exc).__name__}: {exc}")
+
+
+_REPLY_SNIPPET_LIMIT = 400
+
+
+def _reply_snippet(embed: Any) -> dict[str, str]:
+    """The readable parts of a Mudae reply, for logging when parsing fails."""
+
+    def cut(value: Any) -> str:
+        return str(value or "").strip()[:_REPLY_SNIPPET_LIMIT]
+
+    fields = [str(getattr(f, "value", "") or "") for f in (getattr(embed, "fields", None) or [])]
+    return {
+        "author": cut(getattr(getattr(embed, "author", None), "name", None)),
+        "title": cut(getattr(embed, "title", None)),
+        "description": cut(getattr(embed, "description", None)),
+        "footer": cut(getattr(getattr(embed, "footer", None), "text", None)),
+        "fields": cut(" | ".join(fields)),
+    }
+
+
+def _parse_failed(context: str, embed: Any) -> MudaeError:
+    """Record what Mudae actually sent, then return an honest error.
+
+    The ~40 helpers in this module reverse-engineer Mudae's embed output, which
+    is not a public API and can change without notice. When one of them gives
+    up, the useful fact is the reply itself, so it is logged (truncated) before
+    the error goes back -- otherwise the only trace of a format change is a
+    generic refusal and no way to see what arrived.
+    """
+    log.warning("mudae.parse_failed", context=context, reply=_reply_snippet(embed))
+    return MudaeError(
+        "Mudae sent a reply this app could not read. Its format may have changed; "
+        "the raw reply was logged so it can be inspected."
+    )
 
 
 def _token() -> str:
@@ -149,6 +183,14 @@ def _mudae_id() -> int:
 
 
 def configured() -> bool:
+    """Whether Mudae features are available.
+
+    In service mode the web app cannot see the token (the service owns it), so
+    "configured" means "pointed at a service". Use `status()` for whether that
+    service is actually reachable and connected.
+    """
+    if service_mode():
+        return True
     return bool(_token() and _channel_id())
 
 
@@ -157,6 +199,50 @@ def require_configured() -> None:
         raise MudaeError("Mudae import is not configured. See DEPLOY.md.")
     if not _channel_id():
         raise MudaeError("Mudae import is not configured. See DEPLOY.md.")
+
+
+# --- Configuration ------------------------------------------------------
+#
+# Shared by the web client and the service process so both agree on the socket
+# and the limits. Everything has a default; only MUDAE_SOCKET has to be set to
+# switch a deployment onto the service.
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def socket_path() -> str:
+    return (os.environ.get("MUDAE_SOCKET") or "").strip()
+
+
+def service_mode() -> bool:
+    return bool(socket_path())
+
+
+def idle_seconds() -> float:
+    """How long the service stays connected with nothing to do."""
+    return _float_env("MUDAE_IDLE_SECONDS", 600.0)
+
+
+def queue_max() -> int:
+    """How many jobs may wait behind the one being run."""
+    return _int_env("MUDAE_QUEUE_MAX", 4)
+
+
+def job_timeout() -> float:
+    """Longest a web request will wait for a queued job to come back."""
+    return _float_env("MUDAE_JOB_TIMEOUT", 180.0)
 
 
 def _strip_md(text: str) -> str:
@@ -367,7 +453,7 @@ def parse_im_embed(embed: discord.Embed) -> LookupResult:
     if _is_im_list_embed(embed):
         matches = _parse_im_candidate_matches(embed)
         if not matches:
-            raise MudaeError("Could not parse Mudae character list")
+            raise _parse_failed("im_character_list", embed)
         return LookupResult(
             type="candidates",
             candidate_matches=matches,
@@ -424,7 +510,7 @@ def parse_im_embed(embed: discord.Embed) -> LookupResult:
         uniq.append(c)
 
     if not uniq:
-        raise MudaeError("Could not parse Mudae $im reply (no character card or name list)")
+        raise _parse_failed("im_reply", embed)
     return LookupResult(
         type="candidates",
         candidates=uniq,
@@ -450,7 +536,7 @@ def parse_im_message(msg: discord.Message) -> LookupResult:
         return parse_im_embed(msg.embeds[0])
     text = (msg.content or "").strip()
     if not text:
-        raise MudaeError("Mudae reply had no content")
+        raise _parse_failed("im_empty_reply", _TextEmbed(""))
     return parse_im_embed(_TextEmbed(text))
 
 
@@ -736,7 +822,20 @@ def clean_series_label(label: str) -> str:
 
 
 class _MudaeSession:
-    """On-demand discord.py-self connection: connect, query Mudae, disconnect."""
+    """A discord.py-self client pinned to the Mudae channel.
+
+    The connection is deliberately separate from any one query. `connect()`
+    brings up the client and resolves the channel; `close()` tears them down;
+    the lookup methods can run any number of times in between. That is what lets
+    a long-lived process pay Discord's *identify* cost once rather than per
+    lookup, and it is why the client is not scoped to a single `with`.
+
+    Queries are still serialized by the caller, so at most one is in flight.
+    Each one resets its own wait state and pins a watermark: the handlers record
+    every Mudae message they see -- even while idle -- so a late reply, or a DM
+    part left over from a previous fetch, cannot be mistaken for this query's
+    answer.
+    """
 
     def __init__(self) -> None:
         require_configured()
@@ -745,8 +844,16 @@ class _MudaeSession:
         self._mudae_id = _mudae_id()
         self._channel_id = _channel_id()
         self._ready = asyncio.Event()
-        self._pending: asyncio.Future[discord.Message] | None = None
         self._start_task: asyncio.Task | None = None
+
+        # Watermarks: the newest Mudae message seen on each surface, advanced by
+        # the handlers whether or not a query is waiting. A query only accepts
+        # replies newer than the mark that stood when it started.
+        self._last_channel_at = 0.0
+        self._last_dm_at = 0.0
+
+        # Per-query state, reset at the start of each lookup / series fetch.
+        self._pending: asyncio.Future[discord.Message] | None = None
         self._expect_message_id: int | None = None
         self._reply_not_before: float | None = None
         # `$imartsmi-` collects the series list from DMs, not the channel.
@@ -777,7 +884,7 @@ class _MudaeSession:
     async def _poll_recent_mudae_reply(self) -> discord.Message | None:
         if self._channel is None:
             return None
-        not_before = self._reply_not_before or (time.time() - 30.0)
+        not_before = self._reply_not_before or self._last_channel_at or (time.time() - 30.0)
         try:
             async for msg in self._channel.history(limit=15):
                 if msg.author.id != self._mudae_id:
@@ -786,7 +893,9 @@ class _MudaeSession:
                     continue
                 if self._expect_message_id is not None and msg.id != self._expect_message_id:
                     continue
-                if msg.created_at.timestamp() < not_before:
+                # Strictly newer than the mark: the watermark itself is the last
+                # message seen, so `<=` is what excludes it.
+                if msg.created_at.timestamp() <= not_before:
                     continue
                 if self._mudae_message_ready(msg):
                     log.debug("mudae.reply_polled", message_id=msg.id)
@@ -796,7 +905,7 @@ class _MudaeSession:
         return None
 
     async def _action_pause(self, extra: float = 0.0) -> None:
-        await _cancellable_sleep(ACTION_DELAY_S + extra)
+        await asyncio.sleep(ACTION_DELAY_S + extra)
 
     async def _refresh_message(self, msg: discord.Message) -> discord.Message:
         if self._channel is None:
@@ -806,10 +915,11 @@ class _MudaeSession:
         except Exception:
             return msg
 
-    async def __aenter__(self) -> _MudaeSession:
+    async def connect(self) -> _MudaeSession:
         # discord.py-self 2.1.0 has no Intents — user clients use plain Client().
         client = discord.Client()
         self._client = client
+        self._ready.clear()
 
         @client.event
         async def on_ready():
@@ -828,10 +938,10 @@ class _MudaeSession:
         try:
             await asyncio.wait_for(self._ready.wait(), timeout=30.0)
         except TimeoutError as e:
-            await self._shutdown()
+            await self.close()
             raise MudaeError("Timed out connecting to Discord") from e
         except discord.LoginFailure as e:
-            await self._shutdown()
+            await self.close()
             _log_mudae_error("Discord login failed", e)
             raise MudaeError("Could not sign in to Discord. Check your setup in DEPLOY.md.") from e
 
@@ -840,7 +950,7 @@ class _MudaeSession:
             try:
                 channel = await client.fetch_channel(self._channel_id)
             except Exception as e:
-                await self._shutdown()
+                await self.close()
                 _log_mudae_error(f"could not open channel {self._channel_id}", e)
                 raise MudaeError(
                     "Could not access the configured Discord channel. See DEPLOY.md."
@@ -848,10 +958,13 @@ class _MudaeSession:
         self._channel = channel  # type: ignore[assignment]
         return self
 
-    async def __aexit__(self, *exc) -> None:
-        await self._shutdown()
+    async def __aenter__(self) -> _MudaeSession:
+        return await self.connect()
 
-    async def _shutdown(self) -> None:
+    async def __aexit__(self, *exc) -> None:
+        await self.close()
+
+    async def close(self) -> None:
         client = self._client
         self._client = None
         if client is not None and not client.is_closed():
@@ -863,13 +976,17 @@ class _MudaeSession:
                 await asyncio.wait_for(task, timeout=5.0)
             except Exception:
                 task.cancel()
+        self._channel = None
 
     async def _maybe_capture(self, message: discord.Message) -> None:
-        if self._pending is None or self._pending.done():
-            return
         if message.author.id != self._mudae_id:
             return
         if not self._message_in_target_channel(message):
+            return
+        # Advance the watermark even with no query waiting, so a reply that lands
+        # between queries is already spoken for and cannot answer the next one.
+        self._last_channel_at = max(self._last_channel_at, message.created_at.timestamp())
+        if self._pending is None or self._pending.done():
             return
         if self._expect_message_id is not None and message.id != self._expect_message_id:
             return
@@ -880,14 +997,15 @@ class _MudaeSession:
 
     async def _maybe_capture_dm(self, message: discord.Message) -> None:
         """Collect one part of a `$imartsmi-` DM while a fetch is in flight."""
-        if not self._dm_active or self._dm_event is None:
-            return
         if message.author.id != self._mudae_id:
             return
         # A DM has no guild; a same-author message in the channel is not it.
         if getattr(message, "guild", None) is not None:
             return
-        if message.created_at.timestamp() < self._dm_not_before:
+        self._last_dm_at = max(self._last_dm_at, message.created_at.timestamp())
+        if not self._dm_active or self._dm_event is None:
+            return
+        if message.created_at.timestamp() <= self._dm_not_before:
             return
         body = _dm_body(message)
         if not body:
@@ -922,13 +1040,13 @@ class _MudaeSession:
         series = (series or "").strip()
         if not series:
             raise MudaeError("Series name is required")
-        _raise_if_series_cancelled()
 
         await self._action_pause()
         self._dm_parts = []
         self._dm_event = asyncio.Event()
         self._dm_active = True
-        self._dm_not_before = time.time() - 1.0
+        # Only parts newer than the last one we ever saw belong to this fetch.
+        self._dm_not_before = max(self._last_dm_at, time.time() - 1.0)
         try:
             await self._channel.send(f"$imartsmi- {series}")
             return await self._collect_series_dm()
@@ -942,7 +1060,6 @@ class _MudaeSession:
 
         deadline = time.monotonic() + DM_MAX_WAIT_S
         while time.monotonic() < deadline:
-            _raise_if_series_cancelled()
             text = "\n".join(self._dm_parts)
             # Local import keeps this module free of the catalog parser except
             # for the completeness check it needs here.
@@ -967,35 +1084,31 @@ class _MudaeSession:
             raise MudaeError("Internal error waiting for Mudae reply")
         deadline = time.monotonic() + timeout
         last_poll = 0.0
-        try:
-            while True:
-                _raise_if_series_cancelled()
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    polled = await self._poll_recent_mudae_reply()
-                    if polled is not None:
-                        return polled
-                    raise MudaeError("Timed out waiting for Mudae reply")
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                polled = await self._poll_recent_mudae_reply()
+                if polled is not None:
+                    return polled
+                raise MudaeError("Timed out waiting for Mudae reply")
+            if self._pending.done():
+                return self._pending.result()
+            now = time.monotonic()
+            if now - last_poll >= 0.5:
+                last_poll = now
+                polled = await self._poll_recent_mudae_reply()
+                if polled is not None and not self._pending.done():
+                    self._pending.set_result(polled)
                 if self._pending.done():
                     return self._pending.result()
-                now = time.monotonic()
-                if now - last_poll >= 0.5:
-                    last_poll = now
-                    polled = await self._poll_recent_mudae_reply()
-                    if polled is not None and not self._pending.done():
-                        self._pending.set_result(polled)
-                    if self._pending.done():
-                        return self._pending.result()
-                try:
-                    return await asyncio.wait_for(
-                        asyncio.shield(self._pending), timeout=min(0.25, remaining)
-                    )
-                except TimeoutError:
-                    if self._pending.done():
-                        return self._pending.result()
-                    continue
-        except asyncio.CancelledError:
-            raise MudaeCancelled("Series import cancelled by user") from None
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(self._pending), timeout=min(0.25, remaining)
+                )
+            except TimeoutError:
+                if self._pending.done():
+                    return self._pending.result()
+                continue
 
     async def send_and_wait(
         self,
@@ -1006,17 +1119,18 @@ class _MudaeSession:
     ) -> discord.Message:
         if self._channel is None:
             raise MudaeError("Discord channel not available")
-        _raise_if_series_cancelled()
         if pause_before:
             await self._action_pause()
         loop = asyncio.get_running_loop()
         self._pending = loop.create_future()
-        self._reply_not_before = time.time() - 2.0
+        self._expect_message_id = None
+        # The previous reply is not this one's answer: never look further back
+        # than the last Mudae message seen, but keep the small grace window for
+        # the first query on a fresh connection.
+        self._reply_not_before = max(self._last_channel_at, time.time() - 2.0)
         try:
             await self._channel.send(content)
-            msg = await self._wait_for_pending_reply(timeout=timeout)
-            _raise_if_series_cancelled()
-            return msg
+            return await self._wait_for_pending_reply(timeout=timeout)
         finally:
             self._pending = None
             self._reply_not_before = None
@@ -1050,7 +1164,6 @@ class _MudaeSession:
         name = (name or "").strip()
         if not name:
             raise MudaeError("Character name is required")
-        _raise_if_series_cancelled()
         msg = await self.send_and_wait(f"$im {name}", pause_before=pause_before)
         msg = await self._ensure_embed_ready(msg)
         return parse_im_message(msg)
@@ -1058,6 +1171,62 @@ class _MudaeSession:
 
 def _run_async(coro):
     return asyncio.run(coro)
+
+
+# --- Service client -----------------------------------------------------
+#
+# One request, one connection, one JSON line each way. The job itself may wait
+# behind others, so the socket timeout has to outlast the service's own queue
+# deadline; the service answers with an error reply rather than dropping us.
+
+
+def _service_call(op: str, args: dict[str, Any] | None = None) -> Any:
+    path = socket_path()
+    payload = (json.dumps({"op": op, "args": args or {}}) + "\n").encode()
+    timeout = job_timeout() + 30.0
+    chunks: list[bytes] = []
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            sock.connect(path)
+            sock.sendall(payload)
+            while True:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if b"\n" in chunk:
+                    break
+    except OSError as e:
+        _log_mudae_error("mudae service unreachable", e)
+        raise MudaeError(
+            "The Mudae service is not running. Try again shortly, or see DEPLOY.md."
+        ) from e
+
+    raw = b"".join(chunks).decode(errors="replace").strip()
+    try:
+        reply = json.loads(raw)
+    except ValueError as e:
+        _log_mudae_error("mudae service sent unreadable reply", e)
+        raise MudaeError("The Mudae service sent an unreadable reply. See DEPLOY.md.") from e
+    if not isinstance(reply, dict) or not reply.get("ok"):
+        raise MudaeError((reply or {}).get("error") or "The Mudae service refused the request.")
+    return reply.get("data")
+
+
+def status() -> dict[str, Any]:
+    """What Mudae can do right now, for the status endpoint.
+
+    In service mode this asks the service, so it reflects the real connection
+    state (and the queue) rather than whether some environment variable is set.
+    """
+    if service_mode():
+        try:
+            data = _service_call("status")
+        except MudaeError as e:
+            return {"configured": False, "mode": "service", "error": str(e)}
+        return {"configured": True, "mode": "service", **(data or {})}
+    return {"configured": configured(), "mode": "in-process"}
 
 
 def with_discord_lock(fn: Callable[[], Any]) -> Any:
@@ -1072,6 +1241,9 @@ def with_discord_lock(fn: Callable[[], Any]) -> Any:
 
 
 def lookup_character(name: str) -> LookupResult:
+    if service_mode():
+        return LookupResult.from_dict(_service_call("lookup", {"name": name}))
+
     def _do():
         async def _inner():
             async with _MudaeSession() as session:
@@ -1084,6 +1256,8 @@ def lookup_character(name: str) -> LookupResult:
 
 def fetch_series_extract(series: str) -> str:
     """$imartsmi- a series and return the raw DM body for the caller to parse."""
+    if service_mode():
+        return str(_service_call("series_extract", {"series": series}))
 
     def _do():
         async def _inner():
