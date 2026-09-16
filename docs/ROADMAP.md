@@ -428,7 +428,7 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ---
 
-## Phase 8 — Mudae hardening
+## Phase 8 — Mudae hardening — **COMPLETE**
 
 - [x] **Move Discord work to a single dedicated process.** _Done._ `mudae_service.py` owns the only
       Discord client and serializes jobs (FIFO, 4 deep) over a Unix socket at `MUDAE_SOCKET`; the
@@ -719,10 +719,25 @@ relevant — the concurrency test is written first, before Phase 2:
   Portraits are **mirrored** now: `scripts/mirror_portraits_to_r2.py` fetches each `mudae.net`
   portrait, encodes WebP, uploads to R2 and records the key in `characters.main_image_thumb` /
   `character_catalog.mudae_image_thumb` (migration 012); every portrait payload carries
-  `image_thumb` and the frontend prefers it via `portraitUrl`. Still open: point the self-bot at
-  gap-filling and rank refresh only; add series pages. Pool filters are in: the suggestions API
-  takes `pool=` and the Add form carries the facet chips. See `DECISIONS.md` §8, "The Mudae
-  catalog".
+  `image_thumb` and the frontend prefers it via `portraitUrl`. Still open: series pages. Catalog
+  gap-fill and rank refresh were considered and **declined** (next entry). Pool filters are in: the
+  suggestions API takes `pool=` and the Add form carries the facet chips. See `DECISIONS.md` §8,
+  "The Mudae catalog".
+- **Mudae catalog gap-fill and rank refresh.** _(considered, declined 2026-09)_ The idea: have the
+  self-bot fetch, by series, only what the catalog lacks — a series with no rows at all, rows with
+  an empty rank/series/portrait/pool — and keep ranks current. Declined as unnecessary work:
+  - **Ranks are unbounded, ongoing maintenance.** They move constantly, each series costs one
+    Discord *identify*, and the number they produce is not acted on by anything. That is a
+    recurring job for no benefit.
+  - **The character gaps are already mostly closed.** The catalog holds most of the roster, so the
+    remaining holes are individual names. Those can be added on demand through the existing Add
+    flow (`$imartsmi-` for a whole series, or the catalog add), which is exactly when someone wants
+    them — no background reconciliation needed.
+
+  The machinery is not removed and remains available if a real need appears — `$imartsmi-`, the
+  idempotent `db.upsert_catalog_characters`, and the mirror script — but there is deliberately no
+  gap-fill script.
+
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).
