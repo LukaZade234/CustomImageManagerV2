@@ -143,8 +143,15 @@ Secrets go in `/etc/imgmanager/secrets.env` (mode `600`, owned by `imgmanager`):
 SECRET_KEY=<long random string, see below>
 IMGCHEST_API_KEY=<from imgchest.com>
 THUMB_DIR=/var/lib/imgmanager/thumbs
-DISCORD_USER_TOKEN=<optional, see Mudae below>
-DISCORD_CHANNEL_ID=<optional>
+```
+
+Mudae credentials do **not** go here. They go in their own
+`/etc/imgmanager/mudae.env` (also mode `600`, owned by `imgmanager`), which only
+`imgmanager-mudae.service` loads — so the web process never holds the token:
+
+```env
+DISCORD_USER_TOKEN=<see Mudae below>
+DISCORD_CHANNEL_ID=<see Mudae below>
 ```
 
 > **`SECRET_KEY` must be stable and must never change.** It signs the identity
@@ -162,7 +169,7 @@ sudo systemctl status imgmanager
 ```
 
 For Mudae support, also install the dedicated worker (see "Mudae import"
-below). It is a separate unit because it is the only thing that should hold the
+below). It is a separate unit because it is the only thing that holds the
 Discord token:
 
 ```bash
@@ -446,8 +453,8 @@ round overwrites the live database with itself.
 | `LOG_LEVEL` | origin | no | Default `INFO`. `DEBUG` adds the per-file upload steps |
 | `PORT` | origin | no | Default 8080 |
 | `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` | origin | no | See `gunicorn.conf.py` |
-| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**). Needed by the **mudae** unit, not the API unit |
-| `MUDAE_SOCKET` | origin | with Mudae | Where the API finds the Mudae worker, and where the worker listens. Unset ⇒ the API runs the self-bot in-process again (see below) |
+| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**). Belong in `/etc/imgmanager/mudae.env`; the mudae unit is the only one that loads them |
+| `MUDAE_SOCKET` | origin | with Mudae | Where the API finds the Mudae worker, and where the worker listens. Required for Mudae features |
 | `MUDAE_IDLE_SECONDS` | origin | no | How long the worker stays connected with an empty queue. Default 600. Shorter means more Discord identifies |
 | `MUDAE_QUEUE_MAX` / `MUDAE_JOB_TIMEOUT` | origin | no | Queue depth (default 4) and how long a web request waits (default 180s) |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | origin | no | Sign-in (an **OAuth app**, unrelated to the above) |
@@ -473,23 +480,23 @@ a Discord channel you configure.
    into `DISCORD_USER_TOKEN` (the value only — no `Bearer` prefix).
 5. Keep it secret; never commit it.
 
-The **mudae** unit is the only thing that uses the token. The API unit talks to
-it over `MUDAE_SOCKET` and needs no Discord credentials of its own. It connects
-lazily on the first job and disconnects after `MUDAE_IDLE_SECONDS` (10 minutes)
-with an empty queue, so an idle site is not a permanently online account. Check
-it with:
+The **mudae** unit is the only thing that uses the token; it reads
+`/etc/imgmanager/mudae.env`. The API unit talks to it over `MUDAE_SOCKET` and
+has no Discord credentials at all, so it cannot sign in even by mistake. The
+worker connects lazily on the first job and disconnects after
+`MUDAE_IDLE_SECONDS` (10 minutes) with an empty queue, so an idle site is not a
+permanently online account. Check it with:
 
 ```bash
 journalctl -u imgmanager-mudae -f      # connect / disconnect / job logs
 curl -s localhost:8080/api/mudae/status | jq
 ```
 
-**Rollback / local development.** If `MUDAE_SOCKET` is unset, the API runs the
-self-bot in-process exactly as it did before the service existed. Leave
-`DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` in `secrets.env` (both units read it)
-until the service has been confirmed working; then remove the fallback by taking
-the token out of the API unit's environment. A missing or dead service is a clean
-503 on the Mudae endpoints, never a site outage.
+`MUDAE_SOCKET` is required for Mudae features. Without it — or with the service
+down — those endpoints return a clean 503 and nothing else is affected; there is
+no in-process fallback. To run Mudae locally, start the worker in a second
+terminal (`MUDAE_SOCKET=/tmp/imgmanager-mudae.sock uv run python mudae_service.py`)
+and point `.env` at the same path.
 
 > **This is a self-bot, and the account can be banned.** Automating a user
 > account violates Discord's Terms of Service, so treat the token as disposable

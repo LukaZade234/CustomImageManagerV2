@@ -472,9 +472,10 @@ permanently online account. `deploy/imgmanager-mudae.service` runs it; `deploy/u
 it best-effort. `_service_call`/`status()` in `mudae_discord.py` are the client side, and
 `/api/mudae/status` reports the service's real state (connected, busy, queue depth).
 
-Without `MUDAE_SOCKET` the module falls back to connecting in-process, as it did before the
-service existed. That path is kept for local development and as a one-release rollback; once the
-service is confirmed it (and the token in the API unit's environment) should be removed.
+The web app has no in-process fallback: `MUDAE_SOCKET` is required for Mudae
+features, and without it (or with the service down) those endpoints return a
+clean 503. The token is loaded only by the mudae unit, from
+`/etc/imgmanager/mudae.env`, so the API process never holds it.
 
 Pacing: `REPLY_TIMEOUT_S = 25.0` bounds a single reply wait, `ACTION_DELAY_S = 1.0` spaces Discord
 actions, and a series DM is collected until its header total is reached or the parts stop arriving
