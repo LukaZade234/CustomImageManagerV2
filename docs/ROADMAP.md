@@ -693,6 +693,73 @@ why it does not contradict the anti-queue argument there.
 
 ---
 
+## Review findings (2026-09-16)
+
+A third-party review raised nine findings, each with an executable plan in
+`critiques and plans.md`. That file is the working document; **this section is the
+decision record** — what was accepted, what was declined, and why, so a later pass
+does not reopen it without new information. The review's own numbers were
+re-verified against the tree on 2026-09-16 and held.
+
+### Accepted, roughly in order
+
+- [ ] **Code splitting (#2).** One 442 KB JS chunk ships to every anonymous
+      visitor, including the whole moderation console and the Mudae import panel
+      they cannot open. Route-level `React.lazy` plus one `Suspense`, keeping the
+      landing page and shared chrome eager and `RequireModerator` outside the lazy
+      boundary. Highest user-facing value, lowest risk; the review's plan is taken
+      as written.
+- [ ] **Reorder abuse, error disclosure and indexes (#1a, #4, #5), one commit.**
+      `/api/reorder-custom-images` has no rate limit, no ownership check and no
+      audit, while the delete route beside it has both — and reordering
+      redistributes prominence, which `DECISIONS.md` §1 treats as removal's equal.
+      Add the `reorder` rate limit, replace the 26 `"error": str(e)` returns with
+      fixed sentences, and add the two partial indexes on `added_by` /
+      `removed_by`.
+- [ ] **`ui/` primitive tests (#9).** Ten of eleven primitives are untested; they
+      are the most-reused components, so a regression lands everywhere at once.
+      Tests only — contracts, not classes — in the review's order.
+- [ ] **Data-fetching consistency (#7), scoped.** `HiddenTab` and `RemovedTab`
+      move to react-query (the `SavedTab` template), and `CustomsPage`'s
+      `reloadKey` becomes `refetch()`. `AddPage` / `CharacterPage` raw fetches wait
+      for #3 rather than being churned twice.
+- [ ] **`CharacterPage.jsx` decomposition (#3).** 1,113 lines and 26 `useState`
+      in one function, with three test files because no single setup covers it.
+      Behaviour-preserving and incremental (lightbox → edit → gallery-selection
+      reducer → accent → upload), tests untouched apart from imports. Scheduled on
+      its own, never beside #8.
+
+### Declined or deferred, and why
+
+- **`reorder_history` (#1b) — declined for now.** A new table whose only reader is
+  a moderation view that does not exist is more than the risk warrants. A
+  structured `reorder.saved` log line (the actor attaches automatically inside a
+  request) gives the visibility and deterrence; the table stays in reserve if an
+  undo or a moderation read is ever actually wanted.
+- **`/api/stats` caching (#6) — deferred until measured.** The heaviest route is
+  real, but nine sub-millisecond queries on 8.5k rows is not load, and this is the
+  one place the review optimised without evidence. Its privacy caveat is already
+  satisfied: `you` is fetched separately from the cacheable block. If it is built,
+  cache only the shared block, and remember a `private` header gets no Cloudflare
+  caching anyway.
+- **`db.py` / `pages.css` splits (#8) — declined for now.** Both are explicitly
+  optional; `db.py`'s organization is good and only its size is bad, and a
+  zero-behaviour split is a large diff with circular-import risk. If `pages.css`
+  is ever split, do it per page when that page's CSS is already being changed, and
+  verify by the sorted-content hash.
+- **Secondary suggestions.** The `manualChunks` vendor split is folded into #2;
+  the "stop CharacterPage under 400 lines" target is dropped as arbitrary — the
+  goal is one concern per file, not a line count.
+
+Three corrections to the review, recorded so the plans are not followed blindly:
+its `/api/stats` `you` caveat is already satisfied structurally; "sign out leaves
+the previous identity's data on screen" is mostly unreachable because sign-out
+happens on a route where the raw-fetch tabs are unmounted; and sections 1(b) and 5
+both propose migration `022`, so the indexes take `022` and any reorder history
+would be `023`.
+
+---
+
 ## Testing detail (harness set up in Phase 1)
 
 The harness goes up in Phase 1. These are the rules worth covering, in the order they become
