@@ -314,12 +314,16 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
 - [ ] **Rebuild the derived layers after the import.** The v1 dump carries only names,
       image URLs and bookmarks; the catalog, portrait mirrors, thumbnail cache (which
       *must* be cleared, since thumbnails are keyed by row id), accents, dimensions,
-      ImgChest post ids and traits are rebuilt afterwards. See **CUTOVER.md**.
-- [ ] **Reconcile ImgChest.** A planned one-off: keep every image that is in use in
-      Discord or on the site, delete the rest — which also clears the griefed uploads
-      from before moderation existed — and re-add the in-use images that were
-      wrongfully removed so they can be restored. It must show a preview of both lists
-      before deleting. See **CUTOVER.md**.
+      content fingerprints and traits are rebuilt afterwards. ImgChest post ids are
+      filled by the cleanup in the step below. Ordering matters — fingerprints and
+      dimensions re-read the image bytes and must run before the cleanup. See
+      **CUTOVER.md**, [After the import](CUTOVER.md#after-the-import-the-derived-layers).
+- [x] **Reconcile ImgChest.** _Built._ `scripts/imgchest_cleanup.py` keeps every image
+      that is in use in Discord or on the site, deletes the rest — which also clears
+      the griefed uploads from before moderation existed — and re-adds the in-use
+      images that were wrongfully removed so they can be restored. It shows a preview
+      of both lists before deleting, rendered in an owner-only Cut-over tab, and only
+      deletes with `--execute`. See **CUTOVER.md**, [ImgChest cleanup](CUTOVER.md#imgchest-cleanup).
 - [x] **Removed `flask-compress`** (`5c62b9c`). Cloudflare is in front and does Brotli, so
       origin-side gzip only spent CPU.
 
@@ -519,9 +523,11 @@ them. There are no v2 users yet, so this costs nothing now.
       `remote_images.py`, `ratelimit.py` and `validation.py`. Paths are unchanged;
       `tests/test_url_map.py` pins every registered route so one going missing is a test failure
       rather than a production surprise.
-- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671, now 963 after the mode and
-      accent rework. The four mutually exclusive mode booleans became one `mode` value, and
-      `GalleryToolbar` and `CharacterHeader` moved out with tests of their own.
+- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671, then 963 after the mode and
+      accent rework, and 1,017 after the 2026-09-16 review's five extractions (see
+      [Review findings](#review-findings-2026-09-16)). The four mutually exclusive mode booleans
+      became one `mode` value, and `GalleryToolbar` and `CharacterHeader` moved out with tests of
+      their own.
 - [x] **Split `AddPage.jsx`** _(done)_ — 806 lines down to 253. The Mudae lookup and the manual
       form are their own components (`AddMudaePanel` 519, `AddManualForm` 135) with tests of
       their own; the page keeps only the catalog-match logic and the one record both panels

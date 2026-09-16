@@ -198,7 +198,7 @@ never deletes — the destructive half stays a CLI. It supersedes the one-off
 
 **Ordering is load-bearing.** Content fingerprints and image dimensions both re-read the image bytes
 from ImgChest, so they must run **before** the cleanup; deleting first makes them impossible for the
-files concerned. See `CUTOVER.md`, [ImgChest cleanup](#imgchest-cleanup-planned).
+files concerned. See `CUTOVER.md`, [ImgChest cleanup](#imgchest-cleanup).
 
 ---
 

@@ -85,7 +85,7 @@ actually used and delete the rest — including griefed or otherwise inappropria
 uploads made before moderation existed. It needs a Discord export of the images in
 use, a preview before anything is removed, and an explicit go-ahead. It is **built**:
 `scripts/imgchest_cleanup.py` plus an owner-only Cut-over tab — see
-**[ImgChest cleanup](#imgchest-cleanup-planned)**.
+**[ImgChest cleanup](#imgchest-cleanup)**.
 
 - [ ] **Run the cleanup with the cut-over.**
 - [ ] **Skip it, and leave ImgChest as it is.**
@@ -310,7 +310,7 @@ from ImgChest, so they must come **before** the cleanup in step 5:
    and it stores `imgchest_post_id` for everything that survives, which is what permanent
    delete needs. This replaces the separate post-id backfill: the two compute the same
    file-to-post map, so there is no reason to walk the account twice. The order here is
-   the whole point — see [ImgChest cleanup](#imgchest-cleanup-planned).
+   the whole point — see [ImgChest cleanup](#imgchest-cleanup).
 6. **Accents — rebuild.** Lost with the column. Recomputed on visit, but the backfill
    script walks the library once — and it measures *only from thumbnails already on
    disk*, so run it after the thumbnail cache has warmed, or accept partial accents
@@ -329,7 +329,7 @@ slate.
 
 ---
 
-## ImgChest cleanup (planned)
+## ImgChest cleanup
 
 Every image this app ever uploaded is still live on ImgChest — nothing was ever
 deleted (that was v1's constraint, kept in v2). That includes images no longer in any
@@ -337,8 +337,9 @@ database, and griefed or otherwise inappropriate uploads made before moderation
 existed. The cut-over is the one moment to reconcile the account against what is
 actually used, and to remove the rest.
 
-**This is planned, not built.** `scripts/` will gain a one-off cleanup, and it is
-deliberately gated.
+**It is built and deliberately gated.** `scripts/imgchest_cleanup.py` writes a preview
+and only deletes with `--execute`; the app renders the preview in an owner-only tab and
+never deletes. See **[Running it](#running-it)** for the exact commands.
 
 **The input is ground truth from Discord.** The operator will export the list of every
 image currently used in the servers — the URLs actually named in Mudae's `$ai` lists.
@@ -510,7 +511,7 @@ data that has ever existed. That is the reason pre-flight step 4 is a gate.
   which puts fingerprints and dimensions before the cleanup.
 - [ ] **Reconcile ImgChest** — generate the preview, review it in the owner-only
   Cut-over tab, run a `--limit` trial, then execute, if Decision 4 was to proceed. See
-  [ImgChest cleanup](#imgchest-cleanup-planned).
+  [ImgChest cleanup](#imgchest-cleanup).
 - [ ] Update `CURRENT_STATE.md` — it describes v1 in the present tense throughout.
 - [ ] Close out the Phase 5 "Outstanding" items in `ROADMAP.md`.
 - [x] Remove `flask-compress` — done ahead of the cut-over in `5c62b9c`, once
