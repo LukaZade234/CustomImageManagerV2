@@ -21,6 +21,7 @@ import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useGallerySelection } from '../hooks/useGallerySelection'
+import { useLightbox } from '../hooks/useLightbox'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import {
   applyOrderToCache,
@@ -41,7 +42,6 @@ import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
 } from '../utils/downloadCustomImages'
-import { ratioOf } from '../utils/galleryRatios'
 import { isImageFileLike } from '../utils/imageFiles'
 import { pickPixel } from '../utils/imagePick'
 
@@ -158,11 +158,6 @@ export default function CharacterPage() {
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
   const [removedDrawer, setRemovedDrawer] = useState(null)
-  // Measured as images load; see utils/galleryRatios.js for why the server
-  // cannot supply these.
-  const [ratios, setRatios] = useState({})
-  const [modalOpen, setModalOpen] = useState(false)
-  const [modalIndex, setModalIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
 
   /** Full multi-line upload error for dismissible dialog (replaces window.alert). */
@@ -183,13 +178,18 @@ export default function CharacterPage() {
    */
   const reorderSessionRef = useRef(null)
 
-  // Measure image ratios off the onLoad event, which fires once per image in
-  // its own tick — a 256-image gallery meant 256 full re-renders of the grid
-  // while it filled in. Coalescing a frame's worth of measurements into one
-  // state update makes the fill cost one render per frame instead.
-  const pendingRatiosRef = useRef({})
-  const ratioFrameRef = useRef(0)
-  useEffect(() => () => cancelAnimationFrame(ratioFrameRef.current), [])
+  // The full-screen viewer, and the ratios the gallery is laid out from. Opens
+  // only from browse; in any other mode a click is a selection.
+  const {
+    open: modalOpen,
+    index: modalIndex,
+    ratios,
+    noteRatio,
+    openAt: openModal,
+    close: closeModal,
+    prev: prevImage,
+    next: nextImage,
+  } = useLightbox({ imageCount: customs.length, canOpen: mode === 'browse' })
 
   useEffect(() => {
     if (char) setMainImage(char.image || '')
@@ -651,29 +651,6 @@ export default function CharacterPage() {
     }
   }
 
-  const noteRatio = (imageId, element) => {
-    const ratio = ratioOf(element)
-    if (ratio === null) return
-    pendingRatiosRef.current[imageId] = ratio
-    if (ratioFrameRef.current) return
-    ratioFrameRef.current = requestAnimationFrame(() => {
-      ratioFrameRef.current = 0
-      const pending = pendingRatiosRef.current
-      pendingRatiosRef.current = {}
-      setRatios((prev) => {
-        let changed = false
-        const next = { ...prev }
-        for (const [id, measured] of Object.entries(pending)) {
-          if (next[id] !== measured) {
-            next[id] = measured
-            changed = true
-          }
-        }
-        return changed ? next : prev
-      })
-    })
-  }
-
   const handleReport = async (imageId, reason) => {
     setReportTarget(null)
     try {
@@ -762,12 +739,6 @@ export default function CharacterPage() {
   const onGalleryDragOver = (e) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-  }
-
-  const openModal = (index) => {
-    if (mode !== 'browse') return
-    setModalIndex(index)
-    setModalOpen(true)
   }
 
   /** Modal viewer: custom images only (main portrait is separate above the gallery) */
@@ -1026,9 +997,9 @@ export default function CharacterPage() {
         <ImageModal
           images={galleryModalImages}
           currentIndex={modalIndex}
-          onClose={() => setModalOpen(false)}
-          onPrev={() => setModalIndex((i) => Math.max(0, i - 1))}
-          onNext={() => setModalIndex((i) => Math.min(galleryModalImages.length - 1, i + 1))}
+          onClose={closeModal}
+          onPrev={prevImage}
+          onNext={nextImage}
           onReport={rows[modalIndex] ? () => setReportTarget(rows[modalIndex]) : undefined}
         />
       )}
