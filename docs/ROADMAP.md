@@ -430,18 +430,25 @@ them. There are no v2 users yet, so this costs nothing now.
 
 ## Phase 8 — Mudae hardening
 
-- [ ] **Move Discord work to a single dedicated process or queue.** The guarding `threading.Lock`
-      is process-global while gunicorn runs 2 workers, so two concurrent Mudae requests on
-      different workers both connect. One worker, or an external queue, makes the lock mean
-      something.
-- [ ] **Consider a persistent connection.** The current connect-per-request pattern burns one
-      Discord *identify* per lookup against a cap of roughly 1000/day. A long-lived client in the
-      dedicated process removes that entirely.
-- [ ] **Document the self-bot ToS risk and the fallback.** Automating a user account can get it
-      banned, taking out every Mudae feature. Decide in advance what happens then.
-- [ ] **Better failure reporting when embed parsing breaks.** Mudae has no API, so ~40 helpers
-      reverse-engineer its embed output and will break when Mudae changes. A clear error beats a
-      silent wrong answer.
+- [x] **Move Discord work to a single dedicated process.** _Done._ `mudae_service.py` owns the only
+      Discord client and serializes jobs (FIFO, 4 deep) over a Unix socket at `MUDAE_SOCKET`; the
+      web workers are thin clients and no longer hold the token. `deploy/imgmanager-mudae.service`
+      runs it, and `deploy/update.sh` restarts it best-effort so a Mudae problem cannot roll back a
+      deploy. When `MUDAE_SOCKET` is unset the old in-process path is still used (local dev and the
+      one-release rollback); remove it once the service is confirmed.
+- [x] **A persistent connection, but not a permanent one.** _Done._ The service connects on the
+      first job, reuses the session across queued jobs, and disconnects after `MUDAE_IDLE_SECONDS`
+      (10 minutes) with an empty queue — deliberately **not** a client that sits online around the
+      clock (see `DECISIONS.md` §8, "The self-bot is a liability"). `_MudaeSession` was made
+      reusable for this, with reply watermarks so a previous answer cannot satisfy the next query.
+- [x] **Document the self-bot ToS risk and the fallback.** _Done._ `DECISIONS.md` §8 ("The self-bot
+      is a liability, so Mudae is optional by design") sets out what a ban costs and what survives,
+      and `DEPLOYMENT.md` "Mudae import" carries the operator-facing warning. Also settled: prefer a
+      throwaway alt, and keep the connection on-demand rather than always-on.
+- [x] **Better failure reporting when embed parsing breaks.** _Done._ A failed parse now logs the
+      raw reply (author/title/description/footer/fields, truncated) as `mudae.parse_failed` and
+      returns "Mudae sent a reply this app could not read. Its format may have changed" instead of a
+      contentless refusal, so the next format change is visible in the logs.
 
 ---
 

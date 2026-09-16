@@ -85,24 +85,60 @@ class _FakeAuthor:
         self.id = author_id
 
 
+class _FakeChannel:
+    def __init__(self, channel_id=42, parent_id=None):
+        self.id = channel_id
+        self.parent_id = parent_id
+
+
 class _FakeMessage:
-    def __init__(self, content="", *, author_id=0, guild=None, created_at=None, embeds=None):
+    def __init__(
+        self, content="", *, author_id=0, guild=None, created_at=None, embeds=None, channel=None
+    ):
         self.content = content
         self.author = _FakeAuthor(author_id)
         self.guild = guild
         self.embeds = embeds or []
         self.id = 1
+        self.channel = channel or _FakeChannel()
         stamp = created_at if created_at is not None else time.time()
         self.created_at = datetime.fromtimestamp(stamp, tz=UTC)
+
+
+class _FakeHistoryChannel(_FakeChannel):
+    """The bit of a channel `_poll_recent_mudae_reply` reads."""
+
+    def __init__(self, messages, channel_id=42, parent_id=None):
+        super().__init__(channel_id, parent_id)
+        self._messages = messages
+
+    def history(self, limit=15):
+        async def _gen():
+            for message in self._messages[:limit]:
+                yield message
+
+        return _gen()
 
 
 def _dm_session():
     session = object.__new__(mudae_discord._MudaeSession)
     session._mudae_id = 999
+    session._last_dm_at = 0.0
     session._dm_parts = []
     session._dm_event = asyncio.Event()
     session._dm_active = True
     session._dm_not_before = 0.0
+    return session
+
+
+def _channel_session(*, last_channel_at=0.0, reply_not_before=0.0):
+    session = object.__new__(mudae_discord._MudaeSession)
+    session._mudae_id = 999
+    session._channel_id = 42
+    session._last_channel_at = last_channel_at
+    session._reply_not_before = reply_not_before
+    session._pending = None
+    session._expect_message_id = None
     return session
 
 
@@ -140,6 +176,98 @@ class TestCaptureDmParts:
         text = asyncio.run(session._collect_series_dm())
 
         assert text == EXTRACT
+
+
+class TestReplyWatermark:
+    """A persistent connection sees replies between queries; none may be reused.
+
+    On a fresh connect-per-query session the only Mudae message that could exist
+    was the one just asked for. On a session that outlives a query, the previous
+    answer is still in the channel, and the 30-second history poll would happily
+    return it as this query's card. The watermark is what stops that.
+    """
+
+    def test_an_idle_reply_advances_the_channel_watermark(self):
+        session = _channel_session()
+        message = _FakeMessage(author_id=999, created_at=321.0, embeds=[object()])
+
+        asyncio.run(session._maybe_capture(message))
+
+        assert session._last_channel_at == 321.0
+
+    def test_a_reply_satisfies_the_waiting_query(self):
+        session = _channel_session(reply_not_before=100.0)
+
+        async def scenario():
+            session._pending = asyncio.get_running_loop().create_future()
+            message = _FakeMessage(author_id=999, created_at=200.0, embeds=[object()])
+            await session._maybe_capture(message)
+            return session._pending, message
+
+        pending, message = asyncio.run(scenario())
+        assert pending.result() is message
+
+    def test_the_history_poll_ignores_a_previous_reply(self):
+        previous = _FakeMessage(author_id=999, created_at=100.0, embeds=[object()])
+        session = _channel_session(last_channel_at=100.0, reply_not_before=150.0)
+        session._channel = _FakeHistoryChannel([previous])
+
+        assert asyncio.run(session._poll_recent_mudae_reply()) is None
+
+    def test_the_history_poll_still_finds_a_newer_reply(self):
+        reply = _FakeMessage(author_id=999, created_at=200.0, embeds=[object()])
+        session = _channel_session(last_channel_at=100.0, reply_not_before=150.0)
+        session._channel = _FakeHistoryChannel([reply])
+
+        assert asyncio.run(session._poll_recent_mudae_reply()) is reply
+
+    def test_the_watermark_itself_is_not_reused(self):
+        # Equality matters: the mark *is* the previous reply, so a message at
+        # that instant belongs to the previous query, not this one.
+        previous = _FakeMessage(author_id=999, created_at=100.0, embeds=[object()])
+        session = _channel_session(last_channel_at=100.0, reply_not_before=100.0)
+        session._channel = _FakeHistoryChannel([previous])
+
+        assert asyncio.run(session._poll_recent_mudae_reply()) is None
+
+    def test_a_query_marks_the_last_seen_reply_as_off_limits(self):
+        now = time.time()
+        session = _channel_session(last_channel_at=now)
+
+        class _Channel:
+            def __init__(self):
+                self.sent = []
+
+            async def send(self, content):
+                self.sent.append(content)
+
+        session._channel = _Channel()
+        seen = {}
+
+        async def _fake_wait(timeout=None):
+            seen["not_before"] = session._reply_not_before
+            return "message"
+
+        session._wait_for_pending_reply = _fake_wait
+
+        result = asyncio.run(session.send_and_wait("$im Rem", pause_before=False))
+
+        assert result == "message"
+        assert seen["not_before"] == now
+        assert session._channel.sent == ["$im Rem"]
+        assert session._pending is None
+
+    def test_an_idle_dm_advances_the_dm_watermark_without_being_collected(self):
+        session = _dm_session()
+        session._dm_active = False
+        session._dm_event = None
+
+        message = _FakeMessage("late part", author_id=999, created_at=321.0)
+
+        asyncio.run(session._maybe_capture_dm(message))
+
+        assert session._last_dm_at == 321.0
+        assert session._dm_parts == []
 
 
 class TestSeriesExtractRoute:

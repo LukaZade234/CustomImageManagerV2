@@ -161,6 +161,19 @@ sudo systemctl daemon-reload && sudo systemctl enable --now imgmanager
 sudo systemctl status imgmanager
 ```
 
+For Mudae support, also install the dedicated worker (see "Mudae import"
+below). It is a separate unit because it is the only thing that should hold the
+Discord token:
+
+```bash
+sudo cp deploy/imgmanager-mudae.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now imgmanager-mudae
+sudo systemctl status imgmanager-mudae
+```
+
+`deploy/update.sh` restarts it on each deploy, but only best-effort: a Mudae
+problem never rolls the site back.
+
 ## 4. Load the data
 
 ```bash
@@ -433,7 +446,10 @@ round overwrites the live database with itself.
 | `LOG_LEVEL` | origin | no | Default `INFO`. `DEBUG` adds the per-file upload steps |
 | `PORT` | origin | no | Default 8080 |
 | `WEB_WORKERS` / `WEB_THREADS` / `WEB_TIMEOUT` | origin | no | See `gunicorn.conf.py` |
-| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**) |
+| `DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` | origin | no | Mudae import (a **self-bot user token**). Needed by the **mudae** unit, not the API unit |
+| `MUDAE_SOCKET` | origin | with Mudae | Where the API finds the Mudae worker, and where the worker listens. Unset ⇒ the API runs the self-bot in-process again (see below) |
+| `MUDAE_IDLE_SECONDS` | origin | no | How long the worker stays connected with an empty queue. Default 600. Shorter means more Discord identifies |
+| `MUDAE_QUEUE_MAX` / `MUDAE_JOB_TIMEOUT` | origin | no | Queue depth (default 4) and how long a web request waits (default 180s) |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | origin | no | Sign-in (an **OAuth app**, unrelated to the above) |
 | `DISCORD_REDIRECT_URI` | origin | with sign-in | One or more callbacks, comma-separated. Each must match Discord exactly. Not derived: behind the Tunnel the app sees `localhost:8080`. With several, the one matching the browser's origin is used and the first is the fallback |
 | `OWNER_DISCORD_ID` | origin | no | Grants the owner role at login |
@@ -444,7 +460,8 @@ round overwrites the live database with itself.
 ## Mudae import (optional)
 
 Enables **Add Character** lookup, bulk series import, and **Update main from
-Mudae**. The app runs `$im` / `$ima` in a Discord channel you configure.
+Mudae**. The app runs `$im` (one character) and `$imartsmi-` (a whole series) in
+a Discord channel you configure.
 
 1. Pick a Discord server where Mudae is installed and you can run commands. Use a
    dedicated channel, e.g. `#mudae-imports`.
@@ -456,9 +473,34 @@ Mudae**. The app runs `$im` / `$ima` in a Discord channel you configure.
    into `DISCORD_USER_TOKEN` (the value only — no `Bearer` prefix).
 5. Keep it secret; never commit it.
 
-> Automating a user account may violate Discord's Terms of Service, and the
-> account can be banned. This is an authoring convenience, not part of the serving
-> path — see `DECISIONS.md` §8.
+The **mudae** unit is the only thing that uses the token. The API unit talks to
+it over `MUDAE_SOCKET` and needs no Discord credentials of its own. It connects
+lazily on the first job and disconnects after `MUDAE_IDLE_SECONDS` (10 minutes)
+with an empty queue, so an idle site is not a permanently online account. Check
+it with:
+
+```bash
+journalctl -u imgmanager-mudae -f      # connect / disconnect / job logs
+curl -s localhost:8080/api/mudae/status | jq
+```
+
+**Rollback / local development.** If `MUDAE_SOCKET` is unset, the API runs the
+self-bot in-process exactly as it did before the service existed. Leave
+`DISCORD_USER_TOKEN` / `DISCORD_CHANNEL_ID` in `secrets.env` (both units read it)
+until the service has been confirmed working; then remove the fallback by taking
+the token out of the API unit's environment. A missing or dead service is a clean
+503 on the Mudae endpoints, never a site outage.
+
+> **This is a self-bot, and the account can be banned.** Automating a user
+> account violates Discord's Terms of Service, so treat the token as disposable
+> and prefer a throwaway alt over a personal account. A ban costs every
+> Mudae-backed feature — character lookup, "Update main from Mudae", bulk series
+> import, rank/pool refreshes — but not browsing, uploads, ImgChest, the catalog,
+> moderation, or portraits already mirrored to R2. The client connects on demand
+> and drops the connection when idle rather than staying online; that is
+> deliberate (see `DECISIONS.md` §8, "The self-bot is a liability"). A parse
+> failure is logged with the raw reply, since Mudae's embed format can change
+> without notice.
 
 ## Local development
 

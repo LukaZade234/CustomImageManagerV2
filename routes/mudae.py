@@ -165,7 +165,9 @@ def _persist_mudae_character(info, *, overwrite_main=False):
 
 @mudae_bp.route("/api/mudae/status", methods=["GET"])
 def mudae_status():
-    return jsonify({"configured": mudae_discord.configured()})
+    # In service mode this asks the service, so it says whether the connection
+    # is actually up rather than just whether env vars are present.
+    return jsonify(mudae_discord.status())
 
 
 @mudae_bp.route("/api/mudae/proxy-image", methods=["GET"])

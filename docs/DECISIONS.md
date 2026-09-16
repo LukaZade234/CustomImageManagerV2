@@ -697,6 +697,47 @@ the ` - ` separator (`Lord of the Mysteries   0/55`), then alias lines, pool tot
 around the character lines. Only the header and the `#rank - Name · ($pools) - url` lines carry
 data, so an alias block never becomes a parse failure.
 
+### The self-bot is a liability, so Mudae is optional by design
+
+The Discord integration is a **self-bot**: it signs in as the operator's own account
+(`DISCORD_USER_TOKEN`) and drives `$im` / `$imartsmi-`. Automating a user account is against
+Discord's ToS, and a user account does not run in an app sandbox — the failure mode is the account
+itself.
+
+**What a ban would cost.** Every Mudae-backed feature dies at once: looking a character up instead
+of typing it in, "update main image from Mudae", and the one-command series fetch. Rank and pool
+refreshes stop too. Nothing else does — browsing, uploads, ImgChest, the catalog, moderation and the
+portrait mirrors are all independent of Discord, and Mudae portraits already mirrored to R2 keep
+being served. The blast radius is bounded because the integration was kept a *metadata fetcher*
+rather than a data source (see "The Mudae catalog"): the catalog is its own table, seeded in bulk,
+and the self-bot is not on any request path that a normal visit takes.
+
+**Decisions taken because of that:**
+
+- **A dedicated process owns the connection.** `mudae_service.py` is the only
+  thing that signs in; the web workers forward jobs over a Unix socket. This is
+  not only tidiness — gunicorn's two workers each had their own lock, so two
+  Mudae requests could connect at once, and every lookup paid a fresh Discord
+  *identify*. One process serializes for real, and the token lives in one unit's
+  environment instead of the whole API's.
+- **Keep it off, not always on.** The client connects when a job arrives and
+  disconnects once the queue has been empty for `MUDAE_IDLE_SECONDS` (10
+  minutes). A permanently-online user account is the most visible thing a
+  self-bot can be; an intermittent one that appears only while someone is
+  curating is quieter, and the cost is a single identify on the next lookup.
+- **Queue, don't refuse.** Jobs wait in a short FIFO queue (4 deep) rather than
+  the old "another request is in progress" refusal, since the realistic case is
+  one person clicking twice. Past the cap the request is refused with a 503, and
+  a job that cannot start in time fails fast rather than holding a worker.
+- **Move it to a throwaway account when convenient.** The token belongs to the
+  operator's personal account today, which is exactly the account a ban would
+  hurt most. A dedicated alt contains the damage; it is not urgent, but it is the
+  intended end state.
+- **Assume a silent format change.** Mudae has no API and its embeds are
+  reverse-engineered, so a parse failure is treated as expected, logged with the
+  raw reply, and surfaced as "its format may have changed" rather than a blank
+  refusal — the next thing to check when a lookup stops working.
+
 ---
 
 ## 9. The visual design system

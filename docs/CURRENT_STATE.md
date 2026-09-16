@@ -452,37 +452,43 @@ limited per identity (`ratelimit.py`).
 
 ### 5.4 Mudae integration (`mudae_discord.py`)
 
-A **Discord self-bot**: it logs into the operator's own personal Discord account using
-`DISCORD_USER_TOKEN`, posts `$im` / `$ima` in a fixed channel, and parses Mudae's embed replies.
-It does not introduce any end-user identity — every request is attributed to the operator's
-account. Identity checks are only "is this message from the Mudae bot"
-(`mudae_discord.py:897`, `:1142`).
+A **Discord self-bot**: it logs into the operator's own Discord account using
+`DISCORD_USER_TOKEN`, sends `$im` (one character) or `$imartsmi-` (a whole series) in a fixed
+channel, and parses Mudae's embed and DM replies. It does not introduce any end-user identity —
+every request is attributed to the operator's account; the only identity check is "is this message
+from the Mudae bot".
 
-**Architecture: connect per request, not persistent.** `mudae_discord.py:1348` is
-`asyncio.run(coro)` — each request creates a fresh event loop, calls `client.start()`
-(`:1097`), waits up to 30s for ready (`:1099`), does its work, then tears the client down
-(`:1127`). Two consequences:
+**Connection model.** `_MudaeSession.connect()` brings up a `discord.py-self` client and resolves
+the channel; `close()` tears them down; the lookup methods run in between. The session is
+**reusable** — the connection is not tied to a single `with` — and each query resets its own wait
+state and pins a watermark (the newest Mudae message seen on the channel and in DMs), so a reply
+that arrives late, or a DM part left over from a previous fetch, cannot answer the wrong query.
 
-- The guarding `threading.Lock` (`mudae_discord.py:131`) is **process-global, and gunicorn runs
-  2 workers** — two concurrent Mudae requests landing on different workers will both connect
-  simultaneously, defeating the lock entirely.
-- Every lookup consumes one Discord *identify*, which is rate-limited to roughly 1000/day per
-  account.
+**The connection lives in `mudae_service.py`.** That process is the only thing that signs in; the
+web workers forward jobs over a Unix socket (`MUDAE_SOCKET`) and no longer need the token. It
+connects lazily on the first job, runs jobs one at a time from a short FIFO queue (4 deep), and
+disconnects after `MUDAE_IDLE_SECONDS` (10 minutes) with an empty queue, so an idle site is not a
+permanently online account. `deploy/imgmanager-mudae.service` runs it; `deploy/update.sh` restarts
+it best-effort. `_service_call`/`status()` in `mudae_discord.py` are the client side, and
+`/api/mudae/status` reports the service's real state (connected, busy, queue depth).
 
-Pacing constants (`:24`–`:32`): `REPLY_TIMEOUT_S = 25.0`, `IM_INTERVAL_S = 1.0`,
-`IMA_PAGE_DELAY_S = 2.2`, `MAX_IMA_PAGES = 40`, `CHARACTER_LOOKUP_RETRIES = 2`. An `_ImPacer`
-class (`:157`) enforces minimum spacing between `$im` sends.
+Without `MUDAE_SOCKET` the module falls back to connecting in-process, as it did before the
+service existed. That path is kept for local development and as a one-release rollback; once the
+service is confirmed it (and the token in the API unit's environment) should be removed.
 
-Parsing is extensive and fragile — roughly 40 helpers reverse-engineering Mudae's embed format
-(`parse_im_embed` `:421`, `parse_ima_series_reply` `:528`, plus claim-rank, series, and
-nav-button/reaction handling). It breaks whenever Mudae changes its output.
+Pacing: `REPLY_TIMEOUT_S = 25.0` bounds a single reply wait, `ACTION_DELAY_S = 1.0` spaces Discord
+actions, and a series DM is collected until its header total is reached or the parts stop arriving
+(`DM_IDLE_TIMEOUT_S`, `DM_MAX_WAIT_S`).
 
-Bulk series import streams progress to the browser over **SSE**, with cancellation via a
-`threading.Event` (`:128`).
+Parsing is extensive and fragile — roughly 40 helpers reverse-engineering Mudae's formats
+(`parse_im_embed`, `parse_im_message`, `parse_ima_names`, plus claim-rank, series and list
+handling). It breaks whenever Mudae changes its output, so a failed parse now logs the raw reply
+and raises a "format may have changed" error rather than a blank refusal.
 
-**Risk:** automating a user account violates Discord's Terms of Service. v1's `DEPLOY.md` (since
-replaced by `DEPLOYMENT.md`) already
-notes this. The account can be banned, which would take out all Mudae features.
+**Risk:** automating a user account violates Discord's Terms of Service. The account can be banned,
+which would take out every Mudae-backed feature — lookup, portrait refresh, bulk series import,
+rank/pool refreshes — but nothing else. Prefer a throwaway alt and keep the connection off rather
+than always-on; see `DECISIONS.md` §8, "The self-bot is a liability".
 
 ---
 

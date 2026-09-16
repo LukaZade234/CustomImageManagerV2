@@ -6,6 +6,8 @@ it. The gender arrives as a custom emoji that `_strip_md` removes, so it has to
 be read off the raw description.
 """
 
+import pytest
+
 import mudae_discord
 
 
@@ -117,3 +119,74 @@ class TestCharacterCard:
         assert body["is_male"] is True
         assert body["is_female"] is False
         assert body["pools"] == "Game & Animanga"
+
+
+class _Recorder:
+    """Stands in for the structured logger so a test can read what was logged."""
+
+    def __init__(self):
+        self.calls = []
+
+    def warning(self, event, **fields):
+        self.calls.append((event, fields))
+
+    def info(self, *args, **kwargs):
+        pass
+
+    def error(self, *args, **kwargs):
+        pass
+
+
+class _Unreadable:
+    """An embed that matches none of Mudae's known shapes."""
+
+    def __init__(self, description=""):
+        self.author = None
+        self.title = None
+        self.description = description
+        self.image = None
+        self.thumbnail = None
+        self.footer = None
+        self.fields = []
+
+
+class _EmptyMessage:
+    embeds = []
+    content = ""
+
+
+class TestParseFailureReporting:
+    """Mudae has no API, so a parse failure is expected; the raw reply is the clue."""
+
+    def test_the_raw_reply_is_logged_and_the_error_says_so(self, monkeypatch):
+        recorder = _Recorder()
+        monkeypatch.setattr(mudae_discord, "log", recorder)
+
+        with pytest.raises(mudae_discord.MudaeError) as caught:
+            mudae_discord.parse_im_embed(_Unreadable("UNKNOWN:" + "x" * 300))
+
+        event, fields = recorder.calls[0]
+        assert event == "mudae.parse_failed"
+        assert fields["context"] == "im_reply"
+        assert fields["reply"]["description"].startswith("UNKNOWN:")
+        assert "format may have changed" in str(caught.value)
+
+    def test_an_empty_message_is_its_own_failure(self, monkeypatch):
+        recorder = _Recorder()
+        monkeypatch.setattr(mudae_discord, "log", recorder)
+
+        with pytest.raises(mudae_discord.MudaeError):
+            mudae_discord.parse_im_message(_EmptyMessage())
+
+        assert recorder.calls[0][0] == "mudae.parse_failed"
+        assert recorder.calls[0][1]["context"] == "im_empty_reply"
+
+    def test_a_huge_reply_is_truncated_in_the_log(self, monkeypatch):
+        recorder = _Recorder()
+        monkeypatch.setattr(mudae_discord, "log", recorder)
+
+        with pytest.raises(mudae_discord.MudaeError):
+            mudae_discord.parse_im_embed(_Unreadable("x" * 5000))
+
+        snippet = recorder.calls[0][1]["reply"]["description"]
+        assert len(snippet) == mudae_discord._REPLY_SNIPPET_LIMIT
