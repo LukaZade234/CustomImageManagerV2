@@ -1697,6 +1697,11 @@ body.reorder-touch-dragging {
   margin: 0;
   font-size: var(--type-body);
 }
+.duplicates__count-label {
+  font-size: var(--type-meta);
+  font-weight: 400;
+  color: var(--text-muted);
+}
 .duplicates__hash {
   font-family: var(--font-mono, monospace);
   font-size: var(--type-micro);

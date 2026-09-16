@@ -187,8 +187,8 @@ JSON documents replaced by tables, on SQLite. Engine and shape settled in
       *before* it reaches ImgChest, where it could not be deleted. The fingerprint is of the
       stored file, so `scripts/backfill_content_hashes.py` can fill in the older library by
       downloading it, and the moderator **Duplicate images** review
-      (`/profile/moderation/duplicates`) groups by it. See `DECISIONS.md`, "Uploading the same
-      picture twice".
+      (`/profile/moderation/duplicates`) flags a character holding the same file twice. See
+      `DECISIONS.md`, "Uploading the same picture twice".
 
 ### What the real data taught us
 

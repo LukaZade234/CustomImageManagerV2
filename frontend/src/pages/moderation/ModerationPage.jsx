@@ -251,15 +251,12 @@ export default function ModerationPage() {
   const pageBody = (
     <>
       <div className="moderation-head">
-        <h1 className="page-title">Moderation</h1>
         {user ? (
           <Link className="moderation-back" to={pathname}>
             ← Search another contributor
           </Link>
         ) : (
-          <Link className="moderation-back" to="/profile/moderation/duplicates">
-            Duplicate images →
-          </Link>
+          <h2 className="section-heading">Contributors</h2>
         )}
       </div>
 

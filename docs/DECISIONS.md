@@ -542,9 +542,10 @@ import path fetches the bytes on the server, where the client has nothing to has
 `content_hash` and `idx_custom_images_hash` carry it; no migration was needed. For the library that
 predates the gate, `scripts/backfill_content_hashes.py` fills the fingerprint in (it has to
 download each image, which is exactly why the hash is of the stored file), and the moderator
-**Duplicate images** review at `/profile/moderation/duplicates` groups by it, with a soft remove or
-restore per copy. The add-time gate only ever sees a fingerprint that already exists; the backfill
-is what gives the old rows one.
+**Duplicate images** review at `/profile/moderation/duplicates` groups each character's own copies
+by it — the same file twice on one character — because the same picture on several characters is
+usually deliberate. Each copy can be soft-removed or restored. The add-time gate only ever sees a
+fingerprint that already exists; the backfill is what gives the old rows one.
 
 ### 50,000 characters: searchable names, pages on demand
 

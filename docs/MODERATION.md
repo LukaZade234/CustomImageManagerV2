@@ -645,17 +645,26 @@ that are already in the library, from before that gate existed.
 ### Backend
 - `db.find_images_by_content_hash` is the add-time gate; `db.images_missing_content_hash` /
   `db.set_content_hash` are the backfill; `db.list_duplicate_clusters` is the audit — unpurged rows
-  sharing a fingerprint, biggest cluster first, owner attribution shown as staff.
+  a single character holds more than once, biggest cluster first, owner attribution shown as staff.
+  Grouped **per character**: the same file on several characters is usually one image showing
+  several of them, which is intentional, so only a character's own repeats are flagged.
 - `scripts/backfill_content_hashes.py [--dry-run] [--limit N]` downloads each unfingerprinted image
   and records the sha256 of the stored file. Resumable and keyset-paginated; a failure (usually a
   dead link) leaves the row NULL for a later run.
 - `GET /api/moderation/duplicates` (`require_moderator`) returns `{clusters, total}`.
 
 ### Frontend
-- `/profile/moderation/duplicates` (`DuplicatesPage.jsx`), linked from the finder. Each cluster is a
-  Card of its copies: thumbnail, character link, state, adder, date. **Remove** (soft, through the
-  existing owner-or-moderator delete endpoint) for an active copy, **Restore** for a removed one.
-  `queries/moderation.js` adds `useModerationDuplicates` and `useRemoveDuplicateImage`.
+- The staff area is one tabbed layout, `ModerationLayout.jsx`, with three sections: **Users**
+  (`ModerationPage`, the contributor finder), **Reports** and **Duplicates** — real routes, so a tab
+  is linkable and survives a reload, the same reasoning as `ProfileLayout`.
+- **Reports** (`ReportsPage.jsx`) is a deliberate placeholder: reporting already exists and already
+  acts, but whether it becomes a readable queue is the open "reports question" in the roadmap. The
+  tab settles the shape of the staff area without pre-judging that answer.
+- **Duplicates** (`DuplicatesPage.jsx`) at `/profile/moderation/duplicates`. Each cluster is a Card
+  of its copies — thumbnail, state, adder, date — where the thumbnail and the character name both
+  open the character page. **Remove** (soft, through the existing owner-or-moderator delete
+  endpoint) for an active copy, **Restore** for a removed one. `queries/moderation.js` adds
+  `useModerationDuplicates` and `useRemoveDuplicateImage`.
 
 Nothing here purges. A duplicate is a mistake to correct, not an image to destroy, and a soft remove
 stays reversible from the character's Removed list.

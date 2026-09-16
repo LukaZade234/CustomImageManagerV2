@@ -1796,7 +1796,12 @@ def images_missing_content_hash(limit: int = 500, after_id: int = 0) -> list[dic
 
 
 def list_duplicate_clusters(limit: int = 200) -> list[dict]:
-    """Groups of images that share a fingerprint — the audit's input.
+    """Groups of images the same character has more than once — the audit's input.
+
+    Grouped **per character**, not per fingerprint: the same picture legitimately
+    belongs to several characters when it shows more than one of them, so a
+    cross-character match is not a finding. A cluster is one character holding
+    the same file twice, which is the case worth reviewing.
 
     Only unpurged rows count, since a purged row cannot be viewed or restored.
     A cluster carries every copy, removed ones included: seeing that a picture
@@ -1805,10 +1810,12 @@ def list_duplicate_clusters(limit: int = 200) -> list[dict]:
     """
     conn = get_connection()
     groups = conn.execute(
-        "SELECT i.content_hash AS content_hash, COUNT(*) AS n"
+        "SELECT i.character_id AS character_id, i.content_hash AS content_hash,"
+        "       c.name AS character, COUNT(*) AS n"
         "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
         " WHERE i.content_hash IS NOT NULL AND i.purged_at IS NULL"
-        " GROUP BY i.content_hash"
+        " GROUP BY i.character_id, i.content_hash"
         " HAVING COUNT(*) > 1"
         " ORDER BY n DESC, i.content_hash"
         " LIMIT ?",
@@ -1826,13 +1833,14 @@ def list_duplicate_clusters(limit: int = 200) -> list[dict]:
             "  FROM custom_images i"
             "  JOIN characters c ON c.id = i.character_id"
             "  LEFT JOIN identities owner ON owner.id = i.added_by"
-            " WHERE i.content_hash = ? AND i.purged_at IS NULL"
+            " WHERE i.character_id = ? AND i.content_hash = ? AND i.purged_at IS NULL"
             " ORDER BY i.state, i.id",
-            (group["content_hash"],),
+            (group["character_id"], group["content_hash"]),
         ).fetchall()
         clusters.append(
             {
                 "hash": group["content_hash"],
+                "character": group["character"],
                 "count": int(group["n"]),
                 "images": [
                     {

@@ -42,7 +42,9 @@ import AddPage from './AddPage'
 import CharacterPage from './CharacterPage'
 import CustomsPage from './CustomsPage'
 import HomePage from './HomePage'
+import ModerationLayout from './moderation/ModerationLayout'
 import ModerationPage from './moderation/ModerationPage'
+import ReportsPage from './moderation/ReportsPage'
 import NotificationsPage from './NotificationsPage'
 import SavedTab from './profile/SavedTab'
 import SearchResultsPage from './SearchResultsPage'
@@ -130,10 +132,22 @@ describe('page smoke tests', () => {
   })
 
   it('renders the moderation page', async () => {
-    renderAt(<ModerationPage />, '/moderation')
+    renderAt(
+      <Routes>
+        <Route path="/moderation" element={<ModerationLayout />}>
+          <Route index element={<ModerationPage />} />
+        </Route>
+      </Routes>,
+      '/moderation',
+    )
     expect(
       await screen.findByRole('heading', { level: 1, name: /moderation/i }),
     ).toBeInTheDocument()
+  })
+
+  it('renders the reports placeholder', () => {
+    renderAt(<ReportsPage />)
+    expect(screen.getByRole('heading', { level: 2, name: /reports/i })).toBeInTheDocument()
   })
 
   it('renders the notifications page', async () => {
