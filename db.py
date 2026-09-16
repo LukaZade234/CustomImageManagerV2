@@ -2933,6 +2933,92 @@ def report_image(image_id: int, identity_id: str, reason: str) -> dict | None:
         return {"reports": reports, "removed": removed, "already_reported": already_reported}
 
 
+def list_reported_images(status: str | None = None, limit: int = 200) -> list[dict]:
+    """Images that carry at least one report, newest report first.
+
+    `status` splits the queue into the two states a moderator cares about:
+    `"reported"` for images still live (`state='active'`), and `"removed"` for
+    images the threshold already took down. `None` is both. Purged rows are
+    excluded — they are gone and cannot be acted on.
+
+    Each item carries its individual reports, with the reporter's handle, so the
+    reasons and who gave them are readable rather than only counted.
+    """
+    if status not in (None, "reported", "removed"):
+        raise ValueError(f"Unknown report status: {status!r}")
+    conn = get_connection()
+    sql = (
+        "SELECT i.id AS id, i.url AS url, i.thumb_key AS thumb_key,"
+        "       i.state AS state, i.removed_reason AS removed_reason,"
+        "       i.removed_at AS removed_at,"
+        "       c.name AS character,"
+        "       COUNT(r.identity_id) AS report_count, MAX(r.at) AS last_report_at"
+        "  FROM custom_images i"
+        "  JOIN characters c ON c.id = i.character_id"
+        "  JOIN image_reports r ON r.image_id = i.id"
+        " WHERE i.purged_at IS NULL"
+    )
+    if status == "reported":
+        sql += " AND i.state = 'active'"
+    elif status == "removed":
+        sql += " AND i.state = 'removed'"
+    sql += " GROUP BY i.id ORDER BY last_report_at DESC, i.id LIMIT ?"
+    rows = conn.execute(sql, (limit,)).fetchall()
+
+    items = []
+    for row in rows:
+        reports = conn.execute(
+            "SELECT r.reason AS reason, r.at AS at, reporter.handle AS reporter"
+            "  FROM image_reports r"
+            "  LEFT JOIN identities reporter ON reporter.id = r.identity_id"
+            " WHERE r.image_id = ?"
+            " ORDER BY r.at, r.identity_id",
+            (row["id"],),
+        ).fetchall()
+        items.append(
+            {
+                "id": row["id"],
+                "character": row["character"],
+                "url": row["url"],
+                "thumb": thumbnails.thumb_url(row["id"], row["url"], row["thumb_key"]),
+                "state": row["state"],
+                "removed_reason": row["removed_reason"],
+                "removed_at": row["removed_at"],
+                "report_count": int(row["report_count"]),
+                "last_report_at": row["last_report_at"],
+                "reports": [
+                    {
+                        "reason": r["reason"],
+                        "at": r["at"],
+                        # NULL when the reporter's identity has since gone.
+                        "reporter": r["reporter"],
+                    }
+                    for r in reports
+                ],
+            }
+        )
+    return items
+
+
+def reported_image_counts() -> dict:
+    """How many images are in each bucket, for the filter labels."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.state AS state, COUNT(DISTINCT i.id) AS n"
+        "  FROM custom_images i"
+        "  JOIN image_reports r ON r.image_id = i.id"
+        "  WHERE i.purged_at IS NULL"
+        "  GROUP BY i.state"
+    ).fetchall()
+    counts = {"reported": 0, "removed": 0}
+    for row in rows:
+        if row["state"] == "active":
+            counts["reported"] = int(row["n"])
+        elif row["state"] == "removed":
+            counts["removed"] = int(row["n"])
+    return counts
+
+
 # --- Takes --------------------------------------------------------------
 
 

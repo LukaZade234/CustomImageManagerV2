@@ -55,6 +55,7 @@ EXPECTED_ROUTES = {
     ("/api/me/settings", "PATCH"),
     ("/api/moderation/duplicates", "GET"),
     ("/api/moderation/history/<int:action_id>/delete", "POST"),
+    ("/api/moderation/reports", "GET"),
     ("/api/moderation/users", "GET"),
     ("/api/moderation/users/<ref>/ban", "POST"),
     ("/api/moderation/users/<ref>/characters", "GET"),

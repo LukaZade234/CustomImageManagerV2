@@ -657,17 +657,36 @@ that are already in the library, from before that gate existed.
 - The staff area is one tabbed layout, `ModerationLayout.jsx`, with three sections: **Users**
   (`ModerationPage`, the contributor finder), **Reports** and **Duplicates** — real routes, so a tab
   is linkable and survives a reload, the same reasoning as `ProfileLayout`.
-- **Reports** (`ReportsPage.jsx`) is a deliberate placeholder: reporting already exists and already
-  acts, but whether it becomes a readable queue is the open "reports question" in the roadmap. The
-  tab settles the shape of the staff area without pre-judging that answer.
 - **Duplicates** (`DuplicatesPage.jsx`) at `/profile/moderation/duplicates`. Each cluster is a Card
   of its copies — thumbnail, state, adder, date — where the thumbnail and the character name both
-  open the character page. **Remove** (soft, through the existing owner-or-moderator delete
-  endpoint) for an active copy, **Restore** for a removed one. `queries/moderation.js` adds
-  `useModerationDuplicates` and `useRemoveDuplicateImage`.
+  open the character page. **Delete** permanently removes an active copy (confirmed first, and the
+  ImgChest file goes with it); a copy already removed offers **Restore**. `queries/moderation.js`
+  adds `useModerationDuplicates` and reuses `usePurgeModerationImage` / `useRestoreModerationImage`.
 
-Nothing here purges. A duplicate is a mistake to correct, not an image to destroy, and a soft remove
-stays reversible from the character's Removed list.
+
+---
+
+## Reports
+
+Reporting already exists and already acts: two *distinct* reports remove an image (`DECISIONS.md`
+§1). What this tab adds is the read — every reported image, split by whether the threshold has acted
+yet.
+
+### Backend
+- `db.list_reported_images(status)` — `"reported"` for images still live with at least one report,
+  `"removed"` for images the threshold already took down, `None` for both. Each item carries its
+  individual reports (reason, reporter handle, time), so the *reasons* are readable, not just a
+  count.
+- `db.reported_image_counts()` — the two bucket sizes, for the filter labels.
+- `GET /api/moderation/reports?status=reported|removed|all` (`require_moderator`) returns
+  `{status, counts, items, total}`.
+
+### Frontend
+- **Reports** (`ReportsPage.jsx`) at `/profile/moderation/reports`: a segmented filter between **Not
+  removed yet** and **Removed by reports** (the counts ride in the labels), then a card per image
+  with its thumbnail, character, state and reports. Read-only, like the rest of the surface — the
+  verbs to restore or delete an image stay where the image and its context are.
+  `queries/moderation.js` adds `useModerationReports`.
 
 
 ---

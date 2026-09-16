@@ -1,24 +1,24 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getImageUrl } from '../../api'
-import { Button, Card, EmptyState } from '../../components/ui'
+import { Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { thumbUrl } from '../../config'
 import {
   useModerationDuplicates,
-  useRemoveDuplicateImage,
+  usePurgeModerationImage,
   useRestoreModerationImage,
 } from '../../queries/moderation'
 import { useStore } from '../../store/useStore'
 
 /**
- * The duplicate audit: pictures the same file was added under more than one URL.
+ * The duplicate audit: a character holding the same picture twice.
  *
  * The upload gate stops a duplicate *newly* added, but the library predates it,
  * and every fingerprint here was filled in by `scripts/backfill_content_hashes.py`.
- * Removing a copy is a soft delete, restorable from the character's Removed
- * list, so this is a review surface rather than a purge — the same read-only
- * posture as the rest of moderation, with the acting verbs kept to the minimum
- * that makes a finding actionable.
+ * The extra copies are real, so removing one means deleting it from ImgChest as
+ * well — a permanent, confirmed delete, available to staff (owner included).
+ * A copy that was already removed can instead be restored.
  */
 
 function formatDate(iso) {
@@ -30,22 +30,23 @@ function formatDate(iso) {
 
 export default function DuplicatesPage() {
   const { data, isPending, isError, error, refetch } = useModerationDuplicates()
-  const removeImage = useRemoveDuplicateImage()
+  const purgeImage = usePurgeModerationImage()
   const restoreImage = useRestoreModerationImage()
   const addToast = useStore((s) => s.addToast)
+  const [purgeTarget, setPurgeTarget] = useState(null)
 
   const clusters = data?.clusters ?? []
-  const busyUrl = removeImage.isPending
-    ? removeImage.variables?.url
+  const busyUrl = purgeImage.isPending
+    ? purgeImage.variables?.url
     : restoreImage.isPending
       ? restoreImage.variables?.url
       : null
 
-  const remove = (image) =>
-    removeImage.mutate(
+  const purge = (image) =>
+    purgeImage.mutate(
       { character: image.character, url: image.url },
       {
-        onSuccess: () => addToast('Image removed', 'success'),
+        onSuccess: () => addToast('Image permanently deleted', 'success'),
         onError: (err) => addToast(err.message, 'error'),
       },
     )
@@ -64,9 +65,9 @@ export default function DuplicatesPage() {
       <h2 className="section-heading">Duplicate images</h2>
       <p className="text-meta moderation-lead">
         A character holding the same picture twice. The same file on <em>different</em> characters
-        is usually intentional — one image can show several of them — so it is not flagged. Removing
-        a copy is a soft delete, restorable from the character&rsquo;s Removed list. Existing
-        duplicates get a fingerprint from the backfill; new ones are stopped at upload.
+        is usually intentional — one image can show several of them — so it is not flagged. Deleting
+        a copy removes it from ImgChest permanently; a copy already removed can be restored instead.
+        Existing duplicates get a fingerprint from the backfill; new ones are stopped at upload.
       </p>
 
       {isPending ? (
@@ -138,9 +139,9 @@ export default function DuplicatesPage() {
                           size="sm"
                           variant="danger"
                           loading={busyUrl === image.url}
-                          onClick={() => remove(image)}
+                          onClick={() => setPurgeTarget(image)}
                         >
-                          Remove
+                          Delete
                         </Button>
                       )}
                     </li>
@@ -150,6 +151,21 @@ export default function DuplicatesPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {purgeTarget && (
+        <ConfirmDialog
+          title="Delete this copy permanently?"
+          body={`"${purgeTarget.character}" will lose this copy and the file will be deleted from ImgChest too. This cannot be undone — any $ai command using it will break.`}
+          confirmLabel="Delete forever"
+          variant="danger"
+          onConfirm={() => {
+            const target = purgeTarget
+            setPurgeTarget(null)
+            purge(target)
+          }}
+          onCancel={() => setPurgeTarget(null)}
+        />
       )}
     </>
   )

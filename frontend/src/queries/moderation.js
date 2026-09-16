@@ -41,21 +41,14 @@ export function useModerationDuplicates() {
   })
 }
 
-/**
- * Remove one copy of a duplicate (soft, like every removal). Reuses the
- * owner-or-moderator remove endpoint; the audit and the contributor lists have
- * both changed, so refresh them.
- */
-export function useRemoveDuplicateImage() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ character, url }) => apiClient.deleteCustomImage(character, url),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: moderationDuplicatesKey })
-      queryClient.invalidateQueries({ queryKey: ['moderation-user-images'] })
-      queryClient.invalidateQueries({ queryKey: ['moderation-user-characters'] })
-      queryClient.invalidateQueries({ queryKey: moderationUsersKey })
-    },
+/** The report queue, filtered to images still live or already removed. */
+export const moderationReportsKey = (status) => ['moderation-reports', status]
+
+export function useModerationReports(status) {
+  return useQuery({
+    queryKey: moderationReportsKey(status),
+    queryFn: () => apiClient.listModerationReports({ status }),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -200,8 +193,9 @@ export function useDeleteModerationHistory() {
 }
 
 /**
- * Owner-only: permanently delete an image — its ImgChest post, then a tombstone.
- * Both work views have lost a row, and the contributor counts have changed.
+ * Staff-only: permanently delete an image — its ImgChest file or post, then a
+ * tombstone. The work views and contributor counts have changed, and a
+ * duplicate cluster (or report row) may have lost a copy.
  */
 export function usePurgeModerationImage() {
   const queryClient = useQueryClient()
@@ -211,6 +205,8 @@ export function usePurgeModerationImage() {
       queryClient.invalidateQueries({ queryKey: ['moderation-user-images'] })
       queryClient.invalidateQueries({ queryKey: ['moderation-user-characters'] })
       queryClient.invalidateQueries({ queryKey: moderationUsersKey })
+      queryClient.invalidateQueries({ queryKey: moderationDuplicatesKey })
+      queryClient.invalidateQueries({ queryKey: ['moderation-reports'] })
     },
   })
 }

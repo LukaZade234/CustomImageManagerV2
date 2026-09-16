@@ -70,6 +70,8 @@ export const apiClient = {
   listModerationUsers: () => api('/api/moderation/users'),
   listModerationDuplicates: (limit = 200) =>
     api(`/api/moderation/duplicates?limit=${encodeURIComponent(limit)}`),
+  listModerationReports: ({ status = 'reported' } = {}) =>
+    api(`/api/moderation/reports?status=${encodeURIComponent(status)}`),
   listModerationUserImages: ({
     ref,
     state = 'active',
