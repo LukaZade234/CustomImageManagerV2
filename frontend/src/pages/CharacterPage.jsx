@@ -23,6 +23,7 @@ import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
 import { useGallerySelection } from '../hooks/useGallerySelection'
 import { useLightbox } from '../hooks/useLightbox'
+import { useMainImage } from '../hooks/useMainImage'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import {
   applyOrderToCache,
@@ -43,7 +44,6 @@ import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
 } from '../utils/downloadCustomImages'
-import { isImageFileLike } from '../utils/imageFiles'
 
 /** What the heading says while a mode is active. Browse gets nothing. */
 const MODE_LABELS = {
@@ -140,7 +140,6 @@ export default function CharacterPage() {
     },
   })
   const [loading, setLoading] = useState(false)
-  const [mudaeMainBusy, setMudaeMainBusy] = useState(false)
   const [mudaeConfigured, setMudaeConfigured] = useState(false)
   /**
    * The gallery is in exactly one mode at a time, and its selection and discard
@@ -165,7 +164,6 @@ export default function CharacterPage() {
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
   const [removedDrawer, setRemovedDrawer] = useState(null)
-  const [dragOver, setDragOver] = useState(false)
 
   /** Full multi-line upload error for dismissible dialog (replaces window.alert). */
 
@@ -370,6 +368,24 @@ export default function CharacterPage() {
     onReorder: (next) => applyReorder(next),
   })
 
+  /**
+   * The main portrait, its own hook: replace by file, drop, or Mudae refresh.
+   * The sign-in check lives inside it, before anything is read or sent.
+   */
+  const main = useMainImage({
+    name,
+    canAddImages,
+    onChanged: setMainImage,
+    addToast,
+    onMudaeRefresh: async () => {
+      addToast('Fetching main image from Mudae…', 'info')
+      const res = await apiClient.mudaeRefreshMainImage(name)
+      setMainImage(res.image_url)
+      reloadChar()
+      addToast(res.message || 'Main image updated from Mudae', 'success')
+    },
+  })
+
   const applyReorder = useCallback(
     (newOrder) => {
       // The gallery renders from the query cache, so writing the order there is
@@ -452,63 +468,6 @@ export default function CharacterPage() {
       }
     } catch (err) {
       addToast(err.message, 'error')
-    }
-  }
-
-  const handleMainImageChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!canAddImages) {
-      addToast('Sign in with Discord to change the main image', 'error')
-      e.target.value = ''
-      return
-    }
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('character_name', name)
-    try {
-      const res = await apiClient.setMainImage(fd)
-      setMainImage(res.image_url)
-      addToast('Main image updated', 'success')
-    } catch (err) {
-      addToast(err.message, 'error')
-    }
-  }
-
-  const handleMainImageDrop = (e) => {
-    e.preventDefault()
-    setDragOver(false)
-    if (!canAddImages) {
-      addToast('Sign in with Discord to change the main image', 'error')
-      return
-    }
-    const file = e.dataTransfer.files?.[0]
-    if (!isImageFileLike(file)) return
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('character_name', name)
-    apiClient
-      .setMainImage(fd)
-      .then((res) => {
-        setMainImage(res.image_url)
-        addToast('Main image updated', 'success')
-      })
-      .catch((err) => addToast(err.message, 'error'))
-  }
-
-  const handleMudaeRefreshMain = async () => {
-    if (!name || mudaeMainBusy) return
-    setMudaeMainBusy(true)
-    addToast('Fetching main image from Mudae…', 'info')
-    try {
-      const res = await apiClient.mudaeRefreshMainImage(name)
-      setMainImage(res.image_url)
-      reloadChar()
-      addToast(res.message || 'Main image updated from Mudae', 'success')
-    } catch (err) {
-      addToast(err.message, 'error')
-    } finally {
-      setMudaeMainBusy(false)
     }
   }
 
@@ -726,10 +685,10 @@ export default function CharacterPage() {
         mainThumb={mainThumb}
         mainInputRef={mainInputRef}
         loading={loading}
-        dragOver={dragOver}
-        onDragOverChange={setDragOver}
-        onMainImageChange={handleMainImageChange}
-        onMainImageDrop={handleMainImageDrop}
+        dragOver={main.dragOver}
+        onDragOverChange={main.setDragOver}
+        onMainImageChange={main.onFileInputChange}
+        onMainImageDrop={main.onDrop}
         canAddImages={canAddImages}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
@@ -751,8 +710,8 @@ export default function CharacterPage() {
         }}
         mudae={{
           configured: mudaeConfigured,
-          busy: mudaeMainBusy,
-          onRefreshMain: handleMudaeRefreshMain,
+          busy: main.mudaeBusy,
+          onRefreshMain: main.refreshFromMudae,
         }}
         pick={accent.pick}
         onPickPortrait={accent.pickFromPortrait}
