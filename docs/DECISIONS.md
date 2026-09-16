@@ -599,12 +599,14 @@ The importer merges every extract by `name_key` before writing: extracts overlap
 repeats are dropped, and when two captures disagree the better (lower) rank wins. It is idempotent,
 dry-runnable, and never overwrites a working row's field it did not find in the catalog.
 
-**Deferred, not rejected.** Retiring the self-bot to gap-filling and refreshes, and series pages, are
-natural next phases. Gap-fill means fetching *by series* only what the catalog lacks or has let
-drift — a series with no rows at all, rows with an empty rank/series/portrait/pool, and ranks that
-have moved — and merging it through the existing idempotent upsert, so the pasted extracts remain
-the seeding path rather than the ongoing one. Each `$imartsmi-` is one Discord identify, so it is
-run deliberately, not on a timer.
+**Catalog gap-fill and rank refresh: considered and declined.** Fetching, by series, only what the
+catalog lacks or has let drift (a series with no rows, rows with an empty rank/series/portrait/pool)
+and keeping ranks current was the obvious last job for the self-bot. It is not worth doing. Ranks
+move constantly and each series costs one Discord identify, so it is unbounded ongoing maintenance
+for a number nothing acts on; and the character gaps are already mostly closed, so what remains is
+individual names that can be added on demand through the existing Add flow — precisely when someone
+wants them. The mechanism stays (`$imartsmi-` plus the idempotent upsert) if a real need appears;
+there is deliberately no background reconciliation. Series pages remain a natural next phase.
 
 Mirroring the portraits to R2 as WebP (~18 KB each, ~8× smaller than the PNGs,
 free egress) has since landed: `scripts/mirror_portraits_to_r2.py` fetches each `mudae.net` portrait,

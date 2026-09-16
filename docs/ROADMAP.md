@@ -719,32 +719,25 @@ relevant — the concurrency test is written first, before Phase 2:
   Portraits are **mirrored** now: `scripts/mirror_portraits_to_r2.py` fetches each `mudae.net`
   portrait, encodes WebP, uploads to R2 and records the key in `characters.main_image_thumb` /
   `character_catalog.mudae_image_thumb` (migration 012); every portrait payload carries
-  `image_thumb` and the frontend prefers it via `portraitUrl`. Still open: **catalog gap-fill and
-  rank refresh** (next entry) and series pages. Pool filters are in: the suggestions API takes
-  `pool=` and the Add form carries the facet chips. See `DECISIONS.md` §8, "The Mudae catalog".
-- **Mudae catalog gap-fill and rank refresh.** This is the last real job for the self-bot: instead
-  of asking for another pasted `$wa` / `$ima` extract, use `$imartsmi-` to fetch only what the
-  catalog is missing or has let drift. Three kinds of hole:
-  - **A series with no rows at all.** Breadth came from whatever extracts were pasted; a series
-    nobody captured has no catalog entries, so its characters never appear in search or the Add
-    autocomplete. The trigger is a working character whose series has no catalog rows (or a small
-    curated list of series to pull in).
-  - **Rows with missing fields.** An empty `rank`, `series`, `mudae_image_url` (and so no mirrored
-    thumb), or no pool booleans. These are found with a `WHERE` over `character_catalog`, and
-    re-fetched by series so one DM covers many at once.
-  - **Ranks that have moved.** `character_catalog.rank` drifts constantly. Refreshing is the same
-    fetch; `db.enrich_characters_from_catalog` then carries the new series/rank/portrait onto
-    matching working rows. This is "refresh when it matters", not a cron — the cost is one Discord
-    *identify* per series fetched, so a full refresh is a few hundred and should be deliberate.
+  `image_thumb` and the frontend prefers it via `portraitUrl`. Still open: series pages. Catalog
+  gap-fill and rank refresh were considered and **declined** (next entry). Pool filters are in: the
+  suggestions API takes `pool=` and the Add form carries the facet chips. See `DECISIONS.md` §8,
+  "The Mudae catalog".
+- **Mudae catalog gap-fill and rank refresh.** _(considered, declined 2026-09)_ The idea: have the
+  self-bot fetch, by series, only what the catalog lacks — a series with no rows at all, rows with
+  an empty rank/series/portrait/pool — and keep ranks current. Declined as unnecessary work:
+  - **Ranks are unbounded, ongoing maintenance.** They move constantly, each series costs one
+    Discord *identify*, and the number they produce is not acted on by anything. That is a
+    recurring job for no benefit.
+  - **The character gaps are already mostly closed.** The catalog holds most of the roster, so the
+    remaining holes are individual names. Those can be added on demand through the existing Add
+    flow (`$imartsmi-` for a whole series, or the catalog add), which is exactly when someone wants
+    them — no background reconciliation needed.
 
-  Almost everything it needs already exists: `$imartsmi-` returns a whole series in one DM,
-  `db.upsert_catalog_characters` merges idempotently (lower rank wins, a working row is never
-  overwritten with a field the catalog did not have), and the Phase 8 service now owns the
-  connection and the identify budget. What is missing is a script — `scripts/gap_fill_catalog.py` —
-  that selects the gaps, fetches by series *through the service socket* rather than the self-bot
-  directly, and prints what it would change before writing (dry-run first, like every other
-  backfill). Mirroring any newly fetched portraits is then the existing
-  `scripts/mirror_portraits_to_r2.py`.
+  The machinery is not removed and remains available if a real need appears — `$imartsmi-`, the
+  idempotent `db.upsert_catalog_characters`, and the mirror script — but there is deliberately no
+  gap-fill script.
+
 - **ImgChest mirror.** A second copy of every image in R2 or similar, so the library survives
   ImgChest losing files or shutting down. Explicitly a **backup, not a replacement** — the
   ImgChest URL stays canonical because Mudae accepts nothing else (`DECISIONS.md` §2).

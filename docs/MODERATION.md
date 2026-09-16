@@ -713,8 +713,10 @@ confirmation, and a tombstone (`purged_at`) so the record does not silently vani
 stands — an `$ai` command already copied into Discord breaks — which is the argument a holding period
 would answer, and none is built.
 
-**Phase 4 — the reports question.** Whether `image_reports` should ever be readable, given that §1
-designed it to work *without* a human. The honest case for reading it is diagnostic rather than
-operational: knowing which reasons are actually used, and whether the threshold of two is right,
-cannot be learned from a table nobody queries. That is an argument for a statistic, not a queue, and
-the distinction should be settled before anything is built.
+**Phase 4 — the reports question. Done — as a read, not a queue.** `image_reports` is now readable
+by staff: the **Reports** tab at `/profile/moderation/reports` lists reported images, split into
+those still live and those the two-report threshold already removed, with each report's reason,
+reporter and time. It is deliberately read-only — nothing is assignable and the removal/restore
+verbs stay on the character page — which is the distinction §1 insisted on. The open sub-question
+the tab now makes answerable by inspection is whether the threshold of two is right, and which
+reasons are actually used.

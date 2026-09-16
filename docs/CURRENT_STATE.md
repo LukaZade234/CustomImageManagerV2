@@ -614,10 +614,11 @@ genuinely does not:
   on one. The per-person `show_nsfw` preference is recorded against that day
   arriving, and reads as such in the UI.
 - **A moderation queue.** Reports remove an image at two distinct reporters and
-  that is the whole mechanism; there is no appeal. A staff-only *inspection*
-  surface now exists at `/moderation` — who added and removed what — but it is
-  not a queue: nothing is pending, `image_reports` stays unread, and the removal
-  and restore verbs stay on the character page.
+  that is still the whole mechanism; there is no appeal. The staff surface at
+  `/profile/moderation` now *reads* them — the Reports tab lists reported images,
+  split into those still live and those the threshold already removed — but it is
+  inspection, not a queue: nothing is assignable, and the removal and restore
+  verbs stay on the character page.
 - **Server-side sessions.** Identity is a signed cookie and nothing else.
 - **A second origin.** One box serves everything; Cloudflare caches in front of
   it, and Litestream is the only redundancy.
@@ -630,10 +631,7 @@ Still open:
 
 | Issue | Location | Impact |
 |---|---|---|
-| Mudae lock is per-process | `mudae_discord.py` + 2 workers | Two concurrent lookups can connect at once and capture each other's replies |
-| Discord identify quota burn | `mudae_discord.py` | Connect/disconnect per request against a ~1000/day cap |
-| Discord self-bot ToS | `mudae_discord.py` | An account ban would remove every Mudae feature |
-| SSE imports over the worker timeout | `gunicorn.conf.py` | A very large series import can still be cut off mid-stream |
+| Discord self-bot ToS | `mudae_service.py` | An account ban would remove every Mudae feature |
 | The two databases have forked | v1 Neon vs v2 SQLite | See `CUTOVER.md`; the migration is insert-only and re-running gives the union |
 
 Fixed since this document was first written, kept here because the shape of each
@@ -645,10 +643,12 @@ is worth remembering:
 | Anyone could delete anything | Ownership-scoped removal, soft delete, reports |
 | No rate limiting anywhere | `ratelimit.py`, per identity, per action |
 | `CORS: *` by default | Explicit origins; wildcards refused at startup |
-| No tests at all | 462 backend, 390 frontend |
+| No tests at all | 692 backend, 520 frontend |
 | `print()` with no actor | `logs.py`; identity attaches automatically inside a request |
 | Health check could not fail | Reads the database; 503 when it cannot |
 | Full-map fetch on the home page | `/api/stats`, with a test that it stays bounded |
 | Uploads wrote next to the code | `tempfiles.py`; the server's filesystem is read-only |
 | `THUMB_DIR`/`DATABASE_PATH` could silently default into the code tree | A startup guard refuses a deployed config whose durable paths land in the checkout |
 | Hiding an unknown image id returned 500 | The insert selects from `custom_images`, so it is a no-op |
+| Mudae lock was per-process, so two workers could connect at once | One dedicated `mudae_service` owns the connection (Phase 8) |
+| Every lookup burned a Discord identify | The service connects on demand, reuses the session, and disconnects after 10 idle minutes (Phase 8) |
