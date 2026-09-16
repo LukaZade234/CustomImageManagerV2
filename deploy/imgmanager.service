@@ -32,6 +32,10 @@ Environment=CORS_ORIGINS=https://<YOUR_PAGES_DOMAIN>
 # token is not, and must not be, in this unit's environment: it lives only in
 # /etc/imgmanager/mudae.env, which only imgmanager-mudae.service loads.
 Environment=MUDAE_SOCKET=/var/lib/imgmanager/mudae.sock
+# Where the owner-only Cut-over tab reads the preview that
+# scripts/imgchest_cleanup.py writes. The app only reads it; the script is what
+# deletes. In the writable state dir, which the script and the app share.
+Environment=IMGCHEST_CLEANUP_PREVIEW=/var/lib/imgmanager/imgchest-cleanup-preview.json
 # Must be a stable secret: it signs the identity cookies. If it changes, every
 # visitor silently becomes a new person.
 EnvironmentFile=/etc/imgmanager/secrets.env

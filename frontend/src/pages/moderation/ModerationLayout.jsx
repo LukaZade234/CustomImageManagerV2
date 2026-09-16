@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Card } from '../../components/ui'
+import { useMe } from '../../queries/me'
 
 /**
  * The staff area, behind one set of tabs.
@@ -17,7 +18,15 @@ const TABS = [
   { to: '/profile/moderation/duplicates', label: 'Duplicates' },
 ]
 
+// Shown only to the owner. The route is guarded independently, so a moderator who
+// navigates here by URL is redirected; hiding the tab just avoids offering a door
+// they cannot open.
+const OWNER_TABS = [{ to: '/profile/moderation/cutover', label: 'Cut-over' }]
+
 export default function ModerationLayout() {
+  const { data: me } = useMe()
+  const tabs = me?.is_owner ? [...TABS, ...OWNER_TABS] : TABS
+
   return (
     <div className="moderation">
       <Card as="header" padding="lg" className="profile-header">
@@ -30,7 +39,7 @@ export default function ModerationLayout() {
       </Card>
 
       <nav className="profile-tabs" aria-label="Moderation sections">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}

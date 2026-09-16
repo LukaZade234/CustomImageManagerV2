@@ -174,6 +174,32 @@ A useful consequence: because nothing ever deletes from ImgChest, every image in
 is still live at its URL. Soft delete and restore are therefore essentially free, and the
 moderation design in §1 depends on this.
 
+### The one-time cut-over cleanup
+
+Nothing has ever been deleted, so the account still holds every upload the app and v1 ever made —
+including images no database still references, and griefed or otherwise inappropriate uploads made
+before moderation existed. The cut-over is treated as the one moment to reconcile the account against
+what is actually used, and everything else is then deleted permanently. This is a deliberate
+exception to the paragraph above: the "never delete" property holds *during* operation, and this is
+the single planned reconciliation of the backlog.
+
+The keep sets are **in use** (from a manual Discord export of the URLs named in Mudae's `$ai` lists,
+deduplicated across servers) and **on the site** (`custom_images`, in any state — so an image removed
+on the site but still used in Discord is a keeper, not a deletion). Anything in neither set is a
+deletion candidate. In-use images the site does not have are re-added in the `removed` state, so
+they surface in the Removed drawer and can be restored; they land with `added_by IS NULL` like every
+other migrated row, so staff restore them.
+
+The cleanup is **planned, not routine**, and is gated three ways: the script does nothing without
+`--execute`, it writes a preview first that a human reads, and the preview is surfaced in the app as
+an **owner-only** tab so the operator reviews it in the same place the decision was made. The app
+never deletes — the destructive half stays a CLI. It supersedes the one-off
+`backfill_imgchest_post_ids.py` pass by computing the same file-to-post map itself.
+
+**Ordering is load-bearing.** Content fingerprints and image dimensions both re-read the image bytes
+from ImgChest, so they must run **before** the cleanup; deleting first makes them impossible for the
+files concerned. See `CUTOVER.md`, [ImgChest cleanup](#imgchest-cleanup-planned).
+
 ---
 
 ## 3. Hosting

@@ -88,6 +88,19 @@ within reach.
 | Images tab | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary), with the character filter and added/removed switch. |
 | Gating | Non-moderators are redirected home, indistinguishable from the existing `*` catch-all. The backend enforces separately and does not trust the client. |
 
+#### The Cut-over tab, and why it is owner-only
+
+A fourth tab, **Cut-over**, is appended to the staff area but shown only to the owner, and its route
+is wrapped in `RequireOwner` (one level stricter than the console around it). It renders the preview
+that `scripts/imgchest_cleanup.py` writes — the flat list of ImgChest files that would be permanently
+deleted, the flat list that would be recovered into the Removed drawer, and the counts and warnings.
+It is **read-only**: the app reads a JSON file and never deletes; the destructive half is the CLI,
+run by hand. See `CUTOVER.md` and `DECISIONS.md` §2.
+
+It is owner-only rather than moderator-only because reconciling and deleting from the ImgChest
+account is operator work, not moderation, and this page is not a queue either: it holds no work and
+changes no chrome. It is the same reasoning that keeps the tab out of the topbar.
+
 #### On putting the verbs on this page
 
 The first draft of this document said the acting verbs would stay on the character page, because a

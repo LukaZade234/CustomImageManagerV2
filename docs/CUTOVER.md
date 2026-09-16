@@ -83,8 +83,9 @@ them, and reports still work.
 The cut-over is the one moment to reconcile the ImgChest account against what is
 actually used and delete the rest — including griefed or otherwise inappropriate
 uploads made before moderation existed. It needs a Discord export of the images in
-use, a preview before anything is removed, and an explicit go-ahead. It is planned
-but not built; see **[ImgChest cleanup](#imgchest-cleanup-planned)**.
+use, a preview before anything is removed, and an explicit go-ahead. It is **built**:
+`scripts/imgchest_cleanup.py` plus an owner-only Cut-over tab — see
+**[ImgChest cleanup](#imgchest-cleanup-planned)**.
 
 - [ ] **Run the cleanup with the cut-over.**
 - [ ] **Skip it, and leave ImgChest as it is.**
@@ -284,7 +285,8 @@ to R2 as it is generated (`thumb_key`, migration 021), so the import also resets
 column; the bucket objects left over from before are keyed by the old ids and content
 hash, so nothing points at them and they can be swept whenever convenient.
 
-Then, roughly in this order:
+Then, roughly in this order. Steps 3 and 4 are the ones that re-read the image bytes
+from ImgChest, so they must come **before** the cleanup in step 5:
 
 1. **Catalog — re-import the Mudae extracts.** `character_catalog` is a v2 table and
    is empty. It restores search and autocomplete, and it is the source for traits and
@@ -295,22 +297,25 @@ Then, roughly in this order:
    If R2 was emptied too, run the full mirror (fetch, encode WebP, upload under
    `portraits/`, record the key). The API process also needs its own rclone config, for
    the in-request "update main from Mudae" flow.
-3. **Accents — rebuild.** Lost with the column. Recomputed on visit, but the backfill
-   script walks the library once — and it measures *only from thumbnails already on
-   disk*, so run it after the thumbnail cache has warmed, or accept partial accents
-   that upgrade on the first visit. Overrides made on v2 before the wipe are gone with
-   everything else v2-only.
-4. **Image dimensions — run the backfill.** Headers only, ~8.5k images, resumable.
-   Without it the gallery reflows on load (the browser falls back to measuring), so it
-   is visible rather than breaking.
-5. **ImgChest post ids — run the backfill.** Staff permanent delete needs them; without
-   them a purge falls back to the file-delete path, which only works on a post with
-   siblings. One rate-limited listing pass over the account (60/min).
-6. **Content fingerprints — run the backfill.** `content_hash` is the duplicate
+3. **Content fingerprints — run the backfill.** `content_hash` is the duplicate
    fingerprint; a fresh import leaves it NULL, so the add-time gate cannot see any of the
    imported images and the moderator Duplicates review is empty. The script downloads
    each image once and hashes it — the library is thousands of images, so expect it to be
-   slow and to move real bandwidth.
+   slow and to move real bandwidth. **Before the cleanup: deleted files cannot be
+   hashed.**
+4. **Image dimensions — run the backfill.** Headers only, ~8.5k images, resumable.
+   Without it the gallery reflows on load (the browser falls back to measuring), so it
+   is visible rather than breaking. **Before the cleanup, for the same reason.**
+5. **ImgChest cleanup — preview, review, then execute.** One rate-limited listing pass,
+   and it stores `imgchest_post_id` for everything that survives, which is what permanent
+   delete needs. This replaces the separate post-id backfill: the two compute the same
+   file-to-post map, so there is no reason to walk the account twice. The order here is
+   the whole point — see [ImgChest cleanup](#imgchest-cleanup-planned).
+6. **Accents — rebuild.** Lost with the column. Recomputed on visit, but the backfill
+   script walks the library once — and it measures *only from thumbnails already on
+   disk*, so run it after the thumbnail cache has warmed, or accept partial accents
+   that upgrade on the first visit. Overrides made on v2 before the wipe are gone with
+   everything else v2-only. Independent of the cleanup.
 7. **Traits — run after the catalog.** Gender and pool badges. Cosmetic.
 
 Config that must match rather than data: `CORS_ORIGINS` on the origin and
@@ -376,6 +381,40 @@ post's listing exposes only its *first* image's file id — so the cleanup plans
 (keep a post if any of its images is a keeper, delete the rest file-by-file) and must
 surface any hand-merged multi-image post the preview cannot fully resolve.
 
+### The decisions this is built on
+
+- **Preview in the app, destructive half in the script.** `scripts/imgchest_cleanup.py`
+  writes a preview JSON; a new **owner-only** Cut-over tab in the staff area renders it.
+  The app is read-only — it never deletes. Deletion and re-add need `--execute`.
+- **Owner-only, not staff.** The preview is appended to the moderation surface but
+  guarded by `require_owner` rather than `require_moderator`; plain moderators do not
+  see the tab or the endpoint. This is operator work, not routine moderation.
+- **Flat lists with counts.** The preview shows two flat lists — *will be permanently
+  deleted*, and *will be recovered into Removed* — each with a count, plus totals and a
+  warnings section. Per-character grouping was considered and dropped: the operator is
+  scanning for surprises, not navigating by character.
+- **The export is `Name - URL`, one per line, and it repeats.** Pulling from several
+  servers means the same URL appears under different names. The cleanup **dedups by URL**
+  (first name wins) and reports malformed lines instead of dropping them silently.
+- **A limit first.** Before the real run, do a `--limit N` execute against a small slice
+  to confirm deletion and re-add behave, then run the whole thing. `--limit` caps
+  deletions, not the preview.
+- **Ordering is load-bearing.** Content fingerprints and image dimensions re-read the
+  bytes from ImgChest and must run **before** the cleanup. See
+  [After the import](#after-the-import-the-derived-layers) step order below.
+
+The step order changes to the following, and the reason is that the cleanup deletes
+files the earlier backfills still need to read:
+
+1. Import, warm thumbnails.
+2. Catalog, portraits, traits (Mudae-side; independent of ImgChest files).
+3. **Content fingerprints** — downloads each image; must see the files before they go.
+4. **Image dimensions** — headers only; same reason.
+5. **ImgChest cleanup** — preview, review, `--limit` trial, then execute. This also
+   fills `imgchest_post_id` for what survives, so `backfill_imgchest_post_ids.py` is no
+   longer a separate step.
+6. **Accents** — from local thumbnails, after the cache has warmed.
+
 ---
 
 ## Rollback
@@ -412,10 +451,12 @@ data that has ever existed. That is the reason pre-flight step 4 is a gate.
 ## Afterwards
 
 - [ ] **Rebuild the derived layers** — catalog, portrait mirrors, thumbnail cache,
-  accents, dimensions, ImgChest post ids, content fingerprints, traits. See
-  [After the import](#after-the-import-the-derived-layers).
-- [ ] **Reconcile ImgChest** — review the cleanup preview and run it, if Decision 4
-  was to proceed. See [ImgChest cleanup](#imgchest-cleanup-planned).
+  content fingerprints, dimensions, accents, traits, and (for what survives) ImgChest
+  post ids. See [After the import](#after-the-import-the-derived-layers) for the order,
+  which puts fingerprints and dimensions before the cleanup.
+- [ ] **Reconcile ImgChest** — generate the preview, review it in the owner-only
+  Cut-over tab, run a `--limit` trial, then execute, if Decision 4 was to proceed. See
+  [ImgChest cleanup](#imgchest-cleanup-planned).
 - [ ] Update `CURRENT_STATE.md` — it describes v1 in the present tense throughout.
 - [ ] Close out the Phase 5 "Outstanding" items in `ROADMAP.md`.
 - [x] Remove `flask-compress` — done ahead of the cut-over in `5c62b9c`, once

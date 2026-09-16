@@ -72,6 +72,7 @@ export const apiClient = {
     api(`/api/moderation/duplicates?limit=${encodeURIComponent(limit)}`),
   listModerationReports: ({ status = 'reported' } = {}) =>
     api(`/api/moderation/reports?status=${encodeURIComponent(status)}`),
+  getModerationCutover: () => api('/api/moderation/cutover'),
   listModerationUserImages: ({
     ref,
     state = 'active',

@@ -143,6 +143,23 @@ describe('the staff gate', () => {
     expect(await screen.findByRole('button', { name: /Ada Otter/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Bob Falcon/ })).toBeInTheDocument()
   })
+
+  it('offers the owner the Cut-over tab', async () => {
+    renderModeration()
+    expect(await screen.findByRole('link', { name: 'Cut-over' })).toBeInTheDocument()
+  })
+
+  it('hides the Cut-over tab from a plain moderator', async () => {
+    api.getMe.mockResolvedValue({
+      handle: 'Moss',
+      role: 'moderator',
+      is_moderator: true,
+      is_owner: false,
+    })
+    renderModeration()
+    await screen.findByRole('link', { name: 'Users' })
+    expect(screen.queryByRole('link', { name: 'Cut-over' })).not.toBeInTheDocument()
+  })
 })
 
 describe('opening on the finder', () => {

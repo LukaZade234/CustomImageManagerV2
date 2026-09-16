@@ -52,6 +52,20 @@ export function useModerationReports(status) {
   })
 }
 
+/**
+ * The ImgChest cut-over preview, written by `scripts/imgchest_cleanup.py`. A
+ * plain read of a file the script produced; refetching is how the operator sees
+ * a re-run's result without a reload. Owner-only on the server.
+ */
+export const moderationCutoverKey = ['moderation-cutover']
+
+export function useModerationCutover() {
+  return useQuery({
+    queryKey: moderationCutoverKey,
+    queryFn: () => apiClient.getModerationCutover(),
+  })
+}
+
 export function useModerationUserImages({ ref, state, character, page, enabled = true }) {
   return useQuery({
     queryKey: moderationUserImagesKey(ref, { state, character, page }),

@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import RequireModerator from './components/RequireModerator'
+import RequireOwner from './components/RequireOwner'
 import RestrictionBanner from './components/RestrictionBanner'
 import Toast from './components/Toast'
 import { Button, Card } from './components/ui'
@@ -24,6 +25,7 @@ const RemovedTab = lazy(() => import('./pages/profile/RemovedTab'))
 const SavedTab = lazy(() => import('./pages/profile/SavedTab'))
 const SettingsTab = lazy(() => import('./pages/profile/SettingsTab'))
 const DuplicatesPage = lazy(() => import('./pages/moderation/DuplicatesPage'))
+const CutoverPage = lazy(() => import('./pages/moderation/CutoverPage'))
 const ModerationLayout = lazy(() => import('./pages/moderation/ModerationLayout'))
 const ModerationPage = lazy(() => import('./pages/moderation/ModerationPage'))
 const ReportsPage = lazy(() => import('./pages/moderation/ReportsPage'))
@@ -108,6 +110,15 @@ function App() {
                   <Route index element={<ModerationPage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route path="duplicates" element={<DuplicatesPage />} />
+                  {/* Owner-only, one level stricter than the console around it. */}
+                  <Route
+                    path="cutover"
+                    element={
+                      <RequireOwner>
+                        <CutoverPage />
+                      </RequireOwner>
+                    }
+                  />
                 </Route>
               </Route>
               <Route path="/search" element={<SearchResultsPage />} />

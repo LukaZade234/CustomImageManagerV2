@@ -10,6 +10,8 @@ load-bearing.
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import UTC, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -383,3 +385,30 @@ def moderation_delete_history(action_id):
         return jsonify({"error": "Moderation record not found"}), 404
     log.info("moderation.history_deleted", action_id=action_id)
     return jsonify({"success": True})
+
+
+# The preview `scripts/imgchest_cleanup.py` writes. The app only *reads* it: the
+# destructive half stays a CLI, deliberately, so a mistake here cannot delete an
+# image. Owner-only, because the cut-over is operator work, not moderation.
+_DEFAULT_PREVIEW_PATH = "/var/lib/imgmanager/imgchest-cleanup-preview.json"
+
+
+@moderation_bp.route("/api/moderation/cutover")
+@require_owner
+def moderation_cutover():
+    """The ImgChest cleanup preview, or an empty result if none was generated.
+
+    Missing file is not an error: the honest answer is "the script has not run",
+    and the page says so. A file that exists but does not parse *is* an error, so
+    the page can tell the operator the preview is broken rather than empty.
+    """
+    path = os.environ.get("IMGCHEST_CLEANUP_PREVIEW", _DEFAULT_PREVIEW_PATH)
+    try:
+        with open(path, encoding="utf-8") as handle:  # noqa: PTH123
+            preview = json.load(handle)
+    except FileNotFoundError:
+        return jsonify({"available": False})
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning("cutover.preview_unreadable", path=path, error=str(e))
+        return jsonify({"error": "The cleanup preview could not be read."}), 500
+    return jsonify({"available": True, "preview": preview})
