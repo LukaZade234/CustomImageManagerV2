@@ -703,12 +703,15 @@ re-verified against the tree on 2026-09-16 and held.
 
 ### Accepted, roughly in order
 
-- [ ] **Code splitting (#2).** One 442 KB JS chunk ships to every anonymous
-      visitor, including the whole moderation console and the Mudae import panel
-      they cannot open. Route-level `React.lazy` plus one `Suspense`, keeping the
-      landing page and shared chrome eager and `RequireModerator` outside the lazy
-      boundary. Highest user-facing value, lowest risk; the review's plan is taken
-      as written.
+- [x] **Code splitting (#2).** _Done._ One 454 KB JS chunk shipped to every
+      anonymous visitor, including the moderation console and the Mudae import
+      panel they cannot open. Route-level `React.lazy` plus one `Suspense`, the
+      landing page and shared chrome eager, and `RequireModerator` outside the
+      lazy boundary. First-load JS 454 → 317 KB raw (136 → 98 KB gzip); the heavy
+      routes are their own chunks (CharacterPage 60 KB, ModerationPage 22 KB,
+      AddPage 20 KB) that an anonymous visitor never fetches. A source test pins
+      the boundary, since a static import or a guard moved inside would silently
+      undo it.
 - [ ] **Reorder abuse, error disclosure and indexes (#1a, #4, #5), one commit.**
       `/api/reorder-custom-images` has no rate limit, no ownership check and no
       audit, while the delete route beside it has both — and reordering

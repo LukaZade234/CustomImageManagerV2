@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react()],
@@ -25,6 +25,13 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
+        // React, the router and react-query change far less often than the app
+        // does, so everything from node_modules gets its own chunk and stays
+        // cached across deploys. (Rolldown, which Vite 8 uses, wants a function
+        // here rather than the object form.)
+        manualChunks(id) {
+          if (id.includes('node_modules')) return 'vendor'
+        },
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
