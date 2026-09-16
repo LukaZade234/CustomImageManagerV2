@@ -10,7 +10,9 @@ import CharacterPage from './pages/CharacterPage'
 import CustomsPage from './pages/CustomsPage'
 import HomePage from './pages/HomePage'
 import DuplicatesPage from './pages/moderation/DuplicatesPage'
+import ModerationLayout from './pages/moderation/ModerationLayout'
 import ModerationPage from './pages/moderation/ModerationPage'
+import ReportsPage from './pages/moderation/ReportsPage'
 import NotificationsPage from './pages/NotificationsPage'
 import HiddenTab from './pages/profile/HiddenTab'
 import HistoryTab from './pages/profile/HistoryTab'
@@ -76,18 +78,14 @@ function App() {
                 path="moderation"
                 element={
                   <RequireModerator>
-                    <ModerationPage />
+                    <ModerationLayout />
                   </RequireModerator>
                 }
-              />
-              <Route
-                path="moderation/duplicates"
-                element={
-                  <RequireModerator>
-                    <DuplicatesPage />
-                  </RequireModerator>
-                }
-              />
+              >
+                <Route index element={<ModerationPage />} />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="duplicates" element={<DuplicatesPage />} />
+              </Route>
             </Route>
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />

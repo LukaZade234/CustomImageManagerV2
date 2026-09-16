@@ -61,16 +61,12 @@ export default function DuplicatesPage() {
 
   return (
     <>
-      <div className="moderation-head">
-        <h1 className="page-title">Duplicate images</h1>
-        <Link className="moderation-back" to="/profile/moderation">
-          ← Moderation
-        </Link>
-      </div>
+      <h2 className="section-heading">Duplicate images</h2>
       <p className="text-meta moderation-lead">
-        The same picture added under more than one URL. Removing a copy is a soft delete — it can be
-        restored from the character&rsquo;s Removed list. Existing duplicates get a fingerprint from
-        the backfill; new ones are stopped at upload.
+        A character holding the same picture twice. The same file on <em>different</em> characters
+        is usually intentional — one image can show several of them — so it is not flagged. Removing
+        a copy is a soft delete, restorable from the character&rsquo;s Removed list. Existing
+        duplicates get a fingerprint from the backfill; new ones are stopped at upload.
       </p>
 
       {isPending ? (
@@ -86,15 +82,23 @@ export default function DuplicatesPage() {
       ) : clusters.length === 0 ? (
         <EmptyState
           title="No duplicates"
-          description="Every fingerprinted image in the library is unique. New duplicates are refused at upload."
+          description="No character holds the same picture twice. New duplicates are refused at upload."
         />
       ) : (
         <ul className="duplicates__list">
           {clusters.map((cluster) => (
-            <li key={cluster.hash}>
+            <li key={`${cluster.character}:${cluster.hash}`}>
               <Card className="duplicates__cluster">
                 <div className="duplicates__head">
-                  <h2 className="duplicates__count">{cluster.count} copies</h2>
+                  <h2 className="duplicates__count">
+                    <Link
+                      to={`/character/${encodeURIComponent(cluster.character)}`}
+                      className="duplicates__character"
+                    >
+                      {cluster.character}
+                    </Link>{' '}
+                    <span className="duplicates__count-label">{cluster.count} copies</span>
+                  </h2>
                   <span className="duplicates__hash" title={cluster.hash}>
                     {cluster.hash.slice(0, 12)}
                   </span>
@@ -102,11 +106,10 @@ export default function DuplicatesPage() {
                 <ul className="duplicates__images">
                   {cluster.images.map((image) => (
                     <li key={image.id} className="duplicates__image">
-                      <a
-                        href={getImageUrl(image.url)}
-                        target="_blank"
-                        rel="noreferrer"
+                      <Link
+                        to={`/character/${encodeURIComponent(image.character)}`}
                         className="duplicates__thumb-link"
+                        aria-label={`Open ${image.character}`}
                       >
                         <img
                           className="duplicates__thumb"
@@ -114,14 +117,8 @@ export default function DuplicatesPage() {
                           alt=""
                           loading="lazy"
                         />
-                      </a>
+                      </Link>
                       <div className="duplicates__meta">
-                        <Link
-                          to={`/character/${encodeURIComponent(image.character)}`}
-                          className="duplicates__character"
-                        >
-                          {image.character}
-                        </Link>
                         <span className="text-meta">
                           {image.state === 'removed' ? 'Removed' : 'Active'}
                           {image.owner ? ` · ${image.owner}` : ''}

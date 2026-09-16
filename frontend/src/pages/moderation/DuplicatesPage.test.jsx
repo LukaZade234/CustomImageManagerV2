@@ -28,6 +28,7 @@ const CLUSTERS = {
   clusters: [
     {
       hash: 'abcdef0123456789',
+      character: 'Rem',
       count: 2,
       images: [
         {
@@ -41,7 +42,7 @@ const CLUSTERS = {
         },
         {
           id: 2,
-          character: 'Emilia',
+          character: 'Rem',
           url: 'https://cdn/b.png',
           thumb: 'thumbs/2.webp',
           state: 'removed',
@@ -73,11 +74,14 @@ describe('DuplicatesPage', () => {
     renderPage()
     expect(await screen.findByText('2 copies')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Rem' })).toHaveAttribute('href', '/character/Rem')
-    expect(screen.getByRole('link', { name: 'Emilia' })).toHaveAttribute(
-      'href',
-      '/character/Emilia',
-    )
     expect(screen.getByText(/Ada Otter/)).toBeInTheDocument()
+  })
+
+  it('opens the character page from a copy’s thumbnail', async () => {
+    renderPage()
+    const thumbs = await screen.findAllByRole('link', { name: /open rem/i })
+    expect(thumbs).toHaveLength(2)
+    expect(thumbs[0]).toHaveAttribute('href', '/character/Rem')
   })
 
   it('removes the active copy', async () => {
@@ -92,7 +96,7 @@ describe('DuplicatesPage', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: /restore/i }))
     await waitFor(() =>
-      expect(api.restoreImages).toHaveBeenCalledWith('Emilia', ['https://cdn/b.png']),
+      expect(api.restoreImages).toHaveBeenCalledWith('Rem', ['https://cdn/b.png']),
     )
   })
 

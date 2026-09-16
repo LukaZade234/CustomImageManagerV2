@@ -272,21 +272,48 @@ class TestBackfillHelpers:
 
 class TestDuplicateClusters:
     def _seed(self, clean_db):
+        """The same file twice on one character — the finding worth reviewing."""
         clean_db.add_custom_images(
             "Rem", ["https://cdn/a.png"], content_hashes={"https://cdn/a.png": "same"}
         )
         clean_db.add_custom_images(
-            "Emilia", ["https://cdn/b.png"], content_hashes={"https://cdn/b.png": "same"}
+            "Rem", ["https://cdn/b.png"], content_hashes={"https://cdn/b.png": "same"}
         )
 
-    def test_a_shared_fingerprint_is_one_cluster(self, clean_db):
+    def test_the_same_file_twice_on_one_character_is_a_cluster(self, clean_db):
         self._seed(clean_db)
         clusters = clean_db.list_duplicate_clusters()
         assert len(clusters) == 1
         cluster = clusters[0]
         assert cluster["hash"] == "same"
+        assert cluster["character"] == "Rem"
         assert cluster["count"] == 2
-        assert sorted(image["character"] for image in cluster["images"]) == ["Emilia", "Rem"]
+        assert {image["character"] for image in cluster["images"]} == {"Rem"}
+
+    def test_the_same_file_across_characters_is_not_flagged(self, clean_db):
+        """An image showing several characters legitimately lives on each of them."""
+        clean_db.add_custom_images(
+            "Rem", ["https://cdn/a.png"], content_hashes={"https://cdn/a.png": "shared"}
+        )
+        clean_db.add_custom_images(
+            "Emilia", ["https://cdn/b.png"], content_hashes={"https://cdn/b.png": "shared"}
+        )
+        assert clean_db.list_duplicate_clusters() == []
+
+    def test_a_third_copy_on_a_character_joins_its_own_cluster(self, clean_db):
+        clean_db.add_custom_images(
+            "Rem", ["https://cdn/a.png"], content_hashes={"https://cdn/a.png": "shared"}
+        )
+        clean_db.add_custom_images(
+            "Emilia", ["https://cdn/b.png"], content_hashes={"https://cdn/b.png": "shared"}
+        )
+        clean_db.add_custom_images(
+            "Emilia", ["https://cdn/c.png"], content_hashes={"https://cdn/c.png": "shared"}
+        )
+        clusters = clean_db.list_duplicate_clusters()
+        assert len(clusters) == 1
+        assert clusters[0]["character"] == "Emilia"
+        assert clusters[0]["count"] == 2
 
     def test_unique_fingerprints_do_not_cluster(self, clean_db):
         clean_db.add_custom_images(
@@ -325,13 +352,14 @@ class TestDuplicatesApi:
             "Rem", ["https://cdn/a.png"], content_hashes={"https://cdn/a.png": "same"}
         )
         clean_db.add_custom_images(
-            "Emilia", ["https://cdn/b.png"], content_hashes={"https://cdn/b.png": "same"}
+            "Rem", ["https://cdn/b.png"], content_hashes={"https://cdn/b.png": "same"}
         )
         make_moderator()
 
         body = client.get("/api/moderation/duplicates").get_json()
         assert body["total"] == 2
         assert body["clusters"][0]["count"] == 2
+        assert body["clusters"][0]["character"] == "Rem"
 
 
 class TestBackfillScript:

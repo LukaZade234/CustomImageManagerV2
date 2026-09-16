@@ -36,6 +36,7 @@ vi.mock('../../api', () => ({
 
 import RequireModerator from '../../components/RequireModerator'
 import { renderWithQueryClient } from '../../test/renderWithQueryClient'
+import ModerationLayout from './ModerationLayout'
 import ModerationPage from './ModerationPage'
 
 const USERS = [
@@ -75,10 +76,12 @@ function renderModeration(route = '/moderation') {
           path="/moderation"
           element={
             <RequireModerator>
-              <ModerationPage />
+              <ModerationLayout />
             </RequireModerator>
           }
-        />
+        >
+          <Route index element={<ModerationPage />} />
+        </Route>
       </Routes>
     </MemoryRouter>,
   )
