@@ -135,6 +135,12 @@ duplicate — and every one of those has a right answer that requires no consens
    become real, there will be months of actual data to design against instead of another guess.
 6. **Moderator and owner accounts exist as a manual fallback only** — explicitly not the primary
    mechanism, and not something the operator should need to use routinely.
+7. **Reordering a shared gallery is tied to a Discord account.** Position is prominence, so pushing
+   images down is removal's practical equal — but unlike removal it had no rule and left no trace.
+   It now requires a linked account and is rate limited. It is deliberately *not* owner-only: the
+   gallery is shared, and any signed-in person may still curate the order. The account (rather than
+   the cookie) is what a suspension or ban can be held to, since clearing a cookie mints a fresh
+   pseudonym for free — the same reasoning as uploads.
 
 Worked example — the exact scenario that motivated all of this. Someone opens a character with 10
 images and wants only their own. They click remove on all 10: each is hidden **for them**, nothing

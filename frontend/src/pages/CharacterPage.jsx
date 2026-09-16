@@ -883,6 +883,7 @@ export default function CharacterPage() {
                 onOpenRemovedDrawer={openRemovedDrawer}
                 onAddImage={openCustomFilePicker}
                 canAddImages={canAddImages}
+                canReorder={Boolean(me?.signed_in)}
               />
             </div>
           )}

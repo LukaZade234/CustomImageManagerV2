@@ -97,6 +97,13 @@ describe('GalleryToolbar', () => {
     expect(screen.getByRole('button', { name: /^Reorder$/i })).toBeDisabled()
   })
 
+  it('disables reorder for a cookie-only visitor, and says why', () => {
+    setup({ canReorder: false })
+    const reorder = screen.getByRole('button', { name: /^Reorder$/i })
+    expect(reorder).toBeDisabled()
+    expect(reorder).toHaveAttribute('title', 'Sign in with Discord to change the order')
+  })
+
   it('hidden images stay out of the way until there are some', () => {
     setup({ hiddenCount: 0 })
     expect(screen.queryByRole('button', { name: /hidden/i })).not.toBeInTheDocument()

@@ -297,9 +297,9 @@ def list_customs():
                 per_page=per_page,
             )
         )
-    except Exception as e:
+    except Exception:
         log.exception("customs.list_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not load the gallery."}), 500
 
 
 @customs_bp.route("/api/custom-image", methods=["POST"])
@@ -431,9 +431,9 @@ def add_custom_image():
                 "also_on": _dedupe_matches(also_on),
             }
         )
-    except Exception as e:
+    except Exception:
         log.exception("customs.add_failed")
-        return jsonify({"error": str(e), "details": [f"Server error: {type(e).__name__}"]}), 500
+        return jsonify({"error": "Could not add the image. Try again in a moment."}), 500
 
 
 @customs_bp.route("/api/import-custom-images-from-urls", methods=["POST"])
@@ -548,9 +548,9 @@ def import_custom_images_from_urls():
                 "also_on": _dedupe_matches(also_on),
             }
         )
-    except Exception as e:
+    except Exception:
         log.exception("import.failed")
-        return jsonify({"error": str(e), "details": [f"Server error: {type(e).__name__}"]}), 500
+        return jsonify({"error": "Could not import those images. Try again in a moment."}), 500
 
 
 @customs_bp.route("/api/custom-image/<path:char_name>", methods=["GET"])
@@ -595,7 +595,17 @@ def get_custom_images(char_name):
 
 
 @customs_bp.route("/api/reorder-custom-images", methods=["POST"])
+@identity.require_signed_in(action="reorder a gallery")
+@rate_limited("reorder")
 def reorder_custom_images():
+    """Save a new gallery order.
+
+    Signed-in only: a reorder changes what everyone sees, which `DECISIONS.md` §1
+    treats as removal's equal, and an account is what a suspension or ban can be
+    held to (a cookie can be cleared for free). Rate limited for the same reason.
+    `db.reorder_custom_images` already stamps the character inside its own
+    transaction, so there is no second write here.
+    """
     try:
         req_data = request.json
         char_name = req_data.get("character_name")
@@ -605,12 +615,12 @@ def reorder_custom_images():
 
         if not db.reorder_custom_images(char_name, new_order):
             return jsonify({"error": "Character not found"}), 404
-        db.update_last_modified(char_name)
+        log.info("customs.reordered", character=char_name, images=len(new_order))
         return jsonify({"message": "Order updated successfully"})
 
-    except Exception as e:
+    except Exception:
         log.exception("customs.reorder_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not save the new order."}), 500
 
 
 @customs_bp.route("/api/delete-custom-image", methods=["POST"])
@@ -641,9 +651,9 @@ def delete_custom_image():
             ), 403
         db.update_last_modified(char_name)
         return jsonify({"success": True, "message": "Image removed"})
-    except Exception as e:
+    except Exception:
         log.exception("customs.remove_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not remove that image."}), 500
 
 
 @customs_bp.route("/api/delete-custom-images", methods=["POST"])
@@ -678,9 +688,9 @@ def delete_custom_images():
                 "missing": report["missing"],
             }
         )
-    except Exception as e:
+    except Exception:
         log.exception("customs.remove_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not remove those images."}), 500
 
 
 @customs_bp.route("/api/removed/<path:char_name>", methods=["GET"])
@@ -713,9 +723,9 @@ def restore_images():
         if restored:
             db.update_last_modified(data["character_name"])
         return jsonify({"success": True, "restored": restored})
-    except Exception as e:
+    except Exception:
         log.exception("customs.restore_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not restore those images."}), 500
 
 
 @customs_bp.route("/api/purge-custom-image", methods=["POST"])
@@ -779,8 +789,8 @@ def purge_custom_image():
                 raise
         else:
             return jsonify({"error": "Could not read the file id from this image's URL."}), 500
-    except ImgChestError as e:
-        return jsonify({"error": str(e)}), 502
+    except ImgChestError:
+        return jsonify({"error": "Could not delete the image from ImgChest."}), 502
 
     db.purge_custom_image(char_name, url, identity.current_identity().id)
 
@@ -831,9 +841,9 @@ def hide_images():
         return jsonify(
             {"success": True, "hidden": db.hide_images(identity.current_identity().id, ids)}
         )
-    except Exception as e:
+    except Exception:
         log.exception("customs.hide_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not hide those images."}), 500
 
 
 @customs_bp.route("/api/unhide-images", methods=["POST"])
@@ -847,9 +857,9 @@ def unhide_images():
         return jsonify(
             {"success": True, "unhidden": db.unhide_images(identity.current_identity().id, ids)}
         )
-    except Exception as e:
+    except Exception:
         log.exception("customs.unhide_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not unhide those images."}), 500
 
 
 @customs_bp.route("/api/report-image", methods=["POST"])
@@ -878,9 +888,9 @@ def report_image():
         if result is None:
             return jsonify({"error": "Image not found"}), 404
         return jsonify({"success": True, **result})
-    except Exception as e:
+    except Exception:
         log.exception("customs.report_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not submit that report."}), 500
 
 
 @customs_bp.route("/api/takes", methods=["POST"])

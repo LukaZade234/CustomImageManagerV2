@@ -53,6 +53,12 @@ RATE_LIMITS = {
     "edit_character": _limits_from_env("edit_character", [(30, 60), (200, 3600)]),
     "remove": _limits_from_env("remove", [(30, 60), (200, 3600)]),
     "restore": _limits_from_env("restore", [(30, 60), (200, 3600)]),
+    # Reordering is not destructive, but it redistributes prominence, which
+    # DECISIONS.md section 1 treats as the same problem as removal -- and unlike
+    # a removal it used to leave no trace. Generous enough for an honest
+    # keyboard session (each arrow key press is one request), tight enough that
+    # a script cannot churn a gallery.
+    "reorder": _limits_from_env("reorder", [(120, 60), (900, 3600)]),
     # Hiding is harmless to everyone else, so this is generous -- it exists only
     # to stop an endpoint being an unbounded write loop.
     "hide": _limits_from_env("hide", [(120, 60), (1000, 3600)]),

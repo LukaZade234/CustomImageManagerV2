@@ -71,7 +71,17 @@ export function GalleryToolbar({
   onOpenRemovedDrawer,
   onAddImage,
   canAddImages = true,
+  canReorder = true,
 }) {
+  // Reordering a shared gallery changes what everyone sees, so it is tied to a
+  // Discord account (the backend enforces it too). Explain why rather than just
+  // disabling it.
+  const reorderTitle = !canReorder
+    ? 'Sign in with Discord to change the order'
+    : totalCount < 2
+      ? 'Reordering needs at least two images'
+      : 'Change the order'
+
   return (
     <div className="char-custom-toolbar-actions">
       {hiddenCount > 0 && (
@@ -109,9 +119,9 @@ export function GalleryToolbar({
       <Button
         variant="secondary"
         size="sm"
-        disabled={totalCount < 2}
+        disabled={!canReorder || totalCount < 2}
         onClick={onEnterReorder}
-        title={totalCount < 2 ? 'Reordering needs at least two images' : 'Change the order'}
+        title={reorderTitle}
       >
         <ReorderIcon />
         Reorder

@@ -712,13 +712,17 @@ re-verified against the tree on 2026-09-16 and held.
       AddPage 20 KB) that an anonymous visitor never fetches. A source test pins
       the boundary, since a static import or a guard moved inside would silently
       undo it.
-- [ ] **Reorder abuse, error disclosure and indexes (#1a, #4, #5), one commit.**
-      `/api/reorder-custom-images` has no rate limit, no ownership check and no
-      audit, while the delete route beside it has both — and reordering
-      redistributes prominence, which `DECISIONS.md` §1 treats as removal's equal.
-      Add the `reorder` rate limit, replace the 26 `"error": str(e)` returns with
-      fixed sentences, and add the two partial indexes on `added_by` /
-      `removed_by`.
+- [x] **Reorder abuse, error disclosure and indexes (#1a, #4, #5).** _Done, with
+      one addition._ `/api/reorder-custom-images` had no rate limit, no ownership
+      check and no audit, while the delete route beside it had both. Beyond the
+      review: reordering now **requires a Discord account** and is refused for a
+      suspended or banned one by the existing write gate — see `DECISIONS.md` §1
+      (point 7), with the toolbar disabled for a cookie-only visitor. Also added
+      the `reorder` rate limit, a `customs.reordered` audit log line, replaced the
+      raw `str(e)` returns with fixed sentences (keeping only the deliberately
+      narrowed `MudaeError` / `ImgChestError` / `ValueError` messages, whose text
+      is written for the caller), and added migration `022_actor_indexes.sql` with
+      the two partial indexes.
 - [ ] **`ui/` primitive tests (#9).** Ten of eleven primitives are untested; they
       are the most-reused components, so a regression lands everywhere at once.
       Tests only — contracts, not classes — in the review's order.
