@@ -740,11 +740,18 @@ re-verified against the tree on 2026-09-16 and held.
       mount while cached data still paints instantly). `AddPage` / `CharacterPage`
       raw fetches were left for #3 on purpose, so those files are not churned
       twice.
-- [ ] **`CharacterPage.jsx` decomposition (#3).** 1,113 lines and 26 `useState`
-      in one function, with three test files because no single setup covers it.
-      Behaviour-preserving and incremental (lightbox → edit → gallery-selection
-      reducer → accent → upload), tests untouched apart from imports. Scheduled on
-      its own, never beside #8.
+- [x] **`CharacterPage.jsx` decomposition (#3).** _Done, in five behaviour-
+      preserving steps._ The page was a 1,113-line function with 26 `useState`;
+      it is 1,017 with 13 now, and reads as composition. Each concern moved to a
+      hook of its own: `useCharacterEdit` (the form), `useGallerySelection` (mode
+      + selection + discard confirmation as one reducer, so impossible states are
+      unrepresentable), `useLightbox` (the viewer and the frame-coalesced ratio
+      measuring), `useAccentOverride` (the staff picker), `useMainImage` (portrait
+      upload / drop / Mudae refresh). The three existing test files pass
+      **unmodified** throughout — a step that needed to change one meant
+      behaviour moved. `useGalleryReorder`'s touch handling was left untouched.
+      The first pass put `useMainImage` below the page's early returns, which
+      changed hook order and blanked the page; the existing tests caught it.
 
 ### Declined or deferred, and why
 
