@@ -9,6 +9,8 @@ Two rules, both learned the hard way from what is already in the library:
   URL that does not end in .png, but it renders whatever bytes arrive.
 """
 
+import hashlib
+
 import pytest
 from PIL import Image
 
@@ -94,6 +96,42 @@ class TestPrepareForUpload:
         path.write_bytes(b"nope")
         out, err = image_utils.prepare_for_upload(str(path))
         assert out is None and err
+
+
+class TestContentHash:
+    """The duplicate fingerprint. Raw bytes, so it is stable and exact — which
+    also means a re-encoded copy is *not* the same file. That gap is deliberate
+    and belongs to perceptual matching, not here."""
+
+    def test_identical_bytes_hash_the_same(self, tmp_path):
+        first = tmp_path / "a.bin"
+        second = tmp_path / "b.bin"
+        payload = b"same picture, byte for byte"
+        first.write_bytes(payload)
+        second.write_bytes(payload)
+        assert image_utils.content_hash(str(first)) == image_utils.content_hash(str(second))
+
+    def test_one_byte_different_changes_it(self, tmp_path):
+        first = tmp_path / "a.bin"
+        second = tmp_path / "b.bin"
+        first.write_bytes(b"picture one")
+        second.write_bytes(b"picture two")
+        assert image_utils.content_hash(str(first)) != image_utils.content_hash(str(second))
+
+    def test_it_is_a_sha256_hex_digest(self, tmp_path):
+        path = tmp_path / "a.bin"
+        path.write_bytes(b"x")
+        assert image_utils.content_hash(str(path)) == hashlib.sha256(b"x").hexdigest()
+
+    def test_a_re_encoded_copy_is_not_matched(self, tmp_path):
+        """The exact-only boundary, pinned so nobody mistakes this for fuzzy
+        matching: the same square saved as PNG and as JPEG are different files."""
+        png = _write(tmp_path, "same.png", "PNG", size=(64, 64))
+        jpeg = _write(tmp_path, "same.jpg", "JPEG", size=(64, 64))
+        assert image_utils.content_hash(png) != image_utils.content_hash(jpeg)
+
+    def test_unreadable_is_none(self, tmp_path):
+        assert image_utils.content_hash(str(tmp_path / "missing.png")) is None
 
 
 class TestNaming:

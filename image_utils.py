@@ -1,3 +1,4 @@
+import hashlib
 import os
 
 from PIL import Image, ImageOps
@@ -216,3 +217,26 @@ def read_image_dimensions(path):
     except Exception as e:
         _log(f"read_image_dimensions failed for {path}: {type(e).__name__}: {e}")
     return None
+
+
+def content_hash(path):
+    """sha256 of a file's bytes as hex, or None if it cannot be read.
+
+    This is the duplicate fingerprint, and it is deliberately the *raw* bytes
+    rather than the normalised output: the same file must hash the same on any
+    machine and any Pillow version, and an encoder change must never make an
+    existing row unrecognisable. The cost is that a re-encoded or resized copy
+    of the same picture hashes differently; catching those is a separate,
+    perceptual problem (see the duplicate-detection work), not this one.
+
+    Streamed, so a 30 MB file costs a 1 MB buffer rather than 30.
+    """
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as e:
+        _log(f"content_hash failed for {path}: {type(e).__name__}: {e}")
+        return None
+    return digest.hexdigest()

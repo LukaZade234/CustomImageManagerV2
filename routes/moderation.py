@@ -47,6 +47,25 @@ def moderation_users():
     return jsonify({"items": users, "total": len(users)})
 
 
+@moderation_bp.route("/api/moderation/duplicates")
+@require_moderator
+def moderation_duplicates():
+    """Groups of images sharing a fingerprint, biggest cluster first.
+
+    Read-only, like the rest of this surface: the removal still happens on the
+    character page, where the image and its context are. This is what makes a
+    duplicate added before the gate existed findable at all.
+    """
+    limit = min(request.args.get("limit", default=200, type=int) or 200, 1000)
+    clusters = db.list_duplicate_clusters(limit=limit)
+    return jsonify(
+        {
+            "clusters": clusters,
+            "total": sum(cluster["count"] for cluster in clusters),
+        }
+    )
+
+
 @moderation_bp.route("/api/moderation/users/<ref>/images")
 @require_moderator
 def moderation_user_images(ref):

@@ -9,6 +9,7 @@ import AddPage from './pages/AddPage'
 import CharacterPage from './pages/CharacterPage'
 import CustomsPage from './pages/CustomsPage'
 import HomePage from './pages/HomePage'
+import DuplicatesPage from './pages/moderation/DuplicatesPage'
 import ModerationPage from './pages/moderation/ModerationPage'
 import NotificationsPage from './pages/NotificationsPage'
 import HiddenTab from './pages/profile/HiddenTab'
@@ -76,6 +77,14 @@ function App() {
                 element={
                   <RequireModerator>
                     <ModerationPage />
+                  </RequireModerator>
+                }
+              />
+              <Route
+                path="moderation/duplicates"
+                element={
+                  <RequireModerator>
+                    <DuplicatesPage />
                   </RequireModerator>
                 }
               />

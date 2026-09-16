@@ -182,6 +182,13 @@ JSON documents replaced by tables, on SQLite. Engine and shape settled in
       verified.
 - [x] **Per-character reads are targeted.** `/api/custom-image/<name>` was loading every
       character's images and discarding all but one — an artifact of the document layout.
+- [x] **`content_hash` wired up.** The column and its partial index were declared here and then
+      left empty; uploads now fingerprint their bytes and refuse a same-character duplicate
+      *before* it reaches ImgChest, where it could not be deleted. The fingerprint is of the
+      stored file, so `scripts/backfill_content_hashes.py` can fill in the older library by
+      downloading it, and the moderator **Duplicate images** review
+      (`/profile/moderation/duplicates`) groups by it. See `DECISIONS.md`, "Uploading the same
+      picture twice".
 
 ### What the real data taught us
 
@@ -685,7 +692,7 @@ relevant — the concurrency test is written first, before Phase 2:
       `state='removed'`.
 - [x] Hiding an image changes nothing for a second identity.
 - [x] The second *distinct* report removes; a second report from the *same* identity does not.
-- [x] Duplicate URL and duplicate content hash are both rejected on add.
+- [x] Duplicate URL and duplicate content hash are both rejected on add (the latter overridable).
 - [x] **Concurrent adds to one character both persist** — the regression test for the Phase 2
       data-layer rewrite, and it passes: `tests/test_db_concurrency.py` covers two concurrent
       adds, many concurrent adds, and writes across tables not deadlocking.

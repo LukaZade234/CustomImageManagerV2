@@ -306,7 +306,12 @@ Then, roughly in this order:
 5. **ImgChest post ids — run the backfill.** Staff permanent delete needs them; without
    them a purge falls back to the file-delete path, which only works on a post with
    siblings. One rate-limited listing pass over the account (60/min).
-6. **Traits — run after the catalog.** Gender and pool badges. Cosmetic.
+6. **Content fingerprints — run the backfill.** `content_hash` is the duplicate
+   fingerprint; a fresh import leaves it NULL, so the add-time gate cannot see any of the
+   imported images and the moderator Duplicates review is empty. The script downloads
+   each image once and hashes it — the library is thousands of images, so expect it to be
+   slow and to move real bandwidth.
+7. **Traits — run after the catalog.** Gender and pool badges. Cosmetic.
 
 Config that must match rather than data: `CORS_ORIGINS` on the origin and
 `VITE_API_BASE_URL` / `VITE_IMAGE_BASE_URL` in the Pages build. Portrait keys are
@@ -407,7 +412,7 @@ data that has ever existed. That is the reason pre-flight step 4 is a gate.
 ## Afterwards
 
 - [ ] **Rebuild the derived layers** — catalog, portrait mirrors, thumbnail cache,
-  accents, dimensions, ImgChest post ids, traits. See
+  accents, dimensions, ImgChest post ids, content fingerprints, traits. See
   [After the import](#after-the-import-the-derived-layers).
 - [ ] **Reconcile ImgChest** — review the cleanup preview and run it, if Decision 4
   was to proceed. See [ImgChest cleanup](#imgchest-cleanup-planned).

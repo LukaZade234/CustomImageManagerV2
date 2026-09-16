@@ -21,10 +21,16 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
   const [progress, setProgress] = useState(null)
   const [errorReport, setErrorReport] = useState(null)
   const [dragOver, setDragOver] = useState(false)
+  /**
+   * Duplicates the server refused to upload, held so the dialog can offer to
+   * override. `kind` says how to re-send them: files go back through the file
+   * route, urls through the import route. Null when there is nothing to show.
+   */
+  const [duplicates, setDuplicates] = useState(null)
   /** One upload at a time; see above for why this is a ref. */
   const busy = useRef(false)
 
-  const runCustomUpload = async (fileList) => {
+  const runCustomUpload = async (fileList, { allowDuplicates = false } = {}) => {
     const list = dedupeFilesByIdentity(Array.from(fileList)).filter((f) => isImageFileLike(f))
     if (!list.length) {
       addToast('No image files to upload', 'error')
@@ -40,6 +46,8 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
     addToast(`Starting upload of ${total} image${total !== 1 ? 's' : ''}…`, 'info')
 
     const errors = []
+    const skipped = []
+    const elsewhere = []
     try {
       for (let i = 0; i < list.length; i++) {
         const file = list[i]
@@ -54,10 +62,19 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
           const fd = new FormData()
           fd.append('character_name', characterName)
           fd.append('files', file)
+          if (allowDuplicates) fd.append('allow_duplicates', '1')
           const res = await apiClient.addCustomImage(fd)
           if (Array.isArray(res.links) && res.links.length > 0) {
             await onUploaded(characterName, res.links)
           }
+          // A picture already in this gallery: not an error, a question. Held
+          // for the dialog rather than counted as either a success or a failure.
+          if (Array.isArray(res.duplicates)) {
+            res.duplicates.forEach((dup) => {
+              skipped.push({ file, label: file.name, existing: dup.existing, alsoOn: dup.also_on })
+            })
+          }
+          if (Array.isArray(res.also_on)) elsewhere.push(...res.also_on)
           // Server can return 200 with `errors` when a batch had partial failures (e.g. multi-file request)
           if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
             res._partialErrors.forEach((msg) => {
@@ -72,14 +89,23 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
         }
       }
 
-      const ok = total - errors.length
+      const ok = total - errors.length - skipped.length
+      if (skipped.length && !allowDuplicates) {
+        setDuplicates({ kind: 'files', items: skipped })
+      }
+      if (elsewhere.length) {
+        const names = [...new Set(elsewhere.map((m) => m.character).filter(Boolean))]
+        if (names.length) addToast(`Also used on ${names.join(', ')}`, 'info')
+      }
       if (ok === total) {
         addToast(`${ok} image${ok !== 1 ? 's' : ''} uploaded successfully.`, 'success')
       } else if (ok > 0) {
         addToast(
-          `${ok} of ${total} image${ok !== 1 ? 's' : ''} uploaded. ${errors.length} failed — open the error panel to read and copy details.`,
+          `${ok} of ${total} image${ok !== 1 ? 's' : ''} uploaded. ${errors.length + skipped.length} skipped or failed — open the error panel to read and copy details.`,
           'error',
         )
+      } else if (skipped.length && !errors.length) {
+        addToast('Already in this gallery.', 'info')
       } else {
         addToast(`No images uploaded — open the error panel for full details.`, 'error')
       }
@@ -110,7 +136,7 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
     if (fileInputRef?.current) fileInputRef.current.value = ''
   }
 
-  const runImportFromUrls = async (urls) => {
+  const runImportFromUrls = async (urls, { allowDuplicates = false } = {}) => {
     const deduped = dedupeImageUrls(urls)
     if (!deduped.length) return
     if (busy.current) {
@@ -128,9 +154,24 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
       'info',
     )
     try {
-      const res = await apiClient.importCustomImagesFromUrls(characterName, list)
+      const res = await apiClient.importCustomImagesFromUrls(characterName, list, {
+        allowDuplicates,
+      })
       if (Array.isArray(res.links) && res.links.length > 0) {
         await onUploaded(characterName, res.links)
+      }
+      if (Array.isArray(res.duplicates)) {
+        const items = res.duplicates.map((dup) => ({
+          url: dup.url,
+          label: dup.filename || dup.url,
+          existing: dup.existing,
+          alsoOn: dup.also_on,
+        }))
+        if (items.length && !allowDuplicates) setDuplicates({ kind: 'urls', items })
+      }
+      if (Array.isArray(res.also_on)) {
+        const names = [...new Set(res.also_on.map((m) => m.character).filter(Boolean))]
+        if (names.length) addToast(`Also used on ${names.join(', ')}`, 'info')
       }
       if (res && Array.isArray(res._partialErrors) && res._partialErrors.length) {
         res._partialErrors.forEach((msg) => addToast(`Skipped: ${msg}`, 'error'))
@@ -138,6 +179,8 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
       const n = res?.links?.length || 0
       if (n >= 1) {
         addToast('Image imported from the web.', 'success')
+      } else if (res?.duplicates?.length && !res?._partialErrors?.length) {
+        addToast('Already in this gallery.', 'info')
       } else {
         addToast('Could not import from that URL.', 'error')
       }
@@ -146,6 +189,43 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
     } finally {
       busy.current = false
       setProgress(null)
+    }
+  }
+
+  const dismissDuplicates = useCallback(() => setDuplicates(null), [])
+
+  /**
+   * Drop one refusal from the dialog once it has been dealt with — restoring the
+   * removed copy it pointed at, typically — closing the dialog when none are
+   * left. Keyed by the existing image id, which is what the dialog shows.
+   */
+  const resolveDuplicate = useCallback((existingId) => {
+    setDuplicates((current) => {
+      if (!current) return null
+      const items = current.items.filter((item) => item.existing?.id !== existingId)
+      return items.length ? { ...current, items } : null
+    })
+  }, [])
+
+  /**
+   * The "Upload anyway" path from the dialog: re-send exactly the copies the
+   * server refused, this time with the override. The originals were never
+   * uploaded, so nothing is duplicated by doing this.
+   */
+  const uploadDuplicatesAnyway = async () => {
+    const pending = duplicates
+    if (!pending) return
+    setDuplicates(null)
+    if (pending.kind === 'files') {
+      await runCustomUpload(
+        pending.items.map((item) => item.file),
+        { allowDuplicates: true },
+      )
+    } else {
+      await runImportFromUrls(
+        pending.items.map((item) => item.url),
+        { allowDuplicates: true },
+      )
     }
   }
 
@@ -198,6 +278,10 @@ export function useCustomImageUpload({ characterName, onUploaded, addToast, file
     progress,
     errorReport,
     dismissErrorReport: useCallback(() => setErrorReport(null), []),
+    duplicates,
+    dismissDuplicates,
+    resolveDuplicate,
+    uploadDuplicatesAnyway,
     dragOver,
     onFileInputChange: handleAddCustomImage,
     onDrop: handleCustomDrop,

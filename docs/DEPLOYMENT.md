@@ -177,9 +177,9 @@ so re-running to pick up late changes before cut-over is safe.
 
 That is only the v1 half. The dump carries names, image URLs and bookmarks — nothing
 derived — so the catalog, portrait mirrors, thumbnail cache, accents, image
-dimensions, ImgChest post ids and traits are rebuilt afterwards. The ImgChest account
-can also be reconciled against what Discord actually uses, deleting what is neither
-in use nor on the site. Both are in **[CUTOVER.md](CUTOVER.md)**.
+dimensions, ImgChest post ids, content fingerprints and traits are rebuilt afterwards. The
+ImgChest account can also be reconciled against what Discord actually uses, deleting what is
+neither in use nor on the site. Both are in **[CUTOVER.md](CUTOVER.md)**.
 
 ## 5. Cloudflare: Pages
 
