@@ -15,6 +15,7 @@ import ReportDialog from '../components/ReportDialog'
 import SignInPrompt from '../components/SignInPrompt'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
+import { useAccentOverride } from '../hooks/useAccentOverride'
 import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
 import { useCharacterEdit } from '../hooks/useCharacterEdit'
 import { useCharacterTheme } from '../hooks/useCharacterTheme'
@@ -43,7 +44,6 @@ import {
   writeCustomImagesToDirectory,
 } from '../utils/downloadCustomImages'
 import { isImageFileLike } from '../utils/imageFiles'
-import { pickPixel } from '../utils/imagePick'
 
 /** What the heading says while a mode is active. Browse gets nothing. */
 const MODE_LABELS = {
@@ -128,6 +128,17 @@ export default function CharacterPage() {
   const seededAccent = imagesData?.accentSeed ?? savedSeed ?? char?.accent_seed ?? null
   const theme = useCharacterTheme(name, characterAccents ? seededAccent : null)
   useApplyCharacterTheme(theme)
+  // Above the early returns, like every hook. Refreshes the gallery and saved
+  // rows so the new colour is measured again.
+  const accent = useAccentOverride({
+    name,
+    addToast,
+    onChanged: async () => {
+      await queryClient.invalidateQueries({ queryKey: characterImagesKey(name) })
+      await queryClient.invalidateQueries({ queryKey: savedKey })
+      reloadChar()
+    },
+  })
   const [loading, setLoading] = useState(false)
   const [mudaeMainBusy, setMudaeMainBusy] = useState(false)
   const [mudaeConfigured, setMudaeConfigured] = useState(false)
@@ -150,10 +161,6 @@ export default function CharacterPage() {
     askDiscard,
     cancelDiscard,
   } = useGallerySelection()
-  // Arming the accent picker turns the portrait and gallery into a pixel
-  // sampler: the next click sets the character's colour (staff only).
-  const [accentPick, setAccentPick] = useState(false)
-  const [accentBusy, setAccentBusy] = useState(false)
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
@@ -433,43 +440,6 @@ export default function CharacterPage() {
       setLoading(false)
     }
   }
-
-  /**
-   * Set or clear the character's accent from a picked pixel. The server samples
-   * the image (keyed by row id, never a caller URL), so the click only has to
-   * carry the point within the image.
-   */
-  const handlePickAccent = async (payload) => {
-    setAccentBusy(true)
-    try {
-      const res = await apiClient.setAccentOverride({ name, ...payload })
-      addToast(res.manual ? 'Accent colour saved' : 'Accent reset to measured', 'success')
-      setAccentPick(false)
-      await queryClient.invalidateQueries({ queryKey: characterImagesKey(name) })
-      await queryClient.invalidateQueries({ queryKey: savedKey })
-      reloadChar()
-    } catch (err) {
-      addToast(err.message, 'error')
-    } finally {
-      setAccentBusy(false)
-    }
-  }
-
-  const handlePickAccentFromGallery = (row, point) => {
-    if (!row.thumb) {
-      addToast('That image has no thumbnail to sample', 'error')
-      return
-    }
-    handlePickAccent({ image_id: row.id, u: point.u, v: point.v })
-  }
-
-  const handlePickAccentFromPortrait = (e) => {
-    const img = e.currentTarget.querySelector('img')
-    const point = pickPixel(img, e.clientX, e.clientY)
-    handlePickAccent({ portrait: true, u: point.u, v: point.v })
-  }
-
-  const handleClearAccent = () => handlePickAccent({ clear: true })
 
   const handleToggleSave = async () => {
     try {
@@ -784,16 +754,16 @@ export default function CharacterPage() {
           busy: mudaeMainBusy,
           onRefreshMain: handleMudaeRefreshMain,
         }}
-        pick={accentPick}
-        onPickPortrait={handlePickAccentFromPortrait}
+        pick={accent.pick}
+        onPickPortrait={accent.pickFromPortrait}
         accent={{
           canEdit: Boolean(me?.is_moderator),
           manual: Boolean(imagesData?.accentManual),
-          pickMode: accentPick,
-          busy: accentBusy,
+          pickMode: accent.pick,
+          busy: accent.busy,
           seed: seededAccent,
-          onTogglePick: () => setAccentPick((on) => !on),
-          onClear: handleClearAccent,
+          onTogglePick: accent.togglePick,
+          onClear: accent.clear,
         }}
       />
 
@@ -921,8 +891,8 @@ export default function CharacterPage() {
           onOpenImage={openModal}
           onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
-          pick={accentPick}
-          onPick={handlePickAccentFromGallery}
+          pick={accent.pick}
+          onPick={accent.pickFromGallery}
           /*
             An empty gallery used to be a blank strip under the drop hint, which
             reads as something that failed to load rather than a character
