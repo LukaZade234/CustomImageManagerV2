@@ -165,31 +165,41 @@ def require_owner(fn):
     return wrapper
 
 
-def require_signed_in(fn):
+def require_signed_in(fn=None, *, action: str = "add images"):
     """403 unless the caller has linked a Discord account.
 
-    A cookie-only visitor may browse and curate their own view freely, but adding
-    an image uploads bytes to ImgChest under our key. That action is tied to a
-    real account on purpose: it can be held to, and it is what makes a ban mean
-    something -- clearing a cookie mints a fresh pseudonym for free, so an
-    upload limit that ignores the account is no limit at all.
+    A cookie-only visitor may browse and curate their own view freely, but two
+    actions are tied to a real account on purpose: adding an image uploads bytes
+    to ImgChest under our key, and reordering a shared gallery changes what
+    everyone sees (see `DECISIONS.md` §1). An account can be held to, and it is
+    what makes a ban mean something -- clearing a cookie mints a fresh pseudonym
+    for free, so a rule that ignores the account is no rule at all.
+
+    Usable bare (`@require_signed_in`) for the default upload wording, or with an
+    action (`@require_signed_in(action="reorder a gallery")`) so the message
+    names what the person was trying to do.
     """
 
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not current_identity().is_signed_in:
-            return (
-                jsonify(
-                    {
-                        "error": "Sign in with Discord to add images",
-                        "code": "discord_required",
-                    }
-                ),
-                403,
-            )
-        return fn(*args, **kwargs)
+    def decorator(view):
+        @functools.wraps(view)
+        def wrapper(*args, **kwargs):
+            if not current_identity().is_signed_in:
+                return (
+                    jsonify(
+                        {
+                            "error": f"Sign in with Discord to {action}",
+                            "code": "discord_required",
+                        }
+                    ),
+                    403,
+                )
+            return view(*args, **kwargs)
 
-    return wrapper
+        return wrapper
+
+    if fn is None:
+        return decorator
+    return decorator(fn)
 
 
 def _serializer(secret_key: str) -> URLSafeSerializer:

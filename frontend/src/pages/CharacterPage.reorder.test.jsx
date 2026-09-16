@@ -30,6 +30,11 @@ vi.mock('../api', () => ({
       get: (_target, prop) => {
         if (prop === 'reorderCustomImages') return reorderCustomImages
         if (prop === 'getCustomImagesForChar') return getCustomImagesForChar
+        // Reordering requires a Discord account; the route is disabled without
+        // one, so these tests sign in.
+        if (prop === 'getMe') {
+          return vi.fn().mockResolvedValue({ signed_in: true, is_moderator: false })
+        }
         if (prop === 'findCatalogCharacter') {
           return vi.fn().mockResolvedValue({
             found: true,

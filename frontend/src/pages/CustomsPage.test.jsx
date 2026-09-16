@@ -6,7 +6,7 @@
  * right while downloading the whole library again, which is the regression this
  * change exists to prevent.
  */
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -21,6 +21,7 @@ vi.mock('../api', () => ({
 }))
 
 import { useStore } from '../store/useStore'
+import { renderWithQueryClient } from '../test/renderWithQueryClient'
 import CustomsPage from './CustomsPage'
 
 const page = (items, overrides = {}) => ({
@@ -56,7 +57,7 @@ beforeEach(() => {
 })
 
 const renderPage = () =>
-  render(
+  renderWithQueryClient(
     <MemoryRouter>
       <CustomsPage />
     </MemoryRouter>,
@@ -77,7 +78,7 @@ function LocationProbe() {
 }
 
 const renderRouted = (entries = ['/customs']) =>
-  render(
+  renderWithQueryClient(
     <MemoryRouter initialEntries={entries}>
       <CustomsPage />
       <Routes>

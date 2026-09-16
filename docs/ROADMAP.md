@@ -314,12 +314,16 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
 - [ ] **Rebuild the derived layers after the import.** The v1 dump carries only names,
       image URLs and bookmarks; the catalog, portrait mirrors, thumbnail cache (which
       *must* be cleared, since thumbnails are keyed by row id), accents, dimensions,
-      ImgChest post ids and traits are rebuilt afterwards. See **CUTOVER.md**.
-- [ ] **Reconcile ImgChest.** A planned one-off: keep every image that is in use in
-      Discord or on the site, delete the rest — which also clears the griefed uploads
-      from before moderation existed — and re-add the in-use images that were
-      wrongfully removed so they can be restored. It must show a preview of both lists
-      before deleting. See **CUTOVER.md**.
+      content fingerprints and traits are rebuilt afterwards. ImgChest post ids are
+      filled by the cleanup in the step below. Ordering matters — fingerprints and
+      dimensions re-read the image bytes and must run before the cleanup. See
+      **CUTOVER.md**, [After the import](CUTOVER.md#after-the-import-the-derived-layers).
+- [x] **Reconcile ImgChest.** _Built._ `scripts/imgchest_cleanup.py` keeps every image
+      that is in use in Discord or on the site, deletes the rest — which also clears
+      the griefed uploads from before moderation existed — and re-adds the in-use
+      images that were wrongfully removed so they can be restored. It shows a preview
+      of both lists before deleting, rendered in an owner-only Cut-over tab, and only
+      deletes with `--execute`. See **CUTOVER.md**, [ImgChest cleanup](CUTOVER.md#imgchest-cleanup).
 - [x] **Removed `flask-compress`** (`5c62b9c`). Cloudflare is in front and does Brotli, so
       origin-side gzip only spent CPU.
 
@@ -519,9 +523,11 @@ them. There are no v2 users yet, so this costs nothing now.
       `remote_images.py`, `ratelimit.py` and `validation.py`. Paths are unchanged;
       `tests/test_url_map.py` pins every registered route so one going missing is a test failure
       rather than a production surprise.
-- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671, now 963 after the mode and
-      accent rework. The four mutually exclusive mode booleans became one `mode` value, and
-      `GalleryToolbar` and `CharacterHeader` moved out with tests of their own.
+- [x] **Split `CharacterPage.jsx`** _(done)_ — 1,611 lines down to 671, then 963 after the mode and
+      accent rework, and 1,017 after the 2026-09-16 review's five extractions (see
+      [Review findings](#review-findings-2026-09-16)). The four mutually exclusive mode booleans
+      became one `mode` value, and `GalleryToolbar` and `CharacterHeader` moved out with tests of
+      their own.
 - [x] **Split `AddPage.jsx`** _(done)_ — 806 lines down to 253. The Mudae lookup and the manual
       form are their own components (`AddMudaePanel` 519, `AddManualForm` 135) with tests of
       their own; the page keeps only the catalog-match logic and the one record both panels
@@ -690,6 +696,97 @@ why it does not contradict the anti-queue argument there.
       **Reports** tab lists reported images, split into those still live and those the two-report
       threshold already removed, each with its reasons and reporters. Read-only, and a human still
       makes any call — the queue informs, it does not act.
+
+---
+
+## Review findings (2026-09-16)
+
+A third-party review raised nine findings, each with an executable plan in
+`critiques and plans.md`. That file is the working document; **this section is the
+decision record** — what was accepted, what was declined, and why, so a later pass
+does not reopen it without new information. The review's own numbers were
+re-verified against the tree on 2026-09-16 and held.
+
+### Accepted, roughly in order
+
+- [x] **Code splitting (#2).** _Done._ One 454 KB JS chunk shipped to every
+      anonymous visitor, including the moderation console and the Mudae import
+      panel they cannot open. Route-level `React.lazy` plus one `Suspense`, the
+      landing page and shared chrome eager, and `RequireModerator` outside the
+      lazy boundary. First-load JS 454 → 317 KB raw (136 → 98 KB gzip); the heavy
+      routes are their own chunks (CharacterPage 60 KB, ModerationPage 22 KB,
+      AddPage 20 KB) that an anonymous visitor never fetches. A source test pins
+      the boundary, since a static import or a guard moved inside would silently
+      undo it.
+- [x] **Reorder abuse, error disclosure and indexes (#1a, #4, #5).** _Done, with
+      one addition._ `/api/reorder-custom-images` had no rate limit, no ownership
+      check and no audit, while the delete route beside it had both. Beyond the
+      review: reordering now **requires a Discord account** and is refused for a
+      suspended or banned one by the existing write gate — see `DECISIONS.md` §1
+      (point 7), with the toolbar disabled for a cookie-only visitor. Also added
+      the `reorder` rate limit, a `customs.reordered` audit log line, replaced the
+      raw `str(e)` returns with fixed sentences (keeping only the deliberately
+      narrowed `MudaeError` / `ImgChestError` / `ValueError` messages, whose text
+      is written for the caller), and added migration `022_actor_indexes.sql` with
+      the two partial indexes.
+- [x] **`ui/` primitive tests (#9).** _Done._ Only `Modal` was tested; the other
+      ten primitives now have a file each, asserting the contract — what a user
+      sees, what a screen reader is told, what happens on interaction — not class
+      names. The load-bearing ones: a loading `Button` cannot be pressed again,
+      `Field` wires the label and hint to the control, `SegmentedControl` keeps
+      the full word in the accessible name when the drawn label is shortened, and
+      `ConfirmDialog` treats a dismissal as cancel. No component was changed.
+- [x] **Data-fetching consistency (#7), scoped.** _Done._ `HiddenTab` and
+      `RemovedTab` are react-query now (`queries/hidden.js`, `queries/removed.js`,
+      following the `SavedTab` template), so they take part in the app's
+      invalidation — the concrete bug was that signing out left the previous
+      identity's list on screen, and there is a test for it. `CustomsPage`'s
+      `reloadKey` is gone: it is a `useQuery` with `keepPreviousData` and the
+      shared `useDebouncedValue` (`staleTime: 0`, so the list revalidates on every
+      mount while cached data still paints instantly). `AddPage` / `CharacterPage`
+      raw fetches were left for #3 on purpose, so those files are not churned
+      twice.
+- [x] **`CharacterPage.jsx` decomposition (#3).** _Done, in five behaviour-
+      preserving steps._ The page was a 1,113-line function with 26 `useState`;
+      it is 1,017 with 13 now, and reads as composition. Each concern moved to a
+      hook of its own: `useCharacterEdit` (the form), `useGallerySelection` (mode
+      + selection + discard confirmation as one reducer, so impossible states are
+      unrepresentable), `useLightbox` (the viewer and the frame-coalesced ratio
+      measuring), `useAccentOverride` (the staff picker), `useMainImage` (portrait
+      upload / drop / Mudae refresh). The three existing test files pass
+      **unmodified** throughout — a step that needed to change one meant
+      behaviour moved. `useGalleryReorder`'s touch handling was left untouched.
+      The first pass put `useMainImage` below the page's early returns, which
+      changed hook order and blanked the page; the existing tests caught it.
+
+### Declined or deferred, and why
+
+- **`reorder_history` (#1b) — declined for now.** A new table whose only reader is
+  a moderation view that does not exist is more than the risk warrants. A
+  structured `reorder.saved` log line (the actor attaches automatically inside a
+  request) gives the visibility and deterrence; the table stays in reserve if an
+  undo or a moderation read is ever actually wanted.
+- **`/api/stats` caching (#6) — deferred until measured.** The heaviest route is
+  real, but nine sub-millisecond queries on 8.5k rows is not load, and this is the
+  one place the review optimised without evidence. Its privacy caveat is already
+  satisfied: `you` is fetched separately from the cacheable block. If it is built,
+  cache only the shared block, and remember a `private` header gets no Cloudflare
+  caching anyway.
+- **`db.py` / `pages.css` splits (#8) — declined for now.** Both are explicitly
+  optional; `db.py`'s organization is good and only its size is bad, and a
+  zero-behaviour split is a large diff with circular-import risk. If `pages.css`
+  is ever split, do it per page when that page's CSS is already being changed, and
+  verify by the sorted-content hash.
+- **Secondary suggestions.** The `manualChunks` vendor split is folded into #2;
+  the "stop CharacterPage under 400 lines" target is dropped as arbitrary — the
+  goal is one concern per file, not a line count.
+
+Three corrections to the review, recorded so the plans are not followed blindly:
+its `/api/stats` `you` caveat is already satisfied structurally; "sign out leaves
+the previous identity's data on screen" is mostly unreachable because sign-out
+happens on a route where the raw-fetch tabs are unmounted; and sections 1(b) and 5
+both propose migration `022`, so the indexes take `022` and any reorder history
+would be `023`.
 
 ---
 

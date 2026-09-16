@@ -135,6 +135,12 @@ duplicate — and every one of those has a right answer that requires no consens
    become real, there will be months of actual data to design against instead of another guess.
 6. **Moderator and owner accounts exist as a manual fallback only** — explicitly not the primary
    mechanism, and not something the operator should need to use routinely.
+7. **Reordering a shared gallery is tied to a Discord account.** Position is prominence, so pushing
+   images down is removal's practical equal — but unlike removal it had no rule and left no trace.
+   It now requires a linked account and is rate limited. It is deliberately *not* owner-only: the
+   gallery is shared, and any signed-in person may still curate the order. The account (rather than
+   the cookie) is what a suspension or ban can be held to, since clearing a cookie mints a fresh
+   pseudonym for free — the same reasoning as uploads.
 
 Worked example — the exact scenario that motivated all of this. Someone opens a character with 10
 images and wants only their own. They click remove on all 10: each is hidden **for them**, nothing
@@ -167,6 +173,32 @@ stays canonical and is what gets handed to Mudae; the mirror is insurance only.
 A useful consequence: because nothing ever deletes from ImgChest, every image in the app's history
 is still live at its URL. Soft delete and restore are therefore essentially free, and the
 moderation design in §1 depends on this.
+
+### The one-time cut-over cleanup
+
+Nothing has ever been deleted, so the account still holds every upload the app and v1 ever made —
+including images no database still references, and griefed or otherwise inappropriate uploads made
+before moderation existed. The cut-over is treated as the one moment to reconcile the account against
+what is actually used, and everything else is then deleted permanently. This is a deliberate
+exception to the paragraph above: the "never delete" property holds *during* operation, and this is
+the single planned reconciliation of the backlog.
+
+The keep sets are **in use** (from a manual Discord export of the URLs named in Mudae's `$ai` lists,
+deduplicated across servers) and **on the site** (`custom_images`, in any state — so an image removed
+on the site but still used in Discord is a keeper, not a deletion). Anything in neither set is a
+deletion candidate. In-use images the site does not have are re-added in the `removed` state, so
+they surface in the Removed drawer and can be restored; they land with `added_by IS NULL` like every
+other migrated row, so staff restore them.
+
+The cleanup is **planned, not routine**, and is gated three ways: the script does nothing without
+`--execute`, it writes a preview first that a human reads, and the preview is surfaced in the app as
+an **owner-only** tab so the operator reviews it in the same place the decision was made. The app
+never deletes — the destructive half stays a CLI. It supersedes the one-off
+`backfill_imgchest_post_ids.py` pass by computing the same file-to-post map itself.
+
+**Ordering is load-bearing.** Content fingerprints and image dimensions both re-read the image bytes
+from ImgChest, so they must run **before** the cleanup; deleting first makes them impossible for the
+files concerned. See `CUTOVER.md`, [ImgChest cleanup](#imgchest-cleanup).
 
 ---
 

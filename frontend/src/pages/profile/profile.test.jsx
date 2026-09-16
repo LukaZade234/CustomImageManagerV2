@@ -9,7 +9,7 @@
  * The other is that Saved moved here from its own page, so `/saved` has to keep
  * working for anyone who bookmarked it.
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -215,6 +215,23 @@ describe('acting on a list', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Unhide' }))
     expect(api.unhideImages).toHaveBeenCalledWith([7])
+    await waitFor(() => expect(screen.getByText('Nothing hidden')).toBeInTheDocument())
+  })
+
+  it('refetches when the identity changes, so signing out does not leave the list behind', async () => {
+    // The bug this replaced: a raw useEffect fetch does not take part in the
+    // app's invalidation, so after a sign-out the previous person's list stayed
+    // on screen. react-query refetches active queries on invalidate, and
+    // useSignOut invalidates everything.
+    api.getMyHidden.mockResolvedValue([
+      { id: 7, url: 'a.png', character: 'Rem', hidden_at: '2026-09-01' },
+    ])
+    const { client } = at(<HiddenTab />)
+    expect(await screen.findByText('Rem')).toBeInTheDocument()
+
+    api.getMyHidden.mockResolvedValue([])
+    await act(() => client.invalidateQueries())
+
     await waitFor(() => expect(screen.getByText('Nothing hidden')).toBeInTheDocument())
   })
 })

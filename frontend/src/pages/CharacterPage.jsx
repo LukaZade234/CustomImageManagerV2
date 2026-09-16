@@ -15,10 +15,15 @@ import ReportDialog from '../components/ReportDialog'
 import SignInPrompt from '../components/SignInPrompt'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
+import { useAccentOverride } from '../hooks/useAccentOverride'
 import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
+import { useCharacterEdit } from '../hooks/useCharacterEdit'
 import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
+import { useGallerySelection } from '../hooks/useGallerySelection'
+import { useLightbox } from '../hooks/useLightbox'
+import { useMainImage } from '../hooks/useMainImage'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import {
   applyOrderToCache,
@@ -34,14 +39,11 @@ import {
   DISCORD_LIMIT_REGULAR,
   splitAiCommandForLimit,
 } from '../utils/aiCommandDiscord'
-import { keysToTraits, traitsToKeys } from '../utils/characterTraits'
+import { keysToTraits } from '../utils/characterTraits'
 import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
 } from '../utils/downloadCustomImages'
-import { ratioOf } from '../utils/galleryRatios'
-import { isImageFileLike } from '../utils/imageFiles'
-import { pickPixel } from '../utils/imagePick'
 
 /** What the heading says while a mode is active. Browse gets nothing. */
 const MODE_LABELS = {
@@ -94,16 +96,20 @@ export default function CharacterPage() {
   const customs = rows.map((row) => row.url)
   const rowByUrl = new Map(allRows.map((row) => [row.url, row]))
 
-  const [editMode, setEditMode] = useState(false)
-  const [editName, setEditName] = useState('')
-  const [editSeries, setEditSeries] = useState('')
-  const [editRank, setEditRank] = useState('')
-  // The four editable pool facets (waifu/husbando/anime/game). Seeded from the
-  // row's stored card traits, so the editor shows exactly what the identity
-  // block beside it shows.
-  const [editTraits, setEditTraits] = useState([])
-  const toggleEditTrait = (key) =>
-    setEditTraits((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]))
+  // The editor's own state (fields, mode, seeding) lives in the hook; the page
+  // keeps only what it does with them.
+  const {
+    editMode,
+    setEditMode,
+    editName,
+    setEditName,
+    editSeries,
+    setEditSeries,
+    editRank,
+    setEditRank,
+    editTraits,
+    toggleEditTrait,
+  } = useCharacterEdit(char)
   const [mainImage, setMainImage] = useState('')
   // The catalog's mirrored portrait applies only while the main image is still
   // the catalog's own; an upload or an edit replaces it and has no mirror.
@@ -122,32 +128,42 @@ export default function CharacterPage() {
   const seededAccent = imagesData?.accentSeed ?? savedSeed ?? char?.accent_seed ?? null
   const theme = useCharacterTheme(name, characterAccents ? seededAccent : null)
   useApplyCharacterTheme(theme)
+  // Above the early returns, like every hook. Refreshes the gallery and saved
+  // rows so the new colour is measured again.
+  const accent = useAccentOverride({
+    name,
+    addToast,
+    onChanged: async () => {
+      await queryClient.invalidateQueries({ queryKey: characterImagesKey(name) })
+      await queryClient.invalidateQueries({ queryKey: savedKey })
+      reloadChar()
+    },
+  })
   const [loading, setLoading] = useState(false)
-  const [mudaeMainBusy, setMudaeMainBusy] = useState(false)
   const [mudaeConfigured, setMudaeConfigured] = useState(false)
   /**
-   * The gallery is in exactly one mode at a time. Four independent booleans made
-   * eleven of the sixteen combinations nonsense and needed twelve hand-written
-   * "turn the others off" lines to stay consistent; one value cannot be wrong.
+   * The gallery is in exactly one mode at a time, and its selection and discard
+   * confirmation belong to that machine rather than to separate flags. See
+   * useGallerySelection.
    */
-  const [mode, setMode] = useState('browse')
-  const selectMode = mode === 'select'
-  const reorderMode = mode === 'reorder'
-  // Arming the accent picker turns the portrait and gallery into a pixel
-  // sampler: the next click sets the character's colour (staff only).
-  const [accentPick, setAccentPick] = useState(false)
-  const [accentBusy, setAccentBusy] = useState(false)
+  const {
+    mode,
+    selectMode,
+    reorderMode,
+    selectedUrls,
+    confirmDiscardOrder,
+    reset: resetSelection,
+    enterSelect,
+    enterReorder,
+    toggleUrl,
+    setSelection,
+    askDiscard,
+    cancelDiscard,
+  } = useGallerySelection()
   const [aiLimitDialog, setAiLimitDialog] = useState(null)
-  const [selectedUrls, setSelectedUrls] = useState([])
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [reportTarget, setReportTarget] = useState(null)
   const [removedDrawer, setRemovedDrawer] = useState(null)
-  // Measured as images load; see utils/galleryRatios.js for why the server
-  // cannot supply these.
-  const [ratios, setRatios] = useState({})
-  const [modalOpen, setModalOpen] = useState(false)
-  const [modalIndex, setModalIndex] = useState(0)
-  const [dragOver, setDragOver] = useState(false)
 
   /** Full multi-line upload error for dismissible dialog (replaces window.alert). */
 
@@ -166,24 +182,22 @@ export default function CharacterPage() {
    * reload. Null whenever reorder mode is closed.
    */
   const reorderSessionRef = useRef(null)
-  const [confirmDiscardOrder, setConfirmDiscardOrder] = useState(false)
 
-  // Measure image ratios off the onLoad event, which fires once per image in
-  // its own tick — a 256-image gallery meant 256 full re-renders of the grid
-  // while it filled in. Coalescing a frame's worth of measurements into one
-  // state update makes the fill cost one render per frame instead.
-  const pendingRatiosRef = useRef({})
-  const ratioFrameRef = useRef(0)
-  useEffect(() => () => cancelAnimationFrame(ratioFrameRef.current), [])
+  // The full-screen viewer, and the ratios the gallery is laid out from. Opens
+  // only from browse; in any other mode a click is a selection.
+  const {
+    open: modalOpen,
+    index: modalIndex,
+    ratios,
+    noteRatio,
+    openAt: openModal,
+    close: closeModal,
+    prev: prevImage,
+    next: nextImage,
+  } = useLightbox({ imageCount: customs.length, canOpen: mode === 'browse' })
 
   useEffect(() => {
-    if (char) {
-      setEditName(char.name)
-      setEditSeries(char.series || '')
-      setEditRank(char.rank || '')
-      setMainImage(char.image || '')
-      setEditTraits(traitsToKeys(char.is_female, char.is_male, char.pools))
-    }
+    if (char) setMainImage(char.image || '')
   }, [char])
 
   // charVersion is a re-run trigger, not a value the effect reads.
@@ -221,11 +235,10 @@ export default function CharacterPage() {
   }, [name])
 
   const resetModes = useCallback(() => {
-    setMode('browse')
-    setSelectedUrls([])
+    resetSelection()
     setAiLimitDialog(null)
     reorderSessionRef.current = null
-  }, [])
+  }, [resetSelection])
 
   /**
    * One selection mode, entered before any verb is chosen.
@@ -243,33 +256,30 @@ export default function CharacterPage() {
    */
   const enterSelectMode = useCallback(
     (preselect = []) => {
-      resetModes()
-      setSelectedUrls(preselect)
-      setMode('select')
+      setAiLimitDialog(null)
+      reorderSessionRef.current = null
+      enterSelect(preselect)
     },
-    [resetModes],
+    [enterSelect],
   )
 
   const enterReorderMode = useCallback(() => {
-    setSelectedUrls([])
     reorderSessionRef.current = {
       baseline: [...customs],
       dirty: false,
       failed: false,
       save: Promise.resolve(),
     }
-    setMode('reorder')
-  }, [customs])
+    enterReorder()
+  }, [customs, enterReorder])
 
   /** The file picker behind both "Add image" buttons — toolbar and empty state. */
   const openCustomFilePicker = useCallback(() => customInputRef.current?.click(), [])
 
   const exitReorderMode = useCallback(() => {
     reorderSessionRef.current = null
-    setConfirmDiscardOrder(false)
-    setMode('browse')
-    setSelectedUrls([])
-  }, [])
+    resetSelection()
+  }, [resetSelection])
 
   /**
    * Put the order back the way it was when the session opened.
@@ -315,8 +325,8 @@ export default function CharacterPage() {
       exitReorderMode()
       return
     }
-    setConfirmDiscardOrder(true)
-  }, [exitReorderMode])
+    askDiscard()
+  }, [exitReorderMode, askDiscard])
 
   const doneReorder = useCallback(async () => {
     const session = reorderSessionRef.current
@@ -356,6 +366,24 @@ export default function CharacterPage() {
     enabled: reorderMode,
     indicesFor: getIndicesToMove,
     onReorder: (next) => applyReorder(next),
+  })
+
+  /**
+   * The main portrait, its own hook: replace by file, drop, or Mudae refresh.
+   * The sign-in check lives inside it, before anything is read or sent.
+   */
+  const main = useMainImage({
+    name,
+    canAddImages,
+    onChanged: setMainImage,
+    addToast,
+    onMudaeRefresh: async () => {
+      addToast('Fetching main image from Mudae…', 'info')
+      const res = await apiClient.mudaeRefreshMainImage(name)
+      setMainImage(res.image_url)
+      reloadChar()
+      addToast(res.message || 'Main image updated from Mudae', 'success')
+    },
   })
 
   const applyReorder = useCallback(
@@ -429,43 +457,6 @@ export default function CharacterPage() {
     }
   }
 
-  /**
-   * Set or clear the character's accent from a picked pixel. The server samples
-   * the image (keyed by row id, never a caller URL), so the click only has to
-   * carry the point within the image.
-   */
-  const handlePickAccent = async (payload) => {
-    setAccentBusy(true)
-    try {
-      const res = await apiClient.setAccentOverride({ name, ...payload })
-      addToast(res.manual ? 'Accent colour saved' : 'Accent reset to measured', 'success')
-      setAccentPick(false)
-      await queryClient.invalidateQueries({ queryKey: characterImagesKey(name) })
-      await queryClient.invalidateQueries({ queryKey: savedKey })
-      reloadChar()
-    } catch (err) {
-      addToast(err.message, 'error')
-    } finally {
-      setAccentBusy(false)
-    }
-  }
-
-  const handlePickAccentFromGallery = (row, point) => {
-    if (!row.thumb) {
-      addToast('That image has no thumbnail to sample', 'error')
-      return
-    }
-    handlePickAccent({ image_id: row.id, u: point.u, v: point.v })
-  }
-
-  const handlePickAccentFromPortrait = (e) => {
-    const img = e.currentTarget.querySelector('img')
-    const point = pickPixel(img, e.clientX, e.clientY)
-    handlePickAccent({ portrait: true, u: point.u, v: point.v })
-  }
-
-  const handleClearAccent = () => handlePickAccent({ clear: true })
-
   const handleToggleSave = async () => {
     try {
       if (isSaved) {
@@ -477,63 +468,6 @@ export default function CharacterPage() {
       }
     } catch (err) {
       addToast(err.message, 'error')
-    }
-  }
-
-  const handleMainImageChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!canAddImages) {
-      addToast('Sign in with Discord to change the main image', 'error')
-      e.target.value = ''
-      return
-    }
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('character_name', name)
-    try {
-      const res = await apiClient.setMainImage(fd)
-      setMainImage(res.image_url)
-      addToast('Main image updated', 'success')
-    } catch (err) {
-      addToast(err.message, 'error')
-    }
-  }
-
-  const handleMainImageDrop = (e) => {
-    e.preventDefault()
-    setDragOver(false)
-    if (!canAddImages) {
-      addToast('Sign in with Discord to change the main image', 'error')
-      return
-    }
-    const file = e.dataTransfer.files?.[0]
-    if (!isImageFileLike(file)) return
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('character_name', name)
-    apiClient
-      .setMainImage(fd)
-      .then((res) => {
-        setMainImage(res.image_url)
-        addToast('Main image updated', 'success')
-      })
-      .catch((err) => addToast(err.message, 'error'))
-  }
-
-  const handleMudaeRefreshMain = async () => {
-    if (!name || mudaeMainBusy) return
-    setMudaeMainBusy(true)
-    addToast('Fetching main image from Mudae…', 'info')
-    try {
-      const res = await apiClient.mudaeRefreshMainImage(name)
-      setMainImage(res.image_url)
-      reloadChar()
-      addToast(res.message || 'Main image updated from Mudae', 'success')
-    } catch (err) {
-      addToast(err.message, 'error')
-    } finally {
-      setMudaeMainBusy(false)
     }
   }
 
@@ -646,29 +580,6 @@ export default function CharacterPage() {
     }
   }
 
-  const noteRatio = (imageId, element) => {
-    const ratio = ratioOf(element)
-    if (ratio === null) return
-    pendingRatiosRef.current[imageId] = ratio
-    if (ratioFrameRef.current) return
-    ratioFrameRef.current = requestAnimationFrame(() => {
-      ratioFrameRef.current = 0
-      const pending = pendingRatiosRef.current
-      pendingRatiosRef.current = {}
-      setRatios((prev) => {
-        let changed = false
-        const next = { ...prev }
-        for (const [id, measured] of Object.entries(pending)) {
-          if (next[id] !== measured) {
-            next[id] = measured
-            changed = true
-          }
-        }
-        return changed ? next : prev
-      })
-    })
-  }
-
   const handleReport = async (imageId, reason) => {
     setReportTarget(null)
     try {
@@ -688,14 +599,12 @@ export default function CharacterPage() {
 
   const toggleSelect = (url) => {
     if (mode !== 'browse') {
-      setSelectedUrls((prev) =>
-        prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url],
-      )
+      toggleUrl(url)
     }
   }
 
   const selectAllImages = () => {
-    setSelectedUrls([...customs])
+    setSelection([...customs])
   }
 
   /**
@@ -707,7 +616,7 @@ export default function CharacterPage() {
    * over.
    */
   const selectMineImages = () => {
-    setSelectedUrls(rows.filter((row) => row.is_mine).map((row) => row.url))
+    setSelection(rows.filter((row) => row.is_mine).map((row) => row.url))
   }
 
   /**
@@ -761,12 +670,6 @@ export default function CharacterPage() {
     e.dataTransfer.dropEffect = 'copy'
   }
 
-  const openModal = (index) => {
-    if (mode !== 'browse') return
-    setModalIndex(index)
-    setModalOpen(true)
-  }
-
   /** Modal viewer: custom images only (main portrait is separate above the gallery) */
   const galleryModalImages = customs.map((u) => getImageUrl(u) || u).filter(Boolean)
 
@@ -782,10 +685,10 @@ export default function CharacterPage() {
         mainThumb={mainThumb}
         mainInputRef={mainInputRef}
         loading={loading}
-        dragOver={dragOver}
-        onDragOverChange={setDragOver}
-        onMainImageChange={handleMainImageChange}
-        onMainImageDrop={handleMainImageDrop}
+        dragOver={main.dragOver}
+        onDragOverChange={main.setDragOver}
+        onMainImageChange={main.onFileInputChange}
+        onMainImageDrop={main.onDrop}
         canAddImages={canAddImages}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
@@ -807,19 +710,19 @@ export default function CharacterPage() {
         }}
         mudae={{
           configured: mudaeConfigured,
-          busy: mudaeMainBusy,
-          onRefreshMain: handleMudaeRefreshMain,
+          busy: main.mudaeBusy,
+          onRefreshMain: main.refreshFromMudae,
         }}
-        pick={accentPick}
-        onPickPortrait={handlePickAccentFromPortrait}
+        pick={accent.pick}
+        onPickPortrait={accent.pickFromPortrait}
         accent={{
           canEdit: Boolean(me?.is_moderator),
           manual: Boolean(imagesData?.accentManual),
-          pickMode: accentPick,
-          busy: accentBusy,
+          pickMode: accent.pick,
+          busy: accent.busy,
           seed: seededAccent,
-          onTogglePick: () => setAccentPick((on) => !on),
-          onClear: handleClearAccent,
+          onTogglePick: accent.togglePick,
+          onClear: accent.clear,
         }}
       />
 
@@ -883,6 +786,7 @@ export default function CharacterPage() {
                 onOpenRemovedDrawer={openRemovedDrawer}
                 onAddImage={openCustomFilePicker}
                 canAddImages={canAddImages}
+                canReorder={Boolean(me?.signed_in)}
               />
             </div>
           )}
@@ -946,8 +850,8 @@ export default function CharacterPage() {
           onOpenImage={openModal}
           onImageLoad={noteRatio}
           onDragOver={onGalleryDragOver}
-          pick={accentPick}
-          onPick={handlePickAccentFromGallery}
+          pick={accent.pick}
+          onPick={accent.pickFromGallery}
           /*
             An empty gallery used to be a blank strip under the drop hint, which
             reads as something that failed to load rather than a character
@@ -1007,7 +911,7 @@ export default function CharacterPage() {
           othersSelectedCount={othersSelected.length}
           onSelectAll={selectAllImages}
           onSelectMine={selectMineImages}
-          onClearSelection={() => setSelectedUrls([])}
+          onClearSelection={() => setSelection([])}
           onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
           onDownloadSelected={handleDownloadSelected}
           onRemoveSelected={handleRemoveSelected}
@@ -1022,9 +926,9 @@ export default function CharacterPage() {
         <ImageModal
           images={galleryModalImages}
           currentIndex={modalIndex}
-          onClose={() => setModalOpen(false)}
-          onPrev={() => setModalIndex((i) => Math.max(0, i - 1))}
-          onNext={() => setModalIndex((i) => Math.min(galleryModalImages.length - 1, i + 1))}
+          onClose={closeModal}
+          onPrev={prevImage}
+          onNext={nextImage}
           onReport={rows[modalIndex] ? () => setReportTarget(rows[modalIndex]) : undefined}
         />
       )}
@@ -1055,7 +959,7 @@ export default function CharacterPage() {
           confirmLabel="Discard"
           variant="danger"
           onConfirm={discardReorder}
-          onCancel={() => setConfirmDiscardOrder(false)}
+          onCancel={cancelDiscard}
         />
       )}
       {reportTarget && (

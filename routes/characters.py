@@ -114,7 +114,7 @@ def upload():
             ), 500
     except ImgChestError as e:
         log.warning("upload.failed", filename=file.filename, reason="imgchest_error", error=str(e))
-        return jsonify({"error": str(e)}), 503
+        return jsonify({"error": "Could not upload the image. Try again in a moment."}), 503
     finally:
         # Clean up temp file
         if os.path.exists(temp_path):
@@ -244,7 +244,7 @@ def add_character():
                     _, image_url, _post_id = result
             except ImgChestError as e:
                 log.warning("characters.main_image_failed", character=name, error=str(e))
-                return jsonify({"error": str(e)}), 503
+                return jsonify({"error": "Could not upload the character's image. Try again."}), 503
             except Exception:
                 # Deliberately swallowed: the character is still created, just
                 # without a portrait. Logged loudly because it is invisible to
@@ -259,9 +259,9 @@ def add_character():
             return jsonify({"error": f'Character "{name}" already exists'}), 400
         db.update_last_modified(name)
         return jsonify({"success": True, "message": f'Added "{name}"'})
-    except Exception as e:
+    except Exception:
         log.exception("characters.add_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not add the character. Try again in a moment."}), 500
 
 
 @characters_bp.route("/api/saved/<path:name>", methods=["DELETE"])
@@ -333,8 +333,8 @@ def edit_character():
             pools=pools,
         ):
             return jsonify({"error": "Character not found"}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "Could not save the character."}), 500
 
     # No rename cascade: images, bookmarks and the timestamp all hang off
     # characters.id, so update_character above is the entire rename. v1 needed
@@ -407,10 +407,10 @@ def set_main_image():
         return jsonify({"error": "Character not found"}), 404
     except ImgChestError as e:
         log.warning("characters.main_image_failed", reason="imgchest_error", error=str(e))
-        return jsonify({"error": str(e)}), 503
-    except Exception as e:
+        return jsonify({"error": "Could not upload the new main image. Try again."}), 503
+    except Exception:
         log.exception("characters.main_image_failed")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Could not update the main image."}), 500
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)

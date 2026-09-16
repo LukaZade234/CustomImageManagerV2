@@ -2008,6 +2008,41 @@ def set_thumb_key(image_id: int, key: str) -> bool:
         return bool(cur.rowcount)
 
 
+def set_imgchest_post_id(url: str, post_id: str) -> bool:
+    """Record the ImgChest post a stored URL belongs to. False if no row matched.
+
+    Permanent delete deletes the *post*, so this is what makes it possible. The
+    url is the key, matching how the backfill and the cleanup both find rows.
+    """
+    with transaction() as conn:
+        cur = conn.execute(
+            "UPDATE custom_images SET imgchest_post_id = ? WHERE url = ? AND imgchest_post_id IS NULL",
+            (post_id, url),
+        )
+        return bool(cur.rowcount)
+
+
+def all_custom_image_urls(character: str | None = None) -> list[dict]:
+    """Every image row's url, character, state and ImgChest post id.
+
+    For the cut-over cleanup, which needs the *whole* set in one pass -- any
+    state, because an image removed on the site but still in use in Discord must
+    not be deleted. Deliberately unfiltered by ownership; this is a read for a
+    script and an owner-only surface, not a user-facing list.
+    """
+    sql = (
+        "SELECT i.url AS url, c.name AS character, i.state AS state,"
+        "       i.imgchest_post_id AS imgchest_post_id"
+        "  FROM custom_images i JOIN characters c ON c.id = i.character_id"
+    )
+    params: tuple = ()
+    if character is not None:
+        sql += " WHERE c.name = ?"
+        params = (character,)
+    conn = get_connection()
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
 def images_missing_thumb_key(limit: int = 500, exclude_ids: Iterable[int] = ()) -> list[dict]:
     """Rows whose thumbnail has not been mirrored to R2 yet.
 

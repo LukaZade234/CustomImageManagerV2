@@ -8,6 +8,10 @@ had to stay identical, which is exactly what these assertions protect.
 
 import json
 
+import pytest
+
+import ratelimit
+
 
 def _post(client, path, payload):
     return client.post(path, data=json.dumps(payload), content_type="application/json")
@@ -91,6 +95,11 @@ class TestDeleteMany:
 
 
 class TestReorder:
+    @pytest.fixture(autouse=True)
+    def _signed_in(self, make_signed_in):
+        """Reordering requires a Discord account; the tests here are about order."""
+        make_signed_in()
+
     def test_unknown_character_is_404(self, client, clean_db):
         r = _post(
             client, "/api/reorder-custom-images", {"character_name": "Nobody", "new_order": ["x"]}
@@ -148,6 +157,92 @@ class TestReorder:
         )
         assert r.status_code == 200
         assert clean_db.get_custom_images_for("Rem") == ["https://cdn/a.png"]
+
+
+class TestReorderRequiresAnAccount:
+    """A reorder changes what everyone sees, so it is tied to an account.
+
+    `DECISIONS.md` §1 treats prominence as removal's equal, and a cookie can be
+    cleared for free -- so the rule has to hang on the Discord link, not the
+    cookie. A suspended or banned account is refused by the write gate before
+    the route is ever reached.
+    """
+
+    def test_a_cookie_only_visitor_is_refused(self, client, clean_db):
+        _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]})
+
+        r = _post(
+            client,
+            "/api/reorder-custom-images",
+            {"character_name": "Rem", "new_order": ["https://cdn/b.png", "https://cdn/a.png"]},
+        )
+
+        assert r.status_code == 403
+        assert r.get_json()["code"] == "discord_required"
+        # The order is untouched.
+        assert clean_db.get_custom_images_for("Rem") == [
+            "https://cdn/a.png",
+            "https://cdn/b.png",
+        ]
+
+    def test_a_signed_in_visitor_may_reorder(self, client, clean_db, make_signed_in):
+        make_signed_in()
+        _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]})
+
+        r = _post(
+            client,
+            "/api/reorder-custom-images",
+            {"character_name": "Rem", "new_order": ["https://cdn/b.png", "https://cdn/a.png"]},
+        )
+
+        assert r.status_code == 200
+
+    def test_a_banned_account_cannot_reorder(self, client, clean_db, identity_id, make_signed_in):
+        make_signed_in()
+        clean_db.set_moderation_status(identity_id, "banned", reason="spam")
+        _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]})
+
+        r = _post(
+            client,
+            "/api/reorder-custom-images",
+            {"character_name": "Rem", "new_order": ["https://cdn/b.png", "https://cdn/a.png"]},
+        )
+
+        assert r.status_code == 403
+        assert "banned" in r.get_json()["error"].lower()
+
+    def test_reordering_is_rate_limited(self, client, clean_db, make_signed_in, monkeypatch):
+        make_signed_in()
+        _seed(clean_db, {"Rem": ["https://cdn/a.png", "https://cdn/b.png"]})
+        monkeypatch.setitem(ratelimit.RATE_LIMITS, "reorder", [(1, 60)])
+
+        payload = {
+            "character_name": "Rem",
+            "new_order": ["https://cdn/b.png", "https://cdn/a.png"],
+        }
+        assert _post(client, "/api/reorder-custom-images", payload).status_code == 200
+        assert _post(client, "/api/reorder-custom-images", payload).status_code == 429
+
+    def test_a_server_error_does_not_leak_internals(
+        self, client, clean_db, make_signed_in, monkeypatch
+    ):
+        make_signed_in()
+        _seed(clean_db, {"Rem": ["https://cdn/a.png"]})
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("SECRET-INTERNAL-DETAIL")
+
+        monkeypatch.setattr(clean_db, "reorder_custom_images", boom)
+
+        r = _post(
+            client,
+            "/api/reorder-custom-images",
+            {"character_name": "Rem", "new_order": ["https://cdn/a.png"]},
+        )
+
+        assert r.status_code == 500
+        assert r.get_json()["error"] == "Could not save the new order."
+        assert "SECRET-INTERNAL-DETAIL" not in r.get_data(as_text=True)
 
 
 class TestSaved:

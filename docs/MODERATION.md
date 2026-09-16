@@ -53,10 +53,10 @@ Three consequences are load-bearing and should survive later phases:
   and the moderation page now also carries them (restore, and the permanent delete that did not
   exist before). What it still must not become is a worklist: nothing is queued, nothing is
   assigned, and a verb is only reachable after deliberately opening one contributor.
-- **`image_reports` stays unread** in phase 1. Surfacing reports *is* the queue — that is precisely
-  the mechanism §1 designed to work without a human, auto-removing at two distinct reporters. A
-  review screen for it is a real decision with real arguments on both sides, and it deserves its own
-  entry rather than arriving as a side effect of building a user list.
+- **`image_reports` was unread in phase 1, and is read now** — through the **Reports** tab, which
+  was given its own entry rather than arriving as a side effect of the user list. It stays
+  read-only: the two-report threshold is still the thing that acts, and the tab informs a human
+  rather than queueing work. See [Reports](#reports) below.
 
 If a later phase finds itself adding a pending count, that is the signal to re-read §1 and fix the
 thing generating the backlog instead.
@@ -87,6 +87,19 @@ within reach.
 | Info tab | Stats (total images, removed, account created, last activity, signed-in), person-level actions (warn, suspend, ban), and the moderation history. |
 | Images tab | Two views of the same contributor: **Images** (the grid, per-image restore / permanent delete) and **Characters** (rank, image count, name, recency — the Browse Customs vocabulary), with the character filter and added/removed switch. |
 | Gating | Non-moderators are redirected home, indistinguishable from the existing `*` catch-all. The backend enforces separately and does not trust the client. |
+
+#### The Cut-over tab, and why it is owner-only
+
+A fourth tab, **Cut-over**, is appended to the staff area but shown only to the owner, and its route
+is wrapped in `RequireOwner` (one level stricter than the console around it). It renders the preview
+that `scripts/imgchest_cleanup.py` writes — the flat list of ImgChest files that would be permanently
+deleted, the flat list that would be recovered into the Removed drawer, and the counts and warnings.
+It is **read-only**: the app reads a JSON file and never deletes; the destructive half is the CLI,
+run by hand. See `CUTOVER.md` and `DECISIONS.md` §2.
+
+It is owner-only rather than moderator-only because reconciling and deleting from the ImgChest
+account is operator work, not moderation, and this page is not a queue either: it holds no work and
+changes no chrome. It is the same reasoning that keeps the tab out of the topbar.
 
 #### On putting the verbs on this page
 
@@ -299,8 +312,9 @@ so Back leaves the contributor rather than walking their tabs.
 **`UserProfile.jsx`** — the selected contributor. A header with the handle, a role `Badge`, and the
 stats: **total images** (active), **removed**, **account created** (`created_at`), **last activity**,
 and whether they are Discord-signed-in, all counts in `.tabular`. Below them the person-level actions:
-**Warn** is live and opens `WarnDialog`; **Suspend** and **Ban** are rendered but **inert**
-(`disabled`, with a title saying so).
+**Warn** is live and opens `WarnDialog`; **Suspend** and **Ban** are live too — each opens a
+dialog that asks for the message and, for a suspension, a duration, and calls the route. Lifting
+a suspension or ban is **owner-only**.
 
 For the **owner alone**, a plus/minus `IconButton` sits beside the name: plus for a `user` (promote),
 minus for a `moderator` (demote), nothing for the `owner`. Either opens a `ConfirmDialog`, and only
@@ -363,10 +377,10 @@ Two files will state the opposite of what is true, and DESIGN.md's own meta-rule
 whose claims are already false teaches the next reader that the rules are decorative.
 
 - **`DECISIONS.md` §5** — record that an inspection surface was added, and why it does not contradict
-  the non-goal: no queue, no pending count, no acting *logic* (the buttons are inert), reports still
-  unread.
+  the non-goal: no queue, no pending count, no acting *logic* driven by site state, and reports read
+  but not queued.
 - **`CURRENT_STATE.md` §9** — *"A moderation queue… there is no review screen"* narrows to the part
-  that stays true: no queue, no appeal, reports still unread.
+  that stays true: no queue, no appeal, and the report list informs a human rather than acting.
 - **`ROADMAP.md`** — a Phase 7 entry.
 
 ---

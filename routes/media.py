@@ -123,4 +123,5 @@ def download_image_proxy():
             ct = "application/octet-stream"
         return Response(raw, mimetype=ct)
     except requests.RequestException as e:
-        return jsonify({"error": str(e)}), 502
+        log.warning("media.proxy_failed", error=f"{type(e).__name__}: {e}")
+        return jsonify({"error": "Could not download that image. Try again in a moment."}), 502
