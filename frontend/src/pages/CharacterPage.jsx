@@ -16,6 +16,7 @@ import SignInPrompt from '../components/SignInPrompt'
 import UploadErrorDialog from '../components/UploadErrorDialog'
 import { Button, Card, ConfirmDialog, EmptyState } from '../components/ui'
 import { useApplyCharacterTheme } from '../hooks/useApplyCharacterTheme'
+import { useCharacterEdit } from '../hooks/useCharacterEdit'
 import { useCharacterTheme } from '../hooks/useCharacterTheme'
 import { useCustomImageUpload } from '../hooks/useCustomImageUpload'
 import { useGalleryReorder } from '../hooks/useGalleryReorder'
@@ -34,7 +35,7 @@ import {
   DISCORD_LIMIT_REGULAR,
   splitAiCommandForLimit,
 } from '../utils/aiCommandDiscord'
-import { keysToTraits, traitsToKeys } from '../utils/characterTraits'
+import { keysToTraits } from '../utils/characterTraits'
 import {
   downloadCustomImagesViaBrowser,
   writeCustomImagesToDirectory,
@@ -94,16 +95,20 @@ export default function CharacterPage() {
   const customs = rows.map((row) => row.url)
   const rowByUrl = new Map(allRows.map((row) => [row.url, row]))
 
-  const [editMode, setEditMode] = useState(false)
-  const [editName, setEditName] = useState('')
-  const [editSeries, setEditSeries] = useState('')
-  const [editRank, setEditRank] = useState('')
-  // The four editable pool facets (waifu/husbando/anime/game). Seeded from the
-  // row's stored card traits, so the editor shows exactly what the identity
-  // block beside it shows.
-  const [editTraits, setEditTraits] = useState([])
-  const toggleEditTrait = (key) =>
-    setEditTraits((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]))
+  // The editor's own state (fields, mode, seeding) lives in the hook; the page
+  // keeps only what it does with them.
+  const {
+    editMode,
+    setEditMode,
+    editName,
+    setEditName,
+    editSeries,
+    setEditSeries,
+    editRank,
+    setEditRank,
+    editTraits,
+    toggleEditTrait,
+  } = useCharacterEdit(char)
   const [mainImage, setMainImage] = useState('')
   // The catalog's mirrored portrait applies only while the main image is still
   // the catalog's own; an upload or an edit replaces it and has no mirror.
@@ -177,13 +182,7 @@ export default function CharacterPage() {
   useEffect(() => () => cancelAnimationFrame(ratioFrameRef.current), [])
 
   useEffect(() => {
-    if (char) {
-      setEditName(char.name)
-      setEditSeries(char.series || '')
-      setEditRank(char.rank || '')
-      setMainImage(char.image || '')
-      setEditTraits(traitsToKeys(char.is_female, char.is_male, char.pools))
-    }
+    if (char) setMainImage(char.image || '')
   }, [char])
 
   // charVersion is a re-run trigger, not a value the effect reads.
