@@ -47,19 +47,8 @@ async function copyWithFallback(text, addToast) {
 
 /**
  * Shown when $ai command length >= 2000. Two card columns: Regular vs Nitro limits.
- *
- * `dropped` is the count of images that exceeded Mudae's 100-per-character cap
- * and were not included. It is zero for the ordinary length case; when it is
- * not, the summary says so plainly, because silently handing over a shorter
- * command than the user selected would be the confusing part.
  */
-export default function AiCommandLimitDialog({
-  charCount,
-  nonNitroParts,
-  nitroParts,
-  dropped = 0,
-  onClose,
-}) {
+export default function AiCommandLimitDialog({ charCount, nonNitroParts, nitroParts, onClose }) {
   const { dialogRef, onKeyDown, onBackdropClick } = useDialog({ onClose })
   const announceTimerRef = useRef(null)
   const addToast = useStore((s) => s.addToast)
@@ -122,12 +111,6 @@ export default function AiCommandLimitDialog({
         </div>
 
         <div id={dialogDescId} className="ai-command-limit-dialog__summary-strip">
-          {dropped > 0 && (
-            <>
-              Mudae allows <strong>100</strong> custom images per character, so the first{' '}
-              <strong>100</strong> are here and <strong>{dropped}</strong> were left out.{' '}
-            </>
-          )}
           <strong>{charCount.toLocaleString()}</strong> characters — Discord allows{' '}
           <strong>{DISCORD_LIMIT_REGULAR.toLocaleString()}</strong> per message (
           <strong>{DISCORD_LIMIT_NITRO.toLocaleString()}</strong> with Nitro). Copy each block as a

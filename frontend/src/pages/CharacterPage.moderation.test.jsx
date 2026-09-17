@@ -298,6 +298,60 @@ describe('the $ai door', () => {
     )
   })
 
+  it('refuses the 101st click in the $ai door rather than truncating later', async () => {
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 101 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    // The label already reflects the cap, so the block is visible before the click.
+    expect(screen.getByRole('button', { name: 'Select first 100' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Select first 100' }))
+    // After select-first-100 the only unselected image is the 101st (the last
+    // in the gallery). Clicking it must be refused, not accepted.
+    const tiles = screen.getAllByTitle('Added before ownership was tracked')
+    expect(tiles).toHaveLength(101)
+    await user.click(tiles[100])
+
+    // 101 images, so select-all takes 100 and the 101st is refused.
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '100 of 101 selected',
+    )
+    // Toasts live in the store; the Toast component is not mounted here.
+    expect(useStore.getState().toasts.map((t) => t.msg)).toContainEqual(
+      expect.stringMatching(/Mudae allows 100 images per \$ai command/i),
+    )
+  })
+
+  it('refuses to copy a plain-Select selection over the limit, with a reason', async () => {
+    // The plain door may select everything (remove/hide/download are uncapped),
+    // but the command is still Mudae's to refuse. It must refuse here too, and
+    // never quietly copy a shorter command than was selected.
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 150 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Select$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select all (150)' }))
+    await user.click(screen.getByRole('button', { name: 'Copy $ai command' }))
+
+    // Nothing was copied, and the dialog never opened.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(useStore.getState().toasts.map((t) => t.msg)).toEqual([
+      expect.stringMatching(/Mudae allows 100 images per \$ai command/i),
+    ])
+  })
+
   it('offers the copy-history helpers only in the $ai door', async () => {
     const user = userEvent.setup()
     served.copiedIds = [1, 2]

@@ -35,7 +35,6 @@ import { savedKey, useRemoveSaved, useSaveCharacter, useSavedCharacters } from '
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
-  capAiImages,
   DISCORD_LIMIT_NITRO,
   DISCORD_LIMIT_REGULAR,
   MUDAE_AI_MAX_IMAGES,
@@ -619,9 +618,18 @@ export default function CharacterPage() {
   }
 
   const toggleSelect = (url) => {
-    if (mode !== 'browse') {
-      toggleUrl(url)
+    if (mode === 'browse') return
+    // In the $ai door the selection is itself capped, so the 101st click is
+    // refused with a reason rather than quietly allowed and then truncated at
+    // copy time. Deselecting is always allowed.
+    if (aiIntent && !selectedUrls.includes(url) && selectedUrls.length >= MUDAE_AI_MAX_IMAGES) {
+      addToast(
+        `Mudae allows ${MUDAE_AI_MAX_IMAGES} images per $ai command. Unselect one to pick another.`,
+        'info',
+      )
+      return
     }
+    toggleUrl(url)
   }
 
   /**
@@ -661,9 +669,9 @@ export default function CharacterPage() {
   /**
    * Select what this viewer has, or has not, already copied into an $ai command
    * — the third half of the problem PRODUCT.md describes ("remembering which
-   * ones are already in use"). These only run from the $ai door. A set larger
-   * than Mudae's limit is still allowed to select; the cap is applied when the
-   * command is built, where the dialog can explain what was dropped.
+   * ones are already in use"). These only run from the $ai door. They select
+   * exactly the set they name; if that set somehow exceeds Mudae's limit the
+   * command refuses to build rather than trimming it.
    */
   const selectCopiedImages = () => {
     setSelection(rows.filter((row) => copiedSet.has(row.id)).map((row) => row.url))
@@ -689,42 +697,45 @@ export default function CharacterPage() {
   const generateAiCommand = (urls) => {
     if (!urls.length) return
     const charName = editMode ? editName : char.name
-    // Mudae caps a character at 100 custom images via `$ai`; anything more is
-    // rejected. Take the first 100 in gallery order and say how many were
-    // dropped, rather than handing over a command the bot will refuse.
-    const { urls: capped, dropped } = capAiImages(urls)
+    // Mudae rejects a command over 100 images, so refuse rather than truncate:
+    // silently copying a shorter command than the user selected would leave
+    // them believing images they picked are registered when they are not. The
+    // $ai door already blocks the 101st click, so this only fires when the
+    // plain Select door built the selection.
+    if (urls.length > MUDAE_AI_MAX_IMAGES) {
+      addToast(
+        `Mudae allows ${MUDAE_AI_MAX_IMAGES} images per $ai command — you have ${urls.length} selected. Unselect ${
+          urls.length - MUDAE_AI_MAX_IMAGES
+        } to copy.`,
+        'error',
+      )
+      return
+    }
     // Recorded on this first click, before any Discord length split: the batch
     // is everything the user chose at this moment, and the split into several
     // pastes is a delivery detail, not several intents. A batch is therefore
     // written even if they then close the length dialog without copying.
-    recordTakes(capped, 'copy_command')
-    const cmd = buildAiCommand(charName, capped)
-    const noteDropped = () => {
-      if (dropped > 0) {
-        addToast(`Mudae allows 100 images per character — the first 100 were copied.`, 'info')
-      }
-    }
+    recordTakes(urls, 'copy_command')
+    const cmd = buildAiCommand(charName, urls)
     if (cmd.length < DISCORD_LIMIT_REGULAR) {
       navigator.clipboard
         .writeText(cmd)
         .then(() => {
           addToast('Command copied to clipboard', 'success')
-          noteDropped()
           resetModes()
         })
         .catch(() => addToast('Failed to copy', 'error'))
       return
     }
-    const nonNitroParts = splitAiCommandForLimit(charName, capped, DISCORD_LIMIT_REGULAR)
+    const nonNitroParts = splitAiCommandForLimit(charName, urls, DISCORD_LIMIT_REGULAR)
     const nitroParts =
       cmd.length <= DISCORD_LIMIT_NITRO
         ? [cmd]
-        : splitAiCommandForLimit(charName, capped, DISCORD_LIMIT_NITRO)
+        : splitAiCommandForLimit(charName, urls, DISCORD_LIMIT_NITRO)
     setAiLimitDialog({
       charCount: cmd.length,
       nonNitroParts,
       nitroParts,
-      dropped,
     })
   }
 
