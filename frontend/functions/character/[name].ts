@@ -51,6 +51,15 @@ async function lookupCharacter(name: string, apiBase: string): Promise<Character
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context
 
+  // Defensive: this handler is only meant to run for /character/*, and
+  // `_routes.json` should scope it there. If it is ever invoked for another
+  // path, pass the request straight through rather than answering it with the
+  // root shell — that is what turns a routing mistake into "everything on the
+  // site returns HTML", which the browser then fails to JSON.parse.
+  if (!new URL(request.url).pathname.startsWith('/character/')) {
+    return env.ASSETS.fetch(request)
+  }
+
   // Fetch the shell explicitly by its root path rather than passing `request`
   // through: there is no dist/character/<name> file, so we depend on the asset
   // server resolving to index.html, which is a Pages-wide SPA-fallback setting
