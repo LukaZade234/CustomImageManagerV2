@@ -3,6 +3,17 @@
 A factual description of the version being retired. No recommendations here; those live in
 `ROADMAP.md`, and the reasoning behind them in `DECISIONS.md`.
 
+> **Retired 2026-09-17.** The cut-over is done: v2 runs the real library, and v1's service no
+> longer serves the application. The DigitalOcean app was converted from a Python service to a
+> **static site serving one "we have moved" page** that links to `https://lukazade.dev`; the old
+> `ondigitalocean.app` address still resolves so that bookmarks and pasted links land on that
+> notice rather than a dead host. The v1 repository at
+> `github.com/LukaZade234/CustomImageManager` remains as the historical record, and its README
+> says so. The **Neon PostgreSQL database is not yet deleted** — it is the last surviving copy of
+> anything not in `snapshot-final/`, so its removal is a separate, deliberate step.
+>
+> Read the rest of this document as **how v1 worked**, not as a description of anything running.
+
 Line references point at the code as it stands in this repository (v1 behaviour, reformatted
 by `ruff` during the Phase 0 toolchain work). The original unformatted history lives on the
 v1 repository at commit `93d7c97`.
@@ -673,9 +684,15 @@ Still open:
 | Issue | Location | Impact |
 |---|---|---|
 | Discord self-bot ToS | `mudae_service.py` | An account ban would remove every Mudae feature |
-| The two databases have forked | v1 Neon vs v2 SQLite | See `CUTOVER.md`; the migration is insert-only and re-running gives the union |
 | Uploads are WebP bytes under a `.png` name | `image_utils.py` | Rests on Discord sniffing content rather than trusting the extension. If that changes, every custom image stops rendering at once |
 | No deployment from CI | — | Deliberate — the origin polls because it has no inbound access. Checks run in CI; deploys do not |
+
+The two-databases fork is resolved: the cut-over took the **exact-copy** path, and the v1 data is
+now the v2 database. See `CUTOVER.md` and `ROADMAP.md` "Outstanding".
+
+555 images recovered during the cleanup have no ImgChest post left, so their files cannot be
+permanently deleted and still occupy storage. Recorded in `CUTOVER.md`,
+[known limitation](CUTOVER.md#known-limitation--recovered-rows-whose-post-no-longer-exists).
 
 The WebP-under-`.png` recovery path, recorded before it is needed: the original bytes are on
 ImgChest and each row carries `content_hash` and `imgchest_post_id`, so re-encoding to real PNG and

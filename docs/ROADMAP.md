@@ -306,24 +306,39 @@ Live on `lukazade.dev`. The v1 site on DigitalOcean and Neon is still running an
       did not change. Repeatable without downtime via
       `scripts/verify_litestream_restore.sh` — re-run before the cut-over itself, since the data
       keeps moving.
-- [ ] **Decide the cut-over.** Both sites are live now and **their data has forked** — anything
-      added on v1 from this point does not appear on v2, and because the migration is insert-only,
-      anything *deleted* on v1 is not removed from v2 either. The procedure, the rollback boundary
-      and the decisions it forces are in **[CUTOVER.md](CUTOVER.md)**.
+- [x] **Decide the cut-over.** _(done, 2026-09-17)_ **Exact copy**, not union: v2 held only test
+      data, so the database was wiped and rebuilt from `snapshot-final/`, and every v2-era row —
+      including bookmarks — was deliberately discarded. The v1 data had forked by then, which is
+      the argument for doing this once and promptly rather than keeping both live. Resolved to
+      **1,728 characters / 8,885 images** (the snapshot's 1,729 entries minus "Levy McGarden",
+      whose two entries merged). The procedure, the rollback boundary and the decisions it forced
+      are in **[CUTOVER.md](CUTOVER.md)**.
 - [ ] **Decommission** the DigitalOcean app and the Neon database, only after the above.
-- [ ] **Rebuild the derived layers after the import.** The v1 dump carries only names,
-      image URLs and bookmarks; the catalog, portrait mirrors, thumbnail cache (which
-      *must* be cleared, since thumbnails are keyed by row id), accents, dimensions,
-      content fingerprints and traits are rebuilt afterwards. ImgChest post ids are
-      filled by the cleanup in the step below. Ordering matters — fingerprints and
-      dimensions re-read the image bytes and must run before the cleanup. See
+      **The app is now doing a job**: it has been repurposed as the "we have moved" notice at the
+      old address, so it must not be deleted while old links are still circulating — deleting it
+      takes the notice, and the `ondigitalocean.app` hostname, with it. The Neon database is the
+      separate and irreversible step: `snapshot-final/` is its only copy, so delete it only once
+      that snapshot is confirmed good and no longer needed.
+- [x] **Rebuild the derived layers after the import.** _(done, 2026-09-17)_ The v1 dump carries
+      only names, image URLs and bookmarks; the catalog, portrait mirrors, thumbnail cache (which
+      *must* be cleared, since thumbnails are keyed by row id), accents, dimensions, content
+      fingerprints and traits were all rebuilt afterwards: catalog re-imported (8,432 characters /
+      2,147 series), portraits mirrored (8,426), content hashes (0 missing, 8,594 distinct), image
+      dimensions (0 missing), accents and traits after the cache warmed. Ordering mattered —
+      fingerprints and dimensions re-read the image bytes and had to run before the cleanup. See
       **CUTOVER.md**, [After the import](CUTOVER.md#after-the-import-the-derived-layers).
-- [x] **Reconcile ImgChest.** _Built._ `scripts/imgchest_cleanup.py` keeps every image
-      that is in use in Discord or on the site, deletes the rest — which also clears
-      the griefed uploads from before moderation existed — and re-adds the in-use
-      images that were wrongfully removed so they can be restored. It shows a preview
-      of both lists before deleting, rendered in an owner-only Cut-over tab, and only
-      deletes with `--execute`. See **CUTOVER.md**, [ImgChest cleanup](CUTOVER.md#imgchest-cleanup).
+- [x] **Reconcile ImgChest.** _Built, and run (2026-09-18)._ `scripts/imgchest_cleanup.py` keeps
+      every image that is in use in Discord or on the site, deletes the rest — which also clears
+      the griefed uploads from before moderation existed — and re-adds the in-use images that were
+      wrongfully removed so they can be restored. It shows a preview of both lists before deleting,
+      rendered in an owner-only Cut-over tab, and only deletes with `--execute`. **The run: 4,510
+      deleted, 0 failed, 9,553 posts kept** (down from 14,063), and 1,222 images recovered into the
+      Removed drawer. A `--limit 2` trial went first. Two limitations are recorded in CUTOVER.md:
+      555 of the recovered rows have no post left to record, so permanent delete cannot reach their
+      files, and the post-id step read the stored URLs before recovery — fixed, but it cannot
+      retroactively reach those 555. See **CUTOVER.md**,
+      [ImgChest cleanup](CUTOVER.md#imgchest-cleanup) and its
+      [known limitation](CUTOVER.md#known-limitation--recovered-rows-whose-post-no-longer-exists).
 - [x] **Removed `flask-compress`** (`5c62b9c`). Cloudflare is in front and does Brotli, so
       origin-side gzip only spent CPU.
 
