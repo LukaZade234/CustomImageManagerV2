@@ -88,11 +88,19 @@ class TestReportThreshold:
 
 
 class TestReportValidation:
-    def test_reason_must_be_one_of_the_objective_four(self, client, clean_db, identity_id):
+    def test_reason_must_be_one_of_the_objective_five(self, client, clean_db, identity_id):
         image_id = _seed_one(clean_db)
         r = _post(client, "/api/report-image", {"image_id": image_id, "reason": "ugly"})
         assert r.status_code == 400
         assert "wrong_character" in r.get_json()["error"]
+
+    def test_ai_artwork_is_a_reason(self, client, clean_db, identity_id):
+        """An objective call about provenance, like the others: it has a right
+        answer, so it needs no consensus. Migration 024 widened the CHECK."""
+        image_id = _seed_one(clean_db)
+        r = _post(client, "/api/report-image", {"image_id": image_id, "reason": "ai_artwork"})
+        assert r.status_code == 200
+        assert r.get_json()["reports"] == 1
 
     def test_unknown_image_is_404(self, client, clean_db, identity_id):
         assert (

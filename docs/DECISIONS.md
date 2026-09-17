@@ -138,7 +138,7 @@ So: stop policing the deleting. **Remove the reason to delete.**
 
 The premise being dropped is that "unworthy" images are a problem requiring a mechanism. They are
 not. The only genuinely harmful additions are **objective** — wrong character, dead link, NSFW,
-duplicate — and every one of those has a right answer that requires no consensus at all.
+duplicate, AI artwork — and every one of those has a right answer that requires no consensus at all.
 
 ### The decision
 

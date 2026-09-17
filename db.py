@@ -2922,12 +2922,15 @@ def rate_limit_usage(identity_id: str, action: str, per_seconds: int) -> int:
 
 # --- Reports ------------------------------------------------------------
 #
-# Objective problems only: wrong character, dead link, NSFW, duplicate. Never
-# taste -- that is what hide-for-me is for. The primary key on
+# Objective problems only: wrong character, dead link, NSFW, duplicate, AI
+# artwork. Never taste -- that is what hide-for-me is for. The primary key on
 # (image_id, identity_id) is what makes "two distinct reporters" meaningful:
 # one person cannot reach the threshold alone.
+#
+# Must match the CHECK constraint on `image_reports.reason`; migration 024 is
+# what carried 'ai_artwork' into it.
 
-REPORT_REASONS = ("wrong_character", "dead_link", "nsfw", "duplicate")
+REPORT_REASONS = ("wrong_character", "dead_link", "nsfw", "duplicate", "ai_artwork")
 
 # Two, not more, because the userbase is too small to produce a larger quorum
 # in any reasonable time (DECISIONS.md section 1). Removal is soft and anyone

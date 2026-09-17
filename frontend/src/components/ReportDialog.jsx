@@ -3,8 +3,9 @@ import { Button, Modal } from './ui'
 
 /**
  * Reporting is for objective problems only — wrong character, dead link, NSFW,
- * duplicate. Taste is what Hide is for, and offering "I don't like it" here is
- * how a report queue turns into a popularity contest (DECISIONS.md section 1).
+ * duplicate, AI artwork. Taste is what Hide is for, and offering "I don't like
+ * it" here is how a report queue turns into a popularity contest (DECISIONS.md
+ * section 1).
  *
  * The wording says plainly what a report does, because a mechanism that removes
  * other people's work should never be a surprise.
@@ -14,6 +15,7 @@ const REASONS = [
   { value: 'dead_link', label: 'Broken image', hint: 'The link no longer loads' },
   { value: 'nsfw', label: 'NSFW', hint: 'Not safe for this library' },
   { value: 'duplicate', label: 'Duplicate', hint: 'Already here, same picture' },
+  { value: 'ai_artwork', label: 'AI artwork', hint: 'Generated rather than drawn' },
 ]
 
 export default function ReportDialog({ onSubmit, onCancel }) {
