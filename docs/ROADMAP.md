@@ -389,7 +389,7 @@ them. There are no v2 users yet, so this costs nothing now.
       limit that matters is on uploads — each one is an ImgChest call against a shared key, so an
       unbounded client can get that key throttled and take the app's purpose with it. Applied to
       15 endpoints; each action has a burst window and an hourly one, overridable with
-      `RATE_LIMIT_<ACTION>="30/60,300/3600"`. Moderators get 10x, because a limit sized for a
+      `RATE_LIMIT_<ACTION>="60/60,600/3600"`. Moderators get 10x, because a limit sized for a
       visitor would block the person curating the site.
 - [x] **Auto-cooldown** for an identity reporting at an implausible rate — the same mechanism,
       with report deliberately the tightest limit (5/min, 20/hour) since reports can remove other

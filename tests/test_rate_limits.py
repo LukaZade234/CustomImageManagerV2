@@ -116,6 +116,22 @@ class TestEndpoints:
         hide_hourly = by_window(ratelimit.RATE_LIMITS["hide"])[3600]
         assert report_hourly < hide_hourly
 
+    def test_adding_images_is_limited_per_image_not_per_batch(self):
+        """Both add paths cost one request per image, so the limit must allow a person.
+
+        A web drop is hard-coded to one URL per request, and a file upload loops
+        one file per request. Someone dragging from Pinterest tabs or uploading a
+        folder is doing dozens of requests in a sitting, so a limit set for
+        batches of images blocked ordinary curation. These are floors, not
+        exact values -- the point is that a minute's honest work fits.
+        """
+        by_window = lambda windows: {per: limit for limit, per in windows}  # noqa: E731
+        upload_per_minute = by_window(ratelimit.RATE_LIMITS["upload"])[60]
+        import_per_minute = by_window(ratelimit.RATE_LIMITS["import_urls"])[60]
+        # A directory of 50 images, or 50 drops from a board, both fit in a minute.
+        assert upload_per_minute >= 50
+        assert import_per_minute >= 50
+
 
 class TestConfiguration:
     def test_limits_can_be_overridden_by_environment(self, monkeypatch):
