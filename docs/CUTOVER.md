@@ -136,7 +136,9 @@ sudo -u imgmanager sqlite3 /var/lib/imgmanager/imgmanager.db \
   "SELECT name FROM schema_migrations ORDER BY name;"
 ```
 
-Expect all twenty, `001_initial.sql` through `020_permanent_delete.sql`.
+Expect every migration in `migrations/`, `001_initial.sql` through the highest
+number present. The list grows as the app does; count the directory rather than
+trusting a number written here.
 
 **4. A Litestream restore actually works.**
 
@@ -206,8 +208,8 @@ sudo -u imgmanager DATABASE_PATH=/var/lib/imgmanager/imgmanager.db \
 ```
 
 The script reports what it did and verifies its own image count. The schema is
-recreated from the migrations on first connection, so all twenty — `001_initial.sql`
-through `020_permanent_delete.sql` — are applied automatically.
+recreated from the migrations on first connection, so every one of them is
+applied automatically.
 
 > **The dump is only the v1 half.** It carries names, image URLs and bookmarks; every
 > other column and table is either *derived* or a v2-era feature with no v1 source.
