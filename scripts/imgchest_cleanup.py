@@ -660,7 +660,12 @@ def main() -> int:
         print(f"  recovered {recovered}")
 
     # Fill the post ids the survivors need, from the listing already fetched.
-    post_ids = record_post_ids(posts, rows)
+    #
+    # Re-read the rows rather than reusing `rows`: the recovery above just added
+    # 1,222 of them, and the stale list predates that, so the newly recovered
+    # images were skipped and left with no post id -- which is what permanent
+    # delete needs. Reading again is one query and covers every state.
+    post_ids = record_post_ids(posts, db.all_custom_image_urls())
     print(f"recorded {post_ids} ImgChest post id(s)")
 
     preview["executed"] = True
