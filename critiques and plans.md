@@ -1032,11 +1032,11 @@ done. **13 was declined** — the decision record is in `docs/ROADMAP.md` "Revie
   `CURRENT_STATE.md`'s test counts corrected to 732 / 566.
 - **14 — done.** `CURRENT_STATE.md` section 10 carries the WebP-under-`.png` row and the recovery
   path. A canary is described but deliberately not built.
-- **10 — not done, but the record is now honest.** `CURRENT_STATE.md` section 7 used to describe a
-  `build-frontend.yml` that force-committed `frontend/dist`; that was a **v1 DigitalOcean artifact
-  and never existed in this repository**. It now states plainly that there is no CI, and
-  `DEVELOPMENT.md`'s quality-gates section says nothing runs those gates automatically. The
-  workflow itself is still to be written.
+- **10 — done.** `.github/workflows/checks.yml` runs backend and frontend jobs on every push and
+  pull request; the 11 `ruff` errors are fixed in the same change, `npm run typecheck` was added
+  (the section omitted it), and `routes/spa.py`'s stale "built by GitHub Action, committed to repo"
+  comment was corrected. `pyright` is deliberately **not** in the workflow — it reports 81 errors
+  and is not a passing gate; this is recorded in `DEVELOPMENT.md` rather than left implicit.
 - **12 — partly.** The metadata half is unchanged: still no Open Graph or Twitter card tags, and
   the shell still serves one title and description for every route. What *did* land is the
   groundwork the section listed as out of scope — `robots.txt` exists, the icon set exists, and

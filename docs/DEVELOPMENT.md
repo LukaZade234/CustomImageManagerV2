@@ -24,8 +24,8 @@ uv run python scripts/export_neon_snapshot.py            # read-only, from the l
 uv run python scripts/migrate_v1_to_sqlite.py --dump kv_store.sql
 ```
 
-Use `uv sync --locked` in CI: it fails if `uv.lock` has drifted from `pyproject.toml`
-(there is no CI yet — see `CURRENT_STATE.md` section 7)
+Use `uv sync --locked` in CI — which `.github/workflows/checks.yml` does — because it fails
+if `uv.lock` has drifted from `pyproject.toml`
 rather than silently resolving something new.
 
 ## Running
@@ -95,7 +95,6 @@ tolerated.
 ```bash
 uv run ruff check .           # lint
 uv run ruff format .          # format
-uv run pyright                # types
 
 cd frontend
 npm run lint                  # biome
@@ -104,8 +103,15 @@ npm run typecheck             # tsc --noEmit
 npm run build
 ```
 
-**Nothing runs any of these automatically.** There is no CI, so these are the gates only if
-someone runs them; `ruff` currently reports 11 pre-existing errors for that reason.
+**CI runs these automatically** on every push and pull request —
+`.github/workflows/checks.yml`, two jobs (backend and frontend). `uv sync --locked` is used
+there exactly as this document promises: it fails if `uv.lock` has drifted. Keep the local
+commands green; a red workflow is the signal you missed one.
+
+`pyright` is installed and declared in `pyproject.toml`, but it is **not** in CI and **not**
+runnable clean: it currently reports 81 errors across the tree. It is a useful editor aid and a
+future cleanup, not a gate — do not add it to the workflow until those are down to zero, or the
+workflow will be red on arrival and get disabled.
 
 TypeScript is adopted **incrementally**: `allowJs: true`, `checkJs: false`. Existing
 `.js`/`.jsx` are not type-checked; convert a file to `.ts`/`.tsx` and it is. Shared API

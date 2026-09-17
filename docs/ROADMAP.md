@@ -811,15 +811,23 @@ lines / 11 `useState`, 1,722 characters / 8,562 active images / 987 attributed /
       misread as "there are users now." Figures dated inline, and a runnable query
       kept beside them. The historical migration numbers in this file and in
       `MODERATION.md` are records of an event and were left alone.
-- [ ] **CI (#10).** _Accepted, not yet built._ The highest-value item in the
-      review: 1,286 tests, `ruff`, `biome` and the design-invariant tests all run
-      only when a person remembers, and the 11 standing `ruff` errors are the proof
-      that someone did not. A `checks.yml` with separate backend and frontend jobs
-      changes nothing about the deployment model, which polls the origin precisely
-      because the box has no inbound access — that reasoning is about deploys and
-      does not extend to checks. The 11 lint errors get fixed in the same change or
-      the workflow is red on arrival. **Add `npm run typecheck`** — the repo has it
-      and is clean today, so it has exactly the same unprotected failure mode.
+- [x] **CI (#10).** _Done._ The highest-value item in the review: 1,286 tests,
+      `ruff`, `biome` and the design-invariant tests all ran only when a person
+      remembered, and the 11 standing `ruff` errors were the proof that someone did
+      not. `.github/workflows/checks.yml` runs on push and pull request in two jobs
+      (backend: `uv sync --locked`, `ruff`, `pytest`; frontend: `npm ci`, `biome`,
+      `typecheck`, `vitest`, `build`), so a frontend failure and a backend failure
+      are distinguishable at a glance. The 11 lint errors were fixed in the same
+      change — mechanically, all behaviour-preserving — and `routes/spa.py`'s
+      comment claiming a GitHub Action builds and commits the SPA was corrected
+      (Cloudflare Pages builds it). **Added `npm run typecheck`**, which the review
+      omitted and which has the same unprotected failure mode. **Not added:
+      `pyright`.** It is declared in `pyproject.toml` and listed in
+      `DEVELOPMENT.md`'s quality gates as if it were one, but it reports 81 errors
+      and is nowhere near a passing gate; adding it would make the workflow red on
+      arrival. Recorded in `DEVELOPMENT.md` as a future cleanup rather than
+      silently omitted. The change disturbs nothing about deployment: the box
+      still polls, because checks need no access to it.
 - [ ] **Link previews (#12).** _Accepted; groundwork partially in._ No Open Graph
       or Twitter tags anywhere, and the shell serves one title for every route, so
       a character link pasted into Discord — the one place these users live — is a
