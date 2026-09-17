@@ -146,17 +146,25 @@
 }
 /* The staff accent picker: a swatch, whether the colour is manual or measured,
    and the pick/clear verbs. Presentational; all state lives on the page.
-   A grid item of the band rather than a child of a column -- that is what lets
-   it span the full card on a phone. Here it sits in the identity column, on the
-   row below the columns, which is where it read before. */
+   The header renders it twice because the two layouts need different parents:
+   inline in the actions row (`--inline`, shown wide) and as a grid item of the
+   band (`--block`, shown on a phone, where it can span the card). A child is
+   never wider than its column, so one placement cannot do both. */
 .accent-override {
-  grid-column: 2;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
   color: var(--text-muted);
   font-size: var(--type-meta);
+}
+/* Wide: the inline copy rides at the end of the actions row, on the buttons'
+   line. The block copy would put a second picker under the column, so it goes. */
+.accent-override--inline {
+  margin-left: auto;
+}
+.accent-override--block {
+  display: none;
 }
 .accent-override__swatch {
   width: 16px;
@@ -475,10 +483,15 @@
   .character-top-section {
     gap: var(--space-2) var(--space-4);
   }
-  /* The staff accent picker spans the whole band on a phone. As a grid item it
-     can; as a child of the identity column it could only ever be that column's
-     width, which is what "full width" kept failing to mean. */
-  .accent-override {
+  /* The staff accent picker moves out of the actions row and becomes a grid
+     item of the band, spanning both columns. Inside the identity column it
+     could only ever be that column's width, which is what "full width" kept
+     failing to mean. Exactly one copy is ever visible. */
+  .accent-override--inline {
+    display: none;
+  }
+  .accent-override--block {
+    display: flex;
     grid-column: 1 / -1;
   }
   /* The button is the portrait's width, and the portrait is 85px here. The

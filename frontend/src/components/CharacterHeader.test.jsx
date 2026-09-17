@@ -262,19 +262,20 @@ describe('the save button', () => {
     expect(info.querySelector('.display-title')).toHaveTextContent('Ayanami Rei')
   })
 
-  it('puts the accent picker in the band, not inside either column', () => {
+  it('renders the accent picker in both layouts, one per breakpoint', () => {
     setup({ accent: { canEdit: true, seed: '#cf2c79', manual: false } })
     const band = document.querySelector('.character-top-section')
-    const info = document.querySelector('.char-info-section')
-    const accent = document.querySelector('.accent-override')
+    const actions = document.querySelector('.char-page-actions')
+    const inline = document.querySelector('.accent-override--inline')
+    const block = document.querySelector('.accent-override--block')
 
-    // A grid item of the band, so CSS can span it across both columns on a
-    // phone. Inside the identity column it could only ever be that column's
-    // width, and it would be a third flex child of the column, which is what
-    // moved the Save/Edit alignment twice.
-    expect(accent).toBeInTheDocument()
-    expect(accent.parentElement).toBe(band)
-    expect(accent.parentElement).not.toBe(info)
+    // Two copies, because the two layouts need different parents: a child is
+    // never wider than its column, so the inline one can never span the card,
+    // and the block one can never share the buttons' line. CSS shows exactly
+    // one at each breakpoint (display:none, so the hidden one leaves the
+    // accessibility tree too).
+    expect(inline.parentElement).toBe(actions)
+    expect(block.parentElement).toBe(band)
   })
 
   it('is the same kind of button as the actions it lines up with', () => {

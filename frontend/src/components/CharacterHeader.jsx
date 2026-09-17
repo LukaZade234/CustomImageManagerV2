@@ -267,21 +267,26 @@ export function CharacterHeader({
               </svg>
               $ai command
             </Button>
+            {/*
+                Wide screens: the picker rides at the end of the actions row, on
+                the same line as the buttons. It cannot also be a full-width row
+                of the band from in here, because a child is never wider than
+                its column — so the copy below serves that case and CSS shows
+                exactly one of the two. Both are the same control; only the
+                parent differs, which is what the two layouts need.
+              */}
+            <AccentOverrideControl accent={accent} className="accent-override--inline" />
           </div>
         )}
       </div>
       {/*
-        The staff accent picker is a grid item of the band in its own right, not
-        a child of either column. Inside the identity column it could never be
-        wider than that column, so "full width on a phone" was unreachable; and
-        inside the identity column's flex flow it became a third child, which
-        moved the footer alignment that keeps Save level with Edit/$ai.
-
-        As a grid child both are available: it sits in the identity column on a
-        wide screen, where it reads as part of that column, and spans both
-        columns below 768px, where there is no room to do anything else.
+        Phones: the picker is a grid item of the band, so it can span both
+        columns and take the card's full width. Inside the identity column it
+        could only ever be that column's width, which is what "full width" kept
+        failing to mean. Hidden above the breakpoint; the inline copy above is
+        the one that shows there.
       */}
-      {!edit.active && <AccentOverrideControl accent={accent} />}
+      {!edit.active && <AccentOverrideControl accent={accent} className="accent-override--block" />}
     </div>
   )
 }
