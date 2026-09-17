@@ -828,16 +828,25 @@ lines / 11 `useState`, 1,722 characters / 8,562 active images / 987 attributed /
       arrival. Recorded in `DEVELOPMENT.md` as a future cleanup rather than
       silently omitted. The change disturbs nothing about deployment: the box
       still polls, because checks need no access to it.
-- [ ] **Link previews (#12).** _Accepted; groundwork partially in._ No Open Graph
-      or Twitter tags anywhere, and the shell serves one title for every route, so
-      a character link pasted into Discord — the one place these users live — is a
-      grey box with no art, while everything around it renders. The metadata half is
-      unchanged; what landed first was the groundwork: `robots.txt`, the icon set,
-      and `routes/spa.py` being able to serve root-level files at all. The plan's
-      five constraints stand (escape interpolated strings; keep the shell's
-      `no-cache`; read the shell once rather than per request; `og:image` must be
-      absolute; keep the dev fallback). Add a sixth: **`og:image` must point at the
-      R2 mirror, not the origin**, or crawler traffic lands on the box.
+- [x] **Link previews (#12).** _Done, via a corrected approach._ No Open Graph
+      or Twitter tags anywhere, and the shell served one title for every route, so
+      a character link pasted into Discord — the one place these users live — was
+      a grey box with no art while everything around it rendered. **The plan as
+      written could not work**: it injected the tags in `routes/spa.py`, but in
+      production Cloudflare Pages serves the SPA and only the API runs on the
+      origin, so Flask's HTML is never what a crawler fetches. The fix is a Pages
+      Function (`frontend/functions/character/[name].ts`) that intercepts
+      `/character/*`, asks the API for the character, and splices the tags into
+      the shell. It is all-or-nothing: an unknown character, a slow API or a
+      malformed response returns the shell untouched, so a failure degrades to the
+      old generic card, never to a broken page. The escaping and fallback logic is
+      pure and tested (`functions/_lib/metaTags.ts`); the handler needs the edge
+      runtime. `db.find_character` gained a `custom_count` (one indexed query) so
+      the description can carry the count. Added the required
+      `@cloudflare/workers-types` dep, a `functions/tsconfig.json`, a
+      `wrangler.jsonc`, and widened Vitest/biome/typecheck to cover `functions/`.
+      Homepage previews, a composited `og:image`, and sitemap/structured data all
+      stay out of scope, as the review said.
 - [x] **WebP-under-`.png` contingency (#14).** _Done, documentation only._ The
       upload format is correct and stays. `CURRENT_STATE.md` §10 now carries the
       risk row and the recovery path (original bytes on ImgChest, `content_hash` and

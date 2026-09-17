@@ -1,0 +1,21 @@
+{
+  // Cloudflare Pages project config, for local `wrangler pages dev` and for
+  // wrangler-based deploys. The Pages dashboard remains the source of truth for
+  // the production build settings and environment variables; `vars` here are the
+  // non-secret defaults used when running the Functions locally.
+  //
+  // The Functions live under frontend/functions/ because the Pages "Root
+  // directory" for this project is `frontend` -- a functions/ directory is only
+  // picked up at the configured root, not the repository root.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "imgmanager",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-09-17",
+  "vars": {
+    // Point these at a local Flask (http://localhost:5000) to exercise the
+    // preview function in `wrangler pages dev`. Production values are set in the
+    // Pages dashboard, not committed here.
+    "API_BASE_URL": "http://localhost:5000",
+    "IMAGE_BASE_URL": ""
+  }
+}

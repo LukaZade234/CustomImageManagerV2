@@ -974,6 +974,16 @@ def find_character(name: str) -> dict | None:
         (key,),
     ).fetchone()
     if row:
+        # One indexed count rather than `get_characters()`' full table sweep:
+        # this is the lookup the link-preview edge function makes, and it runs
+        # without an identity, so it must stay cheap. Active customs only, to
+        # match the browse-customs count and the page's own tally.
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM custom_images i"
+            "  JOIN characters c ON c.id = i.character_id"
+            " WHERE c.name_key = ? AND i.state = 'active'",
+            (key,),
+        ).fetchone()["n"]
         return {
             "name": row["name"],
             "series": row["series"],
@@ -987,6 +997,7 @@ def find_character(name: str) -> dict | None:
             "pools": row["pools"],
             "facets": facets,
             "in_library": True,
+            "custom_count": count,
         }
     row = conn.execute(
         "SELECT name, series, rank, mudae_image_url AS image,"
@@ -1004,6 +1015,7 @@ def find_character(name: str) -> dict | None:
             "pool": row["pool"],
             "facets": facets,
             "in_library": False,
+            "custom_count": 0,
         }
     return None
 

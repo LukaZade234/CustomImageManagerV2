@@ -1037,10 +1037,15 @@ done. **13 was declined** — the decision record is in `docs/ROADMAP.md` "Revie
   (the section omitted it), and `routes/spa.py`'s stale "built by GitHub Action, committed to repo"
   comment was corrected. `pyright` is deliberately **not** in the workflow — it reports 81 errors
   and is not a passing gate; this is recorded in `DEVELOPMENT.md` rather than left implicit.
-- **12 — partly.** The metadata half is unchanged: still no Open Graph or Twitter card tags, and
-  the shell still serves one title and description for every route. What *did* land is the
-  groundwork the section listed as out of scope — `robots.txt` exists, the icon set exists, and
-  `routes/spa.py` can now serve root-level files at all, which it could not before.
+- **12 — done, but not as this section describes.** The plan injects tags in `routes/spa.py`;
+  that cannot work in production, because Cloudflare Pages serves the SPA and only the API runs on
+  the origin, so Flask's HTML is never what a crawler fetches. The fix is a Pages Function under
+  `frontend/functions/character/[name].ts`, with the pure escaping/fallback logic in
+  `functions/_lib/metaTags.ts` (tested) and a thin handler around it. It degrades to the old
+  generic card on any failure rather than breaking the page. `db.find_character` gained
+  `custom_count` to supply the description. Homepage previews, a composited image, and structured
+  data remain out of scope. See `DEPLOYMENT.md` "Link previews" for the deploy-time env vars and
+  the fact that verification can only happen after a deploy.
 - **13 — not started.**
 
 Also fixed in passing, and not a numbered finding: `routes/spa.py` served only `/assets/`, so every

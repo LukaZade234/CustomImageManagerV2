@@ -83,6 +83,29 @@ Both are **inlined at build time**, so changing either needs a rebuild, and noth
 secret may go in them. Copy `frontend/.env.example` to `.env.production` for a
 local production-shaped build.
 
+### Edge functions (`frontend/functions/`)
+
+The link-preview code runs on Cloudflare Pages Functions, not in the browser.
+It lives under `frontend/functions/` — at the Pages **Root directory**, not the
+repo root, or Pages will not find it. It has its own `tsconfig.json` because the
+Workers types and the DOM types both declare `fetch`/`Response`/`Request` and
+conflict in one program; `npm run typecheck` checks both projects. Vitest covers
+`functions/**` too, and biome checks it alongside `src`.
+
+Run it locally with the rest of the site:
+
+```bash
+cd frontend
+npm run build
+npx wrangler pages dev dist          # serves the SPA plus the /character/* function
+```
+
+`wrangler.jsonc` points `API_BASE_URL` at `http://localhost:5000` for this, so a
+local Flask must be running. Only the pure logic in `functions/_lib/metaTags.ts`
+is unit-tested; the handler needs the edge runtime, and the thing that actually
+matters — Discord's crawler reading the tags — can only be checked after a
+production deploy. See `DEPLOYMENT.md` "Link previews".
+
 Requests always use `credentials: 'include'`, never `'same-origin'`. Once the SPA
 is on Pages, `'same-origin'` silently stops sending cookies — which would break
 identity in a way that reads as "everyone is a new person" rather than as an

@@ -1,0 +1,22 @@
+{
+  /* The edge code under functions/ runs on the Workers runtime, not in the
+     browser, so it needs its own tsconfig: the Workers types and the DOM types
+     both declare `fetch`, `Response`, `Request` and friends, and mixing them in
+     one program produces conflicts. `npm run typecheck` checks both projects. */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types", "vitest/globals"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["."]
+}

@@ -29,6 +29,12 @@ frontend/dist
 frontend/coverage
 .pytest_cache/
 
+# Wrangler (Cloudflare Pages Functions): the local dev cache and any local-only
+# secrets overlay. frontend/wrangler.jsonc itself is committed -- it holds the
+# non-secret local defaults the functions read under `wrangler pages dev`.
+frontend/.wrangler/
+frontend/.dev.vars
+
 # Local snapshots of the live database (data, not code)
 snapshot/
 kv_store.sql
