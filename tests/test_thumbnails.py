@@ -139,13 +139,23 @@ class TestEndpoint:
         db.add_custom_images("Rem", [url])
         return db.get_custom_image_rows("Rem")[0]["id"]
 
-    def test_a_cached_thumbnail_is_served_with_immutable_caching(self, client, clean_db):
+    def test_a_cached_thumbnail_is_not_marked_immutable(self, client, clean_db):
+        """Short cache only: the URL is keyed by a row id, which a cut-over reuses.
+
+        This used to assert `immutable`, on the reasoning that a row id never
+        changes its URL. It does not hold across a database rebuild. Stale
+        thumbnails from the pre-cut-over database were served as immutable from
+        the edge and rendered other characters' images for URLs that were even
+        dead, and clearing the origin's files changed nothing.
+        """
         image_id = self._seed(clean_db)
         thumbnails.store(image_id, thumbnails.render(_png(800, 1200)))
         response = client.get(f"/thumbs/{image_id}.webp")
         assert response.status_code == 200
         assert response.mimetype == "image/webp"
-        assert "immutable" in response.headers["Cache-Control"]
+        cache_control = response.headers["Cache-Control"]
+        assert "immutable" not in cache_control
+        assert "max-age=300" in cache_control
 
     def test_an_unknown_image_is_404(self, client, clean_db):
         assert client.get("/thumbs/999999.webp").status_code == 404
