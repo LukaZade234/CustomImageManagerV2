@@ -209,12 +209,29 @@ def build_plan(
 
     # In-use but not on the site: recover into the Removed drawer. Compared by
     # exact URL against the database, not by file id.
-    recover = [
-        {"character": character, "url": url}
-        for url, character in in_use.items()
-        if url not in on_site_urls
-    ]
-    return {"delete": delete, "recover": recover, "warnings": warnings, "keepers": keepers}
+    #
+    # Split by whether the app could have made the URL. The app has only ever
+    # uploaded to ImgChest, so an Imgur URL in the export is somebody else's
+    # upload that happens to be used in Discord -- re-adding it would put a
+    # foreign image on the site and, because it has no post on this account, it
+    # could never be permanently deleted from here. Reported, never recovered.
+    recover = []
+    foreign = []
+    for url, character in in_use.items():
+        if url in on_site_urls:
+            continue
+        entry = {"character": character, "url": url}
+        if imgchest_utils.file_id_from_url(url):
+            recover.append(entry)
+        else:
+            foreign.append(entry)
+    return {
+        "delete": delete,
+        "recover": recover,
+        "foreign": foreign,
+        "warnings": warnings,
+        "keepers": keepers,
+    }
 
 
 def record_post_ids(posts: list[dict], rows: list[dict]) -> int:
@@ -288,6 +305,7 @@ def _summarise(in_use: dict, on_site_urls: set, plan: dict) -> dict:
         "keepers": len(plan["keepers"]),
         "delete_candidates": len(delete),
         "recoverable": len(recover),
+        "foreign_urls": len(plan.get("foreign") or []),
         "multi_image_posts": len(plan["warnings"]),
     }
 
@@ -431,6 +449,7 @@ def main() -> int:
         "counts": counts,
         "delete": plan["delete"],
         "recover": plan["recover"],
+        "foreign": plan.get("foreign") or [],
         "warnings": plan["warnings"],
         "executed": False,
     }

@@ -203,13 +203,31 @@ sudo systemctl stop imgmanager
 sudo -u imgmanager cp /var/lib/imgmanager/imgmanager.db \
   /var/lib/imgmanager/pre-cutover-$(date +%F).db
 sudo -u imgmanager rm /var/lib/imgmanager/imgmanager.db*
+# Clear the thumbnail cache here, in the same breath as the database.
+sudo rm -f /var/lib/imgmanager/thumbs/*.webp
 sudo -u imgmanager DATABASE_PATH=/var/lib/imgmanager/imgmanager.db \
   uv run python scripts/migrate_v1_to_sqlite.py --snapshot snapshot-final/
 ```
 
+**The thumbnail clear is not optional and not cosmetic.** Thumbnails live on the box
+(`THUMB_DIR`), not in the database, and their filenames are `custom_images.id`. A fresh
+import reassigns those ids, so every surviving file is keyed to a *different* image
+now. Left in place they do not merely go stale — they render **the wrong pictures**,
+which is worse than a miss and is confusing in a way that looks like the import
+scrambled the library. This went wrong once: 2,101 pre-cut-over files rendered other
+characters' images on a live site.
+
 The script reports what it did and verifies its own image count. The schema is
 recreated from the migrations on first connection, so every one of them is
 applied automatically.
+
+**Then purge the edge.** Cloudflare caches `/thumbs/<id>.webp`, and the origin
+files being gone does not clear what the edge already holds — clients keep getting
+the old picture from Cloudflare without the origin being asked at all. Purge
+everything once after the import (dashboard → your domain → **Caching →
+Configuration → Purge Everything**). The route now sends a five-minute `max-age`
+rather than `immutable` precisely so this cannot strand an image for a year, but an
+explicit purge is still the reliable way to clear what is already cached.
 
 > **The dump is only the v1 half.** It carries names, image URLs and bookmarks; every
 > other column and table is either *derived* or a v2-era feature with no v1 source.
@@ -298,10 +316,12 @@ so the imported database is structurally complete and semantically thin; the ste
 below refill it. None is needed for the site to *serve*, but several are what keep it
 pleasant.
 
-**The one that must happen, not can: the thumbnail cache.** Thumbnails are keyed by
-`custom_images.id` and live on the box (`THUMB_DIR`) — not in the database. A fresh
-import reassigns ids, so any file that survives is keyed to the *wrong* row and would
-show the wrong image, which is worse than a miss. **Clear** `THUMB_DIR`**.** They
+**The one that must happen, not can: the thumbnail cache — and it should already be
+done.** It is cleared in step 3, alongside the database, because a surviving file
+renders the wrong image rather than merely a stale one. If it was skipped, clear it
+now and purge the edge: see the note under step 3. Thumbnails are keyed by
+`custom_images.id` and live on the box (`THUMB_DIR`), not in the database, so a fresh
+import reassigns the ids under them. They
 regenerate lazily on first view, by design (a batch would pull ~16 GB out of ImgChest
 in one go); expect a fetch spike as people browse, cached at the edge after the first
 hit. There is no pre-generation step, and none should be added. Each one is mirrored

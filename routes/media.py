@@ -87,10 +87,18 @@ def serve_thumbnail(image_id):
 
 def _thumbnail_response(path):
     response = send_from_directory(path.parent.resolve(), path.name, mimetype="image/webp")
-    # Derived from an immutable source keyed by a row id that never changes its
-    # URL, so this can be cached hard. Cloudflare then serves it from the edge
-    # and the origin sees each thumbnail once, globally.
-    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    # Deliberately NOT `immutable`. The URL is keyed by a row id, and a row id is
+    # only stable for the life of a database -- a cut-over rebuild reuses the
+    # numbers for different images, and a year-long edge cache then serves the
+    # wrong picture for a URL that is even dead. That happened once: stale
+    # thumbnails from the pre-cut-over database rendered other characters'
+    # images, and deleting the files on the origin did nothing because
+    # Cloudflare had them stored as immutable.
+    #
+    # The hash-addressed R2 mirror (`thumbs/<id>-<hash>.webp`) is the caching
+    # win and carries its own immutable header. This path is the fallback for
+    # rows not yet mirrored, so it can afford a short life.
+    response.headers["Cache-Control"] = "public, max-age=300"
     return response
 
 
