@@ -30,6 +30,14 @@ export function GallerySelectionBar({
   othersSelectedCount,
   onSelectAll,
   onSelectMine,
+  aiIntent,
+  aiCap,
+  copiedCount,
+  lastBatchCount,
+  uncopiedCount,
+  onSelectCopied,
+  onSelectLastBatch,
+  onSelectUncopied,
   onClearSelection,
   onGenerateAiCommand,
   onDownloadSelected,
@@ -88,15 +96,29 @@ export function GallerySelectionBar({
                 Both ends stay enabled — clearing an empty selection is
                 harmless, and a button that disables itself when clicked drops
                 focus just as surely as one that unmounts.
+
+                Behind the $ai door the label changes when the gallery is over
+                Mudae's limit, because there "all" cannot mean all. This is the
+                only helper the limit touches; the explicit ones below select
+                exactly the set they name, and the command caps as a backstop.
               */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={hasSelection ? onClearSelection : onSelectAll}
+                title={
+                  !hasSelection && aiIntent && totalCount > aiCap
+                    ? `Mudae allows ${aiCap} images per $ai command, so the first ${aiCap} are selected`
+                    : undefined
+                }
               >
-                {hasSelection ? 'Clear' : `Select all (${totalCount})`}
+                {hasSelection
+                  ? 'Clear'
+                  : aiIntent && totalCount > aiCap
+                    ? `Select first ${aiCap}`
+                    : `Select all (${totalCount})`}
               </Button>
-              {mineCount > 0 && !hasSelection && (
+              {!aiIntent && mineCount > 0 && !hasSelection && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -105,6 +127,45 @@ export function GallerySelectionBar({
                 >
                   Select mine ({mineCount})
                 </Button>
+              )}
+              {/*
+                The $ai helpers. Only behind the $ai door: this is the door that
+                ends in a command, so "which have I already used" is the question
+                it raises. Each is its own button rather than a scope switch, so
+                the set you get is the button you press. All are hidden until
+                the viewer has copied something here, so none selects nothing.
+              */}
+              {aiIntent && !hasSelection && copiedCount > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSelectCopied}
+                    title="Every image you have copied into an $ai command. This history lives in your browser cookie, like your saved list"
+                  >
+                    Select copied ({copiedCount})
+                  </Button>
+                  {lastBatchCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onSelectLastBatch}
+                      title="Only the images from your most recent $ai copy"
+                    >
+                      Select last batch ({lastBatchCount})
+                    </Button>
+                  )}
+                  {uncopiedCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onSelectUncopied}
+                      title="The images you have not copied into an $ai command yet"
+                    >
+                      Select not copied ({uncopiedCount})
+                    </Button>
+                  )}
+                </>
               )}
             </div>
             {hasSelection && (

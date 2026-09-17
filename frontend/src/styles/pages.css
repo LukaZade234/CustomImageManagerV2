@@ -68,7 +68,13 @@
      edit form, with its own actions). The columns stretch to a shared height
      and each column's footer is pushed to the foot, so in browse mode Save and
      Edit/$ai line up. In edit mode the form is taller than the portrait, so
-     `.editing` below stops the image column following it down. */
+     `.editing` below stops the image column following it down.
+
+     The staff accent picker is a third grid item in the row below (see
+     `.accent-override`), which is what lets it span the card on a phone. It is
+     deliberately not inside the identity column: there it could only ever be as
+     wide as that column, and it would also become a third flex child of the
+     column, moving the footer alignment. */
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
@@ -139,16 +145,26 @@
   min-width: 0;
 }
 /* The staff accent picker: a swatch, whether the colour is manual or measured,
-   and the pick/clear verbs. Presentational; all state lives on the page. */
+   and the pick/clear verbs. Presentational; all state lives on the page.
+   The header renders it twice because the two layouts need different parents:
+   inline in the actions row (`--inline`, shown wide) and as a grid item of the
+   band (`--block`, shown on a phone, where it can span the card). A child is
+   never wider than its column, so one placement cannot do both. */
 .accent-override {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
-  /* Pushed to the far end of the actions row, away from the visitor verbs. */
-  margin-left: auto;
   color: var(--text-muted);
   font-size: var(--type-meta);
+}
+/* Wide: the inline copy rides at the end of the actions row, on the buttons'
+   line. The block copy would put a second picker under the column, so it goes. */
+.accent-override--inline {
+  margin-left: auto;
+}
+.accent-override--block {
+  display: none;
 }
 .accent-override__swatch {
   width: 16px;
@@ -466,6 +482,17 @@
 @media (max-width: 768px) {
   .character-top-section {
     gap: var(--space-2) var(--space-4);
+  }
+  /* The staff accent picker moves out of the actions row and becomes a grid
+     item of the band, spanning both columns. Inside the identity column it
+     could only ever be that column's width, which is what "full width" kept
+     failing to mean. Exactly one copy is ever visible. */
+  .accent-override--inline {
+    display: none;
+  }
+  .accent-override--block {
+    display: flex;
+    grid-column: 1 / -1;
   }
   /* The button is the portrait's width, and the portrait is 85px here. The
      word fits; the word and an icon do not, and .ui-btn does not wrap. */
@@ -3581,23 +3608,41 @@ button.profile-card__link {
 /* Below the phone boundary the bar becomes two rows: what is selected on top,
    what you can do with it underneath, where a thumb can reach it. */
 @media (max-width: 768px) {
+  /* A grid rather than a wrapping flex row, so the bar's two rows stay put when
+     the verbs are absent. With flex, an empty selection left the helpers sitting
+     high over the space the verbs would have taken — the bar looked like it had
+     a blank line under it that only filled in once you picked something.
+     Anchoring every row to the bottom means the helpers rest on the same line
+     whether or not the verbs exist, and simply ride up when they appear. */
   .gallery-action-bar__inner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
     gap: var(--space-2);
     /* The card's own padding drops to 16px here, so this follows it. */
     padding-inline: var(--space-4);
   }
   .gallery-action-bar__count {
-    order: 1;
-  }
-  .gallery-action-bar__helpers {
-    order: 2;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
   }
   .gallery-action-bar__close {
-    order: 3;
-    margin-left: auto;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    margin-left: 0;
   }
+  .gallery-action-bar__helpers {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-self: end;
+  }
+  /* The verbs take their own row only when they exist. An auto row means their
+     absence collapses cleanly instead of leaving a reserved gap. */
   .gallery-action-bar__verbs {
-    order: 4;
+    grid-column: 1 / -1;
+    grid-row: 3;
     width: 100%;
     margin-left: 0;
   }

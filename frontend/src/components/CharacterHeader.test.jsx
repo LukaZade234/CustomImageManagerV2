@@ -253,8 +253,29 @@ describe('the save button', () => {
     setup()
     const info = document.querySelector('.char-info-section')
     const actions = document.querySelector('.char-page-actions')
+    // The actions live in the identity column, not the portrait's, so the
+    // column's `space-between` holds them level with Save. The accent picker
+    // must stay *inside* this row rather than becoming a second child of the
+    // column, which breaks that alignment — and it must not be pulled out into
+    // a wrapping block either, which does the same thing differently.
     expect(actions.parentElement).toBe(info)
     expect(info.querySelector('.display-title')).toHaveTextContent('Ayanami Rei')
+  })
+
+  it('renders the accent picker in both layouts, one per breakpoint', () => {
+    setup({ accent: { canEdit: true, seed: '#cf2c79', manual: false } })
+    const band = document.querySelector('.character-top-section')
+    const actions = document.querySelector('.char-page-actions')
+    const inline = document.querySelector('.accent-override--inline')
+    const block = document.querySelector('.accent-override--block')
+
+    // Two copies, because the two layouts need different parents: a child is
+    // never wider than its column, so the inline one can never span the card,
+    // and the block one can never share the buttons' line. CSS shows exactly
+    // one at each breakpoint (display:none, so the hidden one leaves the
+    // accessibility tree too).
+    expect(inline.parentElement).toBe(actions)
+    expect(block.parentElement).toBe(band)
   })
 
   it('is the same kind of button as the actions it lines up with', () => {

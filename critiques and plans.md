@@ -6,7 +6,7 @@ executable plan.
 | Review | Date | Findings | Status |
 |---|---|---|---|
 | [First review](#first-review-2026-09-16) | 2026-09-16 | 9 | Closed — see `ROADMAP.md` "Review findings (2026-09-16)" for what was accepted, deferred and declined |
-| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done; 10, 12 and A/B accepted, 13 declined — see `ROADMAP.md` "Review findings (2026-09-17)" for the decision record |
+| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 10, 11, 12, 14 and feature A done; B remains; 13 declined — see `ROADMAP.md` "Review findings (2026-09-17)" for the decision record |
 
 **This is a working document, not a decision record.** It does not carry the authority of
 `docs/DECISIONS.md` or `docs/CURRENT_STATE.md`, and it should be deleted or folded into those once
@@ -1046,7 +1046,12 @@ done. **13 was declined** — the decision record is in `docs/ROADMAP.md` "Revie
   `custom_count` to supply the description. Homepage previews, a composited image, and structured
   data remain out of scope. See `DEPLOYMENT.md` "Link previews" for the deploy-time env vars and
   the fact that verification can only happen after a deploy.
-- **13 — not started.**
+- **13 — declined**, not deferred. The record is in `ROADMAP.md` "Review findings
+  (2026-09-17)": the state tangle was the hazard and the first review's five hooks removed it,
+  leaving a long render body that is tedious rather than dangerous. Revisit only if a feature is
+  blocked by the shape of the file.
+- **A — done** (with the Mudae 100-image cap it turned up). See the note at the top of the
+  feature section.
 
 Also fixed in passing, and not a numbered finding: `routes/spa.py` served only `/assets/`, so every
 root-level file and both public directories 404'd whenever Flask served the built SPA — which meant
@@ -1503,6 +1508,16 @@ images per character: max 256, avg 12.1
 ```
 
 ## A. Show people which images they have already used — *recommended first*
+
+> **Done.** Built as two viewer-scoped selection verbs on the character page
+> (**Select copied** / **Select not copied**), with an **Ever / Last batch** scope.
+> Migration `023` adds `image_takes.batch_id`, set on the first click of "Copy
+> `$ai` command" and shared by all its images, so "last batch" is an exact set
+> rather than a time-window guess. Badges were deliberately not used — the
+> history surfaces only as an explicit action, so there is no public signal to
+> misread. `DECISIONS.md` §1 carries the note distinguishing this from the
+> rejected take-based retirement. Alongside it, Mudae's 100-image-per-`$ai`
+> limit is now enforced (`capAiImages`, first 100 in gallery order).
 
 ### The case
 

@@ -10,16 +10,25 @@ import { useCallback, useReducer } from 'react'
  * behind, and a new mode cannot forget to reset them.
  */
 
-const INITIAL = { mode: 'browse', selectedUrls: [], confirmDiscardOrder: false }
+const INITIAL = { mode: 'browse', selectedUrls: [], confirmDiscardOrder: false, aiIntent: false }
 
 function reducer(state, action) {
   switch (action.type) {
     case 'browse':
       return INITIAL
     case 'select':
-      return { mode: 'select', selectedUrls: action.urls, confirmDiscardOrder: false }
+      // `ai` records that the selection was opened from the $ai command button
+      // rather than the plain Select one. The two are the same mode, but only
+      // the $ai door offers the "already used" helpers and the 100-image cap,
+      // because only that door leads somewhere Mudae's limits apply.
+      return {
+        mode: 'select',
+        selectedUrls: action.urls,
+        confirmDiscardOrder: false,
+        aiIntent: Boolean(action.ai),
+      }
     case 'reorder':
-      return { mode: 'reorder', selectedUrls: [], confirmDiscardOrder: false }
+      return { mode: 'reorder', selectedUrls: [], confirmDiscardOrder: false, aiIntent: false }
     case 'toggle':
       return {
         ...state,
@@ -45,10 +54,14 @@ export function useGallerySelection() {
     mode: state.mode,
     selectMode: state.mode === 'select',
     reorderMode: state.mode === 'reorder',
+    aiIntent: state.aiIntent,
     selectedUrls: state.selectedUrls,
     confirmDiscardOrder: state.confirmDiscardOrder,
     reset: useCallback(() => dispatch({ type: 'browse' }), []),
-    enterSelect: useCallback((urls = []) => dispatch({ type: 'select', urls }), []),
+    enterSelect: useCallback(
+      (urls = [], { ai = false } = {}) => dispatch({ type: 'select', urls, ai }),
+      [],
+    ),
     enterReorder: useCallback(() => dispatch({ type: 'reorder' }), []),
     toggleUrl: useCallback((url) => dispatch({ type: 'toggle', url }), []),
     setSelection: useCallback((urls) => dispatch({ type: 'selection', urls }), []),

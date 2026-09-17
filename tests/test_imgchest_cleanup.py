@@ -12,6 +12,7 @@ using in Discord, and ImgChest deletes cannot be undone.
 """
 
 import importlib.util
+import json
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -162,3 +163,135 @@ class TestRecoverRows:
         cleanup.recover_rows(item, added_by=None)
         assert cleanup.recover_rows(item, added_by=None) == 0
         assert len(clean_db.get_removed_for("Rem")) == 1
+
+
+class TestDeleteFingerprint:
+    """The guard on `--execute`.
+
+    Every run re-lists the account and rebuilds the plan, so the execute run does
+    not use the reviewed plan unless something checks. This is that check: a
+    digest of *which* files would be deleted, written into the preview, compared
+    before anything is removed.
+    """
+
+    def test_is_stable_across_ordering_and_cosmetic_change(self):
+        # Order comes from the listing and can vary between runs; only the set
+        # that would be deleted matters.
+        a = [{"file_id": "a", "url": "x"}, {"file_id": "b", "url": "y"}]
+        b = [{"file_id": "b", "url": "other"}, {"file_id": "a", "url": "z"}]
+        assert cleanup.delete_fingerprint(a) == cleanup.delete_fingerprint(b)
+
+    def test_changes_when_a_candidate_is_added(self):
+        before = cleanup.delete_fingerprint([{"file_id": "a"}])
+        after = cleanup.delete_fingerprint([{"file_id": "a"}, {"file_id": "b"}])
+        assert before != after
+
+    def test_changes_when_a_candidate_is_removed(self):
+        # A post already deleted by hand is no longer a candidate. The plan the
+        # operator reviewed is no longer this one.
+        before = cleanup.delete_fingerprint([{"file_id": "a"}, {"file_id": "b"}])
+        after = cleanup.delete_fingerprint([{"file_id": "b"}])
+        assert before != after
+
+    def test_an_empty_plan_is_a_valid_fingerprint(self):
+        assert cleanup.delete_fingerprint([]) == cleanup.delete_fingerprint([])
+
+
+class TestDescribeDeleteDiff:
+    def test_names_what_was_added_and_removed(self):
+        lines = cleanup.describe_delete_diff([{"file_id": "a"}], [{"file_id": "b"}])
+        assert any("b" in line and "newly in line" in line for line in lines)
+        assert any("a" in line and "no longer a candidate" in line for line in lines)
+
+    def test_says_nothing_extra_when_the_sets_match(self):
+        lines = cleanup.describe_delete_diff([{"file_id": "a"}], [{"file_id": "a"}])
+        assert len(lines) == 1
+        assert "newly" not in lines[0]
+
+
+class TestReadPreviousPreview:
+    def test_returns_none_when_there_is_no_file(self, tmp_path):
+        assert cleanup.read_previous_preview(tmp_path / "absent.json") is None
+
+    def test_returns_none_rather_than_raising_on_junk(self, tmp_path):
+        # A guard rail, not a parser: refusing to run because a previous preview
+        # was truncated would be its own failure.
+        junk = tmp_path / "junk.json"
+        junk.write_text("{ not json", encoding="utf-8")
+        assert cleanup.read_previous_preview(junk) is None
+
+    def test_reads_back_a_written_preview(self, tmp_path):
+        path = tmp_path / "preview.json"
+        path.write_text('{"fingerprint": "abc", "delete": []}', encoding="utf-8")
+        assert cleanup.read_previous_preview(path)["fingerprint"] == "abc"
+
+
+class TestExecuteGuard:
+    """The guard as wired into `main`, not just its helpers.
+
+    This is the part that is easy to get wrong: the fresh preview must be written
+    only after the comparison, or a refusal destroys the very plan it refused to
+    vouch for.
+    """
+
+    def _run(self, monkeypatch, tmp_path, listing, argv):
+        export = tmp_path / "export.txt"
+        export.write_text("Rem - https://cdn.imgchest.com/files/keep.png\n", encoding="utf-8")
+        monkeypatch.setenv("IMGCHEST_API_KEY", "test-key")
+        monkeypatch.setattr(cleanup, "list_posts", lambda username, token: listing)
+        monkeypatch.setattr(
+            cleanup, "db", type("D", (), {"all_custom_image_urls": lambda self: []})()
+        )
+        monkeypatch.setattr(cleanup, "record_post_ids", lambda posts, rows: 0)
+        monkeypatch.setattr(cleanup, "recover_rows", lambda recover, added_by=None: 0)
+        deleted = []
+        monkeypatch.setattr(cleanup, "delete_candidate", lambda c: deleted.append(c["file_id"]))
+        monkeypatch.setattr(cleanup, "_DELETE_DELAY", 0)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "cleanup",
+                "--username",
+                "u",
+                "--export",
+                str(export),
+                "--preview",
+                str(tmp_path / "p.json"),
+                *argv,
+            ],
+        )
+        code = cleanup.main()
+        return code, json.loads((tmp_path / "p.json").read_text(encoding="utf-8")), deleted
+
+    def test_execute_refuses_when_the_plan_moved(self, monkeypatch, tmp_path):
+        # Review a plan with one candidate, then the account gains another.
+        self._run(monkeypatch, tmp_path, [_post("doomed")], [])
+        code, preview, deleted = self._run(
+            monkeypatch, tmp_path, [_post("doomed"), _post("newlydoomed")], ["--execute"]
+        )
+
+        assert code == 1, "an execute that no longer matches the review must not proceed"
+        assert deleted == [], "nothing may be deleted when the guard trips"
+        # The reviewed preview is intact, and the proposed one is beside it.
+        assert len(preview["delete"]) == 1
+        proposed = json.loads((tmp_path / "p.proposed.json").read_text(encoding="utf-8"))
+        assert len(proposed["delete"]) == 2
+
+    def test_execute_proceeds_when_the_plan_is_unchanged(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, [_post("doomed")], [])
+        code, preview, deleted = self._run(monkeypatch, tmp_path, [_post("doomed")], ["--execute"])
+        assert code == 0
+        assert deleted == ["doomed"]
+        assert preview["executed"] is True
+
+    def test_force_accepts_a_moved_plan(self, monkeypatch, tmp_path):
+        self._run(monkeypatch, tmp_path, [_post("doomed")], [])
+        code, _, deleted = self._run(
+            monkeypatch, tmp_path, [_post("doomed"), _post("newlydoomed")], ["--execute", "--force"]
+        )
+        assert code == 0
+        assert sorted(deleted) == ["doomed", "newlydoomed"]
+
+    def test_the_fingerprint_is_written_into_the_preview(self, monkeypatch, tmp_path):
+        _, preview, _ = self._run(monkeypatch, tmp_path, [_post("doomed")], [])
+        assert preview["fingerprint"] == cleanup.delete_fingerprint(preview["delete"])

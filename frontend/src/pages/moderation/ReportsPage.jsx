@@ -24,6 +24,7 @@ const REASON_LABELS = {
   dead_link: 'Broken image',
   nsfw: 'NSFW',
   duplicate: 'Duplicate',
+  ai_artwork: 'AI artwork',
 }
 
 function formatDate(iso) {

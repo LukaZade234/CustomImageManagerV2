@@ -1,3 +1,4 @@
+import { cx } from '../utils/cx'
 import { Button } from './ui'
 
 /**
@@ -8,12 +9,18 @@ import { Button } from './ui'
  * owner overrule it by picking a pixel straight off the art. Enabling "Pick"
  * arms the portrait and the gallery; the next click samples that pixel and
  * saves it, with no separate confirm step.
+ *
+ * `className` exists because the character header renders it twice: once in the
+ * actions row, where it shares a line with the buttons on a wide screen, and
+ * once as a grid item of the band, where it spans the card on a phone. It
+ * cannot be both from one parent — a child is never wider than its column — so
+ * CSS shows exactly one of the copies at each breakpoint.
  */
-export default function AccentOverrideControl({ accent }) {
+export default function AccentOverrideControl({ accent, className }) {
   if (!accent?.canEdit) return null
 
   return (
-    <div className="accent-override">
+    <div className={cx('accent-override', className)}>
       <span className="accent-override__label">Accent</span>
       <span
         className={`accent-override__swatch ${accent.seed ? '' : 'is-empty'}`}

@@ -22,8 +22,9 @@ const { hideImages, deleteCustomImages, served } = vi.hoisted(() => ({
   hideImages: vi.fn().mockResolvedValue({ hidden: 1 }),
   deleteCustomImages: vi.fn().mockResolvedValue({ removed: ['https://cdn/mine.png'] }),
   // The page refetches on mount, so seeding the store alone is not enough --
-  // whatever this serves is what ends up on screen.
-  served: { rows: [] },
+  // whatever this serves is what ends up on screen. An object rather than a bare
+  // array so the copy-history fields can be exercised.
+  served: { rows: [], copiedIds: [], lastBatchIds: [] },
 }))
 
 vi.mock('../api', () => ({
@@ -32,7 +33,11 @@ vi.mock('../api', () => ({
   apiUrl: (p) => p,
   apiClient: new Proxy(
     {
-      getCustomImagesForChar: vi.fn(async () => served.rows),
+      getCustomImagesForChar: vi.fn(async () => ({
+        rows: served.rows,
+        copiedIds: served.copiedIds ?? [],
+        lastBatchIds: served.lastBatchIds ?? [],
+      })),
       // The page fetches its own record now instead of reading a downloaded roster.
       findCatalogCharacter: vi.fn(async (name) => ({
         found: true,
@@ -65,6 +70,8 @@ beforeEach(() => {
   hideImages.mockClear()
   deleteCustomImages.mockClear()
   served.rows = ROWS
+  served.copiedIds = []
+  served.lastBatchIds = []
   useStore.setState({
     characters: [{ name: 'Rem', series: 'Re:Zero', rank: '1', image: 'rem.png' }],
     savedCharacters: [],
@@ -218,30 +225,31 @@ describe('attribution', () => {
 describe('the $ai door', () => {
   /**
    * The header button used to copy a command for every image the instant it was
-   * clicked. There was no way to mean "all of them except those three" — and a
-   * command is exactly the thing people want to trim — while the place you
-   * could say that was a Select button by the gallery whose name said nothing
-   * about $ai.
+   * clicked. It then preselected everything, which decided the very thing you
+   * came to pick — and on a gallery past Mudae's cap it preselected a set the
+   * bot would reject. It now opens an empty selection.
    */
-  it('opens the selection with everything already chosen', async () => {
+  it('opens the selection with nothing chosen', async () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
 
     const bar = screen.getByRole('region', { name: /selection actions/i })
-    expect(bar).toHaveTextContent('2 of 2 selected')
-    expect(within(bar).getByRole('button', { name: /Copy \$ai command/i })).toBeInTheDocument()
+    expect(bar).toHaveTextContent('0 of 2 selected')
+    expect(
+      within(bar).queryByRole('button', { name: /Copy \$ai command/i }),
+    ).not.toBeInTheDocument()
   })
 
-  it('lets you take images out before copying, which is the whole point', async () => {
+  it('lets you build the selection yourself before copying', async () => {
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
     await user.click(screen.getByTitle('Added by Jade Lynx'))
 
-    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
-      '1 of 2 selected',
-    )
+    const bar = screen.getByRole('region', { name: /selection actions/i })
+    expect(bar).toHaveTextContent('1 of 2 selected')
+    expect(within(bar).getByRole('button', { name: /Copy \$ai command/i })).toBeInTheDocument()
   })
 
   it('says nothing about $ai in a gallery that has no images', async () => {
@@ -249,6 +257,158 @@ describe('the $ai door', () => {
     renderPage()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^\$ai command$/i })).toBeDisabled(),
+    )
+  })
+
+  it('caps select-all at the Mudae limit of 100 images', async () => {
+    // A command over 100 images is rejected by Mudae, so "select all" in this
+    // door has to stop at 100 rather than put an invalid command one click away.
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 256 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select first 100' }))
+
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '100 of 256 selected',
+    )
+  })
+
+  it('does not cap the plain Select door, which no Mudae limit applies to', async () => {
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 256 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Select$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select all (256)' }))
+
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '256 of 256 selected',
+    )
+  })
+
+  it('refuses the 101st click in the $ai door rather than truncating later', async () => {
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 101 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    // The label already reflects the cap, so the block is visible before the click.
+    expect(screen.getByRole('button', { name: 'Select first 100' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Select first 100' }))
+    // After select-first-100 the only unselected image is the 101st (the last
+    // in the gallery). Clicking it must be refused, not accepted.
+    const tiles = screen.getAllByTitle('Added before ownership was tracked')
+    expect(tiles).toHaveLength(101)
+    await user.click(tiles[100])
+
+    // 101 images, so select-all takes 100 and the 101st is refused.
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '100 of 101 selected',
+    )
+    // Toasts live in the store; the Toast component is not mounted here.
+    expect(useStore.getState().toasts.map((t) => t.msg)).toContainEqual(
+      expect.stringMatching(/Mudae allows 100 images per \$ai command/i),
+    )
+  })
+
+  it('refuses to copy a plain-Select selection over the limit, with a reason', async () => {
+    // The plain door may select everything (remove/hide/download are uncapped),
+    // but the command is still Mudae's to refuse. It must refuse here too, and
+    // never quietly copy a shorter command than was selected.
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 150 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^Select$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select all (150)' }))
+    await user.click(screen.getByRole('button', { name: 'Copy $ai command' }))
+
+    // Nothing was copied, and the dialog never opened.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(useStore.getState().toasts.map((t) => t.msg)).toEqual([
+      expect.stringMatching(/Mudae allows 100 images per \$ai command/i),
+    ])
+  })
+
+  it('offers the copy-history helpers only in the $ai door', async () => {
+    const user = userEvent.setup()
+    served.copiedIds = [1, 2]
+    served.lastBatchIds = [2]
+    renderPage()
+
+    // Plain Select: the helpers are not part of ordinary selection.
+    await user.click(await screen.findByRole('button', { name: /^Select$/i }))
+    expect(screen.queryByRole('button', { name: /Select copied/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Done$/i }))
+
+    // $ai: they are, and each selects its own set.
+    await user.click(screen.getByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select last batch (1)' }))
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '1 of 2 selected',
+    )
+  })
+
+  it('caps the copy-history helpers too, not just select-all', async () => {
+    // The cap belongs to the $ai door, not to one button. It was applied to
+    // select-all alone, so "Select copied (150)" walked straight past it.
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 150 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    served.copiedIds = served.rows.map((r) => r.id)
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select copied (150)' }))
+
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '100 of 150 selected',
+    )
+  })
+
+  it('records the batch and refetches, so a copy shows up in the history', async () => {
+    // A copy is written server-side on the click, but nothing else invalidates
+    // the character query -- so without an explicit refetch the new batch never
+    // appears and "last batch" looks broken.
+    const user = userEvent.setup()
+    const apiClient = (await import('../api')).apiClient
+    served.copiedIds = []
+    served.lastBatchIds = []
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByTitle('Added by Jade Lynx'))
+
+    const before = apiClient.getCustomImagesForChar.mock.calls.length
+    await user.click(screen.getByRole('button', { name: 'Copy $ai command' }))
+
+    await waitFor(() =>
+      expect(apiClient.getCustomImagesForChar.mock.calls.length).toBeGreaterThan(before),
     )
   })
 })

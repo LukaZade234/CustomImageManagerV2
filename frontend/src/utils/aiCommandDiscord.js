@@ -3,6 +3,18 @@ export const DISCORD_LIMIT_REGULAR = 2000
 export const DISCORD_LIMIT_NITRO = 4000
 
 /**
+ * Mudae's own cap: a character can take at most 100 custom images through
+ * `$ai`. A command carrying more is rejected outright, so the app must never
+ * build one -- the user would get a bot error and no explanation.
+ *
+ * Enforced as a block, never as a truncation: the $ai selection stops at this
+ * count, and copying a larger selection is refused with a reason. Quietly
+ * dropping images would leave someone believing they registered a set they did
+ * not.
+ */
+export const MUDAE_AI_MAX_IMAGES = 100
+
+/**
  * One ImgChest URL token as used in chat: `$` + full URL (never split).
  * @param {string} u raw URL or already with leading $
  */

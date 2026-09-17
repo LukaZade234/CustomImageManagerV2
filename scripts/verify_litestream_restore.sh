@@ -2,7 +2,12 @@
 #
 # Prove the R2 backup can actually be restored. Run this on the origin box.
 #
-#     sudo scripts/verify_litestream_restore.sh
+#     cd /opt/imgmanager
+#     sudo ./scripts/verify_litestream_restore.sh
+#
+# Note the `./`. `sudo` resolves its argument against its own secure_path, not
+# the current directory, so a bare `scripts/verify_litestream_restore.sh` is
+# "command not found" however correct the path looks.
 #
 # An untested backup is not a backup, and after the cut-over this machine holds
 # the only copy of the library — so this needs to be a thing you can run often

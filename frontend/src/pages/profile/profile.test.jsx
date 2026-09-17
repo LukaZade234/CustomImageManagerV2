@@ -310,7 +310,7 @@ describe('settings', () => {
 
   it('offers the theme as three states, which a cycling button could not show', async () => {
     at(<SettingsTab />)
-    expect(screen.getByRole('radio', { name: 'Follow system' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'System' })).toBeChecked()
     await userEvent.click(screen.getByRole('radio', { name: 'Dark' }))
     expect(useStore.getState().theme).toBe('dark')
   })

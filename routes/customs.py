@@ -588,10 +588,22 @@ def get_custom_images(char_name):
         # Tells the editor whether the seed was measured or hand-picked, so it
         # can show the override state and offer to clear it.
         accent_manual = bool(db.get_accent_override(char_name))
-        return jsonify({"rows": rows, "accentSeed": accent_seed, "accentManual": accent_manual})
+        # This viewer's own $ai copy history, for the "select what I have
+        # already used" helpers. Scoped to them and this character; never an
+        # aggregate across users, which DECISIONS.md section 1 rules out.
+        copied = db.copied_image_ids(char_name, me.id)
+        return jsonify(
+            {
+                "rows": rows,
+                "accentSeed": accent_seed,
+                "accentManual": accent_manual,
+                "copiedIds": copied["ids"],
+                "lastBatchIds": copied["last_batch"],
+            }
+        )
     except Exception:
         log.exception("customs.read_failed")
-    return jsonify({"rows": [], "accentSeed": None})
+    return jsonify({"rows": [], "accentSeed": None, "copiedIds": [], "lastBatchIds": []})
 
 
 @customs_bp.route("/api/reorder-custom-images", methods=["POST"])
@@ -899,6 +911,13 @@ def record_takes():
 
     Fire-and-forget on purpose: this drives nothing, so a failure here must
     never surface to the user or block the action they actually asked for.
+
+    One request that copies images is **one batch**: the id is minted here and
+    shared by every row, so "the images I copied last time" is an exact set
+    rather than a guess at a time window. The client sends this on the first
+    click of "Copy $ai command", before any Discord length split, so the batch
+    is what the user selected at that moment regardless of how many parts the
+    paste becomes.
     """
     data = request.get_json() or {}
     kind = data.get("kind")
@@ -909,11 +928,12 @@ def record_takes():
         return jsonify({"error": "kind must be 'download' or 'copy_command'"}), 400
 
     me = identity.current_identity()
+    batch_id = db.new_take_batch_id() if kind == "copy_command" else None
     logged = 0
     for image_id in ids:
         try:
-            if db.log_take(image_id, me.id, kind):
+            if db.log_take(image_id, me.id, kind, batch_id):
                 logged += 1
         except Exception:
             log.exception("customs.take_failed", image_id=image_id)
-    return jsonify({"success": True, "logged": logged})
+    return jsonify({"success": True, "logged": logged, "batch_id": batch_id})

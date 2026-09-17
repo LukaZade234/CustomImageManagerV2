@@ -233,10 +233,13 @@ export function CharacterHeader({
               was no way to mean "all of them except those three", and the
               place you could say that was a Select button down by the gallery
               whose name gave no hint that $ai lived under it.
-  
-              It opens the selection with everything already chosen instead.
-              Copying the lot is one more click; taking a few out is visible
-              rather than hidden behind a button named after something else.
+
+              It opens the selection with nothing chosen. Preselecting every
+              image decided the very thing you came to pick, and on a gallery
+              past Mudae's 100-image limit it preselected a set the bot would
+              reject. It does open a different selection from the plain Select
+              button, though: only this door offers the "already used" helpers,
+              since only this one ends in a command.
             */}
             {/* The one solid button on the browse screen. Producing the $ai
                 command is what the page is for, and nothing on it led. */}
@@ -264,10 +267,26 @@ export function CharacterHeader({
               </svg>
               $ai command
             </Button>
-            <AccentOverrideControl accent={accent} />
+            {/*
+                Wide screens: the picker rides at the end of the actions row, on
+                the same line as the buttons. It cannot also be a full-width row
+                of the band from in here, because a child is never wider than
+                its column — so the copy below serves that case and CSS shows
+                exactly one of the two. Both are the same control; only the
+                parent differs, which is what the two layouts need.
+              */}
+            <AccentOverrideControl accent={accent} className="accent-override--inline" />
           </div>
         )}
       </div>
+      {/*
+        Phones: the picker is a grid item of the band, so it can span both
+        columns and take the card's full width. Inside the identity column it
+        could only ever be that column's width, which is what "full width" kept
+        failing to mean. Hidden above the breakpoint; the inline copy above is
+        the one that shows there.
+      */}
+      {!edit.active && <AccentOverrideControl accent={accent} className="accent-override--block" />}
     </div>
   )
 }

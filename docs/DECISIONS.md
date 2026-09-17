@@ -74,6 +74,31 @@ Rejected because **users mostly take only their own images.** Given enough time,
 image accumulates zero third-party takes, so the rule eventually retires everything. The signal is
 real but far too sparse at this population size to support a removal decision.
 
+### Not the same thing: takes as your own memory aid
+
+Takes are read now — but only ever as **one person's own history shown back to them**, never as an
+aggregate. The character page offers two selection helpers, "Select copied" and "Select not copied",
+scoped to the viewer, so someone who has already registered images with Mudae can see which ones and
+pick the rest. `image_takes.batch_id` groups the rows from one "Copy `$ai` command" action, which is
+what makes "the ones I copied last time" an exact set rather than a guess at a time window.
+
+This does not overturn the rejection above, and the distinction is the whole reason it is safe:
+
+| Rejected: retirement by disuse | This: your own selection helper |
+|---|---|
+| An **aggregate** across everyone | **One viewer's** rows, filtered by their identity |
+| A **judgment** that an image is unwanted | A **memory aid**; says nothing about worth |
+| **Visible to others**, changes what they see | **Private**; nobody else's view changes |
+| **Acts** — retires the image | **Shows and selects**; the human still decides |
+
+The failure mode that killed the original idea was sparsity: almost every image has zero *third-party*
+takes. That is irrelevant here, because the helper asks "which images did **I** copy", and the answer
+to that is never empty for the person asking. Should anyone ever propose reading takes for ranking,
+retirement, or anything another user can see, this entry is the line they would be crossing.
+
+The history is cookie-bound, like ownership and saved lists: clearing cookies loses it. That is
+stated in the UI rather than left to be discovered.
+
 ### Rejected: voting or ranking
 
 Up/down votes, or sorting by score so weak images sink. Rejected on two grounds:
@@ -113,7 +138,7 @@ So: stop policing the deleting. **Remove the reason to delete.**
 
 The premise being dropped is that "unworthy" images are a problem requiring a mechanism. They are
 not. The only genuinely harmful additions are **objective** — wrong character, dead link, NSFW,
-duplicate — and every one of those has a right answer that requires no consensus at all.
+duplicate, AI artwork — and every one of those has a right answer that requires no consensus at all.
 
 ### The decision
 
@@ -525,7 +550,7 @@ custom_images   (id, character_id FK, url, content_hash, position,
                  UNIQUE (character_id, url))
 saved           (identity_id, character_id)
 user_hidden     (identity_id, image_id)
-image_takes     (image_id, identity_id, kind, at)
+image_takes     (image_id, identity_id, kind, at, batch_id)
 image_reports   (image_id, identity_id, reason, at)
 ```
 
