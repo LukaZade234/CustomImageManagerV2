@@ -520,6 +520,22 @@ sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env 
 Confirm in ImgChest that the two files are gone and that a recovered image appears in
 the Removed drawer, then run the whole thing by dropping `--limit`.
 
+**Check with a cache-buster, or you will think nothing was deleted.** ImgChest serves
+files through Cloudflare with a long edge cache, so a URL keeps returning `200` for
+some time after the file itself is gone — the edge answers without asking ImgChest,
+and the browser has its own copy too. A bare request reads as a failure that is not
+one:
+
+```bash
+UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" "https://cdn.imgchest.com/files/57c6ecdf056d.png"          # 200 — cached
+curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" "https://cdn.imgchest.com/files/57c6ecdf056d.png?cb=$(date +%s)"  # 404 — really gone
+```
+
+The browser User-Agent matters too: without one ImgChest answers `403` to everything,
+deleted or not. The script's own `deleted` count is the authoritative number — it only
+counts after the ImgChest **API** returns 200/204/404, and the API is not cached.
+
 **The execute run is checked against the preview.** Every run re-lists the account and
 rebuilds the plan from scratch, so the `--execute` run does *not* use the plan you
 reviewed — it builds a fresh one. If anything moved in between (a new upload, a post
