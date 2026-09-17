@@ -129,6 +129,18 @@
   color: var(--text-muted);
   box-sizing: border-box;
 }
+.char-info-footer {
+  /* The footer block of the identity column: the action buttons, and beneath
+     them the staff accent picker. One flex child, so `.char-info-section`'s
+     `space-between` still puts it level with Save. The picker cannot be a third
+     child of that column or the alignment moves; it cannot be the last item in
+     the wrapping actions row or it drags the buttons out of line. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
 .char-page-actions {
   /* At the foot of the identity column, level with the Save button at the foot
      of the portrait column: both columns stretch to the row and
@@ -140,15 +152,13 @@
 }
 /* The staff accent picker: a swatch, whether the colour is manual or measured,
    and the pick/clear verbs. Presentational; all state lives on the page.
-   Its own full-width row beneath the actions, so it cannot wrap the buttons
-   above it out of line. */
+   Its own full-width row beneath the buttons, so it spans the card. */
 .accent-override {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
   width: 100%;
-  margin-top: var(--space-2);
   color: var(--text-muted);
   font-size: var(--type-meta);
 }

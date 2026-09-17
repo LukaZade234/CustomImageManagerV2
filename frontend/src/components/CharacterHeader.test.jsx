@@ -252,9 +252,29 @@ describe('the save button', () => {
   it('keeps the page actions in the identity column', () => {
     setup()
     const info = document.querySelector('.char-info-section')
+    const footer = document.querySelector('.char-info-footer')
     const actions = document.querySelector('.char-page-actions')
-    expect(actions.parentElement).toBe(info)
+    // The actions live in the identity column, not the portrait's. They are one
+    // level deeper than they were: the footer block wraps the buttons *and* the
+    // staff accent picker, so the column sees a single child for its
+    // `space-between` to align with Save. Adding the picker as a second child
+    // broke that alignment once already.
+    expect(footer.parentElement).toBe(info)
+    expect(actions.parentElement).toBe(footer)
     expect(info.querySelector('.display-title')).toHaveTextContent('Ayanami Rei')
+  })
+
+  it('puts the accent picker in the footer block, beside the buttons', () => {
+    setup({ accent: { canEdit: true, seed: '#cf2c79', manual: false } })
+    const footer = document.querySelector('.char-info-footer')
+    const actions = document.querySelector('.char-page-actions')
+    const accent = document.querySelector('.accent-override')
+
+    // A sibling of the actions row, inside the footer, so it takes the block's
+    // full width and leaves the buttons above on one line.
+    expect(accent).toBeInTheDocument()
+    expect(accent.parentElement).toBe(footer)
+    expect(accent.previousElementSibling).toBe(actions)
   })
 
   it('is the same kind of button as the actions it lines up with', () => {
