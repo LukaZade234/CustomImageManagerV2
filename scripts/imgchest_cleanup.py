@@ -25,6 +25,13 @@ post with any keeper is never deleted -- only its non-keeper files are.
 The preview is the gate. Nothing is deleted without `--execute`, and the operator
 reviews the preview (also rendered in the owner-only Cut-over tab) first.
 
+`--execute` does not act on that preview, because it cannot: every run re-lists
+the account and rebuilds the plan, so the execute run builds a *fresh* one. It
+therefore compares a fingerprint of which files it would delete against the
+preview on disk and refuses if they differ, leaving the reviewed file alone and
+writing this run's plan beside it as `.proposed.json`. `--force` is the only way
+past, for a change that has been looked at and expected. See `CUTOVER.md`.
+
     uv run python scripts/imgchest_cleanup.py \\
         --username NAME --export discord-export.txt --preview preview.json
     uv run python scripts/imgchest_cleanup.py ... --limit 5 --execute
@@ -37,6 +44,7 @@ already gone reads as gone, and already-present rows are skipped on re-add.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -284,6 +292,56 @@ def _summarise(in_use: dict, on_site_urls: set, plan: dict) -> dict:
     }
 
 
+def delete_fingerprint(delete: list[dict]) -> str:
+    """A stable digest of *which* files are about to be deleted.
+
+    Only the file ids, sorted, because that is the set that matters: the fate of
+    every candidate. Order and any cosmetic field can change between two listings
+    without changing what happens, so they are deliberately not part of it.
+
+    This is what makes the review meaningful. Every run re-lists the account and
+    rebuilds the plan from scratch, so an `--execute` run does not use the plan
+    that was reviewed -- it builds a new one. If the account moved in between
+    (new uploads, a post already gone, an updated export), the new plan can
+    differ, and nothing about running the command says so.
+    """
+    ids = sorted(str(c.get("file_id") or "") for c in delete)
+    return hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()
+
+
+def describe_delete_diff(reviewed: list[dict], current: list[dict]) -> list[str]:
+    """Plain sentences for what changed between the reviewed and current plans."""
+    reviewed_ids = {str(c.get("file_id") or "") for c in reviewed}
+    current_ids = {str(c.get("file_id") or "") for c in current}
+    added = current_ids - reviewed_ids
+    removed = reviewed_ids - current_ids
+    lines = [
+        f"the reviewed plan had {len(reviewed_ids)} to delete; this run would delete {len(current_ids)}"
+    ]
+    if added:
+        preview = ", ".join(sorted(added)[:5])
+        more = f" (+{len(added) - 5} more)" if len(added) > 5 else ""
+        lines.append(f"  newly in line to be deleted, not in what you reviewed: {preview}{more}")
+    if removed:
+        preview = ", ".join(sorted(removed)[:5])
+        more = f" (+{len(removed) - 5} more)" if len(removed) > 5 else ""
+        lines.append(f"  reviewed for deletion but no longer a candidate: {preview}{more}")
+    return lines
+
+
+def read_previous_preview(path: Path) -> dict | None:
+    """The preview already on disk, or None if there is none or it is unreadable.
+
+    Unreadable is returned as None on purpose: this is a guard rail, not a
+    parser, and refusing to run because a previous preview was truncated would
+    be its own failure. The caller decides what an absent preview means.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--username", required=True, help="the ImgChest account's username")
@@ -316,6 +374,14 @@ def main() -> int:
         default=0,
         help="with --execute, delete at most N candidates (0 = all); for a trial run",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "with --execute, proceed even if the plan no longer matches the preview"
+            " on disk; for when you have deliberately re-reviewed"
+        ),
+    )
     args = parser.parse_args()
 
     token = os.environ.get("IMGCHEST_API_KEY", "").strip()
@@ -346,10 +412,16 @@ def main() -> int:
 
     plan = build_plan(posts, in_use, on_site_file_ids, on_site_urls)
     counts = _summarise(in_use, on_site_urls, plan)
+    preview_path = Path(args.preview)
+    # Read what is on disk before overwriting it: that is the plan the operator
+    # reviewed, and the guard below compares it against this run's.
+    previous = read_previous_preview(preview_path)
+    fingerprint = delete_fingerprint(plan["delete"])
 
     preview = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "account": args.username,
+        "fingerprint": fingerprint,
         "export": {
             "path": str(export_path),
             "unique_urls": len(in_use),
@@ -363,8 +435,40 @@ def main() -> int:
         "executed": False,
     }
 
-    Path(args.preview).write_text(json.dumps(preview, indent=2), encoding="utf-8")
-    print(f"preview written to {args.preview}")
+    # The guard, before anything is written. Every run rebuilds the plan from a
+    # fresh listing, so without this the delete list is whatever the account
+    # looks like *now* -- which may not be what was reviewed, and deleting images
+    # people are still using cannot be undone. A missing previous preview is
+    # tolerated (a first `--execute` with no review step is the operator's own
+    # choice); a *different* one is not, and refusing without overwriting leaves
+    # the reviewed file in place so the two can be compared.
+    if args.execute and not args.force and previous is not None:
+        if previous.get("fingerprint") != fingerprint:
+            proposed_path = preview_path.with_suffix(".proposed.json")
+            proposed_path.write_text(json.dumps(preview, indent=2), encoding="utf-8")
+            print(
+                "\nREFUSING TO EXECUTE: the plan has changed since the preview was written.",
+                file=sys.stderr,
+            )
+            for line in describe_delete_diff(previous.get("delete") or [], plan["delete"]):
+                print(line, file=sys.stderr)
+            print(f"  What you reviewed is untouched at {preview_path}", file=sys.stderr)
+            print(f"  This run's plan is at {proposed_path} — diff them.", file=sys.stderr)
+            print(
+                "  Re-run without --execute to review it in the app, or pass --force"
+                " to accept this plan as it stands.",
+                file=sys.stderr,
+            )
+            return _fail("aborted: preview does not match the current plan")
+    elif args.execute and not args.force and previous is None:
+        print(
+            "\nnote: no readable preview at that path, so there is nothing to check this run"
+            " against. Run without --execute first to review the plan.",
+            file=sys.stderr,
+        )
+
+    preview_path.write_text(json.dumps(preview, indent=2), encoding="utf-8")
+    print(f"preview written to {preview_path}")
     for key, value in counts.items():
         print(f"  {key}: {value}")
 

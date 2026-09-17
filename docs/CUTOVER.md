@@ -29,6 +29,8 @@ marks this line; you have to hold it.
 
 ---
 
+
+
 ## Decisions to make before you start
 
 These are not technical unknowns — they are choices, and they change the procedure.
@@ -42,6 +44,8 @@ cut-over means telling people the new URL, and ideally leaving a redirect behind
 
 - [ ] **Repoint an existing domain** — follow step 5a.
 - [x] **New address, redirect the old one** — follow step 5b.
+
+
 
 ### Decision 2 — union, or exact copy?
 
@@ -70,6 +74,8 @@ empty on their first visit.**
   means everyone starts with someone else's bookmarks — which may be wrong for a
   list that was never really "theirs".
 
+
+
 ### Also worth telling people, whichever you choose
 
 **Nobody can remove any of the migrated images.** Every image copied from v1 has no
@@ -87,7 +93,7 @@ use, a preview before anything is removed, and an explicit go-ahead. It is **bui
 `scripts/imgchest_cleanup.py` plus an owner-only Cut-over tab — see
 **[ImgChest cleanup](#imgchest-cleanup)**.
 
-- [ ] **Run the cleanup with the cut-over.**
+- [x] **Run the cleanup with the cut-over.**
 - [ ] **Skip it, and leave ImgChest as it is.**
 
 Note the interaction with Decision 2: the cleanup's "on the site" set is the
@@ -95,6 +101,8 @@ Note the interaction with Decision 2: the cleanup's "on the site" set is the
 (unless they are in use), while a **union** keeps them.
 
 ---
+
+
 
 ## Pre-flight
 
@@ -157,7 +165,11 @@ sudo systemctl stop imgmanager-update.timer
 
 ---
 
+
+
 ## Procedure
+
+
 
 ### 1. Freeze writes on v1
 
@@ -176,6 +188,8 @@ rejects writes.
 # On a machine with DATABASE_URL for Neon in .env
 uv run python scripts/export_neon_snapshot.py --out snapshot-final
 ```
+
+
 
 ### 3. Migrate — exact copy (Decision 2)
 
@@ -210,6 +224,8 @@ sudo systemctl start imgmanager
 > `migrate_v1_to_sqlite.py --snapshot snapshot-final/` against the existing
 > database, with no deletion.
 
+
+
 ### 4. Verify before anyone sees it
 
 ```bash
@@ -231,6 +247,8 @@ Then, in a browser:
   matters** — it is the entire purpose of the app.
 - [ ] Reload. Your handle in the navbar is unchanged (proves `SECRET_KEY` is stable).
 
+
+
 ### 5. Announce the new address (Decision 1)
 
 There is no DNS step: v2 already lives on its own domain. Cut-over here means
@@ -245,6 +263,8 @@ data is the easiest clean cache.
 
 > Had v1 been on its own custom domain, this would instead have been a DNS repoint
 > in Cloudflare with a low TTL for the day, and users would have noticed nothing.
+
+
 
 ### 6. Watch
 
@@ -265,6 +285,8 @@ sudo systemctl start imgmanager-update.timer
 
 ---
 
+
+
 ## After the import: the derived layers
 
 The v1 snapshot holds only names, the flat list of image URLs per name, the global
@@ -277,7 +299,7 @@ pleasant.
 **The one that must happen, not can: the thumbnail cache.** Thumbnails are keyed by
 `custom_images.id` and live on the box (`THUMB_DIR`) — not in the database. A fresh
 import reassigns ids, so any file that survives is keyed to the *wrong* row and would
-show the wrong image, which is worse than a miss. **Clear `THUMB_DIR`.** They
+show the wrong image, which is worse than a miss. **Clear** `THUMB_DIR`**.** They
 regenerate lazily on first view, by design (a batch would pull ~16 GB out of ImgChest
 in one go); expect a fetch spike as people browse, cached at the edge after the first
 hit. There is no pre-generation step, and none should be added. Each one is mirrored
@@ -289,30 +311,30 @@ Then, roughly in this order. Steps 3 and 4 are the ones that re-read the image b
 from ImgChest, so they must come **before** the cleanup in step 5:
 
 1. **Catalog — re-import the Mudae extracts.** `character_catalog` is a v2 table and
-   is empty. It restores search and autocomplete, and it is the source for traits and
+  is empty. It restores search and autocomplete, and it is the source for traits and
    portrait mirroring.
 2. **Portraits — repoint or re-mirror.** The dump has no `main_image_thumb`, so every
-   row would hotlink `mudae.net`. If R2's portraits survived the wipe, run the mirror
+  row would hotlink `mudae.net`. If R2's portraits survived the wipe, run the mirror
    script in resync mode: no fetch, just re-point rows at objects that already exist.
    If R2 was emptied too, run the full mirror (fetch, encode WebP, upload under
    `portraits/`, record the key). The API process also needs its own rclone config, for
    the in-request "update main from Mudae" flow.
 3. **Content fingerprints — run the backfill.** `content_hash` is the duplicate
-   fingerprint; a fresh import leaves it NULL, so the add-time gate cannot see any of the
+  fingerprint; a fresh import leaves it NULL, so the add-time gate cannot see any of the
    imported images and the moderator Duplicates review is empty. The script downloads
    each image once and hashes it — the library is thousands of images, so expect it to be
    slow and to move real bandwidth. **Before the cleanup: deleted files cannot be
    hashed.**
 4. **Image dimensions — run the backfill.** Headers only, ~8.5k images, resumable.
-   Without it the gallery reflows on load (the browser falls back to measuring), so it
+  Without it the gallery reflows on load (the browser falls back to measuring), so it
    is visible rather than breaking. **Before the cleanup, for the same reason.**
 5. **ImgChest cleanup — preview, review, then execute.** One rate-limited listing pass,
-   and it stores `imgchest_post_id` for everything that survives, which is what permanent
+  and it stores `imgchest_post_id` for everything that survives, which is what permanent
    delete needs. This replaces the separate post-id backfill: the two compute the same
    file-to-post map, so there is no reason to walk the account twice. The order here is
    the whole point — see [ImgChest cleanup](#imgchest-cleanup).
 6. **Accents — rebuild.** Lost with the column. Recomputed on visit, but the backfill
-   script walks the library once — and it measures *only from thumbnails already on
+  script walks the library once — and it measures *only from thumbnails already on
    disk*, so run it after the thumbnail cache has warmed, or accept partial accents
    that upgrade on the first visit. Overrides made on v2 before the wipe are gone with
    everything else v2-only. Independent of the cleanup.
@@ -328,6 +350,8 @@ are v2-era features with no v1 source, so the moderation surface starts on a cle
 slate.
 
 ---
+
+
 
 ## ImgChest cleanup
 
@@ -356,9 +380,9 @@ chosen) not in the database, so nothing keeps them.
 review:
 
 - **Will stay, but is not on the app** — in-use images the database does not have.
-  This is where the *wrongfully removed* surface: images a user, a report or a moderator
-  removed, but that are still in play in Discord. The operator confirms the list is real
-  user content and nothing surprising.
+This is where the *wrongfully removed* surface: images a user, a report or a moderator
+removed, but that are still in play in Discord. The operator confirms the list is real
+user content and nothing surprising.
 - **Will be permanently deleted** — everything in neither set.
 
 Nothing is deleted until the operator has seen both lists and given an explicit
@@ -385,24 +409,24 @@ surface any hand-merged multi-image post the preview cannot fully resolve.
 ### The decisions this is built on
 
 - **Preview in the app, destructive half in the script.** `scripts/imgchest_cleanup.py`
-  writes a preview JSON; a new **owner-only** Cut-over tab in the staff area renders it.
-  The app is read-only — it never deletes. Deletion and re-add need `--execute`.
+writes a preview JSON; a new **owner-only** Cut-over tab in the staff area renders it.
+The app is read-only — it never deletes. Deletion and re-add need `--execute`.
 - **Owner-only, not staff.** The preview is appended to the moderation surface but
-  guarded by `require_owner` rather than `require_moderator`; plain moderators do not
-  see the tab or the endpoint. This is operator work, not routine moderation.
+guarded by `require_owner` rather than `require_moderator`; plain moderators do not
+see the tab or the endpoint. This is operator work, not routine moderation.
 - **Flat lists with counts.** The preview shows two flat lists — *will be permanently
-  deleted*, and *will be recovered into Removed* — each with a count, plus totals and a
-  warnings section. Per-character grouping was considered and dropped: the operator is
-  scanning for surprises, not navigating by character.
-- **The export is `Name - URL`, one per line, and it repeats.** Pulling from several
-  servers means the same URL appears under different names. The cleanup **dedups by URL**
-  (first name wins) and reports malformed lines instead of dropping them silently.
+deleted*, and *will be recovered into Removed* — each with a count, plus totals and a
+warnings section. Per-character grouping was considered and dropped: the operator is
+scanning for surprises, not navigating by character.
+- **The export is** `Name - URL`**, one per line, and it repeats.** Pulling from several
+servers means the same URL appears under different names. The cleanup **dedups by URL**
+(first name wins) and reports malformed lines instead of dropping them silently.
 - **A limit first.** Before the real run, do a `--limit N` execute against a small slice
-  to confirm deletion and re-add behave, then run the whole thing. `--limit` caps
-  deletions, not the preview.
+to confirm deletion and re-add behave, then run the whole thing. `--limit` caps
+deletions, not the preview.
 - **Ordering is load-bearing.** Content fingerprints and image dimensions re-read the
-  bytes from ImgChest and must run **before** the cleanup. See
-  [After the import](#after-the-import-the-derived-layers) step order below.
+bytes from ImgChest and must run **before** the cleanup. See
+[After the import](#after-the-import-the-derived-layers) step order below.
 
 The step order changes to the following, and the reason is that the cleanup deletes
 files the earlier backfills still need to read:
@@ -412,9 +436,11 @@ files the earlier backfills still need to read:
 3. **Content fingerprints** — downloads each image; must see the files before they go.
 4. **Image dimensions** — headers only; same reason.
 5. **ImgChest cleanup** — preview, review, `--limit` trial, then execute. This also
-   fills `imgchest_post_id` for what survives, so `backfill_imgchest_post_ids.py` is no
+  fills `imgchest_post_id` for what survives, so `backfill_imgchest_post_ids.py` is no
    longer a separate step.
 6. **Accents** — from local thumbnails, after the cache has warmed.
+
+
 
 ### Running it
 
@@ -461,6 +487,31 @@ sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env 
 Confirm in ImgChest that the two files are gone and that a recovered image appears in
 the Removed drawer, then run the whole thing by dropping `--limit`.
 
+**The execute run is checked against the preview.** Every run re-lists the account and
+rebuilds the plan from scratch, so the `--execute` run does *not* use the plan you
+reviewed — it builds a fresh one. If anything moved in between (a new upload, a post
+already deleted by hand, an export you updated), the two can differ, and deleting
+images people are still using in Discord cannot be undone.
+
+So `--execute` compares a fingerprint of which files it would delete against the
+preview on disk, and **refuses** if they differ:
+
+```
+REFUSING TO EXECUTE: the plan has changed since the preview was written.
+   the reviewed plan had 40 to delete; this run would delete 42
+   newly in line to be deleted, not in what you reviewed: a1b2c3, d4e5f6
+  What you reviewed is untouched at /var/lib/.../imgchest-cleanup-preview.json
+  This run's plan is at /var/lib/.../imgchest-cleanup-preview.proposed.json — diff them.
+```
+
+Nothing is deleted and the reviewed preview is left alone, so you can compare the two
+files, then either re-run without `--execute` to review the new plan in the Cut-over
+tab, or pass `--force` to accept it as it stands. `--force` is for the case where you
+have looked and the change is expected — it is the only way past the check.
+
+If there is no preview at the path yet, the check is skipped with a note rather than
+failing: a first `--execute` with no review step is your call, not an error.
+
 The key is read out of `/etc/imgmanager/secrets.env` on the spot rather than typed
 into the command, so it never lands in the shell history. Only that one line is
 extracted, so the file's other values (`SECRET_KEY`, `THUMB_DIR`) do not leak into the
@@ -471,6 +522,8 @@ script's environment.
 > its counts come from the local database, so do not read them as the real plan.
 
 ---
+
+
 
 ## Rollback
 
@@ -485,6 +538,8 @@ The practical consequence: **do not decommission anything until you are past the
 point where rollback is plausible.**
 
 ---
+
+
 
 ## Decommission
 
@@ -502,6 +557,8 @@ After step 4, the origin box plus its Litestream replica are the only copies of 
 data that has ever existed. That is the reason pre-flight step 4 is a gate.
 
 ---
+
+
 
 ## Afterwards
 

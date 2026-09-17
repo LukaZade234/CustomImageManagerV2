@@ -925,16 +925,17 @@ All are cheap to keep and expensive to invest in before there are users.
 
 ### Additions to the review
 
-- **The cut-over cleanup is the one open high-consequence path and the review is
-  silent on it.** `scripts/imgchest_cleanup.py` deletes from a live third-party
-  account and is gated only by `--execute` against a preview file; a `--execute`
-  run against a stale preview would delete on stale data. The preview-to-execute
-  path wants a guard — a mandatory re-preview, or an assertion that the preview's
-  counts still match the live listing. See `CUTOVER.md`.
+- **The cut-over cleanup's preview-to-execute guard — _done_.** Every run
+  re-lists the account and rebuilds the plan, so the `--execute` run does not use
+  the reviewed plan. `--execute` now compares a fingerprint of which files it
+  would delete against the preview on disk and refuses if they differ, leaving
+  the reviewed file intact and writing this run's plan beside it as
+  `.proposed.json` for a diff. `--force` is the only way past, for a change that
+  has been looked at and expected. See `CUTOVER.md`, "Running it".
 - **The stats query belongs in the repo, not in prose.** Finding 11's structural
   point (state the shape, point at a command) is right, and the command should be a
   small script so the docs can cite something runnable rather than a query that
-  drifts inside a paragraph.
+  drifts inside a paragraph. Not done; docs-only.
 - **Document how to force a re-scrape of a link preview.** Discord caches OG data
   at its edge for a long time; a wrong first render must not be permanent. Worth a
   line in finding 12's plan.
