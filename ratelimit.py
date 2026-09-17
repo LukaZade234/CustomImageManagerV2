@@ -24,14 +24,22 @@ import logs
 # with no ceiling is a liability, not because abuse is expected.
 #
 # Each action carries one or more (limit, window seconds) pairs. Two windows let
-# a burst be allowed while a sustained rate is not: 30 uploads in a minute is a
-# person pasting a batch, 2000 in an hour is not a person.
+# a burst be allowed while a sustained rate is not.
+#
+# The two image-adding limits are set against what a person does, not what a
+# batch does, because both paths cost one request per *image*. A web drop is
+# hard-coded to a single URL per call (useCustomImageUpload.js), and a file
+# upload loops one file per multipart request even though the endpoint accepts a
+# list. So "10 a minute" on imports was ten dragged images, and "30 a minute" on
+# uploads was a 30-file batch -- both reachable by someone curating a gallery in
+# one sitting. They now match: a minute's burst, and an hour that a script
+# churning an upload loop will still meet.
 
 _RATE_LIMIT_MULTIPLIER_FOR_STAFF = 10
 
 
 def _limits_from_env(name: str, default: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Override with e.g. RATE_LIMIT_UPLOAD="30/60,300/3600"."""
+    """Override with e.g. RATE_LIMIT_UPLOAD="60/60,600/3600"."""
     raw = os.environ.get(f"RATE_LIMIT_{name.upper()}", "").strip()
     if not raw:
         return default
@@ -47,8 +55,8 @@ def _limits_from_env(name: str, default: list[tuple[int, int]]) -> list[tuple[in
 
 
 RATE_LIMITS = {
-    "upload": _limits_from_env("upload", [(30, 60), (300, 3600)]),
-    "import_urls": _limits_from_env("import_urls", [(10, 60), (100, 3600)]),
+    "upload": _limits_from_env("upload", [(60, 60), (600, 3600)]),
+    "import_urls": _limits_from_env("import_urls", [(60, 60), (600, 3600)]),
     "add_character": _limits_from_env("add_character", [(10, 60), (60, 3600)]),
     "edit_character": _limits_from_env("edit_character", [(30, 60), (200, 3600)]),
     "remove": _limits_from_env("remove", [(30, 60), (200, 3600)]),

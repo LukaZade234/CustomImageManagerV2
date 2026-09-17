@@ -302,7 +302,7 @@ silently becomes a new person and loses ownership of their uploads.
 
 Every costly endpoint is wrapped in `@rate_limited("<action>")`. Limits live in
 `RATE_LIMITS` in `ratelimit.py`, one or more `(limit, window seconds)` pairs per
-action, each overridable with `RATE_LIMIT_<ACTION>="30/60,300/3600"`. A new endpoint
+action, each overridable with `RATE_LIMIT_<ACTION>="60/60,600/3600"`. A new endpoint
 that uploads, calls Discord, or writes in a loop needs one; the decorator raises
 `KeyError` on a name with no entry, which a test catches.
 
