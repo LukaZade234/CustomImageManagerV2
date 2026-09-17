@@ -1046,7 +1046,12 @@ done. **13 was declined** — the decision record is in `docs/ROADMAP.md` "Revie
   `custom_count` to supply the description. Homepage previews, a composited image, and structured
   data remain out of scope. See `DEPLOYMENT.md` "Link previews" for the deploy-time env vars and
   the fact that verification can only happen after a deploy.
-- **13 — not started.**
+- **13 — declined**, not deferred. The record is in `ROADMAP.md` "Review findings
+  (2026-09-17)": the state tangle was the hazard and the first review's five hooks removed it,
+  leaving a long render body that is tedious rather than dangerous. Revisit only if a feature is
+  blocked by the shape of the file.
+- **A — done** (with the Mudae 100-image cap it turned up). See the note at the top of the
+  feature section.
 
 Also fixed in passing, and not a numbered finding: `routes/spa.py` served only `/assets/`, so every
 root-level file and both public directories 404'd whenever Flask served the built SPA — which meant
