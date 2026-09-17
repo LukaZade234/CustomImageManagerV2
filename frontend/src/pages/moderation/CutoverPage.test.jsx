@@ -46,6 +46,7 @@ const PREVIEW = {
     },
   ],
   recover: [{ character: 'A2', url: 'https://cdn.imgchest.com/files/cafe.png' }],
+  dead: [{ character: 'Albedo', url: 'https://cdn.imgchest.com/files/0812f6b02d38.png' }],
   foreign: [{ character: 'Someone Else', url: 'https://i.imgur.com/zzz.png' }],
   warnings: [],
   executed: false,
@@ -110,15 +111,26 @@ describe('what the preview shows', () => {
     // The pictures, not just their ids: reviewing is a visual judgement.
     await screen.findByText('A2')
     const images = document.querySelectorAll('.cutover__grid img')
-    expect(images).toHaveLength(2)
     expect([...images].map((img) => img.getAttribute('src'))).toEqual([
       'https://cdn.imgchest.com/files/deadbeef.png',
       'https://cdn.imgchest.com/files/cafe.png',
+      'https://cdn.imgchest.com/files/0812f6b02d38.png',
     ])
     expect(screen.getByText('deadbeef')).toBeInTheDocument()
     expect(screen.getByText('A2')).toBeInTheDocument()
     expect(screen.getByText(/to delete permanently/i)).toBeInTheDocument()
     expect(screen.getByText(/recovered into Removed/i)).toBeInTheDocument()
+  })
+
+  it('lists dead files separately, and never among those recovered', async () => {
+    // The export records what was pasted into Discord, not what is still
+    // hosted. Recovering a 404 would add a broken image for staff to remove.
+    renderCutover()
+    await screen.findByText(/no longer hosted/i)
+    expect(screen.getByText('Albedo')).toBeInTheDocument()
+    // It is in its own section, not the recover grid.
+    const recoverSection = screen.getByText(/recovered into Removed/i).closest('section')
+    expect(recoverSection).not.toHaveTextContent('Albedo')
   })
 
   it('hides external URLs behind the filter, and shows them when asked', async () => {

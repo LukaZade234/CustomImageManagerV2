@@ -25,6 +25,13 @@ post with any keeper is never deleted -- only its non-keeper files are.
 The preview is the gate. Nothing is deleted without `--execute`, and the operator
 reviews the preview (also rendered in the owner-only Cut-over tab) first.
 
+Recover candidates are probed for liveness before they are planned. The export
+records what was pasted into Discord, not what is still hosted, so a URL can be
+in it and gone -- and putting a 404 back on the site is a broken image for staff
+to remove again. Dead files are reported in their own list and never recovered;
+`--no-verify` skips the probing. URLs hosted anywhere but ImgChest are somebody
+else's upload and are reported the same way.
+
 `--execute` does not act on that preview, because it cannot: every run re-lists
 the account and rebuilds the plan, so the execute run builds a *fresh* one. It
 therefore compares a fingerprint of which files it would delete against the
@@ -59,8 +66,10 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import db  # noqa: E402
+import image_utils  # noqa: E402
 import imgchest_utils  # noqa: E402
 from imgchest_utils import ImgChestError  # noqa: E402
+from remote_images import _request_headers_for_image_import  # noqa: E402
 
 _BASE = "https://api.imgchest.com/v1"
 _PER_PAGE = 100
@@ -68,6 +77,13 @@ _PER_PAGE = 100
 _PAGE_DELAY = 1.05
 # Between file/post deletes, to stay inside the same window.
 _DELETE_DELAY = 1.05
+# Between liveness probes. These are CDN requests rather than API ones, but the
+# same host rate-limits and a check is not worth being the thing that gets us
+# throttled during a listing.
+_PROBE_DELAY = 0.15
+# A liveness probe has to be cheap: the answer is in the status line, so the
+# body is cut off after a few bytes.
+_PROBE_TIMEOUT = 20
 
 # The recovery rows are created by staff hand on the operator's behalf.
 _RECOVER_REASON = "recovered at cut-over"
@@ -152,7 +168,75 @@ def list_posts(username: str, token: str) -> list[dict]:
     return posts
 
 
-# --- Bucketing ------------------------------------------------------------
+# --- Liveness -------------------------------------------------------------
+
+
+def url_is_alive(url: str) -> bool:
+    """Whether an image URL still serves an image.
+
+    The export is a record of what was pasted into Discord, not of what is still
+    hosted. Images get deleted from ImgChest over time, so a URL can be in the
+    export and genuinely gone -- and re-adding one puts a dead link on the site
+    for staff to clean up later.
+
+    A bare `requests.get` is not enough: ImgChest answers 403 to anything without
+    a browser User-Agent, which reads as "gone" when the image is fine. The
+    headers are the app's own image-fetch headers for the same reason. The body
+    is abandoned after the status line, so this costs a round trip rather than a
+    download.
+    """
+    try:
+        response = requests.get(
+            url,
+            headers=_request_headers_for_image_import(url),
+            timeout=_PROBE_TIMEOUT,
+            stream=True,
+        )
+        try:
+            if response.status_code != 200:
+                return False
+            return response.headers.get("Content-Type", "").lower().startswith("image/")
+        finally:
+            response.close()
+    except requests.RequestException:
+        # A network failure is not evidence the image is gone, but it is
+        # evidence it cannot be recovered right now, which is the same result.
+        return False
+
+
+def partition_recover(in_use: dict, on_site_urls: set, *, verify: bool = True) -> dict:
+    """Split in-use-but-missing URLs into recover / dead / foreign.
+
+    - **recover** -- ImgChest, still serving an image. The only set worth putting
+      back on the site.
+    - **dead** -- ImgChest, but the file is gone. Reported so the operator can see
+      what Discord is still pointing at, never recovered.
+    - **foreign** -- not ImgChest, so never this app's upload. Reported, never
+      recovered.
+
+    With `verify` off, everything ImgChest goes to `recover` and `dead` is empty,
+    which is the behaviour before the probe existed.
+    """
+    recover: list[dict] = []
+    dead: list[dict] = []
+    foreign: list[dict] = []
+    checked = 0
+    for url, character in in_use.items():
+        if url in on_site_urls:
+            continue
+        entry = {"character": character, "url": url}
+        if not imgchest_utils.file_id_from_url(url):
+            foreign.append(entry)
+            continue
+        if verify:
+            checked += 1
+            if checked > 1:
+                time.sleep(_PROBE_DELAY)
+            if not url_is_alive(url):
+                dead.append(entry)
+                continue
+        recover.append(entry)
+    return {"recover": recover, "dead": dead, "foreign": foreign}
 
 
 def build_plan(
@@ -203,18 +287,28 @@ def build_plan(
                 "file_id": file_id,
                 "post_id": post["post_id"],
                 "image_count": post["image_count"],
-                "url": f"https://cdn.imgchest.com/files/{file_id}",
+                # The app uploads under `image_utils.UPLOAD_SUFFIX`, and the
+                # listing's file id alone (no suffix) is not a fetchable URL --
+                # the preview's thumbnails 404'd without this.
+                "url": f"https://cdn.imgchest.com/files/{file_id}{image_utils.UPLOAD_SUFFIX}",
             }
         )
 
     # In-use but not on the site: recover into the Removed drawer. Compared by
     # exact URL against the database, not by file id.
     #
-    # Split by whether the app could have made the URL. The app has only ever
-    # uploaded to ImgChest, so an Imgur URL in the export is somebody else's
-    # upload that happens to be used in Discord -- re-adding it would put a
-    # foreign image on the site and, because it has no post on this account, it
-    # could never be permanently deleted from here. Reported, never recovered.
+    # Split by whether the app could have made the URL, and -- done here rather
+    # than in this pure function -- by whether the file still exists. The app has
+    # only ever uploaded to ImgChest, so an Imgur URL in the export is somebody
+    # else's upload that happens to be used in Discord; re-adding it would put a
+    # foreign image on the site, under a row that could never be permanently
+    # deleted from here because this account has no post for it. A dead ImgChest
+    # file is the same problem from the other end: put back, it is a broken
+    # image for staff to remove again. Both are reported and never recovered;
+    # `main` probes liveness and moves what fails into `dead`.
+    #
+    # Kept pure -- no network -- so the bucketing stays testable without an
+    # ImgChest account or a running clock.
     recover = []
     foreign = []
     for url, character in in_use.items():
@@ -232,7 +326,6 @@ def build_plan(
         "warnings": warnings,
         "keepers": keepers,
     }
-
 
 def record_post_ids(posts: list[dict], rows: list[dict]) -> int:
     """Store the ImgChest post id on every row whose file the listing named.
@@ -305,6 +398,7 @@ def _summarise(in_use: dict, on_site_urls: set, plan: dict) -> dict:
         "keepers": len(plan["keepers"]),
         "delete_candidates": len(delete),
         "recoverable": len(recover),
+        "dead_urls": len(plan.get("dead") or []),
         "foreign_urls": len(plan.get("foreign") or []),
         "multi_image_posts": len(plan["warnings"]),
     }
@@ -400,6 +494,14 @@ def main() -> int:
             " on disk; for when you have deliberately re-reviewed"
         ),
     )
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help=(
+            "skip probing recover candidates for liveness; faster, but dead links"
+            " then get re-added to the site"
+        ),
+    )
     args = parser.parse_args()
 
     token = os.environ.get("IMGCHEST_API_KEY", "").strip()
@@ -429,6 +531,26 @@ def main() -> int:
     on_site_urls = {r["url"] for r in rows}
 
     plan = build_plan(posts, in_use, on_site_file_ids, on_site_urls)
+
+    # Probe the recover candidates before anything is planned around them. The
+    # export records what was pasted into Discord, not what is still hosted, so a
+    # URL can be in it and gone -- and recovering one puts a broken image on the
+    # site for staff to remove again. Skipped only on request.
+    if args.no_verify:
+        plan["dead"] = []
+        print("recover candidates: liveness check skipped (--no-verify)")
+    elif plan["recover"]:
+        print(f"checking {len(plan['recover'])} recover candidate(s) are still hosted ...")
+        parted = partition_recover(
+            {entry["url"]: entry["character"] for entry in plan["recover"]},
+            on_site_urls,
+        )
+        plan["recover"] = parted["recover"]
+        plan["dead"] = parted["dead"]
+        print(f"  {len(plan['recover'])} alive, {len(plan['dead'])} no longer hosted")
+    else:
+        plan["dead"] = []
+
     counts = _summarise(in_use, on_site_urls, plan)
     preview_path = Path(args.preview)
     # Read what is on disk before overwriting it: that is the plan the operator
@@ -449,6 +571,7 @@ def main() -> int:
         "counts": counts,
         "delete": plan["delete"],
         "recover": plan["recover"],
+        "dead": plan.get("dead") or [],
         "foreign": plan.get("foreign") or [],
         "warnings": plan["warnings"],
         "executed": False,

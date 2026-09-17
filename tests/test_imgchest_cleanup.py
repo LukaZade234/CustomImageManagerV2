@@ -330,3 +330,102 @@ class TestExecuteGuard:
     def test_the_fingerprint_is_written_into_the_preview(self, monkeypatch, tmp_path):
         _, preview, _ = self._run(monkeypatch, tmp_path, [_post("doomed")], [])
         assert preview["fingerprint"] == cleanup.delete_fingerprint(preview["delete"])
+
+
+class TestRecoverLiveness:
+    """Dead URLs must not be recovered back onto the site.
+
+    The export records what was pasted into Discord, not what is still hosted.
+    Re-adding a dead one puts a broken image on the site for staff to remove
+    again, which is worse than leaving the export alone.
+    """
+
+    def _response(self, status=200, content_type="image/png"):
+        class _R:
+            status_code = status
+            headers = {"Content-Type": content_type}
+
+            def close(self):
+                pass
+
+        return _R()
+
+    def test_a_served_image_is_alive(self, monkeypatch):
+        monkeypatch.setattr(cleanup.requests, "get", lambda *a, **k: self._response())
+        assert cleanup.url_is_alive("https://cdn.imgchest.com/files/aaa.png") is True
+
+    def test_a_404_is_not_alive(self, monkeypatch):
+        monkeypatch.setattr(
+            cleanup.requests, "get", lambda *a, **k: self._response(404, "text/html")
+        )
+        assert cleanup.url_is_alive("https://cdn.imgchest.com/files/gone.png") is False
+
+    def test_a_403_is_not_alive_and_that_is_the_point(self, monkeypatch):
+        # ImgChest answers 403 to a request without a browser User-Agent, so the
+        # probe has to send one or every image reads as dead. This pins that the
+        # headers are passed, not just that a 403 means dead.
+        seen = {}
+
+        def fake_get(url, headers=None, **kwargs):
+            seen["headers"] = headers or {}
+            return self._response(200)
+
+        monkeypatch.setattr(cleanup.requests, "get", fake_get)
+        cleanup.url_is_alive("https://cdn.imgchest.com/files/aaa.png")
+        assert "User-Agent" in seen["headers"]
+        assert "Mozilla" in seen["headers"]["User-Agent"]
+
+    def test_a_non_image_response_is_not_alive(self, monkeypatch):
+        # An HTML error page served as 200 is not an image.
+        monkeypatch.setattr(
+            cleanup.requests, "get", lambda *a, **k: self._response(200, "text/html")
+        )
+        assert cleanup.url_is_alive("https://cdn.imgchest.com/files/aaa.png") is False
+
+    def test_a_network_failure_reads_as_not_alive(self, monkeypatch):
+        def boom(*a, **k):
+            raise cleanup.requests.RequestException("nope")
+
+        monkeypatch.setattr(cleanup.requests, "get", boom)
+        assert cleanup.url_is_alive("https://cdn.imgchest.com/files/aaa.png") is False
+
+    def test_partition_splits_alive_dead_and_foreign(self, monkeypatch):
+        monkeypatch.setattr(cleanup.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(
+            cleanup,
+            "url_is_alive",
+            lambda url: "dead" not in url,
+        )
+        parted = cleanup.partition_recover(
+            {
+                "https://cdn.imgchest.com/files/alive.png": "A",
+                "https://cdn.imgchest.com/files/dead.png": "B",
+                "https://i.imgur.com/zzz.png": "C",
+            },
+            on_site_urls=set(),
+        )
+        assert [e["character"] for e in parted["recover"]] == ["A"]
+        assert [e["character"] for e in parted["dead"]] == ["B"]
+        assert [e["character"] for e in parted["foreign"]] == ["C"]
+
+    def test_partition_without_verify_keeps_everything_imgchest(self, monkeypatch):
+        monkeypatch.setattr(cleanup.time, "sleep", lambda _s: None)
+
+        def should_not_run(url):  # pragma: no cover - asserts by not being used
+            raise AssertionError("the probe ran despite verify=False")
+
+        monkeypatch.setattr(cleanup, "url_is_alive", should_not_run)
+        parted = cleanup.partition_recover(
+            {"https://cdn.imgchest.com/files/maybe0dead.png": "A"},
+            on_site_urls=set(),
+            verify=False,
+        )
+        assert [e["character"] for e in parted["recover"]] == ["A"]
+        assert parted["dead"] == []
+
+    def test_an_on_site_url_is_reported_as_nothing(self, monkeypatch):
+        monkeypatch.setattr(cleanup.time, "sleep", lambda _s: None)
+        monkeypatch.setattr(cleanup, "url_is_alive", lambda url: True)
+        url = "https://cdn.imgchest.com/files/present.png"
+        parted = cleanup.partition_recover({url: "A"}, on_site_urls={url})
+        assert parted == {"recover": [], "dead": [], "foreign": []}
