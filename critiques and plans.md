@@ -6,7 +6,7 @@ executable plan.
 | Review | Date | Findings | Status |
 |---|---|---|---|
 | [First review](#first-review-2026-09-16) | 2026-09-16 | 9 | Closed — see `ROADMAP.md` "Review findings (2026-09-16)" for what was accepted, deferred and declined |
-| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done, see the progress note in that section |
+| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done; 10, 12 and A/B accepted, 13 declined — see `ROADMAP.md` "Review findings (2026-09-17)" for the decision record |
 
 **This is a working document, not a decision record.** It does not carry the authority of
 `docs/DECISIONS.md` or `docs/CURRENT_STATE.md`, and it should be deleted or folded into those once
@@ -1020,7 +1020,10 @@ structurally separated from the cacheable block in `/api/stats`.
 | 13 | `CharacterPage` decomposition moved state, not markup | Low | Medium | Medium |
 | 14 | WebP-under-`.png` has no recorded contingency | Low — documentation only | Very low | None |
 
-Recommended order: **10, 11, 12**, then the feature work, then 13 and 14 opportunistically.
+Recommended order: **10, 11, 12**, then the feature work. 14 is documentation and is
+done. **13 was declined** — the decision record is in `docs/ROADMAP.md` "Review findings
+(2026-09-17)"; do not schedule it. The record there also accepts feature **A** first, then
+**B**, folds **C** into B and **D** into A, and adds three items the review missed.
 
 ### Progress (2026-09-17, same day)
 
