@@ -236,9 +236,7 @@ def _safe_import_image_url(url):
             return False
         if h.startswith("169.254."):  # link-local literal in hostname (unusual)
             return False
-        if not _host_resolves_only_to_public_ips(h):
-            return False
-        return True
+        return _host_resolves_only_to_public_ips(h)
     except Exception:
         return False
 

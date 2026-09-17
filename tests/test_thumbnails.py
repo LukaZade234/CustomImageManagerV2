@@ -58,7 +58,7 @@ class TestRendering:
         assert len(thumbnails.render(source)) < len(source) / 2
 
     def test_junk_raises_rather_than_producing_a_broken_file(self):
-        with pytest.raises(Exception):
+        with pytest.raises(Image.UnidentifiedImageError):
             thumbnails.render(b"not an image")
 
 

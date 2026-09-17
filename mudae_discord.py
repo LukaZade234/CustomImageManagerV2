@@ -357,8 +357,8 @@ def _im_embed_text_lines(embed: discord.Embed) -> list[str]:
         lines.append(embed.title)
     if embed.description:
         lines.extend(embed.description.splitlines())
-    for field in getattr(embed, "fields", []) or []:
-        value = getattr(field, "value", None)
+    for embed_field in getattr(embed, "fields", []) or []:
+        value = getattr(embed_field, "value", None)
         if value:
             lines.extend(str(value).splitlines())
     return lines
@@ -398,12 +398,14 @@ def _is_im_list_embed(embed: discord.Embed) -> bool:
     lines = [_strip_md(x) for x in _im_embed_text_lines(embed) if _strip_md(x)]
     if not lines:
         return False
-    if any(_is_im_match_header(l) for l in lines[:3]):
+    if any(_is_im_match_header(entry) for entry in lines[:3]):
         return True
     dash_lines = sum(
         1
-        for l in lines
-        if " - " in l and not _is_im_match_header(l) and not re.search(r"\bpage\b", l, re.I)
+        for entry in lines
+        if " - " in entry
+        and not _is_im_match_header(entry)
+        and not re.search(r"\bpage\b", entry, re.I)
     )
     return dash_lines >= 2
 
@@ -415,9 +417,12 @@ def _parse_im_candidate_matches(embed: discord.Embed) -> list[CandidateMatch]:
         line = _strip_md(raw)
         if not line or _is_im_match_header(line):
             continue
-        if re.search(r"\bpage\b|\bresults?\b", line, re.IGNORECASE) and len(line) < 40:
-            if not re.search(r"[a-zA-Z]{3,}.+[a-zA-Z]{3,}", line):
-                continue
+        if (
+            re.search(r"\bpage\b|\bresults?\b", line, re.IGNORECASE)
+            and len(line) < 40
+            and not re.search(r"[a-zA-Z]{3,}.+[a-zA-Z]{3,}", line)
+        ):
+            continue
         line = re.sub(r"^\d+[\).\:\-]\s*", "", line)
         line = re.sub(r"^[-•*]\s*", "", line).strip()
         if len(line) < 2 or len(line) > 200:
@@ -476,9 +481,9 @@ def parse_im_embed(embed: discord.Embed) -> LookupResult:
         if (
             re.search(r"\bpage\b|\bresults?\b|\bcharacters?\b", line, re.IGNORECASE)
             and len(line) < 40
+            and not re.search(r"[a-zA-Z]{3,}.+[a-zA-Z]{3,}", line)
         ):
-            if not re.search(r"[a-zA-Z]{3,}.+[a-zA-Z]{3,}", line):
-                continue
+            continue
         line = re.sub(r"^\d+[\).\:\-]\s*", "", line)
         line = re.sub(r"^[-•*]\s*", "", line).strip()
         if len(line) < 1 or len(line) > 200:
@@ -639,9 +644,7 @@ def _line_is_series_alias(line: str, *, series_hint: str = "", series_label: str
         return True
     # Short latin acronym (e.g. WuWa) — not normal names like Aalto or Baizhi
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9]{1,7}", line):
-        if re.fullmatch(r"[A-Z][a-z]+", line) and len(line) >= 5:
-            return False
-        return True
+        return not (re.fullmatch(r"[A-Z][a-z]+", line) and len(line) >= 5)
     return False
 
 
@@ -784,9 +787,9 @@ def _is_ima_ambiguous_series_embed(embed: discord.Embed) -> bool:
     if _is_character_card(embed):
         return False
     lines = [_strip_md(x) for x in _im_embed_text_lines(embed) if _strip_md(x)]
-    if any(_is_im_match_header(l) for l in lines[:3]):
+    if any(_is_im_match_header(entry) for entry in lines[:3]):
         return True
-    series_option_lines = sum(1 for l in lines if _line_looks_like_ima_series_option(l))
+    series_option_lines = sum(1 for entry in lines if _line_looks_like_ima_series_option(entry))
     if series_option_lines >= 2:
         return True
     return len(_parse_ima_series_candidates(embed)) >= 2
@@ -871,9 +874,7 @@ class _MudaeSession:
             return False
         if re.search(r"\d+\s+matches?\b", content, re.I):
             return True
-        if " - " in content and len(content) > 10:
-            return True
-        return False
+        return " - " in content and len(content) > 10
 
     async def _poll_recent_mudae_reply(self) -> discord.Message | None:
         if self._channel is None:

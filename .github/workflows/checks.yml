@@ -1,0 +1,45 @@
+# The gates that were previously run only by hand: tests, linters, the
+# design-invariant tests and the build. Split into two jobs so a frontend
+# failure and a backend failure are distinguishable at a glance.
+#
+# This changes nothing about deployment. The origin box polls main and rebuilds
+# itself because it has no inbound access (docs/DEPLOYMENT.md); that reasoning is
+# about deploys and does not extend to checks, which need no access to the box.
+
+name: checks
+
+on: [push, pull_request]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          # Pinned to what pyproject.toml declares, rather than the runner default.
+          python-version: "3.13"
+      # --locked fails if uv.lock has drifted from pyproject.toml, as
+      # docs/DEVELOPMENT.md promises CI does.
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Vite 8 requires Node 20.19+/22.12+; Pages is pinned to 22 too.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx biome check src
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
