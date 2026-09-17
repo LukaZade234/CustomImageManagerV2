@@ -68,7 +68,13 @@
      edit form, with its own actions). The columns stretch to a shared height
      and each column's footer is pushed to the foot, so in browse mode Save and
      Edit/$ai line up. In edit mode the form is taller than the portrait, so
-     `.editing` below stops the image column following it down. */
+     `.editing` below stops the image column following it down.
+
+     The staff accent picker is a third grid item in the row below (see
+     `.accent-override`), which is what lets it span the card on a phone. It is
+     deliberately not inside the identity column: there it could only ever be as
+     wide as that column, and it would also become a third flex child of the
+     column, moving the footer alignment. */
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
@@ -140,13 +146,15 @@
 }
 /* The staff accent picker: a swatch, whether the colour is manual or measured,
    and the pick/clear verbs. Presentational; all state lives on the page.
-   Pushed to the far end of the actions row, on the same line as the buttons. */
+   A grid item of the band rather than a child of a column -- that is what lets
+   it span the full card on a phone. Here it sits in the identity column, on the
+   row below the columns, which is where it read before. */
 .accent-override {
+  grid-column: 2;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-left: auto;
   color: var(--text-muted);
   font-size: var(--type-meta);
 }
@@ -467,13 +475,11 @@
   .character-top-section {
     gap: var(--space-2) var(--space-4);
   }
-  /* The staff accent picker takes its own full-width row on a phone. Inline it
-     wraps anyway at this width, and where it lands depends on how many buttons
-     are beside it, so the row looks like it shifts for no reason. `flex-basis`
-     forces it onto the next line; the desktop layout is untouched. */
+  /* The staff accent picker spans the whole band on a phone. As a grid item it
+     can; as a child of the identity column it could only ever be that column's
+     width, which is what "full width" kept failing to mean. */
   .accent-override {
-    flex-basis: 100%;
-    margin-left: 0;
+    grid-column: 1 / -1;
   }
   /* The button is the portrait's width, and the portrait is 85px here. The
      word fits; the word and an icon do not, and .ui-btn does not wrap. */
@@ -487,17 +493,9 @@
   .custom-images-section {
     margin-top: var(--space-5);
   }
-  /* Smaller again where the row has least to share.
-     Save also sits directly under the portrait here instead of at the foot of
-     the row. The two columns stretch to a shared height and push their footers
-     down so Save lines up with Edit/$ai — which works while those are both one
-     line. Here the staff accent picker wraps to a second line, so the identity
-     column is taller and Save would drop to the picker's row, two lines below
-     the buttons it is meant to line up with. Following the portrait instead is
-     what it looks like it belongs to. */
+  /* Smaller again where the row has least to share. */
   .char-image-section {
     --portrait-max-h: 132px;
-    justify-content: flex-start;
   }
 }
 

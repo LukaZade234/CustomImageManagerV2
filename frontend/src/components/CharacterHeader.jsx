@@ -267,10 +267,21 @@ export function CharacterHeader({
               </svg>
               $ai command
             </Button>
-            <AccentOverrideControl accent={accent} />
           </div>
         )}
       </div>
+      {/*
+        The staff accent picker is a grid item of the band in its own right, not
+        a child of either column. Inside the identity column it could never be
+        wider than that column, so "full width on a phone" was unreachable; and
+        inside the identity column's flex flow it became a third child, which
+        moved the footer alignment that keeps Save level with Edit/$ai.
+
+        As a grid child both are available: it sits in the identity column on a
+        wide screen, where it reads as part of that column, and spans both
+        columns below 768px, where there is no room to do anything else.
+      */}
+      {!edit.active && <AccentOverrideControl accent={accent} />}
     </div>
   )
 }

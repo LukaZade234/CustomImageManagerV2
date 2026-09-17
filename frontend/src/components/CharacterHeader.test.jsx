@@ -262,16 +262,19 @@ describe('the save button', () => {
     expect(info.querySelector('.display-title')).toHaveTextContent('Ayanami Rei')
   })
 
-  it('puts the accent picker inside the actions row, so the row stays aligned', () => {
+  it('puts the accent picker in the band, not inside either column', () => {
     setup({ accent: { canEdit: true, seed: '#cf2c79', manual: false } })
-    const actions = document.querySelector('.char-page-actions')
+    const band = document.querySelector('.character-top-section')
+    const info = document.querySelector('.char-info-section')
     const accent = document.querySelector('.accent-override')
 
-    // Inside the actions row, after the buttons. On a phone CSS gives it its
-    // own line; that is a breakpoint rule and must not be done by changing
-    // where it sits in the tree, which is how the alignment broke.
+    // A grid item of the band, so CSS can span it across both columns on a
+    // phone. Inside the identity column it could only ever be that column's
+    // width, and it would be a third flex child of the column, which is what
+    // moved the Save/Edit alignment twice.
     expect(accent).toBeInTheDocument()
-    expect(accent.parentElement).toBe(actions)
+    expect(accent.parentElement).toBe(band)
+    expect(accent.parentElement).not.toBe(info)
   })
 
   it('is the same kind of button as the actions it lines up with', () => {
