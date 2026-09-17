@@ -14,10 +14,11 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      # TEMPORARY: confirms the job actually executes, not merely passes. Remove
-      # once the first run has been observed.
-      - run: echo "checks running (backend)"
       - uses: actions/checkout@v4
+      # TEMPORARY: confirms the job actually executes, not merely passes. Remove
+      # once the first run has been observed. After checkout, since no step can
+      # run until the workspace exists.
+      - run: echo "checks running (backend)"
       - uses: astral-sh/setup-uv@v5
         with:
           # Pinned to what pyproject.toml declares, rather than the runner default.
@@ -34,9 +35,6 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      # TEMPORARY: confirms the job actually executes, not merely passes. Remove
-      # once the first run has been observed.
-      - run: echo "checks running (frontend)"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -44,6 +42,10 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      # TEMPORARY: confirms the job actually executes, not merely passes. Remove
+      # once the first run has been observed. Must come after checkout: the job's
+      # working-directory default is frontend/, which checkout creates.
+      - run: echo "checks running (frontend)"
       - run: npm ci
       - run: npx biome check src
       - run: npm run typecheck
