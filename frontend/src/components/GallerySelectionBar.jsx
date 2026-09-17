@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Button, IconButton } from './ui'
+import { Button, IconButton, SegmentedControl } from './ui'
 
 /**
  * The bar that appears along the bottom while a gallery mode is open.
@@ -30,6 +30,13 @@ export function GallerySelectionBar({
   othersSelectedCount,
   onSelectAll,
   onSelectMine,
+  copiedCount,
+  uncopiedCount,
+  copiedScope,
+  lastBatchAvailable,
+  onCopiedScopeChange,
+  onSelectCopied,
+  onSelectUncopied,
   onClearSelection,
   onGenerateAiCommand,
   onDownloadSelected,
@@ -105,6 +112,50 @@ export function GallerySelectionBar({
                 >
                   Select mine ({mineCount})
                 </Button>
+              )}
+              {/*
+                "Already used" helpers, from this viewer's own $ai copy history.
+                Shown only when they have some, so the bar does not offer a
+                button that would select nothing. The scope switch is explicit
+                rather than hidden in the click: "ever" and "last batch" mean
+                genuinely different sets, and which one you get should not
+                depend on remembering a modifier.
+              */}
+              {copiedCount > 0 && !hasSelection && (
+                <>
+                  {/* Only offered when there is a recent batch to switch to;
+                      history that predates batch ids cannot answer it. */}
+                  {lastBatchAvailable && (
+                    <SegmentedControl
+                      name="copied-scope"
+                      label="Which copies"
+                      value={copiedScope}
+                      onChange={onCopiedScopeChange}
+                      options={[
+                        { value: 'ever', label: 'Ever', short: 'Ever' },
+                        { value: 'last', label: 'Last batch', short: 'Last' },
+                      ]}
+                    />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSelectCopied}
+                    title="The images you have already copied into an $ai command. This history lives in your browser cookie, like your saved list"
+                  >
+                    Select copied ({copiedCount})
+                  </Button>
+                  {uncopiedCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onSelectUncopied}
+                      title="Select the images you have not copied into an $ai command yet"
+                    >
+                      Select not copied ({uncopiedCount})
+                    </Button>
+                  )}
+                </>
               )}
             </div>
             {hasSelection && (

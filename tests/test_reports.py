@@ -23,6 +23,12 @@ def _seed_one(db, char="Rem", url="https://cdn/a.png", owner=None):
     return db.get_custom_image_rows(char)[0]["id"]
 
 
+def _image_id(db, char, url):
+    """The id of one seeded image. `get_custom_image_rows` is ordered, so
+    indexing [0] returns the first image of the character, not this one."""
+    return next(r["id"] for r in db.get_custom_image_rows(char) if r["url"] == url)
+
+
 class TestReportThreshold:
     def test_one_report_does_not_remove(self, client, clean_db, identity_id):
         image_id = _seed_one(clean_db)
@@ -131,6 +137,96 @@ class TestTakes:
         image_id = _seed_one(clean_db)
         r = _post(client, "/api/takes", {"image_ids": [image_id], "kind": "admired"})
         assert r.status_code == 400
+
+    def test_one_copy_is_one_batch(self, client, clean_db, identity_id):
+        """Every image in one $ai copy shares a batch id, however many parts it
+        was split into for Discord -- the split is delivery, not intent."""
+        a = _seed_one(clean_db, url="https://cdn/a.png")
+        b = _seed_one(clean_db, url="https://cdn/b.png")
+        c = _seed_one(clean_db, url="https://cdn/c.png")
+        body = _post(
+            client, "/api/takes", {"image_ids": [a, b, c], "kind": "copy_command"}
+        ).get_json()
+        assert body["logged"] == 3
+        conn = clean_db.get_connection()
+        batches = conn.execute(
+            "SELECT DISTINCT batch_id FROM image_takes WHERE kind = 'copy_command'"
+        ).fetchall()
+        assert len(batches) == 1
+        assert batches[0]["batch_id"]
+
+    def test_each_copy_is_its_own_batch(self, client, clean_db, identity_id):
+        a = _seed_one(clean_db, url="https://cdn/a.png")
+        b = _seed_one(clean_db, url="https://cdn/b.png")
+        _post(client, "/api/takes", {"image_ids": [a], "kind": "copy_command"})
+        _post(client, "/api/takes", {"image_ids": [b], "kind": "copy_command"})
+        conn = clean_db.get_connection()
+        assert (
+            conn.execute(
+                "SELECT COUNT(DISTINCT batch_id) FROM image_takes WHERE kind = 'copy_command'"
+            ).fetchone()[0]
+            == 2
+        )
+
+    def test_a_download_is_not_a_batch(self, client, clean_db, identity_id):
+        """Batches are about what was copied into Mudae. A download has no
+        batch, so it can never become someone's 'last copied'."""
+        image_id = _seed_one(clean_db)
+        body = _post(client, "/api/takes", {"image_ids": [image_id], "kind": "download"}).get_json()
+        assert body["batch_id"] is None
+        conn = clean_db.get_connection()
+        assert conn.execute("SELECT batch_id FROM image_takes").fetchone()["batch_id"] is None
+
+
+class TestCopiedHistory:
+    """The viewer's own $ai history, which drives the gallery selection verbs.
+
+    It must be per-viewer and per-character: this is a memory aid, not a
+    popularity signal, and DECISIONS.md section 1 rejects anything aggregate.
+    """
+
+    def test_ever_and_last_batch_differ(self, client, clean_db, identity_id):
+        _seed_one(clean_db, char="Rem", url="https://cdn/a.png")
+        _seed_one(clean_db, char="Rem", url="https://cdn/b.png")
+        a = _image_id(clean_db, "Rem", "https://cdn/a.png")
+        b = _image_id(clean_db, "Rem", "https://cdn/b.png")
+        _post(client, "/api/takes", {"image_ids": [a], "kind": "copy_command"})
+        _post(client, "/api/takes", {"image_ids": [b], "kind": "copy_command"})
+        history = clean_db.copied_image_ids("Rem", identity_id)
+        assert sorted(history["ids"]) == sorted([a, b])
+        assert history["last_batch"] == [b]
+
+    def test_rows_that_predate_batches_still_count_as_ever(self, clean_db, identity_id):
+        image_id = _seed_one(clean_db)
+        clean_db.log_take(image_id, identity_id, "copy_command")  # no batch_id
+        history = clean_db.copied_image_ids("Rem", identity_id)
+        assert history["ids"] == [image_id]
+        assert history["last_batch"] == []
+
+    def test_another_person_history_is_not_mine(self, client, clean_db, identity_id):
+        image_id = _seed_one(clean_db)
+        clean_db.log_take(image_id, OTHER, "copy_command", clean_db.new_take_batch_id())
+        for viewer in (identity_id, None):
+            history = clean_db.copied_image_ids("Rem", viewer)
+            assert history["ids"] == []
+            assert history["last_batch"] == []
+
+    def test_history_is_scoped_to_the_character(self, client, clean_db, identity_id):
+        rem = _seed_one(clean_db, char="Rem", url="https://cdn/a.png")
+        _seed_one(clean_db, char="Emilia", url="https://cdn/b.png")
+        clean_db.log_take(rem, identity_id, "copy_command", clean_db.new_take_batch_id())
+        assert clean_db.copied_image_ids("Emilia", identity_id)["ids"] == []
+
+    def test_the_endpoint_returns_the_history(self, client, clean_db, identity_id):
+        _seed_one(clean_db, url="https://cdn/a.png")
+        _seed_one(clean_db, url="https://cdn/b.png")
+        a = _image_id(clean_db, "Rem", "https://cdn/a.png")
+        b = _image_id(clean_db, "Rem", "https://cdn/b.png")
+        _post(client, "/api/takes", {"image_ids": [a], "kind": "copy_command"})
+        _post(client, "/api/takes", {"image_ids": [b], "kind": "copy_command"})
+        body = client.get("/api/custom-image/Rem").get_json()
+        assert sorted(body["copiedIds"]) == sorted([a, b])
+        assert body["lastBatchIds"] == [b]
 
 
 class TestReportQueue:

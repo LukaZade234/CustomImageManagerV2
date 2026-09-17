@@ -862,17 +862,29 @@ lines / 11 `useState`, 1,722 characters / 8,562 active images / 987 attributed /
       `imgchest_post_id` per row, so re-encoding is mechanical but is 8,562 uploads
       against a rate limit), plus the early-warning canary as an option. The canary
       is deliberately not built.
-- [ ] **Show people which images they have already used (A).** _Accepted as the
-      first feature; not built._ The best of the four recommendations. `PRODUCT.md`
-      names "remembering which ones are already in use" as the third half of the
-      problem and the app solves only the first two; `image_takes` has been
-      collecting exactly the needed data since Phase 6 and **nothing reads it**.
-      818 `copy_command` events against 1 download says the copy path is the
-      product. It does not contradict `DECISIONS.md` §1's rejection of take counts
-      for automatic retirement — this is one person's own history, not an aggregate
-      or a quality signal — and a short note must record that distinction so a later
-      reader does not think §1 was overturned. Do not make it a public per-image
-      counter, and state in the UI that it is cookie-bound.
+- [x] **Show people which images they have already used (A).** _Done, and paired
+      with a correctness fix._ `PRODUCT.md` names "remembering which ones are
+      already in use" as the third half of the problem and the app solved only the
+      first two; `image_takes` had been collecting the data since Phase 6 and
+      **nothing read it** (818 `copy_command` events against 1 download). The
+      character page now offers **Select copied** and **Select not copied**,
+      scoped to the viewer. Migration `023` adds `image_takes.batch_id`, set on
+      the first click of "Copy `$ai` command" and shared by every image in that
+      copy however many Discord parts it splits into, so **Ever** and **Last
+      batch** are exact sets rather than a guessed time window. Selection is not
+      capped — only the command is. `DECISIONS.md` §1 gained a note distinguishing
+      this private history from the rejected take-based retirement (one viewer's
+      rows vs an aggregate; memory aid vs judgment; private vs visible; shows vs
+      acts), because a later reader seeing "takes drive something now" would
+      otherwise think §1 was overturned. The history is cookie-bound and the UI
+      says so.
+- [x] **Cap the `$ai` command at Mudae's 100 images.** _Done, found while
+      building A._ Mudae accepts at most 100 custom images per character through
+      `$ai` (250 more through `$ic`), so a 256-image gallery could generate a
+      command the bot rejects outright. `capAiImages` takes the first 100 in
+      gallery order and reports how many were dropped; "select all" stays free so
+      remove/hide/download are unaffected, and the length dialog states the
+      truncation when it applies.
 - [ ] **Series pages (B).** _Accepted, scheduled deliberately._ 1,015 of 1,722
       characters (59%) have no active images, so more than half of all search
       results lead to an empty page. The coverage number is what makes it a

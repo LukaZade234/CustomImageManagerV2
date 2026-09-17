@@ -6,7 +6,7 @@ executable plan.
 | Review | Date | Findings | Status |
 |---|---|---|---|
 | [First review](#first-review-2026-09-16) | 2026-09-16 | 9 | Closed — see `ROADMAP.md` "Review findings (2026-09-16)" for what was accepted, deferred and declined |
-| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done; 10, 12 and A/B accepted, 13 declined — see `ROADMAP.md` "Review findings (2026-09-17)" for the decision record |
+| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 10, 11, 12, 14 and feature A done; B remains; 13 declined — see `ROADMAP.md` "Review findings (2026-09-17)" for the decision record |
 
 **This is a working document, not a decision record.** It does not carry the authority of
 `docs/DECISIONS.md` or `docs/CURRENT_STATE.md`, and it should be deleted or folded into those once
@@ -1503,6 +1503,16 @@ images per character: max 256, avg 12.1
 ```
 
 ## A. Show people which images they have already used — *recommended first*
+
+> **Done.** Built as two viewer-scoped selection verbs on the character page
+> (**Select copied** / **Select not copied**), with an **Ever / Last batch** scope.
+> Migration `023` adds `image_takes.batch_id`, set on the first click of "Copy
+> `$ai` command" and shared by all its images, so "last batch" is an exact set
+> rather than a time-window guess. Badges were deliberately not used — the
+> history surfaces only as an explicit action, so there is no public signal to
+> misread. `DECISIONS.md` §1 carries the note distinguishing this from the
+> rejected take-based retirement. Alongside it, Mudae's 100-image-per-`$ai`
+> limit is now enforced (`capAiImages`, first 100 in gallery order).
 
 ### The case
 

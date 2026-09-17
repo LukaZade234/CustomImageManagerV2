@@ -35,6 +35,7 @@ import { savedKey, useRemoveSaved, useSaveCharacter, useSavedCharacters } from '
 import { useStore } from '../store/useStore'
 import {
   buildAiCommand,
+  capAiImages,
   DISCORD_LIMIT_NITRO,
   DISCORD_LIMIT_REGULAR,
   splitAiCommandForLimit,
@@ -88,6 +89,14 @@ export default function CharacterPage() {
   const isSaved = savedCharacters.some((s) => s.name === name)
 
   const [showHidden, setShowHidden] = useState(false)
+  /**
+   * Which copy history the "already used" helpers select from: `ever` (every
+   * image copied here) or `last` (only the most recent copy). Declared up here
+   * with the other page state, not beside the values it feeds, because the page
+   * returns early while loading and a hook below that return would change hook
+   * order between renders.
+   */
+  const [copiedScope, setCopiedScope] = useState('ever')
   const hiddenCount = allRows.filter((row) => row.hidden).length
   // Hidden images drop out of the gallery entirely unless you ask for them.
   // That is the whole value of hide-for-me: it has to actually get them out of
@@ -512,6 +521,26 @@ export default function CharacterPage() {
   const mineCount = rows.filter((row) => row.is_mine).length
   const othersSelected = selectedRows.filter((row) => !row.is_mine)
 
+  /**
+   * This viewer's own `$ai` copy history for this character, for the
+   * "already used" selection helpers. `ever` is every image they have copied
+   * here; `last` is only their most recent copy. Both are scoped to them, so
+   * this is a memory aid and never a signal about anyone else.
+   *
+   * "Last batch" is empty for history that predates batch ids, in which case
+   * the switch would offer a scope that selects nothing — so the helpers fall
+   * back to the ever set and the last-batch option is dropped below.
+   */
+  const copiedIds = imagesData?.copiedIds ?? []
+  const lastBatchIds = imagesData?.lastBatchIds ?? []
+  const hasLastBatch = lastBatchIds.length > 0
+  const scopeIds = copiedScope === 'last' && hasLastBatch ? lastBatchIds : copiedIds
+  const copiedSet = new Set(scopeIds)
+  // Counts are over the gallery as shown, so a hidden image is neither offered
+  // nor counted by a helper that selects from what you can see.
+  const copiedCount = rows.filter((row) => copiedSet.has(row.id)).length
+  const uncopiedCount = rows.length - copiedCount
+
   const removeOwnImages = async () => {
     setConfirmRemove(null)
     const urls = mineSelected.map((row) => row.url)
@@ -620,6 +649,21 @@ export default function CharacterPage() {
   }
 
   /**
+   * Select the images this viewer has, or has not, already copied into an $ai
+   * command — the third half of the problem PRODUCT.md describes ("remembering
+   * which ones are already in use"). Selecting is not capped here: only the
+   * `$ai` command cares about Mudae's 100, and remove/hide/download act on a
+   * selection of any size.
+   */
+  const selectCopiedImages = () => {
+    setSelection(rows.filter((row) => copiedSet.has(row.id)).map((row) => row.url))
+  }
+
+  const selectUncopiedImages = () => {
+    setSelection(rows.filter((row) => !copiedSet.has(row.id)).map((row) => row.url))
+  }
+
+  /**
    * Build the $ai command for `urls`.
    *
    * Takes them rather than reading the selection, because it serves two callers
@@ -631,27 +675,42 @@ export default function CharacterPage() {
   const generateAiCommand = (urls) => {
     if (!urls.length) return
     const charName = editMode ? editName : char.name
-    recordTakes(urls, 'copy_command')
-    const cmd = buildAiCommand(charName, urls)
+    // Mudae caps a character at 100 custom images via `$ai`; anything more is
+    // rejected. Take the first 100 in gallery order and say how many were
+    // dropped, rather than handing over a command the bot will refuse.
+    const { urls: capped, dropped } = capAiImages(urls)
+    // Recorded on this first click, before any Discord length split: the batch
+    // is everything the user chose at this moment, and the split into several
+    // pastes is a delivery detail, not several intents. A batch is therefore
+    // written even if they then close the length dialog without copying.
+    recordTakes(capped, 'copy_command')
+    const cmd = buildAiCommand(charName, capped)
+    const noteDropped = () => {
+      if (dropped > 0) {
+        addToast(`Mudae allows 100 images per character — the first 100 were copied.`, 'info')
+      }
+    }
     if (cmd.length < DISCORD_LIMIT_REGULAR) {
       navigator.clipboard
         .writeText(cmd)
         .then(() => {
           addToast('Command copied to clipboard', 'success')
+          noteDropped()
           resetModes()
         })
         .catch(() => addToast('Failed to copy', 'error'))
       return
     }
-    const nonNitroParts = splitAiCommandForLimit(charName, urls, DISCORD_LIMIT_REGULAR)
+    const nonNitroParts = splitAiCommandForLimit(charName, capped, DISCORD_LIMIT_REGULAR)
     const nitroParts =
       cmd.length <= DISCORD_LIMIT_NITRO
         ? [cmd]
-        : splitAiCommandForLimit(charName, urls, DISCORD_LIMIT_NITRO)
+        : splitAiCommandForLimit(charName, capped, DISCORD_LIMIT_NITRO)
     setAiLimitDialog({
       charCount: cmd.length,
       nonNitroParts,
       nitroParts,
+      dropped,
     })
   }
 
@@ -911,6 +970,13 @@ export default function CharacterPage() {
           othersSelectedCount={othersSelected.length}
           onSelectAll={selectAllImages}
           onSelectMine={selectMineImages}
+          copiedCount={copiedCount}
+          uncopiedCount={uncopiedCount}
+          copiedScope={hasLastBatch ? copiedScope : 'ever'}
+          lastBatchAvailable={hasLastBatch}
+          onCopiedScopeChange={setCopiedScope}
+          onSelectCopied={selectCopiedImages}
+          onSelectUncopied={selectUncopiedImages}
           onClearSelection={() => setSelection([])}
           onGenerateAiCommand={() => generateAiCommand(selectedUrls)}
           onDownloadSelected={handleDownloadSelected}

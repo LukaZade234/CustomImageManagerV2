@@ -21,6 +21,9 @@ import { GallerySelectionBar } from './GallerySelectionBar'
 const handlerNames = [
   'onSelectAll',
   'onSelectMine',
+  'onSelectCopied',
+  'onSelectUncopied',
+  'onCopiedScopeChange',
   'onClearSelection',
   'onGenerateAiCommand',
   'onDownloadSelected',
@@ -135,6 +138,47 @@ describe('GallerySelectionBar', () => {
   it('hides Select mine from someone who has added nothing here', () => {
     setup({ ...empty, mineCount: 0 })
     expect(screen.queryByRole('button', { name: /Select mine/i })).not.toBeInTheDocument()
+  })
+
+  describe('the already-copied helpers', () => {
+    const copied = { ...empty, copiedCount: 12, copiedScope: 'ever', lastBatchAvailable: true }
+
+    it('are absent for someone with no copy history here', () => {
+      // Most visitors: signed out, or never copied from this character.
+      setup({ ...empty, copiedCount: 0 })
+      expect(screen.queryByRole('button', { name: /Select copied/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Select not copied/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: /Ever/i })).not.toBeInTheDocument()
+    })
+
+    it('offer both directions, with counts', async () => {
+      const handlers = setup({ ...copied, uncopiedCount: 4 })
+      expect(screen.getByRole('button', { name: 'Select copied (12)' })).toBeInTheDocument()
+      await clickExpecting('Select copied (12)', handlers, 'onSelectCopied')
+
+      const h2 = setup({ ...copied, uncopiedCount: 4 })
+      await clickExpecting('Select not copied (4)', h2, 'onSelectUncopied')
+    })
+
+    it('omit "not copied" when everything has been copied', () => {
+      setup({ ...copied, uncopiedCount: 0 })
+      expect(screen.getByRole('button', { name: 'Select copied (12)' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Select not copied/i })).not.toBeInTheDocument()
+    })
+
+    it('expose the scope as a choice rather than hidden in the click', async () => {
+      const handlers = setup({ ...copied, uncopiedCount: 4 })
+      expect(screen.getByRole('radio', { name: 'Ever' })).toBeChecked()
+      await userEvent.click(screen.getByRole('radio', { name: 'Last batch' }))
+      expect(handlers.onCopiedScopeChange).toHaveBeenCalledWith('last')
+    })
+
+    it('drop the scope switch when there is no batch to switch to', () => {
+      // History from before batch ids: "last batch" would select nothing.
+      setup({ ...copied, lastBatchAvailable: false, uncopiedCount: 4 })
+      expect(screen.queryByRole('radio', { name: /Last batch/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Select copied (12)' })).toBeInTheDocument()
+    })
   })
 
   it('takes the keyboard with it when it opens', () => {

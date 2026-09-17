@@ -13,14 +13,19 @@ export const characterImagesKey = (name) => ['character-images', name]
 
 /**
  * The gallery payload, tolerated in both shapes it has shipped in: the current
- * `{rows, accentSeed}` and the bare array an older response carried.
+ * `{rows, accentSeed, copiedIds, lastBatchIds}` and the bare array an older
+ * response carried.
  */
 export async function fetchCharacterImages(name) {
   const payload = await apiClient.getCustomImagesForChar(name)
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []
   const accentSeed = Array.isArray(payload) ? null : (payload?.accentSeed ?? null)
   const accentManual = Array.isArray(payload) ? false : Boolean(payload?.accentManual)
-  return { rows, accentSeed, accentManual }
+  // This viewer's own $ai history for this character, if any. Empty for a
+  // signed-out visitor and for one who has never copied here.
+  const copiedIds = Array.isArray(payload) ? [] : (payload?.copiedIds ?? [])
+  const lastBatchIds = Array.isArray(payload) ? [] : (payload?.lastBatchIds ?? [])
+  return { rows, accentSeed, accentManual, copiedIds, lastBatchIds }
 }
 
 export function useCharacterImages(name) {

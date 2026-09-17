@@ -22,6 +22,7 @@ import os
 import sqlite3
 import threading
 import time
+import uuid
 from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -3069,13 +3070,19 @@ def reported_image_counts() -> dict:
 # --- Takes --------------------------------------------------------------
 
 
-def log_take(image_id: int, identity_id: str | None, kind: str) -> bool:
+def log_take(image_id: int, identity_id: str | None, kind: str, batch_id: str | None = None) -> bool:
     """Record that someone took an image away with them.
 
     Deliberately drives nothing. It is logged because collecting it costs
     nothing and keeps the option of designing a retirement policy later against
     real evidence rather than a guess -- see DECISIONS.md section 1, where
     retirement-by-disuse was rejected precisely for lack of that evidence.
+
+    `batch_id` groups the rows written by one "Copy $ai command" action, so the
+    images copied last time can be recovered exactly rather than by guessing a
+    time window. It is passed in by the caller rather than minted here: one copy
+    writes many rows and they must share the id. Null for a download, and for
+    the rows that predate the column.
     """
     if kind not in ("download", "copy_command"):
         raise ValueError(f"Unknown take kind: {kind!r}")
@@ -3086,10 +3093,56 @@ def log_take(image_id: int, identity_id: str | None, kind: str) -> bool:
         if identity_id is not None:
             _ensure_identity(conn, identity_id)
         conn.execute(
-            "INSERT INTO image_takes (image_id, identity_id, kind, at) VALUES (?, ?, ?, ?)",
-            (image_id, identity_id, kind, _now()),
+            "INSERT INTO image_takes (image_id, identity_id, kind, at, batch_id)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (image_id, identity_id, kind, _now(), batch_id),
         )
         return True
+
+
+def new_take_batch_id() -> str:
+    """An id for one "Copy $ai command" action, shared by all its takes."""
+    return uuid.uuid4().hex
+
+
+def copied_image_ids(char_name: str, identity_id: str | None) -> dict:
+    """This viewer's `$ai` copy history for one character.
+
+    Returns `{"ids": [...], "last_batch": [...]}` -- every image they ever
+    copied for this character, and the subset from their most recent copy. Both
+    are image ids, and both are scoped to this identity and character only:
+    this is one person's own memory aid, never an aggregate and never visible to
+    anyone else (see DECISIONS.md section 1 for why that distinction is load
+    bearing).
+
+    `last_batch` is empty when this viewer's most recent copies predate the
+    `batch_id` column, because those rows cannot be attributed to a batch
+    without inventing a boundary. "Copied ever" still includes them.
+    """
+    if not identity_id:
+        return {"ids": [], "last_batch": []}
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT i.id AS image_id, t.batch_id AS batch_id"
+        "  FROM image_takes t"
+        "  JOIN custom_images i ON i.id = t.image_id"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE t.identity_id = ? AND t.kind = 'copy_command' AND c.name_key = ?"
+        " ORDER BY t.at DESC, t.id DESC",
+        (identity_id, _name_key(char_name)),
+    ).fetchall()
+    ids: list[int] = []
+    seen: set[int] = set()
+    last_batch: list[int] = []
+    latest_batch_id = next((r["batch_id"] for r in rows if r["batch_id"]), None)
+    for row in rows:
+        image_id = int(row["image_id"])
+        if image_id not in seen:
+            seen.add(image_id)
+            ids.append(image_id)
+        if latest_batch_id and row["batch_id"] == latest_batch_id:
+            last_batch.append(image_id)
+    return {"ids": ids, "last_batch": last_batch}
 
 
 def reorder_custom_images(char_name: str, new_order: list[str]) -> bool:

@@ -1,12 +1,36 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAiSegment,
+  capAiImages,
   DISCORD_LIMIT_NITRO,
   DISCORD_LIMIT_REGULAR,
+  MUDAE_AI_MAX_IMAGES,
   splitAiCommandForLimit,
 } from './aiCommandDiscord'
 
 const url = (n) => `https://cdn.imgchest.com/files/abcdef${String(n).padStart(4, '0')}.png`
+
+describe('capAiImages', () => {
+  it('leaves a selection at or under the cap untouched', () => {
+    const urls = Array.from({ length: 100 }, (_, i) => url(i))
+    expect(capAiImages(urls)).toEqual({ urls, dropped: 0 })
+  })
+
+  it('takes the first 100 in gallery order and reports the rest', () => {
+    // Mudae rejects an $ai command above 100 images, so "copy everything" on a
+    // 256-image gallery has to degrade to the first 100 rather than fail.
+    const urls = Array.from({ length: 256 }, (_, i) => url(i))
+    const { urls: capped, dropped } = capAiImages(urls)
+    expect(capped).toHaveLength(MUDAE_AI_MAX_IMAGES)
+    expect(capped[0]).toBe(urls[0])
+    expect(capped[99]).toBe(urls[99])
+    expect(dropped).toBe(156)
+  })
+
+  it('handles an empty selection', () => {
+    expect(capAiImages([])).toEqual({ urls: [], dropped: 0 })
+  })
+})
 
 describe('buildAiSegment', () => {
   it('produces the Mudae form, prefixing every URL with $', () => {
