@@ -369,8 +369,14 @@ def recover_rows(recover: list[dict], added_by: str | None) -> int:
     Two existing paths, not hand-rolled SQL: `add_custom_images` creates the row,
     `remove_custom_images` soft-deletes it with a reason. They land active for a
     moment and are immediately removed, which is exactly the state the drawer
-    lists. `added_by` is normally NULL for migrated rows; it is a parameter only
-    so a test can avoid creating an identities row.
+    lists.
+
+    No actor, deliberately. `added_by` is normally NULL for migrated rows, and
+    the removal is passed `actor_id=None` so `removed_by` stays NULL too -- no
+    person made this call, the script did. Passing an empty string here instead
+    is not harmless: it is non-NULL, so the rows join to an identity and surface
+    in that identity's moderation history under a generated pseudonym. That
+    happened once, to 1,222 rows, and they read as removed by "Gilded Wigeon".
     """
     by_character: dict[str, list[str]] = {}
     for item in recover:
@@ -378,10 +384,10 @@ def recover_rows(recover: list[dict], added_by: str | None) -> int:
     recovered = 0
     for character, urls in by_character.items():
         recovered += db.add_custom_images(character, urls, added_by=added_by)
-        # Staff act on behalf of the inherited library; passing the actor is what
-        # the removal path wants. A module-level constant keeps the reason fixed.
+        # Staff act on behalf of the inherited library, so the removal is allowed
+        # to bypass ownership -- but it is not attributed to anyone.
         db.remove_custom_images(
-            character, urls, actor_id=added_by or "", is_moderator=True, reason=_RECOVER_REASON
+            character, urls, actor_id=None, is_moderator=True, reason=_RECOVER_REASON
         )
     return recovered
 

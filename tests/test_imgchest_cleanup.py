@@ -199,6 +199,37 @@ class TestRecoverRows:
         assert cleanup.recover_rows(item, added_by=None) == 0
         assert len(clean_db.get_removed_for("Rem")) == 1
 
+    def test_a_recover_is_not_attributed_to_anyone(self, clean_db):
+        """No person made this call, so `removed_by` must stay NULL.
+
+        Passing an empty string instead is not the same thing: it is non-NULL, so
+        the row joins to an identity and lands in that identity's moderation
+        history under a generated pseudonym. That shipped once, to 1,222 rows,
+        which read as removed by "Gilded Wigeon".
+        """
+        cleanup.recover_rows(
+            [{"character": "Rem", "url": "https://cdn.imgchest.com/files/aaa.png"}],
+            added_by=None,
+        )
+        conn = clean_db.get_connection()
+        row = conn.execute("SELECT added_by, removed_by FROM custom_images").fetchone()
+        assert row["added_by"] is None
+        assert row["removed_by"] is None
+        # And no identity was minted for the empty string.
+        assert (
+            conn.execute("SELECT COUNT(*) FROM identities WHERE id = ''").fetchone()[0] == 0
+        )
+
+    def test_the_recovered_rows_stay_out_of_moderation_history(self, clean_db):
+        # Moderation history is built from `removed_by IS NOT NULL`, so a NULL
+        # actor is what keeps a script action from reading as a person's.
+        cleanup.recover_rows(
+            [{"character": "Rem", "url": "https://cdn.imgchest.com/files/aaa.png"}],
+            added_by=None,
+        )
+        conn = clean_db.get_connection()
+        assert conn.execute("SELECT COUNT(*) FROM custom_images WHERE removed_by IS NOT NULL").fetchone()[0] == 0
+
 
 class TestDeleteFingerprint:
     """The guard on `--execute`.

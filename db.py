@@ -1940,7 +1940,7 @@ def add_custom_images(
 def remove_custom_images(
     char_name: str,
     urls: Iterable[str],
-    actor_id: str,
+    actor_id: str | None,
     *,
     is_moderator: bool = False,
     reason: str | None = None,
@@ -1950,6 +1950,13 @@ def remove_custom_images(
     This is the rule that makes griefing unimplementable rather than merely
     discouraged (DECISIONS.md section 1): **you can only remove images you
     added.** Moderators are the documented manual fallback, not the mechanism.
+
+    `actor_id` may be None, for a removal no person made -- the cut-over
+    recovery is one. Then `removed_by` is left NULL, matching the report
+    threshold (`report_image`, "no single person made this call"). Passing an
+    empty string instead is not the same thing: it is a non-NULL value, so the
+    row joins to an identity and shows up in that identity's moderation history
+    under a generated pseudonym. That happened once, to 1,222 rows.
 
     Images migrated from v1 have `added_by IS NULL` -- nobody owns them, so no
     ordinary user can remove them. That is the intended outcome, not an
@@ -1985,13 +1992,19 @@ def remove_custom_images(
             row = by_url.get(url)
             if row is None:
                 result["missing"].append(url)
-            elif is_moderator or (row["added_by"] is not None and row["added_by"] == actor_id):
+            elif is_moderator or (
+                actor_id is not None and row["added_by"] is not None and row["added_by"] == actor_id
+            ):
                 removable.append(row)
             else:
                 result["denied"].append(url)
 
         if removable:
-            _ensure_identity(conn, actor_id)
+            # An actorless removal keeps removed_by NULL, so it belongs to no
+            # identity and cannot be read as a person's action -- see the
+            # docstring.
+            if actor_id is not None:
+                _ensure_identity(conn, actor_id)
             now = _now()
             conn.executemany(
                 "UPDATE custom_images"
