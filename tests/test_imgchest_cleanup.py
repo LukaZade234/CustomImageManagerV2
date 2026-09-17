@@ -199,6 +199,37 @@ class TestRecoverRows:
         assert cleanup.recover_rows(item, added_by=None) == 0
         assert len(clean_db.get_removed_for("Rem")) == 1
 
+    def test_a_recover_is_not_attributed_to_anyone(self, clean_db):
+        """No person made this call, so `removed_by` must stay NULL.
+
+        Passing an empty string instead is not the same thing: it is non-NULL, so
+        the row joins to an identity and lands in that identity's moderation
+        history under a generated pseudonym. That shipped once, to 1,222 rows,
+        which read as removed by "Gilded Wigeon".
+        """
+        cleanup.recover_rows(
+            [{"character": "Rem", "url": "https://cdn.imgchest.com/files/aaa.png"}],
+            added_by=None,
+        )
+        conn = clean_db.get_connection()
+        row = conn.execute("SELECT added_by, removed_by FROM custom_images").fetchone()
+        assert row["added_by"] is None
+        assert row["removed_by"] is None
+        # And no identity was minted for the empty string.
+        assert (
+            conn.execute("SELECT COUNT(*) FROM identities WHERE id = ''").fetchone()[0] == 0
+        )
+
+    def test_the_recovered_rows_stay_out_of_moderation_history(self, clean_db):
+        # Moderation history is built from `removed_by IS NOT NULL`, so a NULL
+        # actor is what keeps a script action from reading as a person's.
+        cleanup.recover_rows(
+            [{"character": "Rem", "url": "https://cdn.imgchest.com/files/aaa.png"}],
+            added_by=None,
+        )
+        conn = clean_db.get_connection()
+        assert conn.execute("SELECT COUNT(*) FROM custom_images WHERE removed_by IS NOT NULL").fetchone()[0] == 0
+
 
 class TestDeleteFingerprint:
     """The guard on `--execute`.
@@ -269,13 +300,25 @@ class TestExecuteGuard:
     vouch for.
     """
 
-    def _run(self, monkeypatch, tmp_path, listing, argv):
+    def _run(self, monkeypatch, tmp_path, listing, argv, rows=None):
         export = tmp_path / "export.txt"
         export.write_text("Rem - https://cdn.imgchest.com/files/keep.png\n", encoding="utf-8")
         monkeypatch.setenv("IMGCHEST_API_KEY", "test-key")
         monkeypatch.setattr(cleanup, "list_posts", lambda username, token: listing)
+        # A cleanup plans against the site, so the database read must not be empty
+        # unless the test is about exactly that.
+        default_rows = [{"url": "https://cdn.imgchest.com/files/keep.png"}]
         monkeypatch.setattr(
-            cleanup, "db", type("D", (), {"all_custom_image_urls": lambda self: []})()
+            cleanup,
+            "db",
+            type(
+                "D",
+                (),
+                {
+                    "all_custom_image_urls": lambda self: default_rows if rows is None else rows,
+                    "database_path": lambda self: "/fake/imgmanager.db",
+                },
+            )(),
         )
         monkeypatch.setattr(cleanup, "record_post_ids", lambda posts, rows: 0)
         monkeypatch.setattr(cleanup, "recover_rows", lambda recover, added_by=None: 0)
@@ -296,7 +339,10 @@ class TestExecuteGuard:
             ],
         )
         code = cleanup.main()
-        return code, json.loads((tmp_path / "p.json").read_text(encoding="utf-8")), deleted
+        # A refused run writes no preview, which is the point of refusing.
+        path = tmp_path / "p.json"
+        preview = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        return code, preview, deleted
 
     def test_execute_refuses_when_the_plan_moved(self, monkeypatch, tmp_path):
         # Review a plan with one candidate, then the account gains another.
@@ -330,6 +376,21 @@ class TestExecuteGuard:
     def test_the_fingerprint_is_written_into_the_preview(self, monkeypatch, tmp_path):
         _, preview, _ = self._run(monkeypatch, tmp_path, [_post("doomed")], [])
         assert preview["fingerprint"] == cleanup.delete_fingerprint(preview["delete"])
+
+    def test_an_empty_database_is_refused(self, monkeypatch, tmp_path):
+        """Losing DATABASE_PATH silently plans against an empty site.
+
+        `db` falls back to ./data/imgmanager.db and creates it, so the run reads
+        no images, keeps only what the export names, and reports a delete list
+        thousands too long -- with nothing in the output saying so. Refusing is
+        the only safe answer, because there is no legitimate cleanup against an
+        empty library.
+        """
+        code, preview, deleted = self._run(monkeypatch, tmp_path, [_post("doomed")], [], rows=[])
+        assert code == 1
+        assert deleted == []
+        # Nothing was written, so no preview for a later run to be judged against.
+        assert preview is None
 
 
 class TestRecoverLiveness:

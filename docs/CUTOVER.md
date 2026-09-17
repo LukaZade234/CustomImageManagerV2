@@ -496,12 +496,23 @@ one to run and read before anything else:
 ```bash
 ssh imgmanager
 cd /opt/imgmanager
-sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env | sed -n 's/^IMGCHEST_API_KEY=//p')" \
+sudo -u imgmanager env \
+  DATABASE_PATH=/var/lib/imgmanager/imgmanager.db \
+  IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env | sed -n 's/^IMGCHEST_API_KEY=//p')" \
   uv run python scripts/imgchest_cleanup.py \
     --username <IMGCHEST_USERNAME> \
     --export /tmp/discord-in-use.txt \
     --preview /var/lib/imgmanager/imgchest-cleanup-preview.json
 ```
+
+**`DATABASE_PATH` is not optional, and leaving it off is dangerous rather than
+merely wrong.** Without it the script falls back to `./data/imgmanager.db` relative
+to the working directory, and `db` **creates that file** if it is absent — so the run
+plans against an empty database, sees no images on the site, and computes a delete
+list far larger than the real one (`files_on_site` reads 0 in its counts). The guard
+will refuse it if a preview was already written, which is how this was caught once,
+but a first run with no preview would report a plausible-looking plan built on
+nothing.
 
 Open the owner-only **Cut-over** tab (Moderation → Cut-over) and read both lists. If
 anything is wrong, fix the export or pass `--rescue URL` and re-run; nothing has been
@@ -509,7 +520,9 @@ deleted. When the preview looks right, do a small trial first — `--limit` caps
 deletions, and this one really deletes:
 
 ```bash
-sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env | sed -n 's/^IMGCHEST_API_KEY=//p')" \
+sudo -u imgmanager env \
+  DATABASE_PATH=/var/lib/imgmanager/imgmanager.db \
+  IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env | sed -n 's/^IMGCHEST_API_KEY=//p')" \
   uv run python scripts/imgchest_cleanup.py \
     --username <IMGCHEST_USERNAME> \
     --export /tmp/discord-in-use.txt \
@@ -517,8 +530,28 @@ sudo -u imgmanager env IMGCHEST_API_KEY="$(sudo cat /etc/imgmanager/secrets.env 
     --limit 2 --execute
 ```
 
+**Sanity-check `files_on_site` in the printed counts.** It should be close to the
+library size (thousands), not `0`. A zero there means the database was not found and
+the plan is meaningless, whatever the delete count looks like.
+
 Confirm in ImgChest that the two files are gone and that a recovered image appears in
 the Removed drawer, then run the whole thing by dropping `--limit`.
+
+**Check with a cache-buster, or you will think nothing was deleted.** ImgChest serves
+files through Cloudflare with a long edge cache, so a URL keeps returning `200` for
+some time after the file itself is gone — the edge answers without asking ImgChest,
+and the browser has its own copy too. A bare request reads as a failure that is not
+one:
+
+```bash
+UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" "https://cdn.imgchest.com/files/57c6ecdf056d.png"          # 200 — cached
+curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" "https://cdn.imgchest.com/files/57c6ecdf056d.png?cb=$(date +%s)"  # 404 — really gone
+```
+
+The browser User-Agent matters too: without one ImgChest answers `403` to everything,
+deleted or not. The script's own `deleted` count is the authoritative number — it only
+counts after the ImgChest **API** returns 200/204/404, and the API is not cached.
 
 **The execute run is checked against the preview.** Every run re-lists the account and
 rebuilds the plan from scratch, so the `--execute` run does *not* use the plan you

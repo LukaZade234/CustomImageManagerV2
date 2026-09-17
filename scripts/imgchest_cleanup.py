@@ -369,8 +369,14 @@ def recover_rows(recover: list[dict], added_by: str | None) -> int:
     Two existing paths, not hand-rolled SQL: `add_custom_images` creates the row,
     `remove_custom_images` soft-deletes it with a reason. They land active for a
     moment and are immediately removed, which is exactly the state the drawer
-    lists. `added_by` is normally NULL for migrated rows; it is a parameter only
-    so a test can avoid creating an identities row.
+    lists.
+
+    No actor, deliberately. `added_by` is normally NULL for migrated rows, and
+    the removal is passed `actor_id=None` so `removed_by` stays NULL too -- no
+    person made this call, the script did. Passing an empty string here instead
+    is not harmless: it is non-NULL, so the rows join to an identity and surface
+    in that identity's moderation history under a generated pseudonym. That
+    happened once, to 1,222 rows, and they read as removed by "Gilded Wigeon".
     """
     by_character: dict[str, list[str]] = {}
     for item in recover:
@@ -378,10 +384,10 @@ def recover_rows(recover: list[dict], added_by: str | None) -> int:
     recovered = 0
     for character, urls in by_character.items():
         recovered += db.add_custom_images(character, urls, added_by=added_by)
-        # Staff act on behalf of the inherited library; passing the actor is what
-        # the removal path wants. A module-level constant keeps the reason fixed.
+        # Staff act on behalf of the inherited library, so the removal is allowed
+        # to bypass ownership -- but it is not attributed to anyone.
         db.remove_custom_images(
-            character, urls, actor_id=added_by or "", is_moderator=True, reason=_RECOVER_REASON
+            character, urls, actor_id=None, is_moderator=True, reason=_RECOVER_REASON
         )
     return recovered
 
@@ -522,6 +528,19 @@ def main() -> int:
     print(f"  {len(posts)} posts listed")
 
     rows = db.all_custom_image_urls()
+    # A cleanup plans against what the site holds, so an empty read is never a
+    # real state -- it means the database was not found. The likely cause is a
+    # missing DATABASE_PATH: `db` falls back to ./data/imgmanager.db and *creates*
+    # it if absent, so the run plans against a brand-new empty file, reports
+    # files_on_site: 0, and computes a delete list that keeps only what the export
+    # names. That is thousands of extra deletions, and nothing about the output
+    # would say so.
+    if not rows:
+        return _fail(
+            f"the database at {db.database_path()} holds no images, which cannot be"
+            " right for a cleanup. Set DATABASE_PATH to the real database and re-run."
+        )
+    print(f"database: {db.database_path()} ({len(rows)} rows)")
     # Match by file id, because a stored URL's extension is not always readable
     # from the listing; the id is the stable key. The exact URLs are the recover
     # comparison.
