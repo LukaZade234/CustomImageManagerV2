@@ -181,6 +181,31 @@ class TestRecordPostIds:
 
 
 class TestRecoverRows:
+    def test_record_post_ids_sees_rows_added_after_the_first_read(self, clean_db):
+        """The step must re-read, or recovered rows are left without a post id.
+
+        `main` reads every URL once at the start, then recovers -- which adds
+        1,222 rows. Passing that first read to `record_post_ids` skips them, and
+        a row with no post id can never be permanently deleted through the app.
+        """
+        # Before recovery: the URL is not on the site, so the first read had nothing.
+        first_read = clean_db.all_custom_image_urls()
+        assert first_read == []
+
+        cleanup.recover_rows(
+            [{"character": "Rem", "url": "https://cdn.imgchest.com/files/aaa.png"}],
+            added_by=None,
+        )
+        posts = [_post("aaa", post_id="slug-aaa")]
+
+        # The stale list misses it; a fresh read does not.
+        assert cleanup.record_post_ids(posts, first_read) == 0
+        assert cleanup.record_post_ids(posts, clean_db.all_custom_image_urls()) == 1
+        conn = clean_db.get_connection()
+        assert (
+            conn.execute("SELECT imgchest_post_id FROM custom_images").fetchone()[0] == "slug-aaa"
+        )
+
     def test_recovered_images_land_in_the_removed_drawer(self, clean_db):
         """Recovered means re-added in the removed state, so staff can restore."""
         count = cleanup.recover_rows(

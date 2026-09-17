@@ -458,8 +458,38 @@ servers means the same URL appears under different names. The cleanup **dedups b
 to confirm deletion and re-add behave, then run the whole thing. `--limit` caps
 deletions, not the preview.
 - **Ordering is load-bearing.** Content fingerprints and image dimensions re-read the
-bytes from ImgChest and must run **before** the cleanup. See
-[After the import](#after-the-import-the-derived-layers) step order below.
+  bytes from ImgChest and must run **before** the cleanup. See
+  [After the import](#after-the-import-the-derived-layers) step order below.
+
+### Known limitation — recovered rows whose post no longer exists
+
+Permanent delete removes the ImgChest **post** (`DELETE /v1/post/{id}`), so a row is
+only purgeable once it has an `imgchest_post_id`. The cleanup records those ids from the
+post listing, but the listing returns posts, not files: a file whose post was deleted
+outside the app still serves from the CDN while appearing in no post.
+
+The real run surfaced exactly this. Of the 1,222 recovered rows, **667 got a post id and
+555 did not** — every one of the 555 is a live CDN file that the account listing does not
+return at any `visibility`, so there is no post to record and none to delete. This is not
+a matching bug: their file ids parse correctly, and they are simply absent from
+`GET /v1/user/{username}/posts`. `backfill_imgchest_post_ids.py` cannot help them for the
+same reason, which is why it reports `555 unmatched, 0 matched` — the list it matches
+against does not contain them.
+
+Two consequences, both accepted:
+
+- **They cannot be permanently deleted through the app.** Such a row leaves the database
+  when purged, but its CDN file survives. For these 555 that is mostly academic — the
+  posts are already gone — but the UI's "delete permanently" is not literally true for
+  them.
+- **They still occupy ImgChest storage.** Orphaned files are not reclaimed. Chasing them
+  would mean deleting by file id rather than post id, which the cleanup deliberately does
+  not do; treat this as out of scope for the cut-over.
+
+A subtler instance of the same class: `record_post_ids` in the cleanup reads the stored
+URLs **once** before recovery, so rows recovered during the run are read too late to be
+recorded in that pass. Running it against a fresh read closes the gap for future runs (it
+does not retroactively reach the 555, which no read can match). See `f9278f4`.
 
 The step order changes to the following, and the reason is that the cleanup deletes
 files the earlier backfills still need to read:
