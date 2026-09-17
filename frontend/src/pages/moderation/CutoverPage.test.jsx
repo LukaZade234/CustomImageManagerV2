@@ -29,10 +29,24 @@ import CutoverPage from './CutoverPage'
 const PREVIEW = {
   generated_at: '2026-09-16T12:00:00Z',
   account: 'tester',
-  export: { unique_urls: 2, malformed: [], malformed_total: 0 },
-  counts: { keepers: 5, delete_candidates: 1, recoverable: 1, multi_image_posts: 0 },
-  delete: [{ file_id: 'deadbeef', post_id: 'p1', image_count: 1, url: 'https://cdn/dead' }],
+  export: { unique_urls: 3, malformed: [], malformed_total: 0 },
+  counts: {
+    keepers: 5,
+    delete_candidates: 1,
+    recoverable: 1,
+    foreign_urls: 1,
+    multi_image_posts: 0,
+  },
+  delete: [
+    {
+      file_id: 'deadbeef',
+      post_id: 'p1',
+      image_count: 1,
+      url: 'https://cdn.imgchest.com/files/deadbeef.png',
+    },
+  ],
   recover: [{ character: 'A2', url: 'https://cdn.imgchest.com/files/cafe.png' }],
+  foreign: [{ character: 'Someone Else', url: 'https://i.imgur.com/zzz.png' }],
   warnings: [],
   executed: false,
 }
@@ -91,14 +105,43 @@ describe('the preview states', () => {
 })
 
 describe('what the preview shows', () => {
-  it('shows both lists with their counts', async () => {
+  it('shows both lists, as images with identifiers under them', async () => {
+    renderCutover()
+    // The pictures, not just their ids: reviewing is a visual judgement.
+    await screen.findByText('A2')
+    const images = document.querySelectorAll('.cutover__grid img')
+    expect(images).toHaveLength(2)
+    expect([...images].map((img) => img.getAttribute('src'))).toEqual([
+      'https://cdn.imgchest.com/files/deadbeef.png',
+      'https://cdn.imgchest.com/files/cafe.png',
+    ])
+    expect(screen.getByText('deadbeef')).toBeInTheDocument()
+    expect(screen.getByText('A2')).toBeInTheDocument()
+    expect(screen.getByText(/to delete permanently/i)).toBeInTheDocument()
+    expect(screen.getByText(/recovered into Removed/i)).toBeInTheDocument()
+  })
+
+  it('hides external URLs behind the filter, and shows them when asked', async () => {
+    // The export is Discord's, so it carries other people's hosts. Recovering
+    // one would put a foreign image on the site, so they are review-only.
+    const { default: userEvent } = await import('@testing-library/user-event')
+    renderCutover()
+    await screen.findByText('A2')
+
+    // Default view: app images only.
+    expect(screen.queryByText('Someone Else')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'External only' }))
+    expect(screen.getByText('Someone Else')).toBeInTheDocument()
+    // The delete list is this account's own posts, so it is not shown here.
+    expect(screen.queryByText('deadbeef')).not.toBeInTheDocument()
+  })
+
+  it('never hides the irreversible list under the default filter', async () => {
+    // "App images only" is the default, and the delete list must survive it —
+    // it is the half that cannot be undone.
     renderCutover()
     expect(await screen.findByText('deadbeef')).toBeInTheDocument()
-    expect(screen.getByText(/to delete permanently/i)).toBeInTheDocument()
-    expect(screen.getByText(/to recover into Removed/i)).toBeInTheDocument()
-    // The recovered row names the character and the file id, not the full URL.
-    expect(screen.getByText('A2')).toBeInTheDocument()
-    expect(screen.getByText('cafe')).toBeInTheDocument()
   })
 
   it('does not claim the run happened when it has not', async () => {

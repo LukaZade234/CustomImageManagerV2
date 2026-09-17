@@ -1,4 +1,5 @@
-import { Badge, Button, Card, EmptyState } from '../../components/ui'
+import { useState } from 'react'
+import { Badge, Button, Card, EmptyState, SegmentedControl } from '../../components/ui'
 import { useModerationCutover } from '../../queries/moderation'
 
 /**
@@ -10,10 +11,27 @@ import { useModerationCutover } from '../../queries/moderation'
  * at the two lists — what would be permanently deleted, and what would be
  * recovered into the Removed drawer — and decide whether to run the script.
  *
- * Flat lists with counts, not grouped by character: the operator is scanning for
- * a surprise (an image they know is in use, or one whose loss would be noticed),
- * and a name-first layout is easier to scan for that than a grouped one.
+ * Images rather than ids: the decision this page exists for is "do I recognise
+ * this picture, and would its loss be noticed", and a file id cannot answer
+ * that. The id stays under each one for cross-referencing with the script's
+ * output.
+ *
+ * The host filter exists because the export is Discord's, not the app's. It
+ * contains images from other people's hosts — the app has only ever uploaded to
+ * ImgChest — and those are never recoverable here. "App images only" hides that
+ * noise; "External only" is there to inspect it.
  */
+
+const HOST_FILTERS = [
+  { value: 'app', label: 'App images only', short: 'App' },
+  { value: 'all', label: 'Everything', short: 'All' },
+  { value: 'external', label: 'External only', short: 'External' },
+]
+
+/** True when the app could have made this URL. Only ImgChest is ever uploaded to. */
+function isAppUrl(url) {
+  return /cdn\.imgchest\.com\/files\//.test(url || '')
+}
 
 function formatStamp(iso) {
   if (!iso) return ''
@@ -33,8 +51,30 @@ function fileIdFromUrl(url) {
   return match ? match[1] : url
 }
 
+/** One reviewed image: the picture first, its identifiers underneath. */
+function ImageTile({ url, caption, note, tone }) {
+  return (
+    <li className="cutover__tile">
+      <a
+        className="cutover__tile-frame"
+        href={url}
+        target="_blank"
+        rel="noreferrer noopener"
+        title="Open full size in a new tab"
+      >
+        {/* Decorative: the caption below carries the meaning, and alt text
+            repeating a file id helps nobody. */}
+        <img src={url} alt="" loading="lazy" />
+      </a>
+      <span className={`cutover__tile-caption${tone ? ` is-${tone}` : ''}`}>{caption}</span>
+      {note ? <span className="cutover__tile-note">{note}</span> : null}
+    </li>
+  )
+}
+
 export default function CutoverPage() {
   const { data, isPending, isError, error, refetch, isFetching } = useModerationCutover()
+  const [hostFilter, setHostFilter] = useState('app')
 
   if (isPending) {
     return (
@@ -78,11 +118,23 @@ export default function CutoverPage() {
 
   const preview = data.preview
   const counts = preview.counts ?? {}
-  const toDelete = preview.delete ?? []
-  const toRecover = preview.recover ?? []
   const warnings = preview.warnings ?? []
   const malformed = preview.export?.malformed ?? []
   const malformedTotal = preview.export?.malformed_total ?? malformed.length
+
+  // The script splits these already: `recover` is only URLs the app could have
+  // made, `foreign` is everything else from the export. Older previews have no
+  // `foreign` key, so fall back to classifying by host.
+  const recoverAll = preview.recover ?? []
+  const externalAll = preview.foreign ?? recoverAll.filter((item) => !isAppUrl(item.url))
+  const recoverApp = recoverAll.filter((item) => isAppUrl(item.url))
+
+  const showExternal = hostFilter === 'external'
+  const toRecover = showExternal ? externalAll : recoverApp
+  // The delete list is always the account's own posts, so the host filter does
+  // not apply to it. It is shown under both non-external views because it is the
+  // irreversible half and hiding it would be the wrong default.
+  const toDelete = showExternal ? [] : (preview.delete ?? [])
 
   return (
     <>
@@ -134,6 +186,25 @@ export default function CutoverPage() {
         )}
       </div>
 
+      <Card padding="lg" className="cutover__filter">
+        <SegmentedControl
+          name="cutover-host-filter"
+          label="Which images to show"
+          value={hostFilter}
+          onChange={setHostFilter}
+          options={HOST_FILTERS}
+        />
+        <p className="text-meta">
+          {hostFilter === 'app' &&
+            `Only ImgChest URLs, which are the ones this app could have made — ` +
+              `${recoverApp.length} to recover.`}
+          {hostFilter === 'external' &&
+            `${externalAll.length} external URL(s) from the export. These are hosted by ` +
+              `somebody else, so they are never recovered and never deleted here.`}
+          {hostFilter === 'all' && `Everything the export named, app and external together.`}
+        </p>
+      </Card>
+
       {malformed.length > 0 && (
         <Card padding="lg" className="cutover__warning">
           <h3 className="cutover__section-title">
@@ -172,47 +243,63 @@ export default function CutoverPage() {
         </Card>
       )}
 
-      <section className="cutover__section">
-        <h3 className="cutover__section-title">
-          Will be permanently deleted <Badge tone="danger">{toDelete.length}</Badge>
-        </h3>
-        <p className="text-meta">
-          In neither the Discord export nor the database. Nothing here is recoverable after the
-          script runs.
-        </p>
-        {toDelete.length === 0 ? (
-          <EmptyState title="Nothing to delete" description="Every ImgChest file is a keeper." />
-        ) : (
-          <ul className="cutover__lines">
-            {toDelete.map((item) => (
-              <li key={item.file_id} className="cutover__line">
-                <code>{item.file_id}</code>
-                {item.image_count > 1 ? ` (post ${item.post_id}, ${item.image_count} images)` : ''}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {!showExternal && (
+        <section className="cutover__section">
+          <h3 className="cutover__section-title">
+            Will be permanently deleted <Badge tone="danger">{toDelete.length}</Badge>
+          </h3>
+          <p className="text-meta">
+            On the ImgChest account, in neither the Discord export nor the database. Nothing here is
+            recoverable after the script runs. These are always this account's own uploads, so the
+            host filter does not apply to them.
+          </p>
+          {toDelete.length === 0 ? (
+            <EmptyState title="Nothing to delete" description="Every ImgChest file is a keeper." />
+          ) : (
+            <ul className="cutover__grid">
+              {toDelete.map((item) => (
+                <ImageTile
+                  key={item.file_id}
+                  url={item.url || `https://cdn.imgchest.com/files/${item.file_id}.png`}
+                  caption={item.file_id}
+                  tone="danger"
+                  note={item.image_count > 1 ? `post has ${item.image_count} images` : undefined}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="cutover__section">
         <h3 className="cutover__section-title">
-          Will be recovered into Removed <Badge tone="accent">{toRecover.length}</Badge>
+          {showExternal ? 'External URLs (never touched)' : 'Will be recovered into Removed'}{' '}
+          <Badge tone={showExternal ? 'caution' : 'accent'}>{toRecover.length}</Badge>
         </h3>
         <p className="text-meta">
-          In use in Discord, but missing from the site. The script re-adds these in the Removed
-          state so staff can restore them.
+          {showExternal
+            ? 'Used in Discord but hosted elsewhere. Recovering these would put another person\u2019s upload on the site under a row that could never be permanently deleted from here, so they are listed for review only.'
+            : 'In use in Discord, missing from the site, and hostable by this app. The script re-adds these in the Removed state so staff can restore them.'}
         </p>
         {toRecover.length === 0 ? (
           <EmptyState
-            title="Nothing to recover"
-            description="Every in-use image is already on the site."
+            title={showExternal ? 'No external URLs' : 'Nothing to recover'}
+            description={
+              showExternal
+                ? 'Every URL in the export is one this app could have made.'
+                : 'Every in-use app image is already on the site.'
+            }
           />
         ) : (
-          <ul className="cutover__lines">
+          <ul className="cutover__grid">
             {toRecover.map((item) => (
-              <li key={item.url} className="cutover__line">
-                <strong>{item.character}</strong> — <code>{fileIdFromUrl(item.url)}</code>
-              </li>
+              <ImageTile
+                key={item.url}
+                url={item.url}
+                caption={item.character || '—'}
+                tone={showExternal ? 'caution' : undefined}
+                note={fileIdFromUrl(item.url)}
+              />
             ))}
           </ul>
         )}

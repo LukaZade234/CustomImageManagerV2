@@ -1902,6 +1902,77 @@ body.reorder-touch-dragging {
 .cutover__line code {
   font-family: var(--font-mono, monospace);
 }
+/* The host filter. Sits above both lists because it governs what they show. */
+.cutover__filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+.cutover__filter .text-meta {
+  flex: 1 1 20ch;
+  margin: 0;
+}
+/* The reviewed images. A grid of small frames: the decision is made by looking
+   at the picture, so it needs to be visible at a glance, and a few hundred of
+   them have to fit without turning the page into a scroll marathon. */
+.cutover__grid {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-3);
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.cutover__tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.cutover__tile-frame {
+  display: block;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+}
+.cutover__tile-caption,
+.cutover__tile-note {
+  font-size: var(--type-meta);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cutover__tile-caption.is-danger {
+  color: var(--danger);
+}
+.cutover__tile-caption.is-caution {
+  color: var(--warning);
+}
+.cutover__tile-note {
+  color: var(--text-subtle);
+}
+/* Scoped through the grid so its specificity matches the other image rules in
+   this file, rather than descending past them. */
+.cutover__grid .cutover__tile-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Same grid on a phone, just fewer columns' worth of width. */
+@media (max-width: 480px) {
+  .cutover__grid {
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  }
+}
 .moderation-users__list {
   list-style: none;
   margin: var(--space-3) 0 0;

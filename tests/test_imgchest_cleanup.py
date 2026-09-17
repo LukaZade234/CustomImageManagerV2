@@ -108,6 +108,41 @@ class TestBuildPlan:
         )
         assert plan["recover"] == []
 
+    def test_a_non_imgchest_url_is_foreign_not_recoverable(self):
+        """The app has only ever uploaded to ImgChest.
+
+        An Imgur URL in the export is somebody else's upload used in Discord.
+        Recovering it would put a foreign image on the site, under a row that can
+        never be permanently deleted here because this account has no post for
+        it. It is reported so the operator can see it, and never recovered.
+        """
+        plan = cleanup.build_plan(
+            [],
+            in_use={
+                "https://cdn.imgchest.com/files/aaa.png": "Mine",
+                "https://i.imgur.com/zzz.png": "Theirs",
+            },
+            on_site_file_ids=set(),
+            on_site_urls=set(),
+        )
+        assert plan["recover"] == [
+            {"character": "Mine", "url": "https://cdn.imgchest.com/files/aaa.png"}
+        ]
+        assert plan["foreign"] == [
+            {"character": "Theirs", "url": "https://i.imgur.com/zzz.png"}
+        ]
+
+    def test_a_foreign_url_present_on_the_site_is_still_dropped(self):
+        # Already on the site means nothing to do, whichever host it is.
+        plan = cleanup.build_plan(
+            [],
+            in_use={"https://i.imgur.com/zzz.png": "Theirs"},
+            on_site_file_ids=set(),
+            on_site_urls={"https://i.imgur.com/zzz.png"},
+        )
+        assert plan["recover"] == []
+        assert plan["foreign"] == []
+
     def test_a_multi_image_post_is_flagged(self):
         plan = cleanup.build_plan(
             [_post("aaa", image_count=3)],
