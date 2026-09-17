@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome check src",
-    "format": "biome format --write src",
+    "typecheck": "tsc --noEmit && tsc -p functions/tsconfig.json --noEmit",
+    "lint": "biome check src functions",
+    "format": "biome format --write src functions",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

@@ -6,7 +6,7 @@ executable plan.
 | Review | Date | Findings | Status |
 |---|---|---|---|
 | [First review](#first-review-2026-09-16) | 2026-09-16 | 9 | Closed — see `ROADMAP.md` "Review findings (2026-09-16)" for what was accepted, deferred and declined |
-| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done, see the progress note in that section |
+| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done; 10, 12 and A/B accepted, 13 declined — see `ROADMAP.md` "Review findings (2026-09-17)" for the decision record |
 
 **This is a working document, not a decision record.** It does not carry the authority of
 `docs/DECISIONS.md` or `docs/CURRENT_STATE.md`, and it should be deleted or folded into those once
@@ -1020,7 +1020,10 @@ structurally separated from the cacheable block in `/api/stats`.
 | 13 | `CharacterPage` decomposition moved state, not markup | Low | Medium | Medium |
 | 14 | WebP-under-`.png` has no recorded contingency | Low — documentation only | Very low | None |
 
-Recommended order: **10, 11, 12**, then the feature work, then 13 and 14 opportunistically.
+Recommended order: **10, 11, 12**, then the feature work. 14 is documentation and is
+done. **13 was declined** — the decision record is in `docs/ROADMAP.md` "Review findings
+(2026-09-17)"; do not schedule it. The record there also accepts feature **A** first, then
+**B**, folds **C** into B and **D** into A, and adds three items the review missed.
 
 ### Progress (2026-09-17, same day)
 
@@ -1029,15 +1032,20 @@ Recommended order: **10, 11, 12**, then the feature work, then 13 and 14 opportu
   `CURRENT_STATE.md`'s test counts corrected to 732 / 566.
 - **14 — done.** `CURRENT_STATE.md` section 10 carries the WebP-under-`.png` row and the recovery
   path. A canary is described but deliberately not built.
-- **10 — not done, but the record is now honest.** `CURRENT_STATE.md` section 7 used to describe a
-  `build-frontend.yml` that force-committed `frontend/dist`; that was a **v1 DigitalOcean artifact
-  and never existed in this repository**. It now states plainly that there is no CI, and
-  `DEVELOPMENT.md`'s quality-gates section says nothing runs those gates automatically. The
-  workflow itself is still to be written.
-- **12 — partly.** The metadata half is unchanged: still no Open Graph or Twitter card tags, and
-  the shell still serves one title and description for every route. What *did* land is the
-  groundwork the section listed as out of scope — `robots.txt` exists, the icon set exists, and
-  `routes/spa.py` can now serve root-level files at all, which it could not before.
+- **10 — done.** `.github/workflows/checks.yml` runs backend and frontend jobs on every push and
+  pull request; the 11 `ruff` errors are fixed in the same change, `npm run typecheck` was added
+  (the section omitted it), and `routes/spa.py`'s stale "built by GitHub Action, committed to repo"
+  comment was corrected. `pyright` is deliberately **not** in the workflow — it reports 81 errors
+  and is not a passing gate; this is recorded in `DEVELOPMENT.md` rather than left implicit.
+- **12 — done, but not as this section describes.** The plan injects tags in `routes/spa.py`;
+  that cannot work in production, because Cloudflare Pages serves the SPA and only the API runs on
+  the origin, so Flask's HTML is never what a crawler fetches. The fix is a Pages Function under
+  `frontend/functions/character/[name].ts`, with the pure escaping/fallback logic in
+  `functions/_lib/metaTags.ts` (tested) and a thin handler around it. It degrades to the old
+  generic card on any failure rather than breaking the page. `db.find_character` gained
+  `custom_count` to supply the description. Homepage previews, a composited image, and structured
+  data remain out of scope. See `DEPLOYMENT.md` "Link previews" for the deploy-time env vars and
+  the fact that verification can only happen after a deploy.
 - **13 — not started.**
 
 Also fixed in passing, and not a numbered finding: `routes/spa.py` served only `/assets/`, so every

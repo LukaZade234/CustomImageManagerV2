@@ -790,6 +790,142 @@ would be `023`.
 
 ---
 
+## Review findings (2026-09-17)
+
+A second review, one day later, against commit `60569e2`. Five findings numbered
+from 10, plus four feature recommendations and a "what not to build yet" list, all
+in `critiques and plans.md`. As before, **this section is the decision record**;
+the numbers below were re-verified against the tree and `data/imgmanager.db` on
+2026-09-17 and held (no `.github/`, 11 `ruff` errors, `CharacterPage.jsx` 1,017
+lines / 11 `useState`, 1,722 characters / 8,562 active images / 987 attributed /
+11 Discord sign-ins, no Open Graph tags, `image_takes` written but never read).
+
+### Accepted, roughly in order
+
+- [x] **`PRODUCT.md` figures (#11).** _Done._ The framing paragraph claimed 13
+      attributed images and one account; the live DB held **987** and **11**. The
+      correction deliberately keeps the "effectively pre-launch" framing and the
+      standing instruction, and separates real contribution from crawler traffic
+      (285 distinct `identity_id`s at ~1.9 views each is crawlers, not an audience;
+      all 818 `copy_command` events come from one identity), so the fix cannot be
+      misread as "there are users now." Figures dated inline, and a runnable query
+      kept beside them. The historical migration numbers in this file and in
+      `MODERATION.md` are records of an event and were left alone.
+- [x] **CI (#10).** _Done._ The highest-value item in the review: 1,286 tests,
+      `ruff`, `biome` and the design-invariant tests all ran only when a person
+      remembered, and the 11 standing `ruff` errors were the proof that someone did
+      not. `.github/workflows/checks.yml` runs on push and pull request in two jobs
+      (backend: `uv sync --locked`, `ruff`, `pytest`; frontend: `npm ci`, `biome`,
+      `typecheck`, `vitest`, `build`), so a frontend failure and a backend failure
+      are distinguishable at a glance. The 11 lint errors were fixed in the same
+      change — mechanically, all behaviour-preserving — and `routes/spa.py`'s
+      comment claiming a GitHub Action builds and commits the SPA was corrected
+      (Cloudflare Pages builds it). **Added `npm run typecheck`**, which the review
+      omitted and which has the same unprotected failure mode. **Not added:
+      `pyright`.** It is declared in `pyproject.toml` and listed in
+      `DEVELOPMENT.md`'s quality gates as if it were one, but it reports 81 errors
+      and is nowhere near a passing gate; adding it would make the workflow red on
+      arrival. Recorded in `DEVELOPMENT.md` as a future cleanup rather than
+      silently omitted. The change disturbs nothing about deployment: the box
+      still polls, because checks need no access to it.
+- [x] **Link previews (#12).** _Done, via a corrected approach._ No Open Graph
+      or Twitter tags anywhere, and the shell served one title for every route, so
+      a character link pasted into Discord — the one place these users live — was
+      a grey box with no art while everything around it rendered. **The plan as
+      written could not work**: it injected the tags in `routes/spa.py`, but in
+      production Cloudflare Pages serves the SPA and only the API runs on the
+      origin, so Flask's HTML is never what a crawler fetches. The fix is a Pages
+      Function (`frontend/functions/character/[name].ts`) that intercepts
+      `/character/*`, asks the API for the character, and splices the tags into
+      the shell. It is all-or-nothing: an unknown character, a slow API or a
+      malformed response returns the shell untouched, so a failure degrades to the
+      old generic card, never to a broken page. The escaping and fallback logic is
+      pure and tested (`functions/_lib/metaTags.ts`); the handler needs the edge
+      runtime. `db.find_character` gained a `custom_count` (one indexed query) so
+      the description can carry the count. Added the required
+      `@cloudflare/workers-types` dep, a `functions/tsconfig.json`, a
+      `wrangler.jsonc`, and widened Vitest/biome/typecheck to cover `functions/`.
+      Homepage previews, a composited `og:image`, and sitemap/structured data all
+      stay out of scope, as the review said.
+- [x] **WebP-under-`.png` contingency (#14).** _Done, documentation only._ The
+      upload format is correct and stays. `CURRENT_STATE.md` §10 now carries the
+      risk row and the recovery path (original bytes on ImgChest, `content_hash` and
+      `imgchest_post_id` per row, so re-encoding is mechanical but is 8,562 uploads
+      against a rate limit), plus the early-warning canary as an option. The canary
+      is deliberately not built.
+- [ ] **Show people which images they have already used (A).** _Accepted as the
+      first feature; not built._ The best of the four recommendations. `PRODUCT.md`
+      names "remembering which ones are already in use" as the third half of the
+      problem and the app solves only the first two; `image_takes` has been
+      collecting exactly the needed data since Phase 6 and **nothing reads it**.
+      818 `copy_command` events against 1 download says the copy path is the
+      product. It does not contradict `DECISIONS.md` §1's rejection of take counts
+      for automatic retirement — this is one person's own history, not an aggregate
+      or a quality signal — and a short note must record that distinction so a later
+      reader does not think §1 was overturned. Do not make it a public per-image
+      counter, and state in the UI that it is cookie-bound.
+- [ ] **Series pages (B).** _Accepted, scheduled deliberately._ 1,015 of 1,722
+      characters (59%) have no active images, so more than half of all search
+      results lead to an empty page. The coverage number is what makes it a
+      contribution prompt rather than a nicer filter — `catalog_series.listed` /
+      `total` already exist and are still read by nothing. Real blockers to plan
+      for: no `series_key` counterpart to `characters.name_key`, `top_series` groups
+      on the raw string so casing variants split, and series names contain `/`
+      ("Fate/Grand Order") which needs the `<path:name>` treatment `/character/`
+      already uses; `routes/spa.py` needs the route added.
+
+### Declined or deferred, and why
+
+- **`CharacterPage` markup extraction (#13) — declined rather than deferred.** The
+  state tangle was the hazard and the first review's five hooks removed it; what
+  remains is a long render body, tedious rather than dangerous. Extracting
+  `CharacterGallery` would thread roughly fifteen hook return values through as
+  props — a long prop list replacing a long function, plus indirection in a heavily
+  tested file, for near-zero safety gain. The doc's own "do it opportunistically"
+  verdict understates this: there is no scheduled version of this worth doing, and
+  the three `CharacterPage.*.test.jsx` files are more valuable as a safety net than
+  as cover for churn. Revisit only if a concrete feature is blocked by the shape of
+  the file.
+- **A standalone "what is missing" surface (C) — folded into B.** It is one query
+  over existing columns and overlaps B almost entirely; if B is built it is a tab
+  on it, not its own page. Not tracked separately.
+- **Within-gallery filtering (D) — only alongside A.** Exactly one character has
+  256 images, the average is 12.1, and only a handful of pages are large enough to
+  matter. Build it as part of A's selection verbs or not at all.
+- **Homepage `og:image` (part of #12) — out of scope.** The character page is the
+  link people share; a homepage preview is decoration.
+
+### What not to build yet — agreed, no action
+
+Saves and hide-for-me (4 bookmarks, 0 hides, ever), a reports workflow (zero
+reports filed — §1's design holding is the intended outcome), and NSFW rating (the
+preference waits honestly; with zero reports there is no signal to bootstrap from).
+All are cheap to keep and expensive to invest in before there are users.
+
+### Additions to the review
+
+- **The cut-over cleanup is the one open high-consequence path and the review is
+  silent on it.** `scripts/imgchest_cleanup.py` deletes from a live third-party
+  account and is gated only by `--execute` against a preview file; a `--execute`
+  run against a stale preview would delete on stale data. The preview-to-execute
+  path wants a guard — a mandatory re-preview, or an assertion that the preview's
+  counts still match the live listing. See `CUTOVER.md`.
+- **The stats query belongs in the repo, not in prose.** Finding 11's structural
+  point (state the shape, point at a command) is right, and the command should be a
+  small script so the docs can cite something runnable rather than a query that
+  drifts inside a paragraph.
+- **Document how to force a re-scrape of a link preview.** Discord caches OG data
+  at its edge for a long time; a wrong first render must not be permanent. Worth a
+  line in finding 12's plan.
+
+### Correction to the review
+
+Finding 11's second target, `CURRENT_STATE.md`'s test counts, was already
+corrected to 732 / 566 before the review's own progress note — the review lists it
+as pending in its plan text. Nothing else was found to be stale.
+
+---
+
 ## Testing detail (harness set up in Phase 1)
 
 The harness goes up in Phase 1. These are the rules worth covering, in the order they become

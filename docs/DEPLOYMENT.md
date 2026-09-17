@@ -227,6 +227,41 @@ neither in use nor on the site. Both are in **[CUTOVER.md](CUTOVER.md)**.
    The API **refuses to start** with `CORS_ORIGINS=*`, because it sends
    credentials and browsers reject credentialed requests against a wildcard.
 
+### Link previews (the `/character/*` Pages Function)
+
+Discord's crawler does not run JavaScript, so a character link pasted into a
+channel rendered as the same generic card with no art. `frontend/functions/character/[name].ts`
+— a Cloudflare Pages Function — now intercepts `/character/*`, asks the API for
+that character, and splices Open Graph and Twitter card tags into the shell
+before the crawler sees it. `frontend/functions/_lib/metaTags.ts` holds the
+escaping and fallback logic, with tests.
+
+It needs two environment variables in the Pages project (**Settings →
+Environment variables**, both Production and Preview):
+
+```
+API_BASE_URL   = https://api.<yourdomain>      # same host as VITE_API_BASE_URL
+IMAGE_BASE_URL = https://images.<yourdomain>   # the R2 custom domain
+```
+
+They are also in `frontend/wrangler.jsonc` as local defaults for
+`wrangler pages dev`; the dashboard values win in production. **The function must
+sit under `frontend/functions/`**, not the repository root: Pages only discovers
+a `functions/` directory at the configured **Root directory**, which for this
+project is `frontend`.
+
+Failure is deliberate and silent: if the API is slow, down, or does not know the
+character, the shell is served exactly as Cloudflare would have served it. A
+failure degrades to the old generic card, never to a broken page, and the SPA is
+unaffected either way — only crawlers read the tags. The API lookup is
+`GET /api/catalog/character?name=`, which is identity-independent and rate-limited.
+
+**Verification cannot be done locally.** After a deploy, paste a character URL
+into a Discord channel and confirm the card shows the name, series, count and
+portrait. Discord caches previews for a long time, so to force a re-scrape while
+testing, append a throwaway query string (`?v=2`) — the URL differs, so Discord
+treats it as a new link.
+
 ## 6. Cut over, then decommission
 
 See **[CUTOVER.md](CUTOVER.md)** — it is the only operation here that happens once

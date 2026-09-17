@@ -603,25 +603,24 @@ and the numbers behind each — is in **[ACCENT.md](ACCENT.md)**.
 
 ## 7. CI
 
-**There is none.** No `.github/` directory exists, and none ever has in this repository.
+**It exists now.** `.github/workflows/checks.yml` runs on every push and pull request: two jobs,
+one for the backend (`uv sync --locked`, `uv run ruff check .`, `uv run pytest tests/ -q`) and one
+for the frontend (`npm ci`, `biome`, `typecheck`, `vitest`, `build`). The 11 `ruff` errors this
+section used to cite as evidence of drift were fixed in the same change.
 
 The workflow this section used to describe — `build-frontend.yml`, force-committing
 `frontend/dist` back to `main` because `.do/app.yaml` used a Python buildpack that could not build
 the frontend — belonged to v1 on DigitalOcean. `.do/app.yaml` is gone, `frontend/dist` is
-gitignored and built locally, and Cloudflare Pages serves the SPA in production.
+gitignored, and Cloudflare Pages builds and serves the SPA in production.
 
-So nothing runs automatically: not the 732 backend tests, not the 566 frontend tests, not `ruff`,
-not `biome`, and not `frontend/src/styles/tokenPairs.test.js`, which enforces the `DESIGN.md`
-rules as executable invariants. The drift this allows is already visible — `uv run ruff check .`
-reports 11 errors, nine of them in `mudae_discord.py`.
+The checks need no access to the origin box, so they do not disturb the deployment model:
+`DEPLOYMENT.md` explains that the box *polls* rather than being pushed to because it has no
+inbound access, and that reasoning is about deploys, not checks. `docs/DEVELOPMENT.md`'s
+reference to using `uv sync --locked` in CI is now a fact rather than an intent.
 
-Two documents still assume CI exists and are wrong until one does:
-`docs/DEVELOPMENT.md` ("Use `uv sync --locked` in CI") describes an intent, not a fact.
+---
 
-Adding checks does not disturb the deployment model. `DEPLOYMENT.md` explains that the origin box
-*polls* rather than being pushed to, because it has no inbound access — that reasoning is about
-deploys, and a workflow that only runs tests and linters needs no access to the box at all. See
-`critiques and plans.md` section 10 for the plan.
+## 7b. Continuous integration
 
 ---
 
@@ -676,7 +675,7 @@ Still open:
 | Discord self-bot ToS | `mudae_service.py` | An account ban would remove every Mudae feature |
 | The two databases have forked | v1 Neon vs v2 SQLite | See `CUTOVER.md`; the migration is insert-only and re-running gives the union |
 | Uploads are WebP bytes under a `.png` name | `image_utils.py` | Rests on Discord sniffing content rather than trusting the extension. If that changes, every custom image stops rendering at once |
-| No CI | — | Nothing runs the 1,298 tests or the linters automatically; `ruff` has already drifted to 11 errors |
+| No deployment from CI | — | Deliberate — the origin polls because it has no inbound access. Checks run in CI; deploys do not |
 
 The WebP-under-`.png` recovery path, recorded before it is needed: the original bytes are on
 ImgChest and each row carries `content_hash` and `imgchest_post_id`, so re-encoding to real PNG and

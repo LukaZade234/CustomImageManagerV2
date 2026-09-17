@@ -19,7 +19,9 @@ from flask import Blueprint, abort, send_from_directory
 spa_bp = Blueprint("spa", __name__)
 
 
-# React SPA: served from frontend/dist/ (built by GitHub Action, committed to repo)
+# React SPA: served from frontend/dist/. In production Cloudflare Pages builds
+# and serves it (`npm ci && npm run build`, output frontend/dist); these routes
+# are the local-development path, where dist/ is built with `npm run build`.
 # Two levels up, not one: this module lives in routes/, so `__file__` here is
 # routes/spa.py and the repo root is its grandparent. It was one level when
 # these routes lived in upload_imgchest.py, and moving the file silently

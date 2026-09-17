@@ -182,6 +182,25 @@ class TestFindCharacter:
         assert found["in_library"] is True
         assert found["name"] == "Hange Zoe\u0308"
 
+    def test_carries_the_active_custom_count(self, clean_db):
+        # The link-preview edge function reads this to say "N custom images".
+        # Only active images count: a removed one is not on the page.
+        clean_db.add_character("Saber", "Fate", "1", "")
+        clean_db.add_custom_images(
+            "Saber",
+            ["https://cdn/a.png", "https://cdn/b.png", "https://cdn/c.png"],
+            added_by="someone",
+        )
+        assert clean_db.find_character("Saber")["custom_count"] == 3
+        clean_db.remove_custom_images("Saber", ["https://cdn/b.png"], "someone")
+        assert clean_db.find_character("Saber")["custom_count"] == 2
+
+    def test_a_catalog_only_character_counts_zero(self, clean_db):
+        seed_catalog(clean_db, [_catalog_row("Artoria Pendragon", "Fate", "4")])
+        found = clean_db.find_character("Artoria Pendragon")
+        assert found["in_library"] is False
+        assert found["custom_count"] == 0
+
     def test_a_lazily_created_row_is_findable(self, clean_db):
         # Custom images can attach to a name with no character row; that insert
         # has to write the key too.
