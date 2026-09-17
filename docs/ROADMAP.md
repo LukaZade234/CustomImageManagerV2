@@ -845,6 +845,15 @@ lines / 11 `useState`, 1,722 characters / 8,562 active images / 987 attributed /
       the description can carry the count. Added the required
       `@cloudflare/workers-types` dep, a `functions/tsconfig.json`, a
       `wrangler.jsonc`, and widened Vitest/biome/typecheck to cover `functions/`.
+      **The first cut of `wrangler.jsonc` carried a `vars` block with localhost
+      placeholders, which took the production site down** — committing `vars`
+      makes wrangler the source of truth, locks the dashboard to Secrets only,
+      and overwrites the dashboard's values on the next deploy, so the SPA's
+      `VITE_API_BASE_URL`/`IMAGE_BASE_URL` were replaced and it called its own
+      origin for the API, receiving the HTML shell back (`JSON.parse` error). The
+      `vars` block is gone; the file carries only `name`,
+      `pages_build_output_dir` and `compatibility_date`, and the env values live
+      in the dashboard with `.dev.vars` for local runs.
       Homepage previews, a composited `og:image`, and sitemap/structured data all
       stay out of scope, as the review said.
 - [x] **WebP-under-`.png` contingency (#14).** _Done, documentation only._ The

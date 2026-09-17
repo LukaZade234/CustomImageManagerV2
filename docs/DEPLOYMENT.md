@@ -244,8 +244,14 @@ API_BASE_URL   = https://api.<yourdomain>      # same host as VITE_API_BASE_URL
 IMAGE_BASE_URL = https://images.<yourdomain>   # the R2 custom domain
 ```
 
-They are also in `frontend/wrangler.jsonc` as local defaults for
-`wrangler pages dev`; the dashboard values win in production. **The function must
+They are also in the Pages project's **Settings → Variables and Secrets** and are
+read at runtime by the Function. **Do not add a `vars` block to
+`frontend/wrangler.jsonc`:** doing so makes the wrangler file the source of truth
+for plaintext variables, locks the dashboard to Secrets only, and overwrites the
+dashboard's values on the next deploy — committed localhost placeholders once
+replaced the production URLs and took the site down. The config file carries only
+`name`, `pages_build_output_dir` and `compatibility_date`. For local
+`wrangler pages dev`, use an uncommitted `frontend/.dev.vars`. **The function must
 sit under `frontend/functions/`**, not the repository root: Pages only discovers
 a `functions/` directory at the configured **Root directory**, which for this
 project is `frontend`.
