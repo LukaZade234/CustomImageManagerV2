@@ -3122,6 +3122,10 @@ def copied_image_ids(char_name: str, identity_id: str | None) -> dict:
     if not identity_id:
         return {"ids": [], "last_batch": []}
     conn = get_connection()
+    key = _name_key(char_name)
+    # Every image this viewer has copied for this character, newest copy first
+    # among duplicates. Deduplicated below, so an image copied in two batches
+    # appears once.
     rows = conn.execute(
         "SELECT i.id AS image_id, t.batch_id AS batch_id"
         "  FROM image_takes t"
@@ -3129,12 +3133,26 @@ def copied_image_ids(char_name: str, identity_id: str | None) -> dict:
         "  JOIN characters c ON c.id = i.character_id"
         " WHERE t.identity_id = ? AND t.kind = 'copy_command' AND c.name_key = ?"
         " ORDER BY t.at DESC, t.id DESC",
-        (identity_id, _name_key(char_name)),
+        (identity_id, key),
     ).fetchall()
+    # The most recent batch is found on its own rather than inferred from the
+    # order above: a batch is an id, and picking it out by position depends on
+    # the sort being right for a question it was not written for. `at` is per
+    # row, not per batch, so ordering the batch rows needs `id` to break ties
+    # within a copy.
+    latest_batch_id = conn.execute(
+        "SELECT t.batch_id FROM image_takes t"
+        "  JOIN custom_images i ON i.id = t.image_id"
+        "  JOIN characters c ON c.id = i.character_id"
+        " WHERE t.identity_id = ? AND t.kind = 'copy_command' AND c.name_key = ?"
+        "   AND t.batch_id IS NOT NULL"
+        " ORDER BY t.at DESC, t.id DESC LIMIT 1",
+        (identity_id, key),
+    ).fetchone()
+    latest_batch_id = latest_batch_id["batch_id"] if latest_batch_id else None
     ids: list[int] = []
     seen: set[int] = set()
     last_batch: list[int] = []
-    latest_batch_id = next((r["batch_id"] for r in rows if r["batch_id"]), None)
     for row in rows:
         image_id = int(row["image_id"])
         if image_id not in seen:

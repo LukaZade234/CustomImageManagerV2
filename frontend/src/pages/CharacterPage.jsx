@@ -475,7 +475,8 @@ export default function CharacterPage() {
 
   const recordTakes = (urls, kind) => {
     const ids = urls.map((url) => rowByUrl.get(url)?.id).filter((id) => id != null)
-    if (ids.length) apiClient.recordTakes(ids, kind)
+    if (!ids.length) return Promise.resolve()
+    return apiClient.recordTakes(ids, kind)
   }
 
   const handleDownloadSelected = async () => {
@@ -633,25 +634,31 @@ export default function CharacterPage() {
   }
 
   /**
-   * Select everything, or — behind the $ai door — as much as Mudae will take.
+   * Apply a selection built by a helper, enforcing Mudae's cap in the $ai door.
    *
-   * Mudae rejects an `$ai` command above 100 images, and the "select every
-   * image on open" this replaced could reach 256. So in the $ai door "all"
-   * means the first 100 in gallery order, and the bar says so in the label.
-   * The plain Select door still selects everything: remove, hide and download
-   * have no such limit, and truncating there would silently drop images.
+   * Every helper goes through here — select-all, mine, copied, last batch, not
+   * copied — because the cap is a property of the door, not of one button. It
+   * was applied to select-all alone, which let "Select copied (150)" walk
+   * straight past it.
+   *
+   * The plain Select door is untouched: remove, hide and download have no such
+   * limit, and trimming there would silently act on fewer images than the
+   * count says.
    */
-  const selectAllImages = () => {
-    const all = [...customs]
-    if (aiIntent && all.length > MUDAE_AI_MAX_IMAGES) {
+  const applyHelperSelection = (urls) => {
+    if (aiIntent && urls.length > MUDAE_AI_MAX_IMAGES) {
       addToast(
         `Mudae allows ${MUDAE_AI_MAX_IMAGES} images per $ai command — the first ${MUDAE_AI_MAX_IMAGES} were selected.`,
         'info',
       )
-      setSelection(all.slice(0, MUDAE_AI_MAX_IMAGES))
+      setSelection(urls.slice(0, MUDAE_AI_MAX_IMAGES))
       return
     }
-    setSelection(all)
+    setSelection(urls)
+  }
+
+  const selectAllImages = () => {
+    applyHelperSelection([...customs])
   }
 
   /**
@@ -663,26 +670,24 @@ export default function CharacterPage() {
    * over.
    */
   const selectMineImages = () => {
-    setSelection(rows.filter((row) => row.is_mine).map((row) => row.url))
+    applyHelperSelection(rows.filter((row) => row.is_mine).map((row) => row.url))
   }
 
   /**
    * Select what this viewer has, or has not, already copied into an $ai command
    * — the third half of the problem PRODUCT.md describes ("remembering which
-   * ones are already in use"). These only run from the $ai door. They select
-   * exactly the set they name; if that set somehow exceeds Mudae's limit the
-   * command refuses to build rather than trimming it.
+   * ones are already in use"). These only run from the $ai door.
    */
   const selectCopiedImages = () => {
-    setSelection(rows.filter((row) => copiedSet.has(row.id)).map((row) => row.url))
+    applyHelperSelection(rows.filter((row) => copiedSet.has(row.id)).map((row) => row.url))
   }
 
   const selectLastBatchImages = () => {
-    setSelection(rows.filter((row) => lastBatchSet.has(row.id)).map((row) => row.url))
+    applyHelperSelection(rows.filter((row) => lastBatchSet.has(row.id)).map((row) => row.url))
   }
 
   const selectUncopiedImages = () => {
-    setSelection(rows.filter((row) => !copiedSet.has(row.id)).map((row) => row.url))
+    applyHelperSelection(rows.filter((row) => !copiedSet.has(row.id)).map((row) => row.url))
   }
 
   /**
@@ -715,7 +720,12 @@ export default function CharacterPage() {
     // is everything the user chose at this moment, and the split into several
     // pastes is a delivery detail, not several intents. A batch is therefore
     // written even if they then close the length dialog without copying.
-    recordTakes(urls, 'copy_command')
+    //
+    // Refetched *after* the write resolves, so the new batch is in the rows the
+    // refetch reads. Firing both at once races: the read can beat the insert and
+    // then the history shows the previous batch. Nothing else invalidates this
+    // query when a command is built, so without this the copy never appears.
+    recordTakes(urls, 'copy_command').then(refreshImages)
     const cmd = buildAiCommand(charName, urls)
     if (cmd.length < DISCORD_LIMIT_REGULAR) {
       navigator.clipboard

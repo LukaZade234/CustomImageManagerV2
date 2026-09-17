@@ -370,4 +370,45 @@ describe('the $ai door', () => {
       '1 of 2 selected',
     )
   })
+
+  it('caps the copy-history helpers too, not just select-all', async () => {
+    // The cap belongs to the $ai door, not to one button. It was applied to
+    // select-all alone, so "Select copied (150)" walked straight past it.
+    const user = userEvent.setup()
+    served.rows = Array.from({ length: 150 }, (_, i) => ({
+      id: i + 1,
+      url: `https://cdn/${i}.png`,
+      owner: null,
+      is_mine: false,
+      hidden: false,
+    }))
+    served.copiedIds = served.rows.map((r) => r.id)
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByRole('button', { name: 'Select copied (150)' }))
+
+    expect(screen.getByRole('region', { name: /selection actions/i })).toHaveTextContent(
+      '100 of 150 selected',
+    )
+  })
+
+  it('records the batch and refetches, so a copy shows up in the history', async () => {
+    // A copy is written server-side on the click, but nothing else invalidates
+    // the character query -- so without an explicit refetch the new batch never
+    // appears and "last batch" looks broken.
+    const user = userEvent.setup()
+    const apiClient = (await import('../api')).apiClient
+    served.copiedIds = []
+    served.lastBatchIds = []
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /^\$ai command$/i }))
+    await user.click(screen.getByTitle('Added by Jade Lynx'))
+
+    const before = apiClient.getCustomImagesForChar.mock.calls.length
+    await user.click(screen.getByRole('button', { name: 'Copy $ai command' }))
+
+    await waitFor(() =>
+      expect(apiClient.getCustomImagesForChar.mock.calls.length).toBeGreaterThan(before),
+    )
+  })
 })
