@@ -208,15 +208,20 @@ neither in use nor on the site. Both are in **[CUTOVER.md](CUTOVER.md)**.
    - Build command: `npm ci && npm run build`
    - Output directory: `frontend/dist`
    - Root directory: `frontend`
-3. Environment variables (**Production**):
+3. Environment variables (**Settings → Variables and Secrets**, Production and
+   Preview). Add all four as **Secrets** — see "Link previews" below for why the
+   dashboard no longer offers the plaintext type on this project:
 
    ```
    VITE_API_BASE_URL   = https://api.<yourdomain>
    VITE_IMAGE_BASE_URL = https://images.<yourdomain>
+   API_BASE_URL        = https://api.<yourdomain>
+   IMAGE_BASE_URL      = https://images.<yourdomain>
    ```
 
-   These are inlined into the bundle at build time, so changing them needs a
-   rebuild, and nothing secret may go here.
+   The `VITE_*` pair is inlined into the bundle at build time, so changing it
+   needs a rebuild; the other two are read at runtime by the Function. None of
+   them are secrets in the credential sense — the URLs are documented here.
 4. Add your custom domain to the Pages project.
 5. Set `CORS_ORIGINS` on the origin to that exact domain and restart:
 
@@ -236,24 +241,38 @@ that character, and splices Open Graph and Twitter card tags into the shell
 before the crawler sees it. `frontend/functions/_lib/metaTags.ts` holds the
 escaping and fallback logic, with tests.
 
-It needs two environment variables in the Pages project (**Settings →
-Environment variables**, both Production and Preview):
+It needs four variables in the Pages project (**Settings → Variables and
+Secrets**, both Production and Preview):
 
 ```
-API_BASE_URL   = https://api.<yourdomain>      # same host as VITE_API_BASE_URL
-IMAGE_BASE_URL = https://images.<yourdomain>   # the R2 custom domain
+API_BASE_URL        = https://api.<yourdomain>      # read at runtime by the Function
+IMAGE_BASE_URL      = https://images.<yourdomain>   # the R2 custom domain
+VITE_API_BASE_URL   = https://api.<yourdomain>      # inlined into the bundle at build time
+VITE_IMAGE_BASE_URL = https://images.<yourdomain>
 ```
 
-They are also in the Pages project's **Settings → Variables and Secrets** and are
-read at runtime by the Function. **Do not add a `vars` block to
-`frontend/wrangler.jsonc`:** doing so makes the wrangler file the source of truth
-for plaintext variables, locks the dashboard to Secrets only, and overwrites the
-dashboard's values on the next deploy — committed localhost placeholders once
-replaced the production URLs and took the site down. The config file carries only
-`name`, `pages_build_output_dir` and `compatibility_date`. For local
-`wrangler pages dev`, use an uncommitted `frontend/.dev.vars`. **The function must
-sit under `frontend/functions/`**, not the repository root: Pages only discovers
-a `functions/` directory at the configured **Root directory**, which for this
+**Add them as Secrets.** Committing a `vars` block to `frontend/wrangler.jsonc`
+once made wrangler the source of truth for plaintext variables, and the dashboard
+now reports *"Environment variables for this project are being managed through
+wrangler.toml. Only Secrets (encrypted variables) can be managed via the
+Dashboard."* — a project-level lock that did not clear when the `vars` block was
+removed. Secrets are read identically by the Function and are injected into the
+build, so the `VITE_*` pair is inlined into the bundle as usual. These are URLs,
+not credentials, so the only cost of the secret type is not being able to read
+them back in the dashboard; they are recorded here.
+
+**Do not add a `vars` block to `frontend/wrangler.jsonc` again.** Beyond the lock,
+its values overwrite the dashboard's on deploy — committed localhost placeholders
+once replaced the production URLs, left the bundle with no API origin, and took
+the site down (the SPA called its own origin for the API and Pages answered with
+the HTML shell, so the browser failed parsing HTML as JSON). The config file
+carries only `name`, `pages_build_output_dir` and `compatibility_date`.
+
+Nothing local belongs in the Pages variables. Local `wrangler pages dev` reads an
+uncommitted `frontend/.dev.vars` (`API_BASE_URL="http://localhost:5000"`), and
+plain `npm run dev` does not invoke the Function at all. **The function must sit
+under `frontend/functions/`**, not the repository root: Pages only discovers a
+`functions/` directory at the configured **Root directory**, which for this
 project is `frontend`.
 
 Failure is deliberate and silent: if the API is slow, down, or does not know the
@@ -485,6 +504,8 @@ round overwrites the live database with itself.
 
 | Variable | Where | Required | Notes |
 |---|---|---|---|
+| `VITE_API_BASE_URL` / `VITE_IMAGE_BASE_URL` | Pages | **yes** | Build-time, inlined into the bundle. Unset means the SPA calls its own origin for the API and gets the HTML shell back. Added as Secrets (the dashboard is locked to that type — see "Link previews") |
+| `API_BASE_URL` / `IMAGE_BASE_URL` | Pages | **yes** | Runtime, read by the `/character/*` link-preview Function. Same values as the pair above. Missing means no link previews, silently |
 | `SECRET_KEY` | origin | **yes** | Signs identity cookies. Stable forever. |
 | `IMGCHEST_API_KEY` | origin | yes | Uploads |
 | `DATABASE_PATH` | origin | yes | `/var/lib/imgmanager/imgmanager.db` |
