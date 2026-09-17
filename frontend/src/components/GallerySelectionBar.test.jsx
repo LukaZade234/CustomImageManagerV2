@@ -22,8 +22,8 @@ const handlerNames = [
   'onSelectAll',
   'onSelectMine',
   'onSelectCopied',
+  'onSelectLastBatch',
   'onSelectUncopied',
-  'onCopiedScopeChange',
   'onClearSelection',
   'onGenerateAiCommand',
   'onDownloadSelected',
@@ -140,24 +140,46 @@ describe('GallerySelectionBar', () => {
     expect(screen.queryByRole('button', { name: /Select mine/i })).not.toBeInTheDocument()
   })
 
-  describe('the already-copied helpers', () => {
-    const copied = { ...empty, copiedCount: 12, copiedScope: 'ever', lastBatchAvailable: true }
+  describe('the $ai helpers', () => {
+    const copied = {
+      ...empty,
+      aiIntent: true,
+      aiCap: 100,
+      copiedCount: 12,
+      lastBatchCount: 5,
+      uncopiedCount: 4,
+    }
 
-    it('are absent for someone with no copy history here', () => {
-      // Most visitors: signed out, or never copied from this character.
-      setup({ ...empty, copiedCount: 0 })
+    it('are absent from the plain Select door', () => {
+      // The helpers answer a question only the $ai door raises, and showing
+      // them on ordinary selection was the clutter this replaced.
+      setup({ ...copied, aiIntent: false })
       expect(screen.queryByRole('button', { name: /Select copied/i })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /Select not copied/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('radio', { name: /Ever/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Select last batch/i })).not.toBeInTheDocument()
     })
 
-    it('offer both directions, with counts', async () => {
-      const handlers = setup({ ...copied, uncopiedCount: 4 })
-      expect(screen.getByRole('button', { name: 'Select copied (12)' })).toBeInTheDocument()
+    it('are absent for someone with no copy history here', () => {
+      setup({ ...copied, copiedCount: 0, lastBatchCount: 0 })
+      expect(screen.queryByRole('button', { name: /Select copied/i })).not.toBeInTheDocument()
+    })
+
+    it('are three separate buttons, each selecting its own set', async () => {
+      const handlers = setup(copied)
       await clickExpecting('Select copied (12)', handlers, 'onSelectCopied')
 
-      const h2 = setup({ ...copied, uncopiedCount: 4 })
-      await clickExpecting('Select not copied (4)', h2, 'onSelectUncopied')
+      const h2 = setup(copied)
+      await clickExpecting('Select last batch (5)', h2, 'onSelectLastBatch')
+
+      const h3 = setup(copied)
+      await clickExpecting('Select not copied (4)', h3, 'onSelectUncopied')
+    })
+
+    it('omit last batch when there is none to offer', () => {
+      // History from before batch ids: the button would select nothing.
+      setup({ ...copied, lastBatchCount: 0 })
+      expect(screen.queryByRole('button', { name: /Select last batch/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Select copied (12)' })).toBeInTheDocument()
     })
 
     it('omit "not copied" when everything has been copied', () => {
@@ -166,18 +188,21 @@ describe('GallerySelectionBar', () => {
       expect(screen.queryByRole('button', { name: /Select not copied/i })).not.toBeInTheDocument()
     })
 
-    it('expose the scope as a choice rather than hidden in the click', async () => {
-      const handlers = setup({ ...copied, uncopiedCount: 4 })
-      expect(screen.getByRole('radio', { name: 'Ever' })).toBeChecked()
-      await userEvent.click(screen.getByRole('radio', { name: 'Last batch' }))
-      expect(handlers.onCopiedScopeChange).toHaveBeenCalledWith('last')
+    it('label select-all by the cap when the gallery exceeds it', () => {
+      // "Select all" cannot mean all here: Mudae rejects a command over 100.
+      setup({ ...copied, totalCount: 256, copiedCount: 0, lastBatchCount: 0 })
+      expect(screen.getByRole('button', { name: 'Select first 100' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Select all/i })).not.toBeInTheDocument()
     })
 
-    it('drop the scope switch when there is no batch to switch to', () => {
-      // History from before batch ids: "last batch" would select nothing.
-      setup({ ...copied, lastBatchAvailable: false, uncopiedCount: 4 })
-      expect(screen.queryByRole('radio', { name: /Last batch/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Select copied (12)' })).toBeInTheDocument()
+    it('keep "Select all" when the gallery fits under the cap', () => {
+      setup({ ...copied, totalCount: 40, copiedCount: 0, lastBatchCount: 0 })
+      expect(screen.getByRole('button', { name: 'Select all (40)' })).toBeInTheDocument()
+    })
+
+    it('never offer the remove-oriented helper in the $ai door', () => {
+      setup({ ...copied, mineCount: 3 })
+      expect(screen.queryByRole('button', { name: /Select mine/i })).not.toBeInTheDocument()
     })
   })
 

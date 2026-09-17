@@ -38,6 +38,7 @@ import {
   capAiImages,
   DISCORD_LIMIT_NITRO,
   DISCORD_LIMIT_REGULAR,
+  MUDAE_AI_MAX_IMAGES,
   splitAiCommandForLimit,
 } from '../utils/aiCommandDiscord'
 import { keysToTraits } from '../utils/characterTraits'
@@ -89,14 +90,6 @@ export default function CharacterPage() {
   const isSaved = savedCharacters.some((s) => s.name === name)
 
   const [showHidden, setShowHidden] = useState(false)
-  /**
-   * Which copy history the "already used" helpers select from: `ever` (every
-   * image copied here) or `last` (only the most recent copy). Declared up here
-   * with the other page state, not beside the values it feeds, because the page
-   * returns early while loading and a hook below that return would change hook
-   * order between renders.
-   */
-  const [copiedScope, setCopiedScope] = useState('ever')
   const hiddenCount = allRows.filter((row) => row.hidden).length
   // Hidden images drop out of the gallery entirely unless you ask for them.
   // That is the whole value of hide-for-me: it has to actually get them out of
@@ -159,6 +152,7 @@ export default function CharacterPage() {
     mode,
     selectMode,
     reorderMode,
+    aiIntent,
     selectedUrls,
     confirmDiscardOrder,
     reset: resetSelection,
@@ -256,18 +250,18 @@ export default function CharacterPage() {
    * deciding what you were going to do before you had picked anything to do it
    * to. Now the images come first and the bar offers whatever fits them.
    *
-   * `preselect` is what the $ai door hands over. A button that copies a command
-   * for every image the moment it is clicked gives you no way to mean "all but
-   * those three", and a command is exactly the thing people want to trim. So it
-   * opens the selection with everything already chosen: copying all of them is
-   * one more click, and the fact that you can take some out is on screen rather
-   * than hidden behind a Select button that says nothing about $ai.
+   * `ai` marks the door the $ai button opened. The plain Select button and the
+   * $ai button are the same mode, but only the $ai one offers the "already
+   * used" helpers and Mudae's 100-image cap, because only that one ends in a
+   * command. Neither preselects anything: a button that chose every image for
+   * you would decide the very thing you came to pick, and on a 256-image
+   * gallery it would do so over Mudae's limit.
    */
   const enterSelectMode = useCallback(
-    (preselect = []) => {
+    ({ ai = false } = {}) => {
       setAiLimitDialog(null)
       reorderSessionRef.current = null
-      enterSelect(preselect)
+      enterSelect([], { ai })
     },
     [enterSelect],
   )
@@ -523,22 +517,20 @@ export default function CharacterPage() {
 
   /**
    * This viewer's own `$ai` copy history for this character, for the
-   * "already used" selection helpers. `ever` is every image they have copied
-   * here; `last` is only their most recent copy. Both are scoped to them, so
-   * this is a memory aid and never a signal about anyone else.
+   * "already used" selection helpers. Both sets are scoped to them, so this is
+   * a memory aid and never a signal about anyone else.
    *
-   * "Last batch" is empty for history that predates batch ids, in which case
-   * the switch would offer a scope that selects nothing — so the helpers fall
-   * back to the ever set and the last-batch option is dropped below.
+   * The helpers appear only behind the $ai button (see `aiIntent`), since that
+   * is the door that leads to a command. "Last batch" is empty for history that
+   * predates batch ids, and the button is simply absent then rather than
+   * selecting nothing.
    */
-  const copiedIds = imagesData?.copiedIds ?? []
-  const lastBatchIds = imagesData?.lastBatchIds ?? []
-  const hasLastBatch = lastBatchIds.length > 0
-  const scopeIds = copiedScope === 'last' && hasLastBatch ? lastBatchIds : copiedIds
-  const copiedSet = new Set(scopeIds)
+  const copiedSet = new Set(imagesData?.copiedIds ?? [])
+  const lastBatchSet = new Set(imagesData?.lastBatchIds ?? [])
   // Counts are over the gallery as shown, so a hidden image is neither offered
   // nor counted by a helper that selects from what you can see.
   const copiedCount = rows.filter((row) => copiedSet.has(row.id)).length
+  const lastBatchCount = rows.filter((row) => lastBatchSet.has(row.id)).length
   const uncopiedCount = rows.length - copiedCount
 
   const removeOwnImages = async () => {
@@ -632,8 +624,26 @@ export default function CharacterPage() {
     }
   }
 
+  /**
+   * Select everything, or — behind the $ai door — as much as Mudae will take.
+   *
+   * Mudae rejects an `$ai` command above 100 images, and the "select every
+   * image on open" this replaced could reach 256. So in the $ai door "all"
+   * means the first 100 in gallery order, and the bar says so in the label.
+   * The plain Select door still selects everything: remove, hide and download
+   * have no such limit, and truncating there would silently drop images.
+   */
   const selectAllImages = () => {
-    setSelection([...customs])
+    const all = [...customs]
+    if (aiIntent && all.length > MUDAE_AI_MAX_IMAGES) {
+      addToast(
+        `Mudae allows ${MUDAE_AI_MAX_IMAGES} images per $ai command — the first ${MUDAE_AI_MAX_IMAGES} were selected.`,
+        'info',
+      )
+      setSelection(all.slice(0, MUDAE_AI_MAX_IMAGES))
+      return
+    }
+    setSelection(all)
   }
 
   /**
@@ -649,14 +659,18 @@ export default function CharacterPage() {
   }
 
   /**
-   * Select the images this viewer has, or has not, already copied into an $ai
-   * command — the third half of the problem PRODUCT.md describes ("remembering
-   * which ones are already in use"). Selecting is not capped here: only the
-   * `$ai` command cares about Mudae's 100, and remove/hide/download act on a
-   * selection of any size.
+   * Select what this viewer has, or has not, already copied into an $ai command
+   * — the third half of the problem PRODUCT.md describes ("remembering which
+   * ones are already in use"). These only run from the $ai door. A set larger
+   * than Mudae's limit is still allowed to select; the cap is applied when the
+   * command is built, where the dialog can explain what was dropped.
    */
   const selectCopiedImages = () => {
     setSelection(rows.filter((row) => copiedSet.has(row.id)).map((row) => row.url))
+  }
+
+  const selectLastBatchImages = () => {
+    setSelection(rows.filter((row) => lastBatchSet.has(row.id)).map((row) => row.url))
   }
 
   const selectUncopiedImages = () => {
@@ -751,7 +765,7 @@ export default function CharacterPage() {
         canAddImages={canAddImages}
         isSaved={isSaved}
         onToggleSave={handleToggleSave}
-        onGetAiCommand={() => enterSelectMode([...customs])}
+        onGetAiCommand={() => enterSelectMode({ ai: true })}
         customCount={customs.length}
         edit={{
           active: editMode,
@@ -970,12 +984,13 @@ export default function CharacterPage() {
           othersSelectedCount={othersSelected.length}
           onSelectAll={selectAllImages}
           onSelectMine={selectMineImages}
+          aiIntent={aiIntent}
+          aiCap={MUDAE_AI_MAX_IMAGES}
           copiedCount={copiedCount}
+          lastBatchCount={lastBatchCount}
           uncopiedCount={uncopiedCount}
-          copiedScope={hasLastBatch ? copiedScope : 'ever'}
-          lastBatchAvailable={hasLastBatch}
-          onCopiedScopeChange={setCopiedScope}
           onSelectCopied={selectCopiedImages}
+          onSelectLastBatch={selectLastBatchImages}
           onSelectUncopied={selectUncopiedImages}
           onClearSelection={() => setSelection([])}
           onGenerateAiCommand={() => generateAiCommand(selectedUrls)}

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Button, IconButton, SegmentedControl } from './ui'
+import { Button, IconButton } from './ui'
 
 /**
  * The bar that appears along the bottom while a gallery mode is open.
@@ -30,12 +30,13 @@ export function GallerySelectionBar({
   othersSelectedCount,
   onSelectAll,
   onSelectMine,
+  aiIntent,
+  aiCap,
   copiedCount,
+  lastBatchCount,
   uncopiedCount,
-  copiedScope,
-  lastBatchAvailable,
-  onCopiedScopeChange,
   onSelectCopied,
+  onSelectLastBatch,
   onSelectUncopied,
   onClearSelection,
   onGenerateAiCommand,
@@ -95,15 +96,29 @@ export function GallerySelectionBar({
                 Both ends stay enabled — clearing an empty selection is
                 harmless, and a button that disables itself when clicked drops
                 focus just as surely as one that unmounts.
+
+                Behind the $ai door the label changes when the gallery is over
+                Mudae's limit, because there "all" cannot mean all. This is the
+                only helper the limit touches; the explicit ones below select
+                exactly the set they name, and the command caps as a backstop.
               */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={hasSelection ? onClearSelection : onSelectAll}
+                title={
+                  !hasSelection && aiIntent && totalCount > aiCap
+                    ? `Mudae allows ${aiCap} images per $ai command, so the first ${aiCap} are selected`
+                    : undefined
+                }
               >
-                {hasSelection ? 'Clear' : `Select all (${totalCount})`}
+                {hasSelection
+                  ? 'Clear'
+                  : aiIntent && totalCount > aiCap
+                    ? `Select first ${aiCap}`
+                    : `Select all (${totalCount})`}
               </Button>
-              {mineCount > 0 && !hasSelection && (
+              {!aiIntent && mineCount > 0 && !hasSelection && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -114,43 +129,38 @@ export function GallerySelectionBar({
                 </Button>
               )}
               {/*
-                "Already used" helpers, from this viewer's own $ai copy history.
-                Shown only when they have some, so the bar does not offer a
-                button that would select nothing. The scope switch is explicit
-                rather than hidden in the click: "ever" and "last batch" mean
-                genuinely different sets, and which one you get should not
-                depend on remembering a modifier.
+                The $ai helpers. Only behind the $ai door: this is the door that
+                ends in a command, so "which have I already used" is the question
+                it raises. Each is its own button rather than a scope switch, so
+                the set you get is the button you press. All are hidden until
+                the viewer has copied something here, so none selects nothing.
               */}
-              {copiedCount > 0 && !hasSelection && (
+              {aiIntent && !hasSelection && copiedCount > 0 && (
                 <>
-                  {/* Only offered when there is a recent batch to switch to;
-                      history that predates batch ids cannot answer it. */}
-                  {lastBatchAvailable && (
-                    <SegmentedControl
-                      name="copied-scope"
-                      label="Which copies"
-                      value={copiedScope}
-                      onChange={onCopiedScopeChange}
-                      options={[
-                        { value: 'ever', label: 'Ever', short: 'Ever' },
-                        { value: 'last', label: 'Last batch', short: 'Last' },
-                      ]}
-                    />
-                  )}
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={onSelectCopied}
-                    title="The images you have already copied into an $ai command. This history lives in your browser cookie, like your saved list"
+                    title="Every image you have copied into an $ai command. This history lives in your browser cookie, like your saved list"
                   >
                     Select copied ({copiedCount})
                   </Button>
+                  {lastBatchCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onSelectLastBatch}
+                      title="Only the images from your most recent $ai copy"
+                    >
+                      Select last batch ({lastBatchCount})
+                    </Button>
+                  )}
                   {uncopiedCount > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={onSelectUncopied}
-                      title="Select the images you have not copied into an $ai command yet"
+                      title="The images you have not copied into an $ai command yet"
                     >
                       Select not copied ({uncopiedCount})
                     </Button>

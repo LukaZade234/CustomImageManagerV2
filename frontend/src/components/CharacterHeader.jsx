@@ -233,10 +233,13 @@ export function CharacterHeader({
               was no way to mean "all of them except those three", and the
               place you could say that was a Select button down by the gallery
               whose name gave no hint that $ai lived under it.
-  
-              It opens the selection with everything already chosen instead.
-              Copying the lot is one more click; taking a few out is visible
-              rather than hidden behind a button named after something else.
+
+              It opens the selection with nothing chosen. Preselecting every
+              image decided the very thing you came to pick, and on a gallery
+              past Mudae's 100-image limit it preselected a set the bot would
+              reject. It does open a different selection from the plain Select
+              button, though: only this door offers the "already used" helpers,
+              since only this one ends in a command.
             */}
             {/* The one solid button on the browse screen. Producing the $ai
                 command is what the page is for, and nothing on it led. */}
