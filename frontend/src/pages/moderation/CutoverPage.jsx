@@ -123,14 +123,19 @@ export default function CutoverPage() {
   const malformedTotal = preview.export?.malformed_total ?? malformed.length
 
   // The script splits these already: `recover` is only URLs the app could have
-  // made, `foreign` is everything else from the export. Older previews have no
-  // `foreign` key, so fall back to classifying by host.
+  // made *and* that still serve an image, `dead` is app URLs whose file is gone,
+  // and `foreign` is anything hosted elsewhere. Older previews have neither key,
+  // so fall back to classifying by host.
   const recoverAll = preview.recover ?? []
+  const deadAll = preview.dead ?? []
   const externalAll = preview.foreign ?? recoverAll.filter((item) => !isAppUrl(item.url))
   const recoverApp = recoverAll.filter((item) => isAppUrl(item.url))
 
   const showExternal = hostFilter === 'external'
   const toRecover = showExternal ? externalAll : recoverApp
+  // Dead files are review-only — they are shown whenever the operator is not
+  // looking exclusively at external hosts.
+  const toDead = showExternal ? [] : deadAll
   // The delete list is always the account's own posts, so the host filter does
   // not apply to it. It is shown under both non-external views because it is the
   // irreversible half and hiding it would be the wrong default.
@@ -196,12 +201,13 @@ export default function CutoverPage() {
         />
         <p className="text-meta">
           {hostFilter === 'app' &&
-            `Only ImgChest URLs, which are the ones this app could have made — ` +
-              `${recoverApp.length} to recover.`}
+            `Only ImgChest URLs that still serve an image — ${recoverApp.length} to recover.`}
           {hostFilter === 'external' &&
             `${externalAll.length} external URL(s) from the export. These are hosted by ` +
               `somebody else, so they are never recovered and never deleted here.`}
-          {hostFilter === 'all' && `Everything the export named, app and external together.`}
+          {hostFilter === 'all' &&
+            `Everything the export named: ${recoverApp.length} recoverable, ` +
+              `${deadAll.length} dead, ${externalAll.length} external.`}
         </p>
       </Card>
 
@@ -304,6 +310,31 @@ export default function CutoverPage() {
           </ul>
         )}
       </section>
+
+      {toDead.length > 0 && (
+        <section className="cutover__section">
+          <h3 className="cutover__section-title">
+            No longer hosted <Badge tone="warning">{toDead.length}</Badge>
+          </h3>
+          <p className="text-meta">
+            Kept in the Discord export, but the file is gone from ImgChest — these return a 404.
+            They are <strong>not</strong> recovered: putting one back would add a broken image to
+            the site for staff to remove again. Listed so you can see what Discord still points at,
+            and worth re-checking your export for.
+          </p>
+          <ul className="cutover__grid">
+            {toDead.map((item) => (
+              <ImageTile
+                key={item.url}
+                url={item.url}
+                caption={item.character || '—'}
+                tone="caution"
+                note={`${fileIdFromUrl(item.url)} · dead`}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   )
 }

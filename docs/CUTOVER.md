@@ -436,10 +436,21 @@ The app is read-only — it never deletes. Deletion and re-add need `--execute`.
 - **Owner-only, not staff.** The preview is appended to the moderation surface but
 guarded by `require_owner` rather than `require_moderator`; plain moderators do not
 see the tab or the endpoint. This is operator work, not routine moderation.
-- **Flat lists with counts.** The preview shows two flat lists — *will be permanently
-deleted*, and *will be recovered into Removed* — each with a count, plus totals and a
-warnings section. Per-character grouping was considered and dropped: the operator is
-scanning for surprises, not navigating by character.
+- **Flat lists with counts, now as images.** The preview shows *will be permanently
+deleted* and *will be recovered into Removed* as thumbnail grids — the decision is
+"do I recognise this picture", which an id cannot answer — each with a count, plus
+totals and a warnings section. Per-character grouping was considered and dropped: the
+operator is scanning for surprises, not navigating by character.
+- **Recover candidates are probed for liveness.** The export records what was pasted
+  into Discord, not what is still hosted, so a URL can be in it and gone. Recovering a
+  404 would put a broken image on the site for staff to remove again, so each candidate
+  is requested once and failures go to their own *no longer hosted* list — reported,
+  never recovered. `--no-verify` skips the probing.
+- **URLs from other hosts are never recovered.** The app has only ever uploaded to
+  ImgChest, so an Imgur or other URL in the export is somebody else's upload used in
+  Discord. Recovering one would put a foreign image on the site under a row that could
+  never be permanently deleted here, because this account has no post for it. They are
+  reported under the *external only* filter, and the default view hides them.
 - **The export is** `Name - URL`**, one per line, and it repeats.** Pulling from several
 servers means the same URL appears under different names. The cleanup **dedups by URL**
 (first name wins) and reports malformed lines instead of dropping them silently.
