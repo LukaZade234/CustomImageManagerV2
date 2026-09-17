@@ -1,8 +1,21 @@
 {
-  // Cloudflare Pages project config, for local `wrangler pages dev` and for
-  // wrangler-based deploys. The Pages dashboard remains the source of truth for
-  // the production build settings and environment variables; `vars` here are the
-  // non-secret defaults used when running the Functions locally.
+  // Cloudflare Pages project config, for local `wrangler pages dev`.
+  //
+  // Deliberately **no `vars` block.** Committing one makes the wrangler file the
+  // source of truth for plaintext environment variables: the dashboard locks
+  // them to Secrets only ("Environment variables for this project are being
+  // managed through wrangler.toml"), and on the next deploy the file's values
+  // overwrite whatever the dashboard held. That is not theoretical — a `vars`
+  // block holding localhost placeholders replaced the production
+  // `API_BASE_URL`/`IMAGE_BASE_URL` and took the whole site down, because the
+  // SPA then called its own origin for the API and got the HTML shell back.
+  //
+  // Environment variables live in the Pages dashboard (Settings -> Variables and
+  // Secrets). For local `wrangler pages dev`, put them in an uncommitted
+  // `frontend/.dev.vars` (gitignored):
+  //
+  //   API_BASE_URL="http://localhost:5000"
+  //   IMAGE_BASE_URL=""
   //
   // The Functions live under frontend/functions/ because the Pages "Root
   // directory" for this project is `frontend` -- a functions/ directory is only
@@ -10,12 +23,6 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "imgmanager",
   "pages_build_output_dir": "./dist",
-  "compatibility_date": "2026-09-17",
-  "vars": {
-    // Point these at a local Flask (http://localhost:5000) to exercise the
-    // preview function in `wrangler pages dev`. Production values are set in the
-    // Pages dashboard, not committed here.
-    "API_BASE_URL": "http://localhost:5000",
-    "IMAGE_BASE_URL": ""
-  }
+  "compatibility_date": "2026-09-17"
 }
+

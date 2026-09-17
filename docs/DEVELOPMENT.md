@@ -100,8 +100,16 @@ npm run build
 npx wrangler pages dev dist          # serves the SPA plus the /character/* function
 ```
 
-`wrangler.jsonc` points `API_BASE_URL` at `http://localhost:5000` for this, so a
-local Flask must be running. Only the pure logic in `functions/_lib/metaTags.ts`
+For that, put `API_BASE_URL=http://localhost:5000` in an uncommitted
+`frontend/.dev.vars`, so a local Flask must be running. **Do not put these in
+`wrangler.jsonc`.** A `vars` block there makes the wrangler file the source of
+truth for plaintext variables: the dashboard locks them to Secrets only, and the
+next deploy overwrites the dashboard's values with whatever the file holds.
+Committing localhost placeholders that way replaced the production API URL and
+took the site down. The file carries only `name`, `pages_build_output_dir` and
+`compatibility_date`.
+
+Only the pure logic in `functions/_lib/metaTags.ts`
 is unit-tested; the handler needs the edge runtime, and the thing that actually
 matters — Discord's crawler reading the tags — can only be checked after a
 production deploy. See `DEPLOYMENT.md` "Link previews".
