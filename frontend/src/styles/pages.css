@@ -487,9 +487,17 @@
   .custom-images-section {
     margin-top: var(--space-5);
   }
-  /* Smaller again where the row has least to share. */
+  /* Smaller again where the row has least to share.
+     Save also sits directly under the portrait here instead of at the foot of
+     the row. The two columns stretch to a shared height and push their footers
+     down so Save lines up with Edit/$ai — which works while those are both one
+     line. Here the staff accent picker wraps to a second line, so the identity
+     column is taller and Save would drop to the picker's row, two lines below
+     the buttons it is meant to line up with. Following the portrait instead is
+     what it looks like it belongs to. */
   .char-image-section {
     --portrait-max-h: 132px;
+    justify-content: flex-start;
   }
 }
 
