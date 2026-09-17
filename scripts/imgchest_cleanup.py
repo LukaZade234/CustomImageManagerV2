@@ -528,6 +528,19 @@ def main() -> int:
     print(f"  {len(posts)} posts listed")
 
     rows = db.all_custom_image_urls()
+    # A cleanup plans against what the site holds, so an empty read is never a
+    # real state -- it means the database was not found. The likely cause is a
+    # missing DATABASE_PATH: `db` falls back to ./data/imgmanager.db and *creates*
+    # it if absent, so the run plans against a brand-new empty file, reports
+    # files_on_site: 0, and computes a delete list that keeps only what the export
+    # names. That is thousands of extra deletions, and nothing about the output
+    # would say so.
+    if not rows:
+        return _fail(
+            f"the database at {db.database_path()} holds no images, which cannot be"
+            " right for a cleanup. Set DATABASE_PATH to the real database and re-run."
+        )
+    print(f"database: {db.database_path()} ({len(rows)} rows)")
     # Match by file id, because a stored URL's extension is not always readable
     # from the listing; the id is the stable key. The exact URLs are the recover
     # comparison.
