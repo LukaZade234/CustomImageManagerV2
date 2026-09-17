@@ -25,6 +25,11 @@ def _repo_root():
 
 EXPECTED_ROUTES = {
     ("/", "GET"),
+    # frontend/public/, copied verbatim into dist by Vite: the icons and
+    # robots.txt at the root (an allowlist, not a file lookup), and the emoji
+    # and font directories.
+    ("/<any(emoji, fonts):folder>/<path:filename>", "GET"),
+    ("/<filename>", "GET"),
     ("/add", "GET"),
     ("/api/accent-override", "POST"),
     ("/api/add-character", "POST"),

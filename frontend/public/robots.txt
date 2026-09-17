@@ -1,0 +1,14 @@
+# ImgManager — a shared library of custom character images for Mudae.
+#
+# Everything here is public and crawlable. The paths below are excluded not
+# because they are secret -- the server enforces access, not this file -- but
+# because they are per-visitor or staff-only views with nothing to index, and
+# crawling them wastes budget on pages that differ for every caller.
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /profile
+Disallow: /profile/
+Disallow: /notifications
+Disallow: /moderation
