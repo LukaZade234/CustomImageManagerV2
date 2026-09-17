@@ -252,29 +252,26 @@ describe('the save button', () => {
   it('keeps the page actions in the identity column', () => {
     setup()
     const info = document.querySelector('.char-info-section')
-    const footer = document.querySelector('.char-info-footer')
     const actions = document.querySelector('.char-page-actions')
-    // The actions live in the identity column, not the portrait's. They are one
-    // level deeper than they were: the footer block wraps the buttons *and* the
-    // staff accent picker, so the column sees a single child for its
-    // `space-between` to align with Save. Adding the picker as a second child
-    // broke that alignment once already.
-    expect(footer.parentElement).toBe(info)
-    expect(actions.parentElement).toBe(footer)
+    // The actions live in the identity column, not the portrait's, so the
+    // column's `space-between` holds them level with Save. The accent picker
+    // must stay *inside* this row rather than becoming a second child of the
+    // column, which breaks that alignment — and it must not be pulled out into
+    // a wrapping block either, which does the same thing differently.
+    expect(actions.parentElement).toBe(info)
     expect(info.querySelector('.display-title')).toHaveTextContent('Ayanami Rei')
   })
 
-  it('puts the accent picker in the footer block, beside the buttons', () => {
+  it('puts the accent picker inside the actions row, so the row stays aligned', () => {
     setup({ accent: { canEdit: true, seed: '#cf2c79', manual: false } })
-    const footer = document.querySelector('.char-info-footer')
     const actions = document.querySelector('.char-page-actions')
     const accent = document.querySelector('.accent-override')
 
-    // A sibling of the actions row, inside the footer, so it takes the block's
-    // full width and leaves the buttons above on one line.
+    // Inside the actions row, after the buttons. On a phone CSS gives it its
+    // own line; that is a breakpoint rule and must not be done by changing
+    // where it sits in the tree, which is how the alignment broke.
     expect(accent).toBeInTheDocument()
-    expect(accent.parentElement).toBe(footer)
-    expect(accent.previousElementSibling).toBe(actions)
+    expect(accent.parentElement).toBe(actions)
   })
 
   it('is the same kind of button as the actions it lines up with', () => {
