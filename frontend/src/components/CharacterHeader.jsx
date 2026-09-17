@@ -267,9 +267,16 @@ export function CharacterHeader({
               </svg>
               $ai command
             </Button>
-            <AccentOverrideControl accent={accent} />
           </div>
         )}
+        {/*
+          The staff accent picker gets its own row rather than riding at the end
+          of the actions row. It is wide enough that `margin-left: auto` wrapped
+          it onto a second line anyway, which dragged Edit and $ai command up and
+          Save down so the three stopped reading as one row. Full width, its own
+          line, no effect on the buttons above it.
+        */}
+        {!edit.active && <AccentOverrideControl accent={accent} />}
       </div>
     </div>
   )

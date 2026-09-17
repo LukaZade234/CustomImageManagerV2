@@ -139,14 +139,16 @@
   min-width: 0;
 }
 /* The staff accent picker: a swatch, whether the colour is manual or measured,
-   and the pick/clear verbs. Presentational; all state lives on the page. */
+   and the pick/clear verbs. Presentational; all state lives on the page.
+   Its own full-width row beneath the actions, so it cannot wrap the buttons
+   above it out of line. */
 .accent-override {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
-  /* Pushed to the far end of the actions row, away from the visitor verbs. */
-  margin-left: auto;
+  width: 100%;
+  margin-top: var(--space-2);
   color: var(--text-muted);
   font-size: var(--type-meta);
 }
@@ -3581,23 +3583,41 @@ button.profile-card__link {
 /* Below the phone boundary the bar becomes two rows: what is selected on top,
    what you can do with it underneath, where a thumb can reach it. */
 @media (max-width: 768px) {
+  /* A grid rather than a wrapping flex row, so the bar's two rows stay put when
+     the verbs are absent. With flex, an empty selection left the helpers sitting
+     high over the space the verbs would have taken — the bar looked like it had
+     a blank line under it that only filled in once you picked something.
+     Anchoring every row to the bottom means the helpers rest on the same line
+     whether or not the verbs exist, and simply ride up when they appear. */
   .gallery-action-bar__inner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
     gap: var(--space-2);
     /* The card's own padding drops to 16px here, so this follows it. */
     padding-inline: var(--space-4);
   }
   .gallery-action-bar__count {
-    order: 1;
-  }
-  .gallery-action-bar__helpers {
-    order: 2;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
   }
   .gallery-action-bar__close {
-    order: 3;
-    margin-left: auto;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    margin-left: 0;
   }
+  .gallery-action-bar__helpers {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-self: end;
+  }
+  /* The verbs take their own row only when they exist. An auto row means their
+     absence collapses cleanly instead of leaving a reserved gap. */
   .gallery-action-bar__verbs {
-    order: 4;
+    grid-column: 1 / -1;
+    grid-row: 3;
     width: 100%;
     margin-left: 0;
   }

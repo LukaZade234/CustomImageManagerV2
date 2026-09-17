@@ -12,7 +12,7 @@ import { useStore } from '../../store/useStore'
  */
 
 const THEMES = [
-  { value: 'system', label: 'Follow system' },
+  { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ]
