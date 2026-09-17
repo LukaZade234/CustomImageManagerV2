@@ -11,12 +11,24 @@ web
 Anyone who plays Mudae, a Discord bot that deals collectible character cards. The product is
 intended to be publicly usable by any Mudae player, not restricted to one server.
 
-Today it is effectively pre-launch: the library holds ~1,706 characters and ~8,556 custom images,
-but one person has registered and only 13 images carry an uploader. The identity, moderation and
-contribution machinery already in the code — anonymous browsing, optional Discord sign-in, reports,
-hide-for-me, contributor rankings — is preparation for strangers rather than a description of
-current traffic. Future work should treat multi-user behaviour as a real requirement and current
-usage numbers as not yet meaningful.
+Today it is effectively pre-launch, but less so than it was. As of **2026-09-17** the library
+holds ~1,722 characters and ~8,562 custom images, **987 of which now carry an uploader** (up from
+13), and **11 accounts have signed in with Discord** (up from one). Contribution is real; traffic
+is not. Read the two apart before citing either:
+
+- `character_views` holds 285 distinct identity ids against 554 views — roughly 1.9 each, with no
+  cookie persistence. That is the shape of crawlers, not people. An identity row is minted per
+  cookie, which `db.get_home_highlights` warns about in its own docstring.
+- All 818 `$ai` command copies recorded in `image_takes` come from a **single** identity.
+
+So the identity, moderation and contribution machinery — anonymous browsing, optional Discord
+sign-in, reports, hide-for-me, contributor rankings — is still preparation for strangers rather
+than a description of current traffic. Future work should treat multi-user behaviour as a real
+requirement and current traffic as not yet meaningful. Attribution and contributor data, however,
+now have enough behind them to design against.
+
+These figures go stale. Re-read them from the database rather than trusting this paragraph; the
+query is in `critiques and plans.md` section 11.
 
 The job: assemble a set of images for a character and get them into Mudae.
 
@@ -88,7 +100,7 @@ what the code already establishes.
 
 Real, and usable in any surface that needs numbers or imagery:
 
-- ~1,706 characters, ~8,556 custom images, ~441 series in the live library.
+- ~1,722 characters, ~8,562 custom images, ~438 series in the live library (2026-09-17).
 - Character portraits are uniformly 225×350; custom images are whatever shape they were drawn in.
 - The weekly "Most visited" ranking is real, deduplicated per visitor: one enthusiast refreshing
   cannot move it.

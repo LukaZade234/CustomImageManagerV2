@@ -25,6 +25,7 @@ uv run python scripts/migrate_v1_to_sqlite.py --dump kv_store.sql
 ```
 
 Use `uv sync --locked` in CI: it fails if `uv.lock` has drifted from `pyproject.toml`
+(there is no CI yet — see `CURRENT_STATE.md` section 7)
 rather than silently resolving something new.
 
 ## Running
@@ -103,9 +104,51 @@ npm run typecheck             # tsc --noEmit
 npm run build
 ```
 
+**Nothing runs any of these automatically.** There is no CI, so these are the gates only if
+someone runs them; `ruff` currently reports 11 pre-existing errors for that reason.
+
 TypeScript is adopted **incrementally**: `allowJs: true`, `checkJs: false`. Existing
 `.js`/`.jsx` are not type-checked; convert a file to `.ts`/`.tsx` and it is. Shared API
 shapes live in `frontend/src/types.ts`.
+
+## Regenerating the icons
+
+The favicon set is built from `frontend/favicon-src.webp` — kakera, Mudae's gem, 48×96 with
+transparency. The source is kept outside `frontend/public/` on purpose: Vite copies that directory
+verbatim into `dist/`, so a source file left there would be published alongside the outputs.
+
+```bash
+uv run python - <<'EOF'
+from pathlib import Path
+from PIL import Image
+
+FE = Path("frontend"); PUB = FE / "public"
+im = Image.open(FE / "favicon-src.webp").convert("RGBA")
+
+def fit(size, scale=1.0, bg=None):
+    """Whole gem, centred, aspect preserved. It is 1:2 — stretching it looks wrong."""
+    c = im.copy(); c.thumbnail((round(size * scale),) * 2, Image.LANCZOS)
+    cv = Image.new("RGBA", (size, size), (*bg, 255) if bg else (0, 0, 0, 0))
+    cv.paste(c, ((size - c.width) // 2, (size - c.height) // 2), c)
+    return cv
+
+# Build the .ico from the LARGEST canvas: Pillow derives the other sizes from
+# whatever image it is given, so saving from the 16px one yields a 16-only file.
+fit(48).save(PUB / "favicon.ico", format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
+fit(32).save(PUB / "favicon-32.png")
+# Opaque: iOS composites alpha on black. 0.75 keeps the upscale to 1.4x, not 1.9x.
+fit(180, scale=0.75, bg=(245, 247, 249)).convert("RGB").save(PUB / "apple-touch-icon.png")
+EOF
+```
+
+Verify the `.ico` really carries three entries — this is the step that silently fails:
+
+```bash
+uv run python -c "from PIL import Image; print(sorted(Image.open('frontend/public/favicon.ico').info['sizes']))"
+# [(16, 16), (32, 32), (48, 48)]
+```
+
+`tests/test_spa_static.py` covers that these and `robots.txt` are actually reachable through Flask.
 
 ## Frontend styling
 
