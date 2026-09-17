@@ -7,11 +7,26 @@
          request carries a foreign Referer. No component relies on the Referer,
          so the document omits it for every subresource and the images load. -->
     <meta name="referrer" content="no-referrer" />
+    <!-- Says plainly what the site is, what Mudae is, and who it is not
+         affiliated with. The site was once flagged while it sat on a shared
+         PaaS hostname, which is a pattern phishing uses; an honest, specific
+         description and the verification below are what answer that. Keep the
+         disclaimer and keep "no account needed" -- both are the claim a
+         reviewer checks. -->
     <meta
       name="description"
-      content="ImgManager — personal tool to browse characters, manage custom images for Mudae, and copy $ai commands. No login; not affiliated with Discord or Mudae."
+      content="ImgManager — a shared library of custom character images for Mudae, the Discord bot. Browse and copy $ai commands; no account needed. Not affiliated with Discord or Mudae."
     />
+    <!-- Google Search Console ownership. Removing this un-verifies the site. -->
     <meta name="google-site-verification" content="7U-EcXYg_g_s3VD9qSfqlEPrIKelnXNfJf9gYwUfyqM" />
+    <!-- Kakera, Mudae's own gem, matching the teal accent. Regenerate all
+         three from frontend/favicon-src.webp -- it is kept outside public/ so
+         Vite does not also copy the source into dist/. The gem is 1:2, so it is
+         centred rather than stretched; apple-touch-icon is opaque because iOS
+         composites alpha on black. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>ImgManager — Mudae custom image helper</title>
     <script>
       /* Runs before first paint so an explicit theme choice never flashes the

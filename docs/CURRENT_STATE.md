@@ -415,7 +415,9 @@ limited per identity (`ratelimit.py`).
 |---|---|---|
 | GET | `/` | — |
 | GET | `/add` | — |
-| GET | `/assets/<path:filename>` | — |
+| GET | `/assets/<path:filename>` | Hashed build output; cached a year |
+| GET | `/<filename>` | `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `robots.txt`. An allowlist, not a file lookup |
+| GET | `/<any(emoji, fonts):folder>/<path:filename>` | Mudae gender emoji and the self-hosted Geist font |
 | GET | `/character/<path:name>` | — |
 | GET | `/customs` | — |
 | GET | `/search` | — |
@@ -534,6 +536,33 @@ is gone. See `DEVELOPMENT.md`.
 handle. Sign-in, sign-out, theme and the privacy switches all live on
 `/profile`. Ownership is shown per image only where it changes what you can do.
 
+### The document shell and its static files
+
+`frontend/index.html` is the only HTML in the project, served unmodified for every client route.
+It carries, in order: the `no-referrer` policy that lets `mudae.net` portraits load, a description,
+the Google Search Console verification token, the icon links, and the pre-paint theme script.
+
+| File | In `frontend/public/` | Notes |
+|---|---|---|
+| `favicon.ico` | yes | 16/32/48 in one file |
+| `favicon-32.png` | yes | What modern and HiDPI browsers pick |
+| `apple-touch-icon.png` | yes | 180×180, opaque — iOS composites alpha on black |
+| `robots.txt` | yes | Everything crawlable except `/api/`, `/profile`, `/notifications`, `/moderation` |
+| `emoji/`, `fonts/` | yes | Mudae gender marks; the self-hosted Geist variable font |
+
+The icons are **kakera**, Mudae's own gem, in the teal that matches `--accent`. The project already
+shipped Mudae emoji for the gender marks, so the precedent was set; the source is
+`frontend/favicon-src.webp`, kept deliberately *outside* `public/` because Vite copies that
+directory verbatim and would otherwise publish the build input. It is 48×96, so the gem is centred
+rather than stretched, and the Apple icon is held to 75% of its tile so the upscale is 1.4× rather
+than 1.9×. `docs/DEVELOPMENT.md` has the regeneration command.
+
+**There are no Open Graph or Twitter card tags**, and the shell carries one static title and
+description for every route. Discord's crawler does not run JavaScript, so a character link pasted
+into Discord — where this product's users are — renders as text with no image. See
+`critiques and plans.md` section 12. There is no `sitemap.xml` either — it would need to be
+generated from the database rather than committed; see section 9.
+
 ### Payload discipline
 
 The home page used to fetch `GET /custom_images.json` — every image URL for
@@ -574,19 +603,25 @@ and the numbers behind each — is in **[ACCENT.md](ACCENT.md)**.
 
 ## 7. CI
 
-`.github/workflows/build-frontend.yml` — on push to `main` touching `frontend/**`, runs
-`npm run build` and **force-commits `frontend/dist` back to `main`** with `[skip ci]`:
+**There is none.** No `.github/` directory exists, and none ever has in this repository.
 
-```
-git add -f frontend/dist
-git diff --staged --quiet || git commit -m "Build frontend [skip ci]"
-git push
-```
+The workflow this section used to describe — `build-frontend.yml`, force-committing
+`frontend/dist` back to `main` because `.do/app.yaml` used a Python buildpack that could not build
+the frontend — belonged to v1 on DigitalOcean. `.do/app.yaml` is gone, `frontend/dist` is
+gitignored and built locally, and Cloudflare Pages serves the SPA in production.
 
-`frontend/dist` is in `.gitignore`, hence the `-f`. This exists only because `.do/app.yaml` uses a
-Python buildpack that cannot build the frontend. It is the source of the many "Build frontend
-[skip ci]" commits in history. There is **no test or lint job** — the only static checking is
-`pyrightconfig.json`, run manually.
+So nothing runs automatically: not the 732 backend tests, not the 566 frontend tests, not `ruff`,
+not `biome`, and not `frontend/src/styles/tokenPairs.test.js`, which enforces the `DESIGN.md`
+rules as executable invariants. The drift this allows is already visible — `uv run ruff check .`
+reports 11 errors, nine of them in `mudae_discord.py`.
+
+Two documents still assume CI exists and are wrong until one does:
+`docs/DEVELOPMENT.md` ("Use `uv sync --locked` in CI") describes an intent, not a fact.
+
+Adding checks does not disturb the deployment model. `DEPLOYMENT.md` explains that the origin box
+*polls* rather than being pushed to, because it has no inbound access — that reasoning is about
+deploys, and a workflow that only runs tests and linters needs no access to the box at all. See
+`critiques and plans.md` section 10 for the plan.
 
 ---
 
@@ -619,6 +654,13 @@ genuinely does not:
   split into those still live and those the threshold already removed — but it is
   inspection, not a queue: nothing is assignable, and the removal and restore
   verbs stay on the character page.
+- **A sitemap, and any per-route metadata.** `robots.txt` exists and invites crawling, but there
+  is no `sitemap.xml` to point crawlers at the ~707 characters that actually have images, and the
+  SPA shell serves one title and description for every route (no Open Graph or Twitter card tags
+  either). A sitemap would have to be **generated**, not committed: the character list changes
+  constantly, so it belongs behind a Flask route reading the database, and it needs the production
+  domain, which lives in the environment rather than the repo. See `critiques and plans.md`
+  section 12.
 - **Server-side sessions.** Identity is a signed cookie and nothing else.
 - **A second origin.** One box serves everything; Cloudflare caches in front of
   it, and Litestream is the only redundancy.
@@ -633,6 +675,14 @@ Still open:
 |---|---|---|
 | Discord self-bot ToS | `mudae_service.py` | An account ban would remove every Mudae feature |
 | The two databases have forked | v1 Neon vs v2 SQLite | See `CUTOVER.md`; the migration is insert-only and re-running gives the union |
+| Uploads are WebP bytes under a `.png` name | `image_utils.py` | Rests on Discord sniffing content rather than trusting the extension. If that changes, every custom image stops rendering at once |
+| No CI | — | Nothing runs the 1,298 tests or the linters automatically; `ruff` has already drifted to 11 errors |
+
+The WebP-under-`.png` recovery path, recorded before it is needed: the original bytes are on
+ImgChest and each row carries `content_hash` and `imgchest_post_id`, so re-encoding to real PNG and
+re-uploading is mechanical — 8,562 uploads against ImgChest's rate limits, with `scripts/backfill_*.py`
+as the shape to copy. A single canary image fetched periodically would turn a silent library-wide
+failure into a noticed one; that is not built.
 
 Fixed since this document was first written, kept here because the shape of each
 is worth remembering:
@@ -643,7 +693,7 @@ is worth remembering:
 | Anyone could delete anything | Ownership-scoped removal, soft delete, reports |
 | No rate limiting anywhere | `ratelimit.py`, per identity, per action |
 | `CORS: *` by default | Explicit origins; wildcards refused at startup |
-| No tests at all | 692 backend, 520 frontend |
+| No tests at all | 732 backend, 566 frontend |
 | `print()` with no actor | `logs.py`; identity attaches automatically inside a request |
 | Health check could not fail | Reads the database; 503 when it cannot |
 | Full-map fetch on the home page | `/api/stats`, with a test that it stays bounded |

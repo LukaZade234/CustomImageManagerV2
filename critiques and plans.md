@@ -1,11 +1,20 @@
 # Critiques and Plans
 
-A code review of CustomImageManager v2 carried out on **2026-09-16**, with each finding written up
-as an independently executable plan.
+Rolling code reviews of CustomImageManager v2, each finding written up as an independently
+executable plan.
+
+| Review | Date | Findings | Status |
+|---|---|---|---|
+| [First review](#first-review-2026-09-16) | 2026-09-16 | 9 | Closed — see `ROADMAP.md` "Review findings (2026-09-16)" for what was accepted, deferred and declined |
+| [Second review](#second-review-2026-09-17) | 2026-09-17 | 5 + feature recommendations | Open — 11 and 14 done, see the progress note in that section |
 
 **This is a working document, not a decision record.** It does not carry the authority of
 `docs/DECISIONS.md` or `docs/CURRENT_STATE.md`, and it should be deleted or folded into those once
 its sections are done. Where it disagrees with the curated docs, the curated docs win.
+
+The decision record for the first review lives in `docs/ROADMAP.md`. **Do not reopen an accepted or
+declined item from it without new information** — the reasoning is recorded there, and the second
+review deliberately does not re-litigate any of it.
 
 ## How to use this document
 
@@ -23,7 +32,13 @@ Two rules for anyone executing a section:
    different people at different times. Sections 3 and 8 in particular must not be attempted
    together.
 
-## Priority
+## First review (2026-09-16)
+
+Carried out against the tree at commit `17ea21c`. Its numbers were re-verified on
+2026-09-16 and held. **All nine findings below are closed** — see the decision record in
+`docs/ROADMAP.md`.
+
+### Priority
 
 | # | Finding | Severity | Effort | Risk |
 |---|---|---|---|---|
@@ -962,3 +977,613 @@ The pattern across all nine findings is the same: **the thinking is consistently
 follow-through.** The reorder endpoint, the missing indexes, the stalled react-query migration and
 the unsplit bundle are each cases where the right approach was established elsewhere in this same
 codebase and simply not applied in one place.
+
+---
+
+# Second review (2026-09-17)
+
+Carried out against commit `60569e2`, one day after the first. Findings are numbered **10 onwards**
+so that a section number means one thing across the whole document — "do section 12" is unambiguous.
+
+Everything below was verified against the tree and the live database on 2026-09-17. At that point
+`uv run pytest tests/ -q` gave **720 passed**, `npm test` gave **566 passed**, `npx biome check src`
+was clean, and the working tree had no uncommitted changes.
+
+**This review does not re-litigate the first one.** Findings 1b, 6 and 8 were deferred or declined
+with recorded reasoning in `docs/ROADMAP.md`, and no new information has appeared that bears on any
+of them. Do not reopen them from here.
+
+## What closed since the first review
+
+Re-measured, not taken on trust:
+
+| # | First-review finding | State on 2026-09-17 |
+|---|---|---|
+| 1a | Reorder unguarded | **Fixed** — `@identity.require_signed_in(action="reorder a gallery")` plus `@rate_limited("reorder")` |
+| 2 | One 442 KB bundle | **Fixed** — 24 chunks; first load is now a 267 KB `vendor` chunk (cacheable across deploys) plus a 50 KB entry, with `CharacterPage` (60 KB), `ModerationPage` (22 KB) and `AddPage` (20 KB) deferred |
+| 3 | `CharacterPage` god component | **Mostly** — see section 13 |
+| 4 | `str(e)` disclosure | **Fixed** — 26 sites down to 8, survivors narrowly caught |
+| 5 | Missing actor indexes | **Fixed** — migration `022` |
+| 7 | Fetch inconsistency | **Fixed in the scope that was accepted** — `CustomsPage` is on react-query with `keepPreviousData`. The first review's detector counted it as a raw fetcher because `apiClient` appears inside the `queryFn`; that was a false positive |
+| 9 | Untested primitives | **Fixed** — 1 test file to 11 |
+
+The three corrections recorded in `docs/ROADMAP.md` are all correct, including that `you` was already
+structurally separated from the cacheable block in `/api/stats`.
+
+## Second-review priority
+
+| # | Finding | Severity | Effort | Risk |
+|---|---|---|---|---|
+| 10 | No CI; `ruff` already failing with 11 errors | **High** — protects everything else | Low | None |
+| 11 | `PRODUCT.md`'s core figures are wrong by ~75× | **High** — it steers product decisions | Very low | None |
+| 12 | No link previews; SPA shell has no per-route meta | Medium — growth, on-product | Medium | Low |
+| 13 | `CharacterPage` decomposition moved state, not markup | Low | Medium | Medium |
+| 14 | WebP-under-`.png` has no recorded contingency | Low — documentation only | Very low | None |
+
+Recommended order: **10, 11, 12**, then the feature work, then 13 and 14 opportunistically.
+
+### Progress (2026-09-17, same day)
+
+- **11 — done.** `PRODUCT.md` now carries dated figures, separates real contribution from crawler
+  traffic, and points here for the query rather than inviting the next reader to trust prose.
+  `CURRENT_STATE.md`'s test counts corrected to 732 / 566.
+- **14 — done.** `CURRENT_STATE.md` section 10 carries the WebP-under-`.png` row and the recovery
+  path. A canary is described but deliberately not built.
+- **10 — not done, but the record is now honest.** `CURRENT_STATE.md` section 7 used to describe a
+  `build-frontend.yml` that force-committed `frontend/dist`; that was a **v1 DigitalOcean artifact
+  and never existed in this repository**. It now states plainly that there is no CI, and
+  `DEVELOPMENT.md`'s quality-gates section says nothing runs those gates automatically. The
+  workflow itself is still to be written.
+- **12 — partly.** The metadata half is unchanged: still no Open Graph or Twitter card tags, and
+  the shell still serves one title and description for every route. What *did* land is the
+  groundwork the section listed as out of scope — `robots.txt` exists, the icon set exists, and
+  `routes/spa.py` can now serve root-level files at all, which it could not before.
+- **13 — not started.**
+
+Also fixed in passing, and not a numbered finding: `routes/spa.py` served only `/assets/`, so every
+root-level file and both public directories 404'd whenever Flask served the built SPA — which meant
+the self-hosted Geist font was silently falling back. Two narrow routes (an allowlist at the root,
+an `any(emoji, fonts)` rule for the directories) fix it without the catch-all the module's
+docstring warns against, and `tests/test_spa_static.py` pins both the files being reachable and
+`/api/*` still 404ing.
+
+---
+
+## 10. There is no CI, and it has already cost you
+
+### Finding
+
+There is no `.github/` directory. Nothing runs the test suites, the linters or the design-invariant
+tests automatically.
+
+```bash
+ls -a .github          # No such file or directory
+find . -name "*.yml" | grep -v node_modules
+#   ./deploy/litestream.yml
+#   ./deploy/cloudflared-config.yml
+```
+
+The drift has already started:
+
+```bash
+uv run ruff check .    # Found 11 errors.
+```
+
+Nine are in `mudae_discord.py` — `F402` (an import shadowed by a loop variable at line 360), two
+`E741` (ambiguous variable name `l`, lines 401 and 405), `SIM102` (nested `if`, line 418), and five
+more at lines 476, 642, 787, 789 and 874. One is in `remote_images.py:239`, one in
+`tests/test_thumbnails.py:61`.
+
+Two documents already assume CI exists:
+
+- `routes/spa.py` renders *"Run the GitHub Action"* in its "Frontend not built" fallback page.
+- `docs/DEVELOPMENT.md:27` — *"Use `uv sync --locked` in CI: it fails if `uv.lock` has drifted from
+  `pyproject.toml`."*
+
+### Why it matters
+
+This project has an unusually strong quality apparatus: 1,286 tests, `ruff`, `biome`, and
+`frontend/src/styles/tokenPairs.test.js` enforcing the `DESIGN.md` rules as executable invariants
+rather than prose. All of it is currently gated on a person remembering to run it, and `ruff` shows
+what happens when someone does not.
+
+`docs/DEPLOYMENT.md:260` explains that *deployment* polls rather than using GitHub Actions,
+deliberately, because the VM has no inbound access. **That reasoning is about deploys and does not
+extend to checks.** A workflow that only runs tests and linters needs no access to the origin box at
+all, and taking it does not change the deployment model.
+
+### The fix
+
+Add `.github/workflows/checks.yml` running on push and pull request. Two jobs, so a frontend failure
+and a backend failure are distinguishable at a glance:
+
+```yaml
+name: checks
+on: [push, pull_request]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --locked      # fails if uv.lock drifted, as DEVELOPMENT.md promises
+      - run: uv run ruff check .
+      - run: uv run pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx biome check src
+      - run: npm test
+      - run: npm run build
+```
+
+Pin the Python version to the one `pyproject.toml` declares (3.13) rather than letting the runner
+choose, since Phase 0 settled that deliberately.
+
+**Fix the 11 `ruff` errors in the same change**, or the workflow is red on its first run and gets
+disabled. They are all mechanical: rename the shadowing loop variable at `mudae_discord.py:360`,
+rename `l` to something readable in the two comprehensions, and collapse the nested `if`. Run
+`uv run ruff check . --fix` first and inspect what it does not fix. Do **not** reach for
+`--unsafe-fixes` — four of the errors are hidden behind it and they deserve a human.
+
+Check whether a build workflow is expected to exist too: `routes/spa.py`'s fallback text implies one
+builds and deploys the frontend. If deployment genuinely happens by polling from the box, correct
+that fallback text so it stops describing a thing that does not exist.
+
+### Files to change
+
+- `.github/workflows/checks.yml` — new.
+- `mudae_discord.py`, `remote_images.py`, `tests/test_thumbnails.py` — the 11 lint errors.
+- `routes/spa.py` — the fallback text, if it is wrong.
+
+### Verification
+
+```bash
+uv run ruff check .          # Found 0 errors
+uv run pytest tests/ -q      # 720 passed
+cd frontend && npx biome check src && npm test && npm run build
+```
+
+Then push a branch and confirm both jobs go green in the Actions tab. Deliberately break one test in
+a scratch commit and confirm the workflow goes red, so you know it is actually running.
+
+### Out of scope
+
+- Deploying from CI. `docs/DEPLOYMENT.md` explains why the box polls; do not change that.
+- Coverage gates, required-status-check branch protection, or a release workflow. Get the checks
+  running first.
+- Any code change beyond the 11 lint fixes.
+
+---
+
+## 11. `PRODUCT.md`'s core figures are wrong by roughly 75×
+
+### Finding
+
+`PRODUCT.md:14-15`, the paragraph that frames every product decision:
+
+> *"Today it is effectively pre-launch: the library holds ~1,706 characters and ~8,556 custom images,
+> but **one person has registered and only 13 images carry an uploader**."*
+
+Against the live database:
+
+```bash
+sqlite3 data/imgmanager.db "
+SELECT (SELECT COUNT(*) FROM characters) chars,
+       (SELECT COUNT(*) FROM custom_images WHERE state='active') active_images,
+       (SELECT COUNT(*) FROM custom_images WHERE added_by IS NOT NULL) attributed,
+       (SELECT COUNT(*) FROM identities) identities,
+       (SELECT COUNT(*) FROM identities WHERE discord_id IS NOT NULL) signed_in;"
+```
+
+```
+chars  active_images  attributed  identities  signed_in
+1722            8562         987          17         11
+```
+
+**987 attributed images, not 13. Eleven Discord sign-ins, not one.**
+
+`docs/CURRENT_STATE.md:646` has the same problem in miniature: *"692 backend, 520 frontend"* against
+an actual 720 and 566.
+
+### Why it matters
+
+The same paragraph issues a standing instruction that other documents lean on —
+
+> *"Future work should treat multi-user behaviour as a real requirement and current usage numbers as
+> not yet meaningful."*
+
+— and several decisions elsewhere defer on the grounds that there is not enough data yet. That was
+correct at 13 attributed images. At 987 it misleads: attribution, the contributor board and the
+moderation surfaces now have real data behind them, and a reader deciding what to build next will
+under-weight all three.
+
+**Do not over-correct.** The framing "effectively pre-launch" is still right, and the update must say
+why, because the raw numbers invite a wrong conclusion:
+
+- `character_views` holds 285 distinct `identity_id` values, which looks like traffic. They average
+  1.9 views each with no cookie persistence — the signature of crawlers, not people. An identity row
+  is minted per cookie, which `db.get_home_highlights`'s own docstring already warns about.
+- All **818** `copy_command` events in `image_takes` come from a **single** identity.
+
+So: real contribution, negligible real traffic. Both halves belong in the correction.
+
+### The fix
+
+Update `PRODUCT.md:14-15` and the "Evidence on Hand" figures at `PRODUCT.md:91`. Keep the
+"effectively pre-launch" framing and the standing instruction; replace the figures and add the
+crawler caveat so the next reader does not mistake 285 cookie ids for an audience.
+
+Update `docs/CURRENT_STATE.md:646` to 720 / 566.
+
+Two structural suggestions, since this will go stale again:
+
+1. **Date the figures inline** — "as of 2026-09-17" — so a reader can tell staleness at a glance.
+2. Consider whether these numbers belong in `PRODUCT.md` at all, or whether it should state the
+   *shape* ("a low-hundreds library, a handful of contributors, no meaningful traffic yet") and point
+   at a command that produces the current counts. Prose that must be manually synchronised with a
+   database will drift again.
+
+Note which figures are **historical and correctly frozen**: `docs/ROADMAP.md:219,294,304` and
+`docs/MODERATION.md:142` cite 8,547 images and 1,705/1,706 characters as *migration facts*. Those are
+records of an event and must not be "corrected".
+
+### Files to change
+
+- `PRODUCT.md` — lines 14-15 and 91.
+- `docs/CURRENT_STATE.md` — line 646.
+
+### Verification
+
+Re-run the `sqlite3` query above against the database the figures claim to describe, and confirm every
+number in the edited prose matches. Re-run `uv run pytest tests/ -q` and `npm test` for the test
+counts rather than trusting this document.
+
+### Out of scope
+
+- The historical migration figures in `ROADMAP.md` and `MODERATION.md`.
+- Any product decision that the corrected numbers might justify revisiting. Correct the record first;
+  decide separately.
+
+---
+
+## 12. Links to this site are dead text in the one place its users live
+
+### Finding
+
+There are no Open Graph tags, no Twitter card tags, and no per-route metadata anywhere.
+
+```bash
+grep -rn "og:\|twitter:" frontend/ routes/ --include=*.html --include=*.py --include=*.jsx
+# (nothing)
+grep -n "og\|meta\|title" routes/spa.py
+# (nothing)
+```
+
+`frontend/index.html` carries one static `<title>` and one `<meta name="description">` for the whole
+application. `routes/spa.py` serves that same shell unmodified for every client route, including
+`/character/<path:name>`.
+
+Discord's link crawler does not execute JavaScript. So pasting a character link into the Discord
+channel where someone is about to run `$ai` produces a grey box reading *"ImgManager — Mudae custom
+image helper"* — identical for every character, with no image.
+
+### Why it matters
+
+`PRODUCT.md` principle 1: *"The command is the product."* The command is pasted into Discord. Links
+to the tool are pasted into the same place, by the same people, in the same conversation — and they
+arrive as bare text while every competing link in the channel renders with art.
+
+A character page has everything a rich preview needs already: a name, a series, an image count and a
+portrait mirrored to R2 (`characters.main_image_thumb`). This is the cheapest available growth lever
+and it is squarely on-product rather than a marketing bolt-on.
+
+There is existing evidence the operator cares about discovery: `frontend/index.html` carries a
+`google-site-verification` meta tag.
+
+### The fix
+
+Inject per-route metadata into the SPA shell server-side, in `routes/spa.py`. That file already
+enumerates client routes explicitly rather than using a catch-all, so the seam exists.
+
+For `/character/<path:name>`: look the character up, and if it is found, substitute a block of meta
+tags into the served `index.html` before returning it. Keep the existing static tags as the fallback
+for every other route and for an unknown character.
+
+```python
+og = (
+    f'<meta property="og:title" content="{escape(name)} — ImgManager">'
+    f'<meta property="og:description" content="{escape(series)} · {count} custom images for Mudae">'
+    f'<meta property="og:image" content="{escape(portrait_url)}">'
+    f'<meta property="og:type" content="website">'
+    f'<meta name="twitter:card" content="summary_large_image">'
+)
+```
+
+Five things this must get right:
+
+- **Escape everything.** Character names and series are user-supplied. `markupsafe.escape` is already
+  available through Flask. An unescaped `"` in a series name breaks the tag; worse is possible.
+- **Do not break the `no-cache` header.** `routes/spa.py` sets `Cache-Control: no-cache,
+  must-revalidate` on the shell deliberately, to avoid a stale SPA after deploy. Keep it.
+- **`send_from_directory` returns a file response.** Injecting means reading the file and returning a
+  built `Response`, which loses that helper's conditional-request handling. Read the shell once at
+  startup or cache it in memory rather than reading it per request.
+- **`og:image` must be an absolute URL** with a scheme and host. Relative paths are ignored by every
+  crawler.
+- **Keep the dev fallback working.** The "Frontend not built" branch must still fire when
+  `SPA_INDEX` is missing.
+
+Consider the same treatment for `/` using the live totals — but only after the character page, which
+is the link people actually share.
+
+### Files to change
+
+- `routes/spa.py` — the injection, and a small helper to build the tag block.
+- `db.py` — possibly a small lookup returning name, series, image count and portrait in one query;
+  check whether an existing function already serves.
+- `tests/test_spa.py` — new or extended.
+
+### Verification
+
+```bash
+uv run pytest tests/ -q
+curl -s localhost:5000/character/Columbina | grep -o '<meta property="og:[^>]*>'
+curl -s localhost:5000/character/NoSuchCharacter | grep -c 'og:title'   # falls back cleanly
+curl -sI localhost:5000/character/Columbina | grep -i cache-control      # still no-cache
+```
+
+Add a test that a character whose name or series contains `"` or `<` produces escaped output.
+
+Then validate a real preview: deploy, and paste a character URL into a Discord channel. That is the
+only check that matters, and it cannot be done locally.
+
+### Out of scope
+
+- Server-side rendering of the page itself. This is metadata injection into a static shell, nothing
+  more.
+- A dynamic `og:image` composited from the gallery. Use the existing portrait.
+- `sitemap.xml` and structured data. Separate concerns. (`robots.txt` was listed here too and has since been added — it is not part of this section's work.)
+
+---
+
+## 13. The `CharacterPage` decomposition moved the state but not the markup
+
+### Finding
+
+```bash
+wc -l frontend/src/pages/CharacterPage.jsx        # 1017  (was 1113)
+grep -c "useState(" frontend/src/pages/CharacterPage.jsx   # 11  (was 26)
+```
+
+Five hooks came out cleanly and are good extractions: `useCharacterEdit`, `useGallerySelection`,
+`useLightbox`, `useAccentOverride`, `useMainImage`. But the file shed only 96 lines while shedding 15
+`useState` calls — roughly 900 lines of JSX and handlers stayed. It remains 1.8× the next-largest
+frontend file (`HomePage.jsx`, 572).
+
+### Why it matters
+
+Much less than it did. The state tangle was the actual hazard and it is gone; what is left is a long
+render body, which is tedious rather than dangerous.
+
+`docs/ROADMAP.md` dropped the first review's "under 400 lines" target as arbitrary, and that was
+right — the stated goal is one concern per file. That goal is not met yet, but it is close enough
+that this should be done opportunistically, when someone is already working in the file, rather than
+scheduled as its own project.
+
+### The fix
+
+Extract the three presentational blocks, one commit each:
+
+1. **The gallery section** — the toolbar, the grid and the selection bar as one `CharacterGallery`
+   component taking the already-extracted hooks' return values as props.
+2. **The dialog stack** — `ConfirmDialog`, `ReportDialog`, `AiCommandLimitDialog`,
+   `UploadErrorDialog`, `DuplicateDialog` and the removed drawer are independent of each other and of
+   the page body.
+3. **The header block**, if anything is left in the page that `CharacterHeader` should own.
+
+Behaviour-preserving, as before. The three `CharacterPage.*.test.jsx` files are the safety net and
+must pass unmodified apart from import paths.
+
+### Files to change
+
+- `frontend/src/pages/CharacterPage.jsx`
+- New components alongside the existing ones in `frontend/src/components/`.
+
+### Verification
+
+```bash
+cd frontend && npm test -- CharacterPage && npm run build && npx biome check src
+```
+
+Then the manual pass: upload with progress, every gallery mode, drag reorder including long-press on
+touch, the `$ai` dialog and its message-limit split, the lightbox's focus trap and arrow keys, the
+removed drawer, and the accent override.
+
+### Out of scope
+
+- Splitting `db.py` or `pages.css` — declined in `docs/ROADMAP.md`.
+- Migrating the remaining `apiClient` calls in this file to react-query. That was deliberately
+  deferred in the first review's scope; do not churn the file twice.
+- Any behaviour or visual change.
+
+---
+
+## 14. WebP-under-`.png` has no recorded contingency
+
+### Finding
+
+`image_utils.py:28-46`:
+
+```
+# Uploads are stored as WebP, under a .png name.
+# Mudae's $ai command will not accept a URL that does not end in .png, but it
+# ...
+UPLOAD_SUFFIX = ".png"
+```
+
+Every uploaded image in the library is WebP at quality 90, served from a URL ending `.png`. It works
+because Discord sniffs content rather than trusting the extension, and it is an eighth the size of
+the PNG it replaced — a PNG often would not fit ImgChest's limit at all.
+
+This is well reasoned and documented in place. It is not a defect and should not be changed.
+
+### Why it matters
+
+It rests on one undocumented third-party behaviour. If Discord or Mudae ever validates magic bytes
+against the extension, **every custom image in the library stops rendering at once** — 8,562 of them
+— with no detection, no fallback and no partial failure to warn first.
+
+`docs/CURRENT_STATE.md` §10 already keeps a risk table for exactly this class of thing, and carries
+the Discord self-bot ToS risk in it. This dependency is at least as consequential and is not listed.
+
+### The fix
+
+Documentation only. Add a row to `docs/CURRENT_STATE.md` §10:
+
+| Issue | Location | Impact |
+|---|---|---|
+| Uploads are WebP bytes under a `.png` name | `image_utils.py` | Depends on Discord sniffing content, not the extension. If that changes, every custom image stops rendering at once |
+
+And a short paragraph beneath the table recording the recovery path, so it is known before it is
+needed rather than improvised under pressure: the original bytes are on ImgChest, `content_hash` and
+`imgchest_post_id` are stored per row, so re-encoding to real PNG and re-uploading is mechanical —
+but it is 8,562 uploads against ImgChest's rate limits, and `scripts/backfill_*.py` is the shape to
+copy.
+
+Worth a sentence on early warning too: a single canary image fetched periodically and checked for a
+rendered result would turn a silent library-wide failure into a noticed one.
+
+### Files to change
+
+- `docs/CURRENT_STATE.md` — §10 only.
+
+### Verification
+
+None beyond review. No code changes.
+
+### Out of scope
+
+- Changing the upload format. The size win is real and PNG frequently would not fit.
+- Building the canary. Record it as an option; decide separately.
+
+---
+
+# Feature recommendations (2026-09-17)
+
+Grounded in what the live database says is actually used, rather than in what seems plausible. The
+figures below come from `data/imgmanager.db` on 2026-09-17.
+
+```
+copy_command takes:  818        downloads:              1
+saved (bookmarks):     4        user_hidden:            0
+image_reports:         0        removed (soft):        25
+characters:         1722        with active customs:  707
+images per character: max 256, avg 12.1
+```
+
+## A. Show people which images they have already used — *recommended first*
+
+### The case
+
+`PRODUCT.md` states the problem the product exists to solve:
+
+> *"Doing that by hand means keeping image links somewhere, pasting them into a command that has a
+> Discord message-length limit, **and remembering which ones are already in use**."*
+
+The app solves the first two. **It does not solve the third** — and it has been collecting exactly
+the data needed since Phase 6:
+
+```sql
+CREATE TABLE image_takes (
+    id          INTEGER PRIMARY KEY,
+    image_id    INTEGER NOT NULL REFERENCES custom_images (id) ON DELETE CASCADE,
+    identity_id TEXT REFERENCES identities (id) ON DELETE SET NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('download', 'copy_command')),
+    at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+```
+
+Per person, per image, timestamped. 818 rows. Read by **nothing** — `recordTakes` is written in
+`CharacterPage.jsx` and never read back anywhere in the frontend.
+
+The ratio is the other half of the argument: **818 `copy_command` events against 1 download.** The
+copy path is the product; almost nothing else in the app is used at all.
+
+### The shape
+
+On a character page, mark the images the viewer has previously copied into an `$ai` command, and add
+two selection verbs beside the existing ones: *select the ones I used last time*, and *select the
+ones I have not used*. On a 256-image gallery that is the difference between scanning and one click.
+
+### Why it does not contradict `DECISIONS.md` §1
+
+§1 rejected using take counts for **automatic retirement**, for sound reasons about signal sparsity:
+people mostly take their own images, so given time nearly everything accumulates zero third-party
+takes and the rule eventually retires the library.
+
+None of that applies here. This is not an aggregate, not a judgment about quality, and not visible to
+anyone else — it is showing a person their own history. It is a memory aid, which is what
+`PRODUCT.md` says the product is for. Worth a short note in `DECISIONS.md` distinguishing the two
+uses, so a later reader does not see "takes drive something now" and think §1 was overturned.
+
+### Notable risks
+
+- **Identity is a cookie.** Clearing cookies loses the history, exactly as it loses ownership. That is
+  consistent with everything else in the app but should be stated in the UI rather than discovered.
+- **Do not make it a per-image public counter.** That re-creates the popularity signal §1 declined,
+  and invites exactly the quality judgments the design avoids.
+
+## B. Series pages, for coverage — *still worth it*
+
+**1,015 of 1,722 characters (59%) have no active custom images.** Browse Customs lists only the 707
+that do, but search covers all 1,722 — so more than half of all search results lead to an empty page.
+That is at once the worst dead end in the app and the entire growth backlog.
+
+This is the deferred series-page work, and the view has not changed: the thing that makes a series
+page worth building rather than a nicer `/customs` filter is the **coverage number**. `catalog_series`
+already stores `listed` and `total` and both columns are still read by nothing; migration `009`'s own
+comment says the table exists so *"a series page can say '3 of 45'"*.
+
+*"Genshin Impact — 23 of 91 characters covered"*, with the 68 gaps listed and each linking to a
+prefilled Add, is a contribution prompt. A list of characters you already have is a browse screen.
+
+The blockers recorded previously still stand and belong in any plan: there is no `series_key`
+counterpart to `characters.name_key`, `top_series` groups on the raw string so casing variants split,
+and series names contain `/` ("Fate/Grand Order") which needs the `<path:name>` converter treatment
+that `/character/<path:name>` already uses. `routes/spa.py` needs the new route added.
+
+## C. A "what is missing" surface — *cheap*
+
+The 1,015 empty characters, sorted by Mudae rank — that is, by how likely anyone is to roll them.
+One query against existing columns, and it answers "what should I add next?" directly. Smaller than
+B and partially overlapping with it; if B is built, this is a tab on it rather than its own page.
+
+## D. Within-gallery filtering — *only alongside A*
+
+At 256 images, picking a set is the bottleneck. But exactly one character has 256, the average is
+12.1, and only a handful of pages are large enough for this to matter. Build it as part of A's
+selection verbs rather than as a feature of its own.
+
+## What not to build yet
+
+- **Anything further on saves or hide-for-me.** 4 bookmarks and 0 hides, ever. Not a reason to remove
+  them — they are cheap and they are insurance — but a clear reason not to invest further until there
+  are users.
+- **A reports workflow.** Zero reports have ever been filed. §1's design is holding precisely because
+  nothing has needed it, which is the outcome it was designed for.
+- **NSFW rating.** The `show_nsfw` preference waits honestly and `image_reports` already has an
+  `nsfw` reason to bootstrap from, but with zero reports there is no signal to bootstrap *with*. This
+  needs real users before it needs code.
