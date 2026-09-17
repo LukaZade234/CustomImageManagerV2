@@ -14,6 +14,9 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
+      # TEMPORARY: confirms the job actually executes, not merely passes. Remove
+      # once the first run has been observed.
+      - run: echo "checks running (backend)"
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
@@ -31,6 +34,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
+      # TEMPORARY: confirms the job actually executes, not merely passes. Remove
+      # once the first run has been observed.
+      - run: echo "checks running (frontend)"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
