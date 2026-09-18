@@ -95,6 +95,104 @@ def moderation_reports():
     )
 
 
+# Claims are the one place this surface *does* act rather than inspect. That is
+# deliberate and bounded: the action is an ownership transfer the claimant cannot
+# perform themselves, and it is staff-gated precisely because the unowned bucket
+# is otherwise permanent (migration 025). Nothing else here gains a verb.
+@moderation_bp.route("/api/moderation/claims")
+@require_moderator
+def moderation_claims():
+    """Claim requests, filtered by status, character and/or claimant.
+
+    `status` is required: pending is the work, decided is the audit trail, and
+    "everything at once" answers neither question. `char` and `user` narrow it,
+    which is what the two filter controls map to; `user` is a public ref, so the
+    identity id never travels.
+    """
+    status = request.args.get("status", default="pending", type=str)
+    if status not in db.CLAIM_STATUSES:
+        return jsonify({"error": "Unknown status"}), 400
+
+    char_name = (request.args.get("char") or "").strip() or None
+    user_ref = (request.args.get("user") or "").strip() or None
+    identity_id = None
+    if user_ref:
+        identity_id = db.identity_by_ref(user_ref)
+        if identity_id is None:
+            return jsonify({"error": "Unknown user"}), 404
+
+    page = max(request.args.get("page", default=1, type=int) or 1, 1)
+    per_page = min(request.args.get("per_page", default=50, type=int) or 50, _MAX_PER_PAGE)
+    result = db.list_ownership_claims(
+        status,
+        char_name=char_name,
+        identity_id=identity_id,
+        limit=per_page,
+        offset=(page - 1) * per_page,
+    )
+    return jsonify({**result, "status": status, "page": page, "per_page": per_page})
+
+
+@moderation_bp.route("/api/moderation/claims/<int:claim_id>/decide", methods=["POST"])
+@require_moderator
+@rate_limited("moderate")
+def moderation_decide_claim(claim_id):
+    """Approve or reject one claim.
+
+    Approving grants every remaining unowned image on the character and
+    auto-rejects the rivals, who are notified; rejecting records the reason and
+    tells the claimant, who may ask again. Either way the decision is the row's
+    own audit line, so there is no separate log to keep in step.
+    """
+    data = request.get_json(silent=True) or {}
+    approve = data.get("approve")
+    if not isinstance(approve, bool):
+        return jsonify({"error": "approve must be true or false"}), 400
+    reason = (data.get("reason") or "").strip()[:MAX_BODY]
+
+    try:
+        result = db.decide_ownership_claim(
+            claim_id, identity.current_identity().id, approve=approve, reason=reason
+        )
+    except Exception:
+        log.exception("moderation.claim_decide_failed", claim=claim_id)
+        return jsonify({"error": "Could not record that decision."}), 500
+    if result is None:
+        return jsonify({"error": "Claim not found, or already decided"}), 404
+    return jsonify({"success": True, "approved": approve, **result})
+
+
+@moderation_bp.route("/api/moderation/claims/approve-all/<ref>", methods=["POST"])
+@require_moderator
+@rate_limited("moderate")
+def moderation_approve_all_claims(ref):
+    """Approve every pending claim this user holds, up to a cap.
+
+    The per-user view's bulk action, for the common case where someone clearly
+    owns a run of characters. Capped so one request is not an unbounded write;
+    `remaining` reports what is left, and running it again continues.
+    """
+    identity_id = db.identity_by_ref(ref)
+    if identity_id is None:
+        return jsonify({"error": "Unknown user"}), 404
+    try:
+        result = db.approve_pending_claims_for_identity(
+            identity_id, identity.current_identity().id
+        )
+    except Exception:
+        log.exception("moderation.claim_approve_all_failed", user=ref)
+        return jsonify({"error": "Could not approve those claims."}), 500
+    return jsonify(
+        {
+            "success": True,
+            "approved_count": len(result["approved"]),
+            "images_granted": result["images_granted"],
+            "remaining": result["remaining"],
+            "cap": db.MAX_BULK_CLAIM_APPROVALS,
+        }
+    )
+
+
 @moderation_bp.route("/api/moderation/users/<ref>/images")
 @require_moderator
 def moderation_user_images(ref):

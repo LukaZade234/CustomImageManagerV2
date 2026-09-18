@@ -173,3 +173,14 @@ def my_history():
 @auth_bp.route("/api/me/contributions", methods=["GET"])
 def my_contributions():
     return jsonify({"images": db.count_images_added_by(identity.current_identity().id)})
+
+
+@auth_bp.route("/api/me/claims", methods=["GET"])
+def my_claims():
+    """Every ownership claim this visitor has filed, newest first.
+
+    Per-claim state also rides on the character gallery response, which is what
+    the banner normally reads. This is the profile-side list, and the source for
+    "am I still waiting on anything".
+    """
+    return jsonify(db.list_claims_for_identity(identity.current_identity().id))

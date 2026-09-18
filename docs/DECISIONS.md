@@ -179,6 +179,38 @@ churning**; and the operator never opened the site.
 - Routine human moderation. If the design requires the operator to check the site regularly, it
   has failed.
 
+### The ownership-claim exception (temporary)
+
+Rule 1 above ("you can only remove images you added") rests on `custom_images.added_by`, and the
+8,500-odd images imported from v1 have `added_by IS NULL`. Migration 004 calls that permanent in as
+many words — ownership must always be recorded, or images "would fall into the same unowned bucket
+as the 8,547 migrated from v1, permanently, with no way to reclaim them" — and
+`db.remove_custom_images` refuses to let an ordinary user touch a NULL-owner row. That is what makes
+griefing the inherited library unimplementable.
+
+This feature is the single, staff-gated way back out, for the original userbase who uploaded those
+images on v1 before ownership existed and should not lose them to the migration. It does not weaken
+the rule, and the reasons are worth stating because the shape looks like a reversal:
+
+- **Nothing transfers on its own.** Filing a claim writes a request row and stops. Only a moderator
+  approving it performs the `UPDATE`, so a malicious claim achieves nothing but a moderator's time.
+- **The transfer is NULL-only.** An image someone already owns is never taken, even on approval.
+  A claim against a fully-owned character is refused with nothing left to claim.
+- **It is not a queue that accumulates pending work.** The distinction §5 draws for the moderation
+  surface is preserved: claims are a bounded reconciliation of a fixed backlog, not a continuing
+  stream of incoming work. When the banner stops appearing, the feature has finished its job.
+- **It is temporary and one-directional.** Once every character is claimed (or the operator removes
+  the affordance), the unowned bucket is closed again, and any future import would need its own
+  decision. Nothing here reopens the general case.
+
+Two claimants for one character are allowed while pending, because the moderation queue is more
+useful when it shows rivals; approving one auto-rejects the rest with a notification, since the end
+state is one owner. A rejection is not a ban — the claimant may ask again, and the unique index that
+enforces "one pending claim per person per character" is scoped to `pending` for exactly that.
+
+The record of *who was given what* survives in `ownership_claims` (`decided_by`, `decided_at`,
+`images_granted`), so the bestowal is auditable rather than silent.
+
 ---
 
 ## 2. ImgChest is mandatory

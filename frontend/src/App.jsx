@@ -25,6 +25,7 @@ const RemovedTab = lazy(() => import('./pages/profile/RemovedTab'))
 const SavedTab = lazy(() => import('./pages/profile/SavedTab'))
 const SettingsTab = lazy(() => import('./pages/profile/SettingsTab'))
 const DuplicatesPage = lazy(() => import('./pages/moderation/DuplicatesPage'))
+const ClaimsPage = lazy(() => import('./pages/moderation/ClaimsPage'))
 const CutoverPage = lazy(() => import('./pages/moderation/CutoverPage'))
 const ModerationLayout = lazy(() => import('./pages/moderation/ModerationLayout'))
 const ModerationPage = lazy(() => import('./pages/moderation/ModerationPage'))
@@ -109,6 +110,7 @@ function App() {
                 >
                   <Route index element={<ModerationPage />} />
                   <Route path="reports" element={<ReportsPage />} />
+                  <Route path="claims" element={<ClaimsPage />} />
                   <Route path="duplicates" element={<DuplicatesPage />} />
                   {/* Owner-only, one level stricter than the console around it. */}
                   <Route

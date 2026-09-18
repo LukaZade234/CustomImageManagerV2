@@ -3083,6 +3083,469 @@ def reported_image_counts() -> dict:
     return counts
 
 
+# --- Ownership claims ---------------------------------------------------
+#
+# A request to be given the unowned images on a character. The unowned bucket is
+# the v1 import, whose `added_by` is NULL, and migration 004 calls that permanent
+# on purpose. This is the one staff-gated way back out, for the original
+# userbase -- see migration 025 for why it does not weaken the rule.
+#
+# Nothing here ever transfers ownership on its own. Filing writes a row and
+# stops; only `decide_ownership_claim` with `approve=True`, run by a moderator,
+# performs the UPDATE. And that UPDATE is NULL-only: an image someone already
+# owns is never taken, so the worst a bad claim can do is waste a moderator's
+# time. That is the property that keeps this feature from reintroducing the
+# griefing hole §1 was written to close.
+
+CLAIM_STATUSES = ("pending", "approved", "rejected")
+
+# One pending claim per person per character is a partial unique index
+# (migration 025). Filing into an existing pending claim is a no-op that returns
+# the existing row rather than a 500: clicking twice is not an error.
+
+
+def claimable_image_counts(char_name: str) -> dict:
+    """How many unowned images a character has, split by state.
+
+    What a claim can actually move, and what the button and the confirmation
+    copy are built from. `{active: 0, removed: 0}` means nothing to claim, which
+    is how the character page decides whether to show the affordance at all.
+    Purged rows are excluded: the file is gone, so there is nothing to give.
+    """
+    conn = get_connection()
+    char_id = _character_id(conn, char_name)
+    if char_id is None:
+        return {"active": 0, "removed": 0}
+    rows = conn.execute(
+        "SELECT state, COUNT(*) AS n FROM custom_images"
+        " WHERE character_id = ? AND added_by IS NULL AND purged_at IS NULL"
+        " GROUP BY state",
+        (char_id,),
+    ).fetchall()
+    counts = {"active": 0, "removed": 0}
+    for row in rows:
+        if row["state"] in counts:
+            counts[row["state"]] = int(row["n"])
+    return counts
+
+
+def get_claim_for(char_name: str, identity_id: str) -> dict | None:
+    """This person's most relevant claim on a character, or None.
+
+    "Most relevant" is a pending claim if there is one, else the newest decided
+    claim -- so the button can say "awaiting review", "not approved", or nothing
+    at all without a second round trip.
+    """
+    conn = get_connection()
+    char_id = _character_id(conn, char_name)
+    if char_id is None:
+        return None
+    row = conn.execute(
+        "SELECT id, status, created_at, decided_at, reason, images_granted"
+        "  FROM ownership_claims"
+        " WHERE character_id = ? AND identity_id = ?"
+        " ORDER BY (status = 'pending') DESC, created_at DESC"
+        " LIMIT 1",
+        (char_id, identity_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": int(row["id"]),
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "decided_at": row["decided_at"],
+        "reason": row["reason"],
+        "images_granted": int(row["images_granted"]),
+    }
+
+
+def file_ownership_claim(char_name: str, identity_id: str) -> dict | None:
+    """Register a claim on a character's unowned images.
+
+    Returns None if the character is unknown, else
+    `{'status': 'filed'|'already_pending'|'nothing_to_claim', 'claim': {...}}`.
+    Refuses when there is nothing unowned left, so a claim can never be filed
+    against a character that has already been granted -- that is the case the
+    UI hides the button for, and the server must agree.
+
+    Idempotent while pending, by way of the partial unique index: filing again
+    returns the existing claim rather than creating a second one. A claim filed
+    after a rejection is a new row, because the index only covers `pending`.
+    """
+    with transaction() as conn:
+        char_id = _character_id(conn, char_name)
+        if char_id is None:
+            return None
+
+        outstanding = conn.execute(
+            "SELECT COUNT(*) AS n FROM custom_images"
+            " WHERE character_id = ? AND added_by IS NULL AND purged_at IS NULL",
+            (char_id,),
+        ).fetchone()["n"]
+        if not outstanding:
+            return {"status": "nothing_to_claim", "claim": None}
+
+        existing = conn.execute(
+            "SELECT id, status, created_at, decided_at, reason, images_granted"
+            "  FROM ownership_claims"
+            " WHERE character_id = ? AND identity_id = ? AND status = 'pending'",
+            (char_id, identity_id),
+        ).fetchone()
+        if existing is not None:
+            return {
+                "status": "already_pending",
+                "claim": {
+                    "id": int(existing["id"]),
+                    "status": existing["status"],
+                    "created_at": existing["created_at"],
+                    "decided_at": existing["decided_at"],
+                    "reason": existing["reason"],
+                    "images_granted": int(existing["images_granted"]),
+                },
+            }
+
+        _ensure_identity(conn, identity_id)
+        cur = conn.execute(
+            "INSERT INTO ownership_claims (character_id, identity_id, status, created_at)"
+            " VALUES (?, ?, 'pending', ?)",
+            (char_id, identity_id, _now()),
+        )
+        return {
+            "status": "filed",
+            "claim": {
+                "id": int(cur.lastrowid),
+                "status": "pending",
+                "created_at": _now(),
+                "decided_at": None,
+                "reason": "",
+                "images_granted": 0,
+            },
+        }
+
+
+def list_ownership_claims(
+    status: str = "pending",
+    *,
+    char_name: str | None = None,
+    identity_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict:
+    """The moderation queue, filtered by status, character and/or claimant.
+
+    `status` is required and must be one of CLAIM_STATUSES -- unlike reports,
+    "all at once" is not a useful view here, because pending is the work and the
+    decided rows are the audit trail.
+
+    Each item carries the character, the claimant's handle, and how many unowned
+    images the character still has, so a moderator can see what an approval would
+    actually move without leaving the list. `counts` gives the per-status totals
+    for the filter labels.
+    """
+    if status not in CLAIM_STATUSES:
+        raise ValueError(f"Unknown claim status: {status!r}")
+    conn = get_connection()
+
+    where = ["cl.status = ?"]
+    params: list[object] = [status]
+    if char_name:
+        where.append("c.name = ?")
+        params.append(char_name)
+    if identity_id:
+        where.append("cl.identity_id = ?")
+        params.append(identity_id)
+    clause = " AND ".join(where)
+
+    total = conn.execute(
+        f"SELECT COUNT(*) AS n FROM ownership_claims cl"
+        f"  JOIN characters c ON c.id = cl.character_id WHERE {clause}",
+        params,
+    ).fetchone()["n"]
+
+    rows = conn.execute(
+        f"SELECT cl.id AS id, cl.status AS status, cl.created_at AS created_at,"
+        f"       cl.decided_at AS decided_at, cl.reason AS reason,"
+        f"       cl.images_granted AS images_granted,"
+        f"       cl.identity_id AS identity_id,"
+        f"       claimant.handle AS claimant,"
+        f"       decider.handle AS decided_by,"
+        f"       c.name AS character, c.id AS character_id,"
+        f"       (SELECT COUNT(*) FROM custom_images u"
+        f"         WHERE u.character_id = c.id AND u.added_by IS NULL"
+        f"           AND u.purged_at IS NULL) AS unowned_total,"
+        f"       (SELECT COUNT(*) FROM custom_images u"
+        f"         WHERE u.character_id = c.id AND u.added_by IS NULL"
+        f"           AND u.purged_at IS NULL AND u.state = 'active') AS unowned_active"
+        f"  FROM ownership_claims cl"
+        f"  JOIN characters c ON c.id = cl.character_id"
+        f"  LEFT JOIN identities claimant ON claimant.id = cl.identity_id"
+        f"  LEFT JOIN identities decider ON decider.id = cl.decided_by"
+        f" WHERE {clause}"
+        f" ORDER BY cl.created_at DESC, cl.id DESC"
+        f" LIMIT ? OFFSET ?",
+        (*params, limit, offset),
+    ).fetchall()
+
+    items = [
+        {
+            "id": int(r["id"]),
+            "status": r["status"],
+            "character": r["character"],
+            "character_id": int(r["character_id"]),
+            "claimant": r["claimant"],
+            "user_ref": identity.public_ref(r["identity_id"]),
+            "created_at": r["created_at"],
+            "decided_at": r["decided_at"],
+            "decided_by": r["decided_by"],
+            "reason": r["reason"],
+            "images_granted": int(r["images_granted"]),
+            "unowned_total": int(r["unowned_total"]),
+            "unowned_active": int(r["unowned_active"]),
+        }
+        for r in rows
+    ]
+    return {
+        "items": items,
+        "total": int(total),
+        "counts": claim_status_counts(),
+    }
+
+
+def claim_status_counts() -> dict:
+    """Pending/approved/rejected totals, for the queue's filter labels."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT cl.status AS status, COUNT(*) AS n FROM ownership_claims cl"
+        " GROUP BY cl.status"
+    ).fetchall()
+    counts = dict.fromkeys(CLAIM_STATUSES, 0)
+    for row in rows:
+        if row["status"] in counts:
+            counts[row["status"]] = int(row["n"])
+    return counts
+
+
+def list_claims_for_identity(identity_id: str, *, limit: int = 100) -> list[dict]:
+    """Every claim this person has filed, newest first.
+
+    Feeds the character page's own state ("your claim is pending") and the
+    approve-all-by-user moderation view, which needs the character names.
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT cl.id AS id, cl.status AS status, cl.created_at AS created_at,"
+        "       cl.decided_at AS decided_at, cl.reason AS reason,"
+        "       cl.images_granted AS images_granted, c.name AS character"
+        "  FROM ownership_claims cl"
+        "  JOIN characters c ON c.id = cl.character_id"
+        " WHERE cl.identity_id = ?"
+        " ORDER BY cl.created_at DESC, cl.id DESC LIMIT ?",
+        (identity_id, limit),
+    ).fetchall()
+    return [
+        {
+            "id": int(r["id"]),
+            "status": r["status"],
+            "character": r["character"],
+            "created_at": r["created_at"],
+            "decided_at": r["decided_at"],
+            "reason": r["reason"],
+            "images_granted": int(r["images_granted"]),
+        }
+        for r in rows
+    ]
+
+
+def _notify(
+    conn: sqlite3.Connection,
+    identity_id: str,
+    title: str,
+    body: str,
+    created_by: str | None = None,
+) -> None:
+    """Write a notification on an already-open connection.
+
+    `add_notification` opens its own transaction, so it cannot be used from
+    inside one -- the inner commit would end the caller's transaction early and a
+    later failure would no longer roll the whole decision back. This is the
+    inline form, the same reason `moderate_identity` writes its notification with
+    `conn.execute`.
+    """
+    _ensure_identity(conn, identity_id)
+    conn.execute(
+        "INSERT INTO notifications (identity_id, kind, title, body, created_by, created_at)"
+        " VALUES (?, 'mechanical', ?, ?, ?, ?)",
+        (identity_id, title, body, created_by, _now()),
+    )
+
+
+def _grant_claim(conn: sqlite3.Connection, claim_id: int, actor_id: str, now: str) -> dict | None:
+    """Approve one pending claim inside an open transaction.
+
+    Returns the granted counts, or None if the claim is missing or already
+    decided -- the caller turns that into a 404/409. Shared by the single decide
+    and the approve-all loop so both do exactly the same thing.
+
+    The UPDATE is the whole point and is deliberately narrow: only rows whose
+    `added_by` is still NULL, and only unpurged ones. `state` and `removed_by`
+    are not touched -- a claim returns ownership, not a restored gallery, and the
+    record of who removed something (often nobody, for the cut-over recovery)
+    stays honest. The claimant can restore their own images afterwards, which is
+    what the Removed drawer is for.
+    """
+    claim = conn.execute(
+        "SELECT id, character_id, identity_id, status FROM ownership_claims WHERE id = ?",
+        (claim_id,),
+    ).fetchone()
+    if claim is None or claim["status"] != "pending":
+        return None
+
+    char_id = int(claim["character_id"])
+    claimant = claim["identity_id"]
+
+    granted = conn.execute(
+        "UPDATE custom_images SET added_by = ?"
+        " WHERE character_id = ? AND added_by IS NULL AND purged_at IS NULL",
+        (claimant, char_id),
+    ).rowcount
+
+    conn.execute(
+        "UPDATE ownership_claims"
+        "   SET status = 'approved', decided_at = ?, decided_by = ?, images_granted = ?"
+        " WHERE id = ?",
+        (now, actor_id, granted, claim_id),
+    )
+    conn.execute("UPDATE characters SET updated_at = ? WHERE id = ?", (now, char_id))
+
+    # Everyone else still waiting on this character loses: one claimant per
+    # character. They are told, because a silent rejection looks like the claim
+    # was never filed. Rivals are not shown to each other -- this only tells each
+    # person they did not get it, never who did.
+    rivals = conn.execute(
+        "SELECT id, identity_id FROM ownership_claims"
+        " WHERE character_id = ? AND status = 'pending' AND id != ?",
+        (char_id, claim_id),
+    ).fetchall()
+    name_row = conn.execute("SELECT name FROM characters WHERE id = ?", (char_id,)).fetchone()
+    char_display = name_row["name"] if name_row else "that character"
+    for rival in rivals:
+        conn.execute(
+            "UPDATE ownership_claims"
+            "   SET status = 'rejected', decided_at = ?, decided_by = ?,"
+            "       reason = 'Another claim on this character was approved first.'"
+            " WHERE id = ?",
+            (now, actor_id, rival["id"]),
+        )
+        _notify(
+            conn,
+            rival["identity_id"],
+            f"Claim for {char_display} not approved",
+            "Someone else's claim on this character was approved, so yours was"
+            " not. You can still ask again if this looks wrong.",
+            created_by=actor_id,
+        )
+
+    _notify(
+        conn,
+        claimant,
+        f"Claim for {char_display} approved",
+        f"You now own {granted} image{'s' if granted != 1 else ''} on"
+        f" {char_display}. Anything that was in the Removed drawer is still"
+        f" there and can be restored.",
+        created_by=actor_id,
+    )
+    return {"images_granted": granted, "rivals_rejected": len(rivals), "character": char_display}
+
+
+def decide_ownership_claim(claim_id: int, actor_id: str, *, approve: bool, reason: str = "") -> dict | None:
+    """Approve or reject a claim. Returns None if missing or already decided.
+
+    Approving grants every unowned image on the character to the claimant, as a
+    moderator action with a durable log line and a notification. Rejecting only
+    records the decision and tells the claimant, who may ask again -- a rejection
+    is not a ban, and the partial index is scoped to pending for exactly that.
+    """
+    now = _now()
+    with transaction() as conn:
+        if approve:
+            return _grant_claim(conn, claim_id, actor_id, now)
+
+        claim = conn.execute(
+            "SELECT id, character_id, identity_id, status FROM ownership_claims WHERE id = ?",
+            (claim_id,),
+        ).fetchone()
+        if claim is None or claim["status"] != "pending":
+            return None
+
+        conn.execute(
+            "UPDATE ownership_claims"
+            "   SET status = 'rejected', decided_at = ?, decided_by = ?, reason = ?"
+            " WHERE id = ?",
+            (now, actor_id, reason, claim_id),
+        )
+        name_row = conn.execute(
+            "SELECT name FROM characters WHERE id = ?", (claim["character_id"],)
+        ).fetchone()
+        char_display = name_row["name"] if name_row else "that character"
+        body = "You can ask again from the character page if this looks wrong."
+        if reason:
+            body = f"{reason}\n\n{body}"
+        _notify(
+            conn,
+            claim["identity_id"],
+            f"Claim for {char_display} not approved",
+            body,
+            created_by=actor_id,
+        )
+        return {"images_granted": 0, "rivals_rejected": 0, "character": char_display}
+
+
+# Approving every pending claim a person has, in one action, is a bulk operation
+# over characters -- the number is bounded by how many they filed, which the
+# claim limit keeps modest, but the loop does a transfer and possibly a
+# notification each. A cap keeps one request from turning into an unbounded
+# write; the caller reports the remainder so the operator can run it again.
+MAX_BULK_CLAIM_APPROVALS = 25
+
+
+def approve_pending_claims_for_identity(identity_id: str, actor_id: str) -> dict:
+    """Approve this person's pending claims, up to MAX_BULK_CLAIM_APPROVALS.
+
+    Returns `{'approved': [...], 'images_granted': n, 'remaining': n}`. The
+    remaining count is claims still pending afterwards, so the UI can say "25
+    done, 12 left" instead of pretending it finished.
+    """
+    with transaction() as conn:
+        pending = conn.execute(
+            "SELECT id FROM ownership_claims"
+            " WHERE identity_id = ? AND status = 'pending'"
+            " ORDER BY created_at, id LIMIT ?",
+            (identity_id, MAX_BULK_CLAIM_APPROVALS),
+        ).fetchall()
+
+        now = _now()
+        approved = []
+        granted_total = 0
+        for row in pending:
+            result = _grant_claim(conn, int(row["id"]), actor_id, now)
+            if result is not None:
+                approved.append({"id": int(row["id"]), **result})
+                granted_total += result["images_granted"]
+
+        remaining = conn.execute(
+            "SELECT COUNT(*) AS n FROM ownership_claims"
+            " WHERE identity_id = ? AND status = 'pending'",
+            (identity_id,),
+        ).fetchone()["n"]
+
+    return {
+        "approved": approved,
+        "images_granted": granted_total,
+        "remaining": int(remaining),
+    }
+
+
 # --- Takes --------------------------------------------------------------
 
 

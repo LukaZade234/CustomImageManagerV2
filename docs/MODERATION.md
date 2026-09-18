@@ -705,6 +705,58 @@ yet.
 
 ---
 
+## Ownership claims
+
+The one place this surface *acts* rather than inspects, and the reason is narrow: a claim transfers
+ownership of the unowned (v1-imported) images, which the claimant cannot do for themselves.
+
+The unowned bucket is permanent on purpose — migration 004, `DECISIONS.md` §1, and
+`db.remove_custom_images` all say so, and it is what makes griefing the inherited library
+unimplementable. This feature is the single staff-gated way back out, for the original userbase.
+The safety properties are that nothing transfers without a moderator's decision and the transfer is
+NULL-only (an image someone owns is never taken). See `DECISIONS.md` §1, "The ownership-claim
+exception".
+
+### Backend
+- `migrations/025_ownership_claims.sql` — `ownership_claims`, plus a **partial unique index** on
+  `(character_id, identity_id) WHERE status = 'pending'` (one pending claim per person per character;
+  a rejection does not bar a new one) and a partial index for the "anything left to claim" reads.
+- `db.claimable_image_counts(name)` — unowned images split by state; all-zero is what hides the
+  banner.
+- `db.get_claim_for(name, identity_id)` / `db.file_ownership_claim(...)` — the caller's claim state,
+  and filing. Filing refuses when nothing is unowned, so the server agrees with the hidden button.
+- `db.list_ownership_claims(status, char_name=, identity_id=)` / `db.claim_status_counts()` — the
+  queue, filtered by character and by claimant.
+- `db.decide_ownership_claim(claim_id, actor_id, approve=, reason=)` — the decision. Approving grants
+  the unowned images, auto-rejects rival pending claims (notifying each loser, without naming the
+  winner), and notifies the claimant. Rejecting records the reason and notifies, and the user may
+  ask again.
+- `db.approve_pending_claims_for_identity(...)` — the per-user bulk action, capped at
+  `MAX_BULK_CLAIM_APPROVALS` (25) and reporting `remaining` so the operator can run it again.
+- Routes: `POST /api/claim-character` (`require_signed_in`, `rate_limited("claim")`),
+  `GET /api/me/claims`, `GET /api/moderation/claims` (`require_moderator`),
+  `POST /api/moderation/claims/<id>/decide` and `POST /api/moderation/claims/approve-all/<ref>`
+  (both `require_moderator` + `rate_limited("moderate")`).
+- The gallery response (`GET /api/custom-image/<name>`) carries `claimable` and `myClaim`, so the
+  character page decides whether to show the banner without a second request.
+
+### Frontend
+- **ClaimBanner** (`ClaimBanner.jsx`) on the character page, between the header and the gallery. It
+  renders only while the character has unowned images, states how many and where they are, and
+  switches to "awaiting review" once a claim is pending. Signed-out visitors are told to sign in
+  rather than given a button that would 403.
+- **Claims** (`ClaimsPage.jsx`) at `/profile/moderation/claims`: a status filter (Pending / Approved /
+  Rejected with counts), a debounced character filter and a user-ref filter. Each pending claim is a
+  Card with the character, claimant, what an approval would move, and Approve / Reject (with a
+  reason). When filtered by user, a bulk **Approve all N for this user** appears, and reports what
+  the cap left behind.
+- `queries/moderation.js` adds `useModerationClaims`, `useDecideModerationClaim` and
+  `useApproveAllModerationClaims`; `queries/characterImages.js` adds `useClaimCharacter` and passes
+  `claimable`/`myClaim` through the gallery payload.
+
+
+---
+
 ## Later phases
 
 Sketches only. Each needs its own decision before it is built, and none is committed to by phase 1.
