@@ -81,6 +81,7 @@ export const apiClient = {
   decideModerationClaim: (claimId, { approve, reason = '' }) =>
     api(`/api/moderation/claims/${encodeURIComponent(claimId)}/decide`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approve, reason }),
     }),
   approveAllModerationClaims: (ref) =>
@@ -207,6 +208,7 @@ export const apiClient = {
   claimCharacter: (characterName) =>
     api('/api/claim-character', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ character_name: characterName }),
     }),
   getMyClaims: () => api('/api/me/claims'),
