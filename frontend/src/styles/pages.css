@@ -3740,3 +3740,96 @@ button.profile-card__link {
 .character-page.has-action-bar {
   padding-bottom: 96px;
 }
+
+/* --- Ownership claim banner (character page) --- */
+.claim-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+.claim-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 22rem;
+}
+.claim-banner__title {
+  margin: 0;
+  font-size: var(--type-body-lg);
+  font-weight: var(--weight-semibold);
+}
+.claim-banner__body {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+.claim-banner__body--rejected {
+  color: var(--danger);
+}
+.claim-banner__signin {
+  font-style: italic;
+}
+
+/* --- Ownership claims (moderation queue) --- */
+.claims__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+.claims__list {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.claims__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.claims__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.claims__character {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+.claims__meta {
+  color: var(--text-muted);
+  font-size: var(--type-meta);
+}
+.claims__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.claims__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.claims__reason {
+  max-width: 32rem;
+}
+.claims__bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}

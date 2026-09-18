@@ -592,6 +592,12 @@ def get_custom_images(char_name):
         # already used" helpers. Scoped to them and this character; never an
         # aggregate across users, which DECISIONS.md section 1 rules out.
         copied = db.copied_image_ids(char_name, me.id)
+        # Whether this character still has unowned (v1-imported) images for the
+        # claim banner, and this viewer's own claim state if they have one. Both
+        # ride along because the character page already makes this request, and a
+        # second round trip to decide whether to show a banner is waste.
+        claimable = db.claimable_image_counts(char_name)
+        my_claim = db.get_claim_for(char_name, me.id) if me.id else None
         return jsonify(
             {
                 "rows": rows,
@@ -599,11 +605,22 @@ def get_custom_images(char_name):
                 "accentManual": accent_manual,
                 "copiedIds": copied["ids"],
                 "lastBatchIds": copied["last_batch"],
+                "claimable": claimable if (claimable["active"] or claimable["removed"]) else None,
+                "myClaim": my_claim,
             }
         )
     except Exception:
         log.exception("customs.read_failed")
-    return jsonify({"rows": [], "accentSeed": None, "copiedIds": [], "lastBatchIds": []})
+    return jsonify(
+        {
+            "rows": [],
+            "accentSeed": None,
+            "copiedIds": [],
+            "lastBatchIds": [],
+            "claimable": None,
+            "myClaim": None,
+        }
+    )
 
 
 @customs_bp.route("/api/reorder-custom-images", methods=["POST"])
@@ -903,6 +920,39 @@ def report_image():
     except Exception:
         log.exception("customs.report_failed")
         return jsonify({"error": "Could not submit that report."}), 500
+
+
+@customs_bp.route("/api/claim-character", methods=["POST"])
+@identity.require_signed_in(action="claim a character")
+@rate_limited("claim")
+def claim_character():
+    """Ask a moderator to hand this character's unowned images to the caller.
+
+    Filing grants nothing -- it puts a row in the moderation queue, and only a
+    moderator approving it performs the transfer (see migration 025 and
+    `db.file_ownership_claim`). Sign-in is required because this is a request to
+    own things, and an account is what makes a ban able to stop someone abusing
+    it; a cookie-only visitor is told to sign in rather than silently ignored.
+
+    Refuses when there is nothing unowned left, so the answer agrees with the
+    banner the page did or did not render.
+    """
+    data = request.get_json(silent=True) or {}
+    char_name = (data.get("character_name") or "").strip()
+    ok, err = validate_character_name(char_name)
+    if not ok:
+        return jsonify({"error": err}), 400
+
+    try:
+        result = db.file_ownership_claim(char_name, identity.current_identity().id)
+        if result is None:
+            return jsonify({"error": "Character not found"}), 404
+        if result["status"] == "nothing_to_claim":
+            return jsonify({"error": "There are no unowned images left on this character."}), 409
+        return jsonify({"success": True, **result})
+    except Exception:
+        log.exception("customs.claim_failed", character=char_name)
+        return jsonify({"error": "Could not file that claim."}), 500
 
 
 @customs_bp.route("/api/takes", methods=["POST"])

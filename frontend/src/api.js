@@ -72,6 +72,19 @@ export const apiClient = {
     api(`/api/moderation/duplicates?limit=${encodeURIComponent(limit)}`),
   listModerationReports: ({ status = 'reported' } = {}) =>
     api(`/api/moderation/reports?status=${encodeURIComponent(status)}`),
+  listModerationClaims: ({ status = 'pending', char = '', user = '', page = 1 } = {}) => {
+    const params = new URLSearchParams({ status, page })
+    if (char) params.set('char', char)
+    if (user) params.set('user', user)
+    return api(`/api/moderation/claims?${params}`)
+  },
+  decideModerationClaim: (claimId, { approve, reason = '' }) =>
+    api(`/api/moderation/claims/${encodeURIComponent(claimId)}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ approve, reason }),
+    }),
+  approveAllModerationClaims: (ref) =>
+    api(`/api/moderation/claims/approve-all/${encodeURIComponent(ref)}`, { method: 'POST' }),
   getModerationCutover: () => api('/api/moderation/cutover'),
   listModerationUserImages: ({
     ref,
@@ -191,6 +204,12 @@ export const apiClient = {
     }),
   removeSaved: (name) => api(`/api/saved/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   getCustomImagesForChar: (name) => api(`/api/custom-image/${encodeURIComponent(name)}`),
+  claimCharacter: (characterName) =>
+    api('/api/claim-character', {
+      method: 'POST',
+      body: JSON.stringify({ character_name: characterName }),
+    }),
+  getMyClaims: () => api('/api/me/claims'),
   addCustomImage: async (formData) => {
     const url = `${API_BASE}/api/custom-image`
     const maxAttempts = 4

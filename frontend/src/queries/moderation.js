@@ -224,3 +224,61 @@ export function usePurgeModerationImage() {
     },
   })
 }
+
+/**
+ * The ownership-claim queue: requests from users to be given a character's
+ * unowned (v1-imported) images. `char` and `user` are the two filters the page
+ * offers; `user` is a public ref, never an identity id.
+ */
+export const moderationClaimsKey = ({ status, char, user, page }) => [
+  'moderation-claims',
+  status,
+  char || '',
+  user || '',
+  page || 1,
+]
+
+export function useModerationClaims({ status = 'pending', char = '', user = '', page = 1 } = {}) {
+  return useQuery({
+    queryKey: moderationClaimsKey({ status, char, user, page }),
+    queryFn: () => apiClient.listModerationClaims({ status, char, user, page }),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * A decision changes the queue and the character's ownership, so the work views
+ * and contributor counts are stale too. Approving also moves images in the
+ * gallery, which the character page reads through its own key.
+ */
+function invalidateClaimEffects(queryClient) {
+  queryClient.invalidateQueries({ queryKey: ['moderation-claims'] })
+  queryClient.invalidateQueries({ queryKey: ['moderation-user-images'] })
+  queryClient.invalidateQueries({ queryKey: ['moderation-user-characters'] })
+  queryClient.invalidateQueries({ queryKey: moderationUsersKey })
+  // The gallery response carries `claimable` and `myClaim`, so any cached
+  // character gallery may now be wrong about what is left to claim.
+  queryClient.invalidateQueries({ queryKey: ['character-images'] })
+}
+
+/** Approve or reject one claim. Rejections carry the reason the mod typed. */
+export function useDecideModerationClaim() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ claimId, approve, reason }) =>
+      apiClient.decideModerationClaim(claimId, { approve, reason }),
+    onSuccess: () => invalidateClaimEffects(queryClient),
+  })
+}
+
+/**
+ * Approve every pending claim a user holds, up to the server's cap. The result
+ * carries how many remain, because the cap means one call may not finish.
+ */
+export function useApproveAllModerationClaims() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ref) => apiClient.approveAllModerationClaims(ref),
+    onSuccess: () => invalidateClaimEffects(queryClient),
+  })
+}

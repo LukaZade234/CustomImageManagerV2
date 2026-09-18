@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../api'
 
 /**
@@ -25,7 +25,12 @@ export async function fetchCharacterImages(name) {
   // signed-out visitor and for one who has never copied here.
   const copiedIds = Array.isArray(payload) ? [] : (payload?.copiedIds ?? [])
   const lastBatchIds = Array.isArray(payload) ? [] : (payload?.lastBatchIds ?? [])
-  return { rows, accentSeed, accentManual, copiedIds, lastBatchIds }
+  // What is left to claim on this character, and this viewer's own claim state.
+  // `claimable` is null when there is nothing unowned, which is what hides the
+  // banner; `myClaim` carries the pending/rejected state once one is filed.
+  const claimable = Array.isArray(payload) ? null : (payload?.claimable ?? null)
+  const myClaim = Array.isArray(payload) ? null : (payload?.myClaim ?? null)
+  return { rows, accentSeed, accentManual, copiedIds, lastBatchIds, claimable, myClaim }
 }
 
 export function useCharacterImages(name) {
@@ -58,5 +63,20 @@ export function applyOrderToCache(queryClient, name, urls) {
     const placed = new Set(ordered.map((row) => row.url))
     ordered.push(...old.rows.filter((row) => !placed.has(row.url)))
     return { ...old, rows: ordered }
+  })
+}
+
+/**
+ * Ask a moderator to give this character's unowned images to the caller.
+ *
+ * Filing grants nothing — it only puts a request in the moderation queue — but
+ * it does change this viewer's claim state on the character, so the gallery is
+ * refreshed to pick up the new `myClaim`.
+ */
+export function useClaimCharacter(name) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiClient.claimCharacter(name),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: characterImagesKey(name) }),
   })
 }

@@ -15,6 +15,7 @@ import { useMe } from '../../queries/me'
 const TABS = [
   { to: '/profile/moderation', end: true, label: 'Users' },
   { to: '/profile/moderation/reports', label: 'Reports' },
+  { to: '/profile/moderation/claims', label: 'Claims' },
   { to: '/profile/moderation/duplicates', label: 'Duplicates' },
 ]
 

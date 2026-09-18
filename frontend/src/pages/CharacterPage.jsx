@@ -5,6 +5,7 @@ import { apiClient, getImageUrl } from '../api'
 import AiCommandLimitDialog from '../components/AiCommandLimitDialog'
 import { CharacterHeader } from '../components/CharacterHeader'
 import CharacterLoadingState from '../components/CharacterLoadingState'
+import ClaimBanner from '../components/ClaimBanner'
 import CustomImageGallery from '../components/CustomImageGallery'
 import DuplicateDialog from '../components/DuplicateDialog'
 import { GallerySelectionBar } from '../components/GallerySelectionBar'
@@ -29,6 +30,7 @@ import {
   applyOrderToCache,
   characterImagesKey,
   useCharacterImages,
+  useClaimCharacter,
 } from '../queries/characterImages'
 import { useMe } from '../queries/me'
 import { savedKey, useRemoveSaved, useSaveCharacter, useSavedCharacters } from '../queries/saved'
@@ -78,6 +80,24 @@ export default function CharacterPage() {
     () => queryClient.invalidateQueries({ queryKey: characterImagesKey(name) }),
     [queryClient, name],
   )
+
+  // Claiming is a request to a moderator, not a transfer, so the only visible
+  // effect is the banner switching to "awaiting review". The mutation refreshes
+  // the gallery for that; the toast confirms the click landed.
+  const claimCharacter = useClaimCharacter(name)
+  const handleClaimCharacter = useCallback(async () => {
+    try {
+      const result = await claimCharacter.mutateAsync()
+      addToast(
+        result?.status === 'already_pending'
+          ? 'You have already asked to claim this character'
+          : 'Claim request sent to the moderators',
+        'success',
+      )
+    } catch (err) {
+      addToast(err.message || 'Could not send that claim', 'error')
+    }
+  }, [claimCharacter, addToast])
 
   // The roster is no longer downloaded, so the page fetches the one character
   // it is showing. A catalog-only name (never added) is treated as not found;
@@ -818,6 +838,14 @@ export default function CharacterPage() {
           onTogglePick: accent.togglePick,
           onClear: accent.clear,
         }}
+      />
+
+      <ClaimBanner
+        claimable={imagesData?.claimable}
+        myClaim={imagesData?.myClaim}
+        signedIn={canAddImages}
+        onClaim={handleClaimCharacter}
+        busy={claimCharacter.isPending}
       />
 
       {/*

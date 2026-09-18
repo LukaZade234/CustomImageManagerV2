@@ -77,6 +77,10 @@ RATE_LIMITS = {
     # A moderation message lands in someone's inbox, like a report lands against
     # their work; modest ceilings, but not a button that can be held down.
     "moderate": _limits_from_env("moderate", [(10, 60), (60, 3600)]),
+    # Filing a claim is rare and consequential -- one person has a handful of
+    # characters to reclaim, not dozens a minute. Low enough that a script
+    # spamming the queue is stopped, high enough that a genuine session is not.
+    "claim": _limits_from_env("claim", [(5, 60), (20, 3600)]),
     # Each Mudae call burns one of Discord's ~1000 daily identify calls.
     "mudae": _limits_from_env("mudae", [(10, 60), (60, 3600)]),
     # Sign-in is cheap for us but hits Discord's API, and a loop here would look
