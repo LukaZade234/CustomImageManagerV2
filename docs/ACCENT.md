@@ -1288,3 +1288,36 @@ Measured on the segmented character (median across each character's images):
   the thresholds come from four characters, and the gap to the reds (0.05 vs
   0.11) is narrow — it needs the full library and the review checks before it
   is trusted.
+
+---
+
+## 21. Colour-profile paths (V30), prototyped (2026-09-26)
+
+The owner's idea from §20.2, built: V30 profiles each character on its cut-out
+images and sends two profiles down their own path; everyone else keeps V29.
+
+- **Monochrome** (under 30% of pixels carry real colour): the dominant tone of the
+  non-skin pixels, with a faint tint (chroma 0.03–0.045 — the frontend refuses
+  seeds under 0.025). The tint comes from cool neutrals only; warm ones are mostly
+  skin, and without a cool tint it falls back to a hint of blue. 2B `#4b4d5f`,
+  A2 `#6c6c80`, The Sandman `#1e313a`.
+- **Pale pink** (at least 70% of the colour pink/red, and at least 10% of that
+  pale): pale pink counts as identity instead of skin; the hue is aimed where the
+  *pale* pinks sit (HSV 315–358°) — the saturated evidence at 0–20° there is
+  skin shadow and red details — and the shade leans 75% to the band's brighter
+  pixels. Tewi `#ca8397`, Nadeko `#d18094`, Sakurako `#cb8498`, Mitsuri `#d790a3`.
+
+**On the review checks: 46 of 49** (V29: 43). Tewi, Nadeko and Sakurako now pass;
+nothing approved broke. Will Auceptin takes the monochrome path and becomes a light
+grey-blue (`#a2b8c4`) instead of red: his colour is 37% red, 2B's 35%, and A2's red
+leads in more of her images than his, so no statistic here separates him from them.
+
+**Scan.** 224 characters profiled — every one of the first 196 in the 10–30 band
+(the band where pale-pink characters cluster; stopped early at the owner's
+request) plus 28 from the other bands and earlier examples. 25 took a path
+(13 pale pink, 12 monochrome), 17 of them in the 10–30 band. New ones that look
+right: Mori Calliope, Sylveon, Lily White, Yuji Itadori (pink), Sora Kasugano,
+Mei Mei, Osaragi, Ken Kaneki (monochrome). Likely false positives to judge:
+Annie Leonhart and Himiko Toga (pink), Semiramis (lavender → dark wine). The page
+(`profiles.py`) shows every path character, the near misses on each threshold and
+an unchanged sample.

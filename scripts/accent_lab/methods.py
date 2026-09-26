@@ -28,7 +28,13 @@ app. Variants build on each other, so read them in order.
     v21   v20 + peak-centred windows + warm whites dropped        split: see below
     v22   v20 + warm whites dropped, aim across the window        25/26; Lynae pale
     v23   v22 + whites muted (not dropped), aim by sub-colour     worse
-    v24   v22's hue, v20's shade (whites only vote on the hue)    25/26, the candidate
+    v24   v22's hue, v20's shade (whites only vote on the hue)    25/26
+    v25   skin zone wraps down through red (with the dark rule)   broke approved reds
+    v26   pale-skin rule starts at 352 (pale pink is not skin)    broke Panty, Shiki
+    v27   v26 + skin shadow damped + shade blended to bright half 39-41/49
+    v28   v24's classes + v27's blend + skin-shadow damping       43/49
+    v29   v28 + pale pink counts once stronger than a highlight   43/49
+    v30   colour-profile paths: monochrome and pale pink          46/49, the candidate
 """
 
 from __future__ import annotations
@@ -1893,3 +1899,165 @@ V29_BLEND = 0.35
 
 def method_v29(portrait, gallery):
     return v29(portrait, gallery)
+
+
+# ---- V30: colour-profile paths (the owner's idea) ------------------------------------------
+#
+# One global rule cannot treat pale pink as both skin and identity. V30 profiles
+# the character first and sends two profiles down their own path; everyone else
+# gets V29 unchanged.
+#
+# - Monochrome (2B, A2): little of the art carries real colour. The accent is the
+#   character's dominant tone with only a faint tint -- the site's frontend refuses
+#   seeds below chroma 0.025, so a pure grey is not possible.
+# - Pale pink (Tewi Inaba, Nadeko Sengoku, Sakurako Kawawa): the colour is almost
+#   all pink/red *and* a real part of it is pale. Approved reds are just as
+#   pink/red but almost never pale (2-5% against 11-30%), so the pale share is the
+#   test. On this path pale pink counts as identity rather than skin, the hue is
+#   kept in the pink range, and the shade leans to the brighter pixels.
+
+MONO_MAX_CHROMATIC = 0.30
+PINK_MIN_SHARE = 0.70
+PINK_MIN_PALE = 0.10
+PINK_RANGE = (320, 12)
+PINK_BLEND = 0.75
+PINK_AIM = (315, 358)  # where pale pink hair and clothes sit (HSV)
+MONO_WARM = (0, 100)  # OKLCH hues ignored for the monochrome tint: skin, brown, pink
+MONO_TINT = (0.03, 0.045)
+MONO_DEFAULT_HUE = 250  # a hint of blue when the art has no tint of its own
+
+
+def colour_profile(images):
+    """Medians across images: chromatic share, pink/red share, pale share within it."""
+    chrom, pink, pale_in = [], [], []
+    for f in images:
+        arr = np.asarray(f.convert("RGB"), dtype=np.float64).reshape(-1, 3) / 255.0
+        arr = arr[~np.all(arr >= 0.999, axis=1)]  # painted-out background
+        if len(arr) < 50:
+            continue
+        mx, mn = arr.max(1), arr.min(1)
+        v = mx
+        s = np.where(mx > 1e-9, (mx - mn) / np.maximum(mx, 1e-9), 0)
+        r, g, b = arr.T
+        d = np.maximum(mx - mn, 1e-9)
+        h = (
+            np.where(
+                mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4)
+            )
+            * 60
+        )
+        lit = v >= 0.15
+        chrom.append(float(((s >= 0.15) & lit).sum() / len(arr)))
+        ev = lit & (s >= 0.08) & ~((h >= 12) & (h <= 38))
+        w = np.where(s < 0.22, 0.5, 1.0) * s * ev
+        pr = (h >= PINK_RANGE[0]) | (h < PINK_RANGE[1])
+        total = w.sum()
+        if total > 0:
+            pw = (w * pr).sum()
+            pink.append(float(pw / total))
+            pale_in.append(float((w * pr * (s < 0.22)).sum() / pw) if pw > 0 else 0.0)
+
+    def med(xs):
+        return sorted(xs)[len(xs) // 2] if xs else 0.0
+
+    return {"chromatic": med(chrom), "pink": med(pink), "pale_in_pink": med(pale_in)}
+
+
+def _mono_seed(images):
+    """Dominant tone of the non-skin foreground, with a faint tint."""
+    Ls, As, Bs, Ws = [], [], [], []
+    for f in images:
+        L, C, h = _to_oklch(f)
+        rgb = np.asarray(f.convert("RGB")).reshape(-1, 3)
+        keep = ~np.all(rgb >= 254, axis=1) & (L > 0.12) & (L < 0.97)
+        keep &= ~((h >= 35) & (h <= 80) & (C >= 0.02) & (C <= 0.13) & (L > 0.55))  # skin
+        if keep.sum() < 50:
+            continue
+        w = np.full(int(keep.sum()), 1.0 / keep.sum())
+        Ls.append(L[keep])
+        As.append((C * np.cos(np.radians(h)))[keep])
+        Bs.append((C * np.sin(np.radians(h)))[keep])
+        Ws.append(w)
+    if not Ls:
+        return None
+    L, a, b, w = (np.concatenate(x) for x in (Ls, As, Bs, Ws))
+    order = np.argsort(L)
+    cum = np.cumsum(w[order])
+    tone = float(np.clip(L[order][np.searchsorted(cum, cum[-1] / 2)], 0.3, 0.8))
+    hue_all = np.degrees(np.arctan2(b, a)) % 360
+    neutral = (np.hypot(a, b) < 0.08) & ~((hue_all >= MONO_WARM[0]) & (hue_all <= MONO_WARM[1]))
+    ma = float((a[neutral] * w[neutral]).sum() / max(w[neutral].sum(), 1e-9))
+    mb = float((b[neutral] * w[neutral]).sum() / max(w[neutral].sum(), 1e-9))
+    tint = math.hypot(ma, mb)
+    hue = math.degrees(math.atan2(mb, ma)) % 360 if tint > 0.004 else MONO_DEFAULT_HUE
+    chroma = float(np.clip(tint * 3, *MONO_TINT))
+    return describe(fit_in_gamut(tone, chroma, hue))
+
+
+def _is_skin_pink_path(h, s, v):
+    return (h >= 352 or h <= 38) and s <= 0.35 and v >= 0.45
+
+
+def _pink_measure(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_pink_path,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+        warm_damp_light=SKIN_SHADOW_ZONE,
+    )
+
+
+def _pink_seed(images):
+    global PALE_WEIGHT, POOL_POW
+    PALE_WEIGHT, POOL_POW = 0.5, 0.5
+    gm = [x for x in (measure(i, _pink_measure) for i in images) if x is not None]
+    if not gm:
+        return None
+    entries = [(x, 1.0) for x in gm]
+    # Aim where the *pale* pinks are: on this path they are the identity, and the
+    # saturated evidence at 0-20 degrees is mostly skin shadow and red details.
+    pale_hist = A._pool_histogram(entries, "pale")
+    lo, hi = PINK_AIM
+    cands = [i for i in range(A.HUE_BINS) if _in_zone((i + 0.5) * 5, lo, hi)]
+    hue = (max(cands, key=lambda i: band_sum(pale_hist, (i + 0.5) * 5, 15)) + 0.5) * 5
+    core, _ = shade_v15(entries, hue, V8)
+    bh = bright_half(entries, hue, V8)
+    if core is None or bh is None:
+        return core
+    r, g, b = (int(core["seed"][i : i + 2], 16) / 255 for i in (1, 3, 5))
+    L, C, h = A.rgb_to_oklch(r, g, b)
+    a0, b0 = C * math.cos(math.radians(h)), C * math.sin(math.radians(h))
+    t = PINK_BLEND
+    mix = ((1 - t) * L + t * bh[0], (1 - t) * a0 + t * bh[1], (1 - t) * b0 + t * bh[2])
+    mc = max(math.hypot(mix[1], mix[2]), PALE_MIN_CHROMA)
+    mh = math.degrees(math.atan2(mix[2], mix[1])) % 360
+    return describe(fit_in_gamut(mix[0], mc, mh))
+
+
+def v30(portrait, gallery, trace=None):
+    _, fg = _segmented(portrait, gallery, drop_scenes=True)
+    prof = colour_profile(fg)
+    tag = f"profile chromatic {prof['chromatic']:.2f} pink {prof['pink']:.2f} pale-in-pink {prof['pale_in_pink']:.2f}"
+    if fg and prof["chromatic"] < MONO_MAX_CHROMATIC:
+        r = _mono_seed(fg)
+        if r is not None:
+            if trace is not None:
+                trace.append(f"monochrome path: {tag}")
+            return r
+    if fg and prof["pink"] >= PINK_MIN_SHARE and prof["pale_in_pink"] >= PINK_MIN_PALE:
+        r = _pink_seed(fg)
+        if r is not None:
+            if trace is not None:
+                trace.append(f"pale-pink path: {tag}")
+            return r
+    local: list[str] = []
+    r = v29(portrait, gallery, local)
+    if trace is not None:
+        trace.append(f"standard path ({tag}); " + (local[0] if local else ""))
+    return r
+
+
+def method_v30(portrait, gallery):
+    return v30(portrait, gallery)
