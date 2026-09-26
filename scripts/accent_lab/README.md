@@ -1,6 +1,6 @@
 # Accent lab
 
-The experiment harness behind `docs/ACCENT.md` §14–21: every extractor variant
+The experiment harness behind `docs/ACCENT.md` §14–22: every extractor variant
 that was tried, the calibration panel they were scored on, and the tools that
 produced the numbers and contact sheets in the doc. Nothing here is imported by
 the app, and the shipped extractor is still `accent_extract.py`.
@@ -67,8 +67,8 @@ the first time: about half a second per image on a laptop CPU.
 
 - `lab.py` — paths, loading (local ids and `live:<Name>`), `describe`, the
   panel, and `method_current` (the shipped extractor).
-- `methods.py` — every variant, `method_mcu` through `method_v30`, with a table
-  at the top saying what each one tried and how it came out. `method_v30` is
+- `methods.py` — every variant, `method_mcu` through `method_v32`, with a table
+  at the top saying what each one tried and how it came out. `method_v32` is
   the current candidate.
 - `seg.py` — skytnt/anime-seg foreground masks.
 - `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py`,

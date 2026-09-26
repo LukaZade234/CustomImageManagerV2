@@ -1321,3 +1321,86 @@ Mei Mei, Osaragi, Ken Kaneki (monochrome). Likely false positives to judge:
 Annie Leonhart and Himiko Toga (pink), Semiramis (lavender → dark wine). The page
 (`profiles.py`) shows every path character, the near misses on each threshold and
 an unchanged sample.
+
+---
+
+## 22. The owner's review of V30, and V31–V32 (2026-09-27)
+
+### 22.1 The verdicts
+
+- **Monochrome.** Will Auceptin's move to the monochrome path made him *more*
+  accurate — white is his most common colour, red his highlight — but he should
+  be closer to pure white, without the blue tint. Ken Kaneki is black and white,
+  sometimes with red highlights: show the highlight when there is a prominent
+  one, but not softer background blues, browns or greens. 2B and A2 should pick
+  a side — pure white or very light grey (their white hair) or pure black or
+  very dark grey (their clothes) — not a bluish mid grey: the forced tint is
+  unwanted.
+- **Pale pink.** Semiramis (black clothes, dark red; pale skin under warm light —
+  a warm grey would fit), Annie Leonhart (blonde; brown second), Himiko Toga
+  (cream) and Evernight Goddess (red, shifted to pink) were false positives. The
+  other pinks looked good, but suspiciously alike — pale skin with hints of pink
+  seemed to get the same colour as genuinely pink characters. Very pale
+  skin-tone pinks could perhaps be ignored or weighted down.
+- Sakurako Kawawa and Kasumi Yamabuki share one gallery (the same 19 images):
+  matching colours are correct.
+
+### 22.2 What the measurements showed
+
+- **Side.** Near-white (S < 0.15, V > 0.8) against near-black (V < 0.3) on the
+  cut-out: Will 0.35 vs 0.10, Sora Kasugano 0.39 vs 0.01 — white; 2B 0.10 vs 0.43,
+  A2 0.14 vs 0.27, Mei Mei, Osaragi, The Sandman — black.
+- **Tint.** Every monochrome character's grey tint is tiny (0.002–0.009), so tint
+  *strength* separates nothing. What separates The Sandman is *consistency*: 94%
+  of his greys lean cool; 2B, A2, Mei Mei, Kaneki and Himeno sit at 54–60% —
+  no lean.
+- **Highlight.** A saturated hue family's mean coverage of the character: Kaneki's
+  red 4.4%; 2B 0.1%, A2 0.6%, Will 0.4%.
+- **Pale pink present or not.** Pixels at hue 315–355, S 0.15–0.45, V ≥ 0.7:
+  0.0% for Semiramis, Annie and Himiko Toga, 0.5% for Evernight Goddess; 1–13%
+  for every genuine pink. Their "pink" was warm-lit skin.
+- **Why the pinks looked alike.** Most had their chroma lifted to exactly the
+  0.09 floor, which erased the real differences; the hue was also shared.
+
+### 22.3 V31 and V32
+
+- **Monochrome** picks the side that covers more (seed L 0.93 or 0.22); tints by
+  how consistently the greys lean cool (none at ≤ 55%, full 0.045 at 95%); and
+  when one saturated hue family covers ≥ 2% of the character on average and shows
+  in ≥ 15% of images, that highlight becomes the accent instead.
+- **Pale pink** additionally needs real pale pink: ≥ 0.8% coverage (median) or
+  present in ≥ 15% of images.
+- **V32** shades each pale pink from the character's own pink pixels only (hue
+  320–355°, so red and skin cannot mix in): the brighter half, then its most
+  chromatic 35%, with no floor.
+
+| character | V29 | V30 | **V32** |
+|---|---|---|---|
+| 2B, A2 | brown | bluish grey | black `#1b1b1b` |
+| Will Auceptin | gold | bluish grey | white `#e8e8e8` |
+| Ken Kaneki | red | bluish grey | red `#c72e29` |
+| The Sandman | slate | slate | deep blue-teal `#001e2b` |
+| Sora Kasugano | olive | blue-grey | white |
+| Semiramis | lavender | wine (pink path) | lavender (standard) |
+| Annie Leonhart | gold | dusty pink | gold `#c1a358` |
+| Evernight Goddess | red | pink | red `#d5404c` |
+| Sylveon / Mori Calliope | — | `#dc8ea3` / `#ce7994` | `#ee99ae` / `#df88a4` |
+| Sakurako / Tewi | red | `#cb8498` / `#ca8397` | `#dba0ae` / `#dc9dac` |
+
+**Checks: 47 of 49** (with Will's check updated to accept near-white).
+
+**Frontend.** Seeds under chroma 0.025 are refused by `accentFromImage.js`
+(`MIN_CHROMA`), and the page falls back to the site accent. The monochrome path's
+near-white and near-black seeds need `themeFromSeed` to build a neutral theme
+instead of returning null before they can show on the site.
+
+### 22.4 Still open
+
+- **Himeno** is now on the monochrome path and becomes near-black; the earlier
+  approved colour was a blue-grey/navy. Her greys lean cool 60% of the time —
+  the same as 2B — so the tint rule cannot keep hers without giving 2B one.
+- **Himiko Toga** falls back to the standard path's brick red (cream wanted);
+  **Semiramis** to lavender (warm grey wanted). Both are warm-lit skin cases.
+- **Nephis** (brown since V28's skin-shadow damping) and **Narumi Momose** (a
+  deeper pink since V29).
+- **Gu Yue Fang Yuan** took the highlight rule (red `#922426`) — unreviewed.

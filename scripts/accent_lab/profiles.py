@@ -30,14 +30,10 @@ from . import methods as M
 
 D = lab.DATA
 EXTRA = [
-    "2B",
-    "A2",
-    "The Sandman",
-    "Tewi Inaba",
-    "Nadeko Sengoku",
-    "Sakurako Kawawa",
-    "Mitsuri Kanroji",
-]
+    "2B", "A2", "The Sandman", "Tewi Inaba", "Nadeko Sengoku", "Sakurako Kawawa", "Mitsuri Kanroji",
+    "Semiramis", "Annie Leonhart", "Himiko Toga", "Evernight Goddess", "Ken Kaneki", "Will Auceptin",
+]  # fmt: skip
+NEW, OLD, MID = "v32", "v29", "v30"
 
 
 def _uri(path, box):
@@ -56,7 +52,7 @@ def _path(prof, has_images):
     if prof["chromatic"] < M.MONO_MAX_CHROMATIC:
         return "monochrome"
     if prof["pink"] >= M.PINK_MIN_SHARE and prof["pale_in_pink"] >= M.PINK_MIN_PALE:
-        return "pale-pink"
+        return "pale-pink?"  # confirmed or rejected by the pale-pink presence check
     return "standard"
 
 
@@ -80,17 +76,30 @@ def scan(scan_file="scan.json"):
             "profile": prof, "path": _path(prof, bool(fg)), "v29": None, "v30": None,
         })  # fmt: skip
         print(k, name, len(g), rows[-1]["path"], flush=True)
+    for r in rows:  # group on the prediction; the shown ones are re-labelled by the real run
+        r["path"] = "pale-pink" if r["path"] == "pale-pink?" else r["path"]
     shown = {r["name"] for _, _, _, members in _groups(rows) for r in members}
+    shown |= set(EXTRA)
     for r in rows:
         if r["name"] not in shown:
             continue
         _, p, g = lab.load_character(f"live:{r['name']}", None)
-        old = M.v29(p, g)
+        old = getattr(M, OLD)(p, g)
+        mid = getattr(M, MID)(p, g) if r["path"] != "standard" else old
         tr: list[str] = []
-        new = M.v30(p, g, tr) if r["path"] != "standard" else old
-        r["v29"] = old["seed"] if old else None
-        r["v30"] = new["seed"] if new else None
-        print("colour", r["name"], r["path"], r["v29"], r["v30"], flush=True)
+        new = getattr(M, NEW)(p, g, tr)
+        why = tr[0] if tr else ""
+        r["path"] = (
+            "monochrome"
+            if why.startswith("monochrome")
+            else "pale-pink"
+            if why.startswith("pale-pink")
+            else "standard"
+        )
+        r["why"] = why.split(": profile", 1)[0]
+        r["v29"], r["v30"] = (old["seed"] if old else None), (new["seed"] if new else None)
+        r["mid"] = mid["seed"] if mid else None
+        print("colour", r["name"], r["path"], r["v29"], r["mid"], r["v30"], flush=True)
     (D / "profiles.json").write_text(json.dumps(rows, indent=1))
     return rows
 
@@ -114,10 +123,10 @@ def _groups(rows):
         pool = [r for r in rest if r["band"] == band]
         sample += rng.sample(pool, min(k, len(pool)))
     return [
-        ("mono", "Monochrome path", f"Under {M.MONO_MAX_CHROMATIC:.0%} of the character's pixels carry real colour. The accent is the dominant tone with a faint tint.", mono),
-        ("pink", "Pale-pink path", f"At least {M.PINK_MIN_SHARE:.0%} of the colour is pink/red and at least {M.PINK_MIN_PALE:.0%} of that is pale. Pale pink counts as the character's colour instead of skin.", pink),
+        ("mono", "Monochrome path", f"Under {M.MONO_MAX_CHROMATIC:.0%} of the character's pixels carry real colour. V32 picks a side (near-white or near-black), tints only as far as the greys consistently lean cool, and uses a strong highlight colour instead when one shows across many images.", mono),
+        ("pink", "Pale-pink path", f"At least {M.PINK_MIN_SHARE:.0%} of the colour is pink/red and at least {M.PINK_MIN_PALE:.0%} of that is pale. V32 also requires real pale pink to be present (not warm-lit skin), and shades from the character's own lighter pinks.", pink),
         ("near", "Near misses", "Just short of either threshold, left on the standard path. These show where the lines sit.", near_mono + near_pink),
-        ("rest", "Unchanged sample", "Standard path, drawn at random, weighted toward characters with 10–30 images. V29 and V30 give the same colour here.", sample),
+        ("rest", "Unchanged sample", "Standard path, drawn at random, weighted toward characters with 10–30 images. V29 and V32 give the same colour here.", sample),
     ]  # fmt: skip
 
 
@@ -163,12 +172,13 @@ def render(rows):
   <div class="char-body">
     <figure class="main">{main}</figure>
     <div class="customs">{customs}</div>
-    <div class="swatches">{swatch("V29", r["v29"], False)}{swatch("V30", r["v30"], changed)}</div>
+    <div class="swatches">{swatch("V29", r["v29"], False)}{swatch("V30", r.get("mid"), False)}{swatch("V32", r["v30"], changed)}</div>
   </div>
   <footer class="char-foot">
     <span class="meter" title="share of pixels with real colour">colour <b>{p["chromatic"]:.0%}</b></span>
     <span class="meter" title="share of the colour that is pink or red">pink/red <b>{p["pink"]:.0%}</b></span>
     <span class="meter" title="share of the pink/red that is pale">pale within <b>{p["pale_in_pink"]:.0%}</b></span>
+    <span class="why">{html.escape(r.get("why", ""))[:140]}</span>
     <span class="path path-{r["path"]}">{r["path"]} path</span>
   </footer>
 </article>"""
@@ -235,13 +245,13 @@ nav a:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
 .char-head {{ display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }}
 .char-head h3 {{ font-size: 0.95rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }}
 .count {{ font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }}
-.char-body {{ display: grid; grid-template-columns: 104px minmax(0, 1fr) 232px; gap: 14px; align-items: start; }}
+.char-body {{ display: grid; grid-template-columns: 104px minmax(0, 1fr) 330px; gap: 14px; align-items: start; }}
 figure {{ margin: 0; }}
 .main img, .nomain {{ width: 104px; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid var(--hairline); display: block; }}
 .nomain {{ display: grid; place-items: center; font-size: 11px; color: var(--ink-3); text-align: center; background: var(--chip); }}
 .customs {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }}
 .custom {{ width: 100%; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid var(--hairline); display: block; }}
-.swatches {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }}
+.swatches {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }}
 .sw {{ display: flex; flex-direction: column; gap: 6px; }}
 .swatch {{ width: 100%; aspect-ratio: 1; max-width: 100%; border-radius: 8px; border: 1px solid var(--hairline); }}
 .swatch.none {{ display: grid; place-items: center; color: var(--ink-3); font-size: 12px; background: var(--chip); }}
@@ -265,7 +275,7 @@ html {{ scroll-behavior: smooth; }}
 <div class="wrap">
   <div class="intro">
     <h1>Colour Profile Paths</h1>
-    <p>V30 profiles each character before choosing an accent. Mostly black-and-white characters take a monochrome path, and characters whose colour is almost all pink with a real share of pale pink take a pale-pink path. Everyone else keeps V29. Each row shows V29 and V30 side by side; a bold border marks a colour V30 changed.</p>
+    <p>V32 profiles each character before choosing an accent. Mostly black-and-white characters take a monochrome path; characters whose colour is almost all pink, with real pale pink present, take a pale-pink path. Everyone else keeps V29. Each row shows V29, the V30 you reviewed, and V32; a bold border marks a colour V32 changed from V29. Near-white and near-black seeds need a small frontend change before the site can display them: today it falls back to its default accent.</p>
     <div class="facts">
       <span><b>{len(rows)}</b> characters scanned ({scanned}, plus earlier examples)</span>
       <span><b>{n_mono}</b> on the monochrome path</span>

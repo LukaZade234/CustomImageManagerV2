@@ -231,7 +231,13 @@ REVIEW = {
     "live:Yuta Okkotsu": ("Yuta: has a colour", _has_colour),
     "live:Alisa Mikhailovna Kujou": ("Alisa: has a colour", _has_colour),
     # Second review: gold is a minority for these; red (or dark) should win.
-    "live:Will Auceptin": ("Will Auceptin: red", _hue_in(340, 45)),
+    # Third review: the near-white V31 gave is closer than gold; red also fine.
+    "live:Will Auceptin": (
+        "Will Auceptin: near-white or red",
+        lambda r: (
+            r is not None and (r["lightness"] >= 0.85 and r["chroma"] < 0.03 or _hue_in(340, 45)(r))
+        ),
+    ),
     "live:Ishtar": (
         "Ishtar: red or dark, not gold",
         lambda r: r is not None and not _hue_in(60, 110)(r),

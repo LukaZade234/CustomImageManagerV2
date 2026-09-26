@@ -34,7 +34,10 @@ app. Variants build on each other, so read them in order.
     v27   v26 + skin shadow damped + shade blended to bright half 39-41/49
     v28   v24's classes + v27's blend + skin-shadow damping       43/49
     v29   v28 + pale pink counts once stronger than a highlight   43/49
-    v30   colour-profile paths: monochrome and pale pink          46/49, the candidate
+    v30   colour-profile paths: monochrome and pale pink          46/49
+    v31   mono picks a side, tints only as far as the greys lean,
+          takes a strong highlight; pale pink must be present     fixes 4 false pinks
+    v32   v31 + each pink shaded from its own lighter pinks       47/49, the candidate
 """
 
 from __future__ import annotations
@@ -2061,3 +2064,236 @@ def v30(portrait, gallery, trace=None):
 
 def method_v30(portrait, gallery):
     return v30(portrait, gallery)
+
+
+# ---- V31: the owner's review of V30 ----------------------------------------------------------
+#
+# Monochrome:
+# - Pick a side. The owner wants 2B and A2 to be black or white, not a bluish mid
+#   grey: whichever of near-white (S < 0.15, V > 0.8) and near-black (V < 0.3)
+#   covers more of the character sets the tone (Will Auceptin: white).
+# - Tint only as far as the art leans. The tint's strength scales with how
+#   consistently the greys lean cool (The Sandman's 94% keeps a slate; 2B's 57% is
+#   no lean). A near-neutral seed needs the frontend to accept seeds under chroma
+#   0.025 -- today it falls back to the site accent.
+# - A strong highlight wins. Ken Kaneki is black and white with red: when one
+#   saturated hue family covers >= MONO_HIGHLIGHT_COV of the character on average
+#   and shows in >= MONO_HIGHLIGHT_PRESENCE of images, it becomes the accent.
+#   (2B, A2 and Will stay under 1%; Kaneki's red is 4.4%.)
+# Pale pink:
+# - The path also needs real pale pink present: hue 315-355, S 0.15-0.45, V >= 0.7
+#   covering >= PP_MIN_COV of the character (median) or appearing in >= PP_MIN_IMAGES
+#   of images. Semiramis, Annie Leonhart, Himiko Toga and Evernight Goddess had none
+#   -- their "pink" was warm-lit skin.
+# - Shaded from a narrower band (+-15 degrees), so less skin-adjacent colour mixes in.
+
+MONO_LIGHT_L, MONO_DARK_L = 0.93, 0.22
+MONO_TINT_FROM, MONO_TINT_FULL, MONO_TINT_MAX = 0.55, 0.95, 0.045
+MONO_HIGHLIGHT_COV, MONO_HIGHLIGHT_PRESENCE = 0.02, 0.15
+PP_MIN_COV, PP_MIN_IMAGES = 0.008, 0.15
+
+
+def _hsv_arrays(f):
+    a = np.asarray(f.convert("RGB"), dtype=np.float64).reshape(-1, 3) / 255.0
+    a = a[~np.all(a >= 0.999, axis=1)]
+    mx, mn = a.max(1), a.min(1)
+    d = np.maximum(mx - mn, 1e-9)
+    r, g, b = a.T
+    h = (
+        np.where(mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4))
+        * 60
+    )
+    s = np.where(mx > 1e-9, (mx - mn) / np.maximum(mx, 1e-9), 0)
+    return a, h, s, mx
+
+
+def pale_pink_presence(images):
+    covs = []
+    for f in images:
+        _, h, s, v = _hsv_arrays(f)
+        if len(h) < 50:
+            continue
+        pp = (h >= 315) & (h <= 355) & (s >= 0.15) & (s <= 0.45) & (v >= 0.7)
+        covs.append(float(pp.mean()))
+    if not covs:
+        return 0.0, 0.0
+    return float(np.median(covs)), float(np.mean([c >= 0.04 for c in covs]))
+
+
+def _mono_highlight(images):
+    """A saturated hue family prominent across images, as a seed; or None."""
+    covs, cells = [], []
+    for f in images:
+        a, h, s, v = _hsv_arrays(f)
+        if len(h) < 50:
+            continue
+        hs = (s >= 0.55) & (v >= 0.35) & ~((h >= 12) & (h <= 40))
+        fam = ((h + 15) % 360 // 30).astype(int)
+        covs.append(np.bincount(fam[hs], minlength=12) / len(h))
+        cells.append((a[hs], h[hs], fam[hs]))
+    if not covs:
+        return None
+    covs = np.array(covs)
+    top = int(np.argmax(covs.mean(0)))
+    if (
+        covs.mean(0)[top] < MONO_HIGHLIGHT_COV
+        or (covs[:, top] > 0.01).mean() < MONO_HIGHLIGHT_PRESENCE
+    ):
+        return None
+    rgb = np.concatenate([c[0][c[2] == top] for c in cells])
+    if len(rgb) < 50:
+        return None
+    img = Image.fromarray((rgb.reshape(1, -1, 3) * 255).astype(np.uint8))
+    L, C, hh = _to_oklch(img)
+    order = np.argsort(-C)[: max(1, len(C) // 2)]
+    a_ = (C * np.cos(np.radians(hh)))[order].mean()
+    b_ = (C * np.sin(np.radians(hh)))[order].mean()
+    return describe(
+        fit_in_gamut(
+            float(L[order].mean()), math.hypot(a_, b_), math.degrees(math.atan2(b_, a_)) % 360
+        )
+    )
+
+
+def _mono_seed_v31(images):
+    light = dark = 0.0
+    cool_shares, cool_ab = [], []
+    for f in images:
+        _, h, s, v = _hsv_arrays(f)
+        if len(h) < 50:
+            continue
+        light += float(((s < 0.15) & (v > 0.8)).mean())
+        dark += float((v < 0.3).mean())
+        L, C, oh = _to_oklch(f)
+        rgb = np.asarray(f.convert("RGB")).reshape(-1, 3)
+        neutral = ~np.all(rgb >= 254, axis=1) & (L > 0.12) & (L < 0.97) & (C < 0.08)
+        cool = neutral & ~((oh >= 0) & (oh <= 100))
+        if neutral.sum() > 30:
+            cool_shares.append(cool.sum() / neutral.sum())
+        if cool.sum() > 30:
+            cool_ab.append(
+                (
+                    (C * np.cos(np.radians(oh)))[cool].mean(),
+                    (C * np.sin(np.radians(oh)))[cool].mean(),
+                )
+            )
+    if not cool_shares:
+        return None, "no usable pixels"
+    tone = MONO_LIGHT_L if light >= dark else MONO_DARK_L
+    share = float(np.mean(cool_shares))
+    strength = min(1.0, max(0.0, (share - MONO_TINT_FROM) / (MONO_TINT_FULL - MONO_TINT_FROM)))
+    if cool_ab and strength > 0:
+        ma, mb = float(np.mean([x[0] for x in cool_ab])), float(np.mean([x[1] for x in cool_ab]))
+        hue = math.degrees(math.atan2(mb, ma)) % 360
+    else:
+        hue = MONO_DEFAULT_HUE
+    chroma = strength * MONO_TINT_MAX
+    side = "white" if tone == MONO_LIGHT_L else "black"
+    return describe(
+        fit_in_gamut(tone, chroma, hue) if chroma > 0.005 else oklab_to_hex(tone, 0, 0)
+    ), (
+        f"{side} side (light {light / len(cool_shares):.2f} vs dark {dark / len(cool_shares):.2f}), "
+        f"greys lean cool {share:.0%} -> tint {chroma:.3f}"
+    )
+
+
+def v31(portrait, gallery, trace=None):
+    global V8
+    _, fg = _segmented(portrait, gallery, drop_scenes=True)
+    prof = colour_profile(fg)
+    tag = f"profile chromatic {prof['chromatic']:.2f} pink {prof['pink']:.2f} pale-in-pink {prof['pale_in_pink']:.2f}"
+    if fg and prof["chromatic"] < MONO_MAX_CHROMATIC:
+        hl = _mono_highlight(fg)
+        if hl is not None:
+            if trace is not None:
+                trace.append(f"monochrome path, highlight colour: {tag}")
+            return hl
+        r, why = _mono_seed_v31(fg)
+        if r is not None:
+            if trace is not None:
+                trace.append(f"monochrome path, {why}: {tag}")
+            return r
+    if fg and prof["pink"] >= PINK_MIN_SHARE and prof["pale_in_pink"] >= PINK_MIN_PALE:
+        cov, presence = pale_pink_presence(fg)
+        if cov >= PP_MIN_COV or presence >= PP_MIN_IMAGES:
+            saved = V8
+            V8 = {**V8, "conf_span": 15}
+            try:
+                r = _pink_seed(fg)
+            finally:
+                V8 = saved
+            if r is not None:
+                if trace is not None:
+                    trace.append(
+                        f"pale-pink path (pale pink {cov:.3f}, in {presence:.0%} of images): {tag}"
+                    )
+                return r
+        tag += f"; pale pink absent ({cov:.3f}, {presence:.0%}) -> not the pale-pink path"
+    local: list[str] = []
+    r = v29(portrait, gallery, local)
+    if trace is not None:
+        trace.append(f"standard path ({tag}); " + (local[0] if local else ""))
+    return r
+
+
+def method_v31(portrait, gallery):
+    return v31(portrait, gallery)
+
+
+# ---- V32: V31 with each pink shaded from its own vivid pinks ---------------------------------
+#
+# V31's pinks converged (#da91a3, #da92a5, #dd90a4, #dc93a6): most had their chroma
+# lifted to exactly the 0.09 floor, which erased the real difference between, say,
+# Mori Calliope's vivid pink and Sylveon's pastel. The pale-pink shade now comes
+# from the character's own pink pixels only -- hue 320-355, pale and saturated
+# together, so red and skin cannot mix in -- taking the most chromatic
+# PINK_CORE share, with no floor.
+
+PINK_ZONE = (320, 355)
+PINK_CORE = 0.35
+PINK_BRIGHT = True
+
+
+def _pink_seed_v32(images):
+    rgbs = []
+    for f in images:
+        a, h, s, v = _hsv_arrays(f)
+        if len(h) < 50:
+            continue
+        sel = (h >= PINK_ZONE[0]) & (h <= PINK_ZONE[1]) & (s >= 0.15) & (v >= 0.45)
+        if sel.sum() < 20:
+            continue
+        pix = a[sel]
+        # equal weight per image: resample each image's pink pixels to a fixed count
+        idx = np.linspace(0, len(pix) - 1, 400).astype(int)
+        rgbs.append(pix[idx])
+    if not rgbs:
+        return None
+    rgb = np.concatenate(rgbs)
+    img = Image.fromarray((rgb.reshape(1, -1, 3) * 255).astype(np.uint8))
+    L, C, hh = _to_oklch(img)
+    pool = np.arange(len(C))
+    if PINK_BRIGHT:
+        pool = pool[np.median(L) <= L]  # pink is light: the deep shading is not the colour
+    order = pool[np.argsort(-C[pool])][: max(1, int(len(pool) * PINK_CORE))]
+    a_ = float((C * np.cos(np.radians(hh)))[order].mean())
+    b_ = float((C * np.sin(np.radians(hh)))[order].mean())
+    return describe(
+        fit_in_gamut(
+            float(L[order].mean()), math.hypot(a_, b_), math.degrees(math.atan2(b_, a_)) % 360
+        )
+    )
+
+
+def v32(portrait, gallery, trace=None):
+    global _pink_seed
+    saved = _pink_seed
+    _pink_seed = _pink_seed_v32  # v31 calls it by name
+    try:
+        return v31(portrait, gallery, trace)
+    finally:
+        _pink_seed = saved
+
+
+def method_v32(portrait, gallery):
+    return v32(portrait, gallery)
