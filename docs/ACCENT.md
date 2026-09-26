@@ -28,6 +28,26 @@ the open questions, including the dead ends.
 - **Audrey Hall cannot be fixed by statistics, and this was verified**: her art
   is gold-dominant by area (55% gold/orange vs 32% green), green wins only 9 of
   28 images. "Audrey is green" is lore, not pixels.
+- **2026-09-26, Lynae (§14):** a 96-image gallery of vivid cyan art produced a dark
+  slate `#2c3946`. Three compounding faults: the confidence test measures one 5°
+  bin, so a colour spread over cyan→blue "declines" at 0.048 against 0.05; a
+  declined 10+ gallery silently hands the whole answer to the portrait; and the
+  portrait's grey background scraped past the chroma floor. Investigating it
+  showed the *shade* logic makes seeds dark and muted **library-wide** (median
+  chroma 0.085, 17 of 68 seeds darker than L 0.45), that the pale class leaks
+  pale skin as a dusty pink, and that Reze passes the panel only by the same
+  portrait fallback that broke Lynae.
+- **Recommended direction (§15):** decide *which hue* by prevalence and *which
+  shade* by vividness, as two separate questions. A prototype (V8) keeps every
+  hue but Reze's, lifts median chroma to 0.122 and cuts dark seeds from 17 to 4.
+- **Same day, follow-up (§16):** foreground segmentation (skytnt/anime-seg) was
+  prototyped and moves Lynae from sky blue to cyan `#34b0c1` — her sky-blue is
+  the backgrounds, her teal/mint is on her. Measuring *every* image rather than a
+  60-sample exposed the skin leak in Madoka too; a wider skin rule fixes it and
+  Artoria. Reze is **not** fixed by using all 122 images: her art is a genuine
+  tie between violet and Bomb Devil red, her hair is too muted to vote, and the
+  violet the panel expected came from her portrait's *background*. The harness
+  is committed as `scripts/accent_lab/`.
 
 ---
 
@@ -129,6 +149,13 @@ found.
 
 **Any change to the extractor must be run against this panel.** It is the only
 thing standing between a plausible idea and a shipped regression.
+
+**Known weaknesses of the panel (found 2026-09-26, §14):** it checks hue ranges
+almost exclusively, so a seed can pass while being dark and muted (Miku passes
+as steel-blue `#3e7e93`, where her teal is nearer `#39c5bb`). Reze passes only
+because her gallery declines and the portrait fallback supplies violet — the
+exact path that produces Lynae's grey. And nothing asserts the pale-skin leak
+does not happen. §15.4 proposes the additions.
 
 ---
 
@@ -466,10 +493,34 @@ chroma change −0.008; higher in only 45/135.
 - **Simple background stripping for complex art.** Does not generalise.
 - **Training an accent-predictor ML model on a handful of picks.** Too little
   data; it learns your hue preferences, not the task.
+- **Material Color Utilities' `Score` used as-is** (§14.4). Its chroma bonus
+  outweighs prevalence, so tiny neon effects win: Lynae → magenta, Miku → red.
+  The *ideas* in it (band proportion, a real cluster colour) are useful; the
+  weights are tuned for wallpapers, not illustrations.
+- **Choosing the winning hue by band share.** It favours whatever is spread
+  widest; Reze's red/pink effects out-sum her violet peak. Use the band share
+  for *confidence*, keep the smoothed peak for *location*.
+- **One continuous OKLCH chroma weight replacing both classes.** Muted pixels
+  get a vote (good for Reze in principle) but low-chroma noise then votes
+  everywhere, Lynae's clear cyan drowns and she declines; Lucy's pale identity is
+  lost. Same see-saw as the V3 fold.
+- **Ranking the shade by HSV saturation.** High HSV saturation is mostly dark
+  pixels, so it makes seeds darker, not more vivid. Rank by OKLCH chroma.
+- **Dropping the "weak saturated" pale rule to stop segmentation flipping
+  Artoria (Alter) pale** (§16.5). Lucy goes royal blue. Widen the skin rule
+  instead.
+- **Segmenting the 200px measurement copy.** The model misses the character in
+  about half of all images at that size; segment the 600px thumbnail.
+- **Blaming the sample for Reze.** All 122 images give the same answer as 60
+  (§16.2).
 
 ---
 
 ## 12. Open problems and proposed next steps
+
+> **Superseded in part by §15** (2026-09-26), which re-orders these in light of
+> the Lynae investigation. Item 2 below — the "washed out" lever — turned out to
+> be the biggest library-wide problem, and §15.2 is a tested version of it.
 
 Ordered by value, roughly:
 
@@ -518,3 +569,333 @@ Ordered by value, roughly:
 `frontend/src/utils/accentFromImage.js`,
 `frontend/src/utils/imagePick.js`,
 `frontend/src/components/AccentOverrideControl.jsx`.
+
+---
+
+## 14. Lynae: a vivid gallery measured as dark slate (2026-09-26)
+
+### 14.1 The report
+
+Lynae (Wuthering Waves) showed a dark grey-blue accent, `#2c3946`. The grey is in
+her Mudae portrait — it is the portrait's *background* — while her 96 gallery
+images are bright and busy, full of cyan, teal and mint highlights; her hair is
+blonde. The expected accent was a vivid teal, and at the very least "anything but
+dark".
+
+Stored state on the live row: seed `#2c3946`, `accent_source = portrait`,
+`accent_gallery_count = 96`, `accent_partial = 0`, recomputed at
+2026-09-26 17:08. So every sampled thumbnail *was* on disk and measured — this is
+the algorithm's real answer, not a stale or partial one. Reproduced locally
+bit-for-bit from the R2 thumbnails and the Mudae portrait.
+
+### 14.2 Three faults, compounding
+
+1. **The gallery declined on confidence, narrowly.** Her saturated pool peaks at
+   HSV 197.5° with a 2.4× margin over the nearest rival (orange at 22°) — an
+   unambiguous winner. But `_dominant_hue` measures confidence as the share of
+   the *single tallest smoothed 5° bin*, and her colour is spread cyan→azure, so
+   no one bin reaches 5%: it scores **0.048 against `MIN_CONFIDENCE = 0.05`**,
+   while **39%** of all saturated mass sits within ±22.5° of the peak. The
+   metric penalises exactly the characters whose colour is shaded across a range.
+2. **A declined 10+ gallery hands the answer to the portrait.** The "portrait
+   steps aside at ten" rule (§4.3) only applies when *both* sides decide. When the
+   gallery declines, `decide()` returns the portrait's result outright — 96
+   images of vivid art lose to one 225×350 portrait.
+3. **The portrait's answer is a grey that passed the grey filter.** Its hue is
+   right (blue, ~210° HSV) but the blue pixels are mostly dark clothing and the
+   grey background; the 0.55 value percentile lands at V≈0.28. The seed is
+   OKLCH L 0.34, **C 0.029** — just over `MIN_CHROMA = 0.025`. The frontend
+   (`accentFromImage.js`) holds a seed's chroma and only walks lightness for
+   contrast, so a C 0.03 seed is grey in both themes whatever it does.
+
+**It is also unstable.** Which 60 of her 96 images `evenly_sample` picks decides
+the outcome: a different sort order produced a proper blue (`#418dac`), and of
+200 random 60-image samples of her gallery only **48** clear the confidence
+floor. Adding or deleting one image can flip the colour.
+
+Her hue histogram, per image rather than pooled: the 180–210° HSV family carries
+≥10% of an image's saturated mass in **77%** of her images — the strongest
+per-image consistency signal of any character examined.
+
+### 14.3 What the investigation found beyond Lynae
+
+- **Dark and muted is library-wide, not a Lynae quirk.** Across the 79 local
+  characters with ≥6 cached thumbnails, current seeds have median chroma **0.085**
+  and median lightness 0.52; **17 of 68** seeds are darker than L 0.45. Panel
+  characters that "pass" are visibly muddy: Miku `#3e7e93` (steel blue),
+  Tsumugi `#936e4d` (brown), Madoka `#ac5a69` (dusty rose), Kafka `#602d48`.
+  Cause: the shade is a 0.6/0.55 percentile over *all* the band's mass, and the
+  band's mass is dominated by shaded and shadowed pixels of the colour.
+- **Reze passes the panel by accident.** Her gallery declines on the same 5%
+  floor (0.046); her violet comes from the portrait fallback — fault 2 above.
+  Her violet hair is in the classifier gap (muted, V < 0.5), the same gap as
+  Audrey's green (§4.4), so it casts almost no vote. What does vote red/pink is
+  blush, lips, lanterns and explosion effects (verified with a pixel mask). Fix
+  fault 2 and she loses violet; her true identity needs segmentation or an
+  override.
+- **The pale class leaks pale skin.** 20 of 68 current seeds have chroma < 0.05,
+  and many are the *same* dusty pink: Ruby Hoshino `#dfb8bd`, Alisa Kujou
+  `#dfb8ba`, Illya `#dfb8bc`, Sesshomaru `#dfb8b9`, Patchouli `#c6a4a3`.
+  Silver-, white- and purple-haired characters converging on one pink is the
+  signature of skin highlights: `SKIN_HUE` is 12–48°, but pale anime skin sits at
+  roughly 340–15° with saturation 0.1–0.3 and high value, straight into the pale
+  class. *Strong hypothesis, not yet confirmed with a mask.* The identical hexes
+  also come from the pale representative being read off a coarse 0.05 grid.
+- **Two more characters had the Lynae pattern** (10+ gallery declined, portrait
+  answered): The Sandman `#344653` and Vertin `#463c60` — both dark slate.
+
+### 14.4 What was tried
+
+All in a scratch harness against the calibration panel plus Lynae, then V8
+against the whole local library. Nothing was committed.
+
+| version | idea | result |
+|---|---|---|
+| MCU | Material Color Utilities: Celebi quantiser (128 colours/image, pooled with equal weight per image) + its `Score` | **Wrong across the board.** Lynae magenta `#f207f9`, Miku red, Reze red, Lucy royal blue. The chroma term `(C−48)×0.3` beats the proportion term, so small neon effects win. Dead end as-is. |
+| V5 | band-share *winner* and confidence (±22.5°), vivid-core shade by OKLCH chroma, coverage gate | Vivid, Lynae seeded `#409ec7`. But Reze → pale pink (band winner picks the widest spread, red), Tsumugi declined (lost the pale→saturated fallback). |
+| V6 | smoothed *peak* picks the hue, band share is only the confidence; vivid core ranked by HSV saturation; hue pinned ±10° of the peak | Reze still pink; **seeds got darker** — high HSV saturation is mostly dark pixels (Miku L 0.51, Lynae `#1f719d`). |
+| V7 | replace both HSV classes with one continuous OKLCH weight `ramp(C, 0.02→0.10)`, sqrt "presence" pooling | Miku a real teal `#41a7b6`, Tsumugi clean gold. But **Lynae declined** (low-chroma noise spreads her histogram flat) and Lucy lost her pale identity. |
+| **V8** | shipped classes and pale rules + peak location + **band-share confidence (≥0.20)** + coverage gate (≥3% of pixels) + **vivid-core shade** (top 35% of band mass by OKLCH chroma, mean L and C, hue pinned to the peak, gamut-fit by shedding chroma) + **a declined 10+ gallery stays declined** | 9/10 on the panel (fails Reze only — see above). Lynae `#3793c6`. Library: below. |
+| V9 | V8 + classifier-gap pixels (S 0.10–0.22, V ≥ 0.25) vote at half weight | No change for Reze (her hair is darker/greyer still); Tsumugi declined. Not worth it. |
+
+**V8 on the local library (79 characters):**
+
+| | current | V8 |
+|---|---|---|
+| seeded | 68 | 71 |
+| median chroma | 0.085 | **0.122** |
+| median lightness | 0.52 | 0.56 |
+| seeds darker than L 0.45 | 17 | **4** |
+| seeds with C < 0.05 | 20 | 21 (the pale path is untouched) |
+| hue moved > 30° | — | 1 (Reze) |
+
+Seeded → declined under V8: 2B (correct), The Sandman, Vertin (both were the
+portrait-fallback slate). Declined → seeded: Nico Robin (pale `#d2b4ae` —
+**wrong**, she is the documented two-colour case and the pale path let her
+through), Osamu Dazai, Rebecca (pale grey-blue — doubtful), Stocking Anarchy,
+Ceres Fauna, Kaguya Houraisan (pale pink — probably the skin leak).
+
+Panel side by side (current → V8): Miku `#3e7e93`→`#258ea5`, Saber
+`#2d4079`→`#304598`, Reimu `#933530`→`#b7413c`, Madoka `#ac5a69`→`#b95168`,
+Audrey `#9f8c44`→`#c3a643`, Tsumugi `#936e4d`→`#ac7746`, Lucy unchanged, 2B
+declined.
+
+**On "teal".** V8 gives Lynae a bright sky blue (OKLCH hue 237), not a teal
+(~185). Her pooled peak is HSV 197.5°, between cyan and azure, and the mint/teal
+highlights (HSV 160–185) are a secondary shoulder of it. Whether sky blue is
+acceptable or teal is required is a judgement for the owner; if teal is
+required, it is a *hue-location* question, not a shade question, and the
+override is the immediate answer.
+
+---
+
+## 15. Recommended approach (2026-09-26)
+
+The lesson of every experiment, old and new, is that the extractor has been
+asked one question when there are two:
+
+- **Which hue is this character?** — a *prevalence* question: the colour the art
+  keeps returning to. The shipped machinery (per-image normalisation, smoothed
+  peak, rival margin, the pale class for soft identities) answers it reasonably
+  well, and every attempt to replace it wholesale regressed something.
+- **Which shade of that hue represents it?** — a *vividness* question: the
+  colour a person would point to, which is the clean, saturated core of the
+  band, not its average. The shipped percentile answers it badly everywhere,
+  and fixing it moves no hues.
+
+Keep the first, replace the second, and fix the plumbing between them. In order:
+
+### 15.1 Decision plumbing (fixes Lynae; low risk)
+- **Confidence as band share.** `share of pooled mass within ±22.5° of the
+  peak ≥ 0.20` instead of `single bin ≥ 0.05`. The peak *location* and the rival
+  margin stay exactly as shipped. The pale-identity rules keep using the old
+  single-bin confidence, because their thresholds are calibrated to that scale
+  (§7.4).
+- **A declined 10+ gallery stays declined.** Never fall back to the portrait
+  once the portrait has no vote. The character gets the system accent — which is
+  honest — and the override exists for the ones someone cares about.
+- **A coverage gate.** Decline when the winning band covers < 3% of all pixels
+  across the pool. This is what lets 2B decline *because she is greyscale*,
+  rather than by a seed happening to fall under the chroma floor.
+- **Keep the pale→saturated fallback** when a pale seed is too grey.
+
+### 15.2 Shade: the vivid core (fixes "dark and muted" library-wide)
+Within the winning band, pooled per image: take the most chromatic 35% of the
+mass (by OKLCH chroma, not HSV saturation), average its L and C, pin the hue to a
+mass-weighted mean within ±10° of the peak (so the shade cannot drift toward the
+more gamut-rich neighbour — blue beside cyan), and bring it into sRGB by
+shedding chroma, never by moving hue. Measured effect: §14.4.
+
+### 15.3 The pale path (next, not yet prototyped)
+- Extend skin rejection to pale pinks (roughly hue 340–15°, S 0.08–0.35,
+  V ≥ 0.7) *for the pale class*, then confirm with masks on Alisa, Ruby,
+  Sesshomaru. Madoka's pink hair is more saturated and should be unaffected —
+  check.
+- Give the pale path the same margin test the saturated path has, so a
+  two-colour character (Nico Robin) cannot enter through it.
+- Audit all C < 0.05 seeds: a pale identity is legitimate (Lucy, Frieren, Gojo)
+  but it should be the exception, not 30% of seeds.
+
+### 15.4 The panel as a real contract
+- Add **Lynae**: hue 170–240, C ≥ 0.09, L ≥ 0.55.
+- Add a **vividness floor** to every non-pale entry (C ≥ 0.08, 0.42 ≤ L ≤ 0.8),
+  with Saber's "deep" and Lucy's "pale" as explicit exceptions.
+- Mark **Reze** as a known semantic failure (or give her an override and assert
+  the override wins), rather than letting her pass by the fallback.
+- Add a **skin-leak regression**: Alisa Kujou / Ruby Hoshino must not seed
+  pale pink.
+- Add **Nico Robin**: must decline.
+
+### 15.5 Measure every image once, and use all of them
+The 60-image `evenly_sample` makes the answer depend on which images happen to
+be picked (Lynae: 48/200). Per-image measurement is small (a few hundred grid
+cells), so compute it once when the thumbnail is rendered and store it with the
+image row; the character's pool is then a sum over *all* active images, is
+stable as images come and go, and a recompute costs no image decoding at all.
+
+### 15.6 Still the route for the semantic cases
+Reze (muted violet hair losing to blush and explosions) and Audrey (green dress
+under gold hair) are unchanged by all of the above. Foreground/hair
+segmentation (§5.2.1) remains the algorithmic answer, and the override the
+practical one.
+
+### Reproducing the experiments
+Everything in §14–16 runs from `scripts/accent_lab/` — see its README. Each
+variant in the tables is a `method_<name>` in `scripts/accent_lab/methods.py`.
+
+---
+
+## 16. Follow-up: all images, segmentation, and Reze (2026-09-26)
+
+### 16.1 The owner's calls
+- **Lynae must be teal or mint, not sky blue.** Added to the lab panel as OKLCH
+  hue 150–205, C ≥ 0.09, L ≥ 0.55.
+- **Measure all of a character's images, not a sample** — prompted by Reze's
+  contact sheet, where the images shown happened to carry little purple.
+
+### 16.2 Reze with all 122 images: not fixed
+Shipped extractor, V8 and every later variant give the same answer on all 122
+live images as on the 60-image sample. The sample was not the problem:
+
+- Across all 122, saturated violet-family pixels cover **11.0%** of the frame and
+  saturated red-family **11.1%**; each family wins in exactly **61** images. Her
+  art is an honest tie.
+- The red is not noise. Masking the red-voting pixels shows explosions, fire and
+  blood — the Bomb Devil — and in 71 of 122 images it outweighs violet *within the
+  segmented character*, because the effects wrap around her.
+- Her hair is dark greyish purple: it falls in the classifier gap (§4.4) and
+  barely votes at all.
+- **The violet `#6a549f` the panel expects came from her Mudae portrait's violet
+  background.** With the background masked, the portrait's strongest colour is
+  the navy ribbon and choker.
+
+So "Reze is violet" means "Reze's *hair* is violet" — a semantic judgement, not a
+pixel statistic. Options are in §16.6.
+
+### 16.3 Measuring every image changes results
+The 60-image `evenly_sample` was hiding a failure. With all 70 of her images
+the **shipped** extractor gives Madoka `#dfb8bf` — the pale-skin pink of §14.3 —
+where the sample gave `#ac5a69`. Sample-dependence cuts both ways: Lynae's
+result depended on it too (§14.2). Measuring everything is the only stable
+baseline, and every number in this section uses `--all`.
+
+### 16.4 Foreground segmentation, prototyped
+[skytnt/anime-seg](https://huggingface.co/skytnt/anime-seg) (`isnetis.onnx`,
+176 MB, Apache-2.0, ~0.5 s per image on a laptop CPU through onnxruntime)
+produces a character mask; background pixels are painted white, which the
+classifier already ignores.
+
+- **The mask must be computed on the 600px thumbnail.** On the 200px measurement
+  copy the model found under 3% foreground in 46 of Lynae's 96 images. At full
+  thumbnail size: median foreground 57%, no misses.
+- **Wide scenes the model cannot separate** (it calls >85% of the frame
+  "character") are dropped rather than measured whole.
+- **Lynae:** in the full frame, sky blue (HSV 200–225°) is 25% of her saturated
+  mass and teal/mint (150–180°) 18%; inside the mask, 20% and 21%. Masks of
+  which pixels vote which way show why: sky blue is skies, water and city
+  lights; teal/mint is her jacket trim, hair streaks and effects. Her pooled
+  peak moves to HSV 187.5°, and the segmented Mudae portrait peaks at the same
+  place.
+
+### 16.5 The variants, and what they did
+
+| version | change over the previous | Lynae | Reze (live) | note |
+|---|---|---|---|---|
+| V8 | §14.4 | `#3795c7` sky | `#c6a6a3` skin pink | |
+| V8s | V8 + pale skin rejected (hue 335–20°, S ≤ 0.35, V ≥ 0.45) | `#aec6d2` pale | `#b34132` red | fixes Madoka's leak |
+| V10 | V8 on the segmented foreground | `#38aac5` | `#c6a6a3` | skin is foreground, so the leak remains |
+| V11d | V10 + skin rule + drop unseparable scenes | **`#34b0c1`** | declined | |
+| V12 | V11d + **portrait as tie-breaker** | **`#34b0c1`** | `#4c649e` navy | see below |
+
+**V12's tie-breaker.** The gallery proposes candidate hues (smoothed peaks at
+least 60% of the top one, 60° apart, each holding ≥15% of the pool); the
+segmented portrait chooses among them by which band it carries most of. The
+portrait never introduces a hue and never blends into the pool, so the
+Artoria trap (§4.3) cannot recur through it. It only acts at 10+ images when
+there are two or more candidates.
+
+**Two traps found on the way.**
+- *Segmentation re-triggers the pale rule.* Removing Artoria (Alter)'s red
+  backgrounds dropped her saturated confidence under `PALE_REP_MAX_SAT_CONF`,
+  and the "weak saturated" pale rule gave her grey-mauve `#93797d`. Removing
+  that rule fixes her but sends Lucy to royal blue — the same see-saw as V3.
+  The actual culprit was shaded skin at V 0.45–0.6, just under the first skin
+  rule's V ≥ 0.6; lowering it to 0.45 restores Artoria's crimson and changes no
+  other panel character.
+- *Lynae is cyan, not teal, and the pixels do not say otherwise.* Inside the
+  mask her colour is flat across mint (21%), cyan (21%) and blue (20%); the
+  centre of that is cyan, HSV 187.5° = OKLCH ~208°, just outside the 150–205
+  teal range. Nothing in the pixels prefers teal over cyan — the jacket trim is
+  what makes her read as teal. Tuning a threshold until she lands on teal would
+  be fitting one character's preference (§11). V12's `#34b0c1` is turquoise;
+  whether that is "teal enough" is the owner's call, and the override gives
+  exact teal today.
+
+**Across the library** (80 characters, every image, `library.py`):
+
+| | current | V8 | V11d | V12 |
+|---|---|---|---|---|
+| seeded | 70 | 72 | 70 | 72 |
+| median chroma | 0.083 | 0.116 | 0.127 | **0.127** |
+| median lightness | 0.52 | 0.56 | 0.55 | 0.54 |
+| darker than L 0.45 | 18 | 4 | 7 | 7 |
+| near-grey (C < 0.05) | 21 | 23 | 10 | **9** |
+
+Judged by eye on a contact sheet of every character V12 changes:
+- **Better:** Madoka (skin pink → her pink `#c55465`), Patchouli (skin pink →
+  muted purple `#8c7993`), Lynae, Artoria (crimson kept), Stocking Anarchy
+  (declined → blue), Alisa Kujou (skin pink → declined, honest), The Sandman
+  (dark slate → declined), Panty Anarchy (pink → cream, nearer her blonde).
+- **Doubtful or worse:** Nico Robin now seeds red-orange `#bf5444` — the
+  tie-breaker overrides the two-colour decline §2 insists on, by design; Hiyuki
+  slate → red; Columbina pale lavender → magenta; Vertin dark purple → pale
+  grey-blue; Ceres Fauna blue while her hair is green; Yuta Okkotsu and Will
+  Auceptin → declined; Touka Kirishima → pale blue.
+
+### 16.6 Where this leaves the recommendation
+
+§15 stands, with these amendments:
+
+1. **Measure every image** (§15.5 moves up — it is a correctness fix, not a
+   performance one).
+2. **Widen the skin rule** to pale pinks with V ≥ 0.45 (§15.3's first item,
+   now measured). It is the single biggest fix for grey accents: near-grey seeds
+   21 → 9.
+3. **Segmentation is worth adopting**, computed once per image when its
+   thumbnail is rendered and stored with the per-image measurement (§15.5), on
+   the 600px thumbnail. It is what moves Lynae off sky blue. The cost is a
+   176 MB model and onnxruntime on the origin box (ARM builds exist); it must be
+   checked for memory on the Oracle instance before committing to it.
+4. **The tie-breaker is a product decision, not a tuning one.** It gives Reze
+   navy instead of pink or nothing, but it also gives two-colour characters like
+   Nico Robin a colour where the current rule deliberately declines them. Decide
+   which is preferred: "the portrait's pick of the two" or "the system accent".
+5. **Reze needs one of:** (a) hair segmentation — an anime face-parsing model
+   that labels hair specifically, so the identity colour can be read from the
+   hair alone; (b) the override, which is available today; or (c) accepting a
+   non-violet answer. (a) would also be the principled fix for Lynae's teal and
+   Audrey's green, and is the next thing worth prototyping.
+6. **Fix the panel.** Reze's violet expectation tests a portrait background;
+   change it to reflect the owner's intent explicitly (an override, or a
+   hair-based check once one exists), and add Lynae, Madoka-with-all-images,
+   Artoria (Alter) and Nico Robin.
