@@ -25,7 +25,7 @@ from . import methods as M
 D = lab.DATA
 
 
-def compute():
+def compute(method="v24", compare=None):
     sample = json.loads((D / "sample.json").read_text())
     problems = [n.strip() for n in (D / "problem_names.txt").read_text().splitlines() if n.strip()]
     entries = [(p["band"], p["name"]) for p in sample["picked"]] + [
@@ -44,7 +44,8 @@ def compute():
     for band, name in entries:
         _, p, g = lab.load_character(f"live:{name}", None)
         tr = []
-        r = M.v24(p, g, tr)
+        r = getattr(M, method)(p, g, tr)
+        rc = getattr(M, compare)(p, g) if compare else None
         meta = json.loads((lab.LIVE / lab.slug(name) / "meta.json").read_text())
         picks = g[:: max(1, len(g) // 4)][:4] if len(g) > 4 else g
         out.append(
@@ -56,13 +57,20 @@ def compute():
                 "L": round(r["lightness"], 2) if r else None,
                 "C": round(r["chroma"], 3) if r else None,
                 "live_seed": meta.get("live_accent_seed"),
+                "compare_seed": rc["seed"] if rc else None,
                 "why": tr[0] if tr else "",
                 "main": uri(p.info["src"], (220, 300)),
                 "customs": [uri(i.info["src"], (240, 240)) for i in picks],
             }
         )
         print(band, name, len(g), r and r["seed"], flush=True)
-    return {"seed": sample["seed"], "library": sample["library"], "rows": out}
+    return {
+        "seed": sample["seed"],
+        "library": sample["library"],
+        "rows": out,
+        "method": method.upper(),
+        "compare": compare.upper() if compare else None,
+    }
 
 
 def render(data):
@@ -107,6 +115,13 @@ def render(data):
             if live
             else '<span class="live muted">on site now: none</span>'
         )
+        prev = r.get("compare_seed")
+        if data.get("compare"):
+            changed = " changed" if prev != r["seed"] else ""
+            live_chip = (
+                f'<span class="live{changed}"><i style="background:{prev or "transparent"}"></i>'
+                f"{data['compare']} {prev or 'none'}</span>" + live_chip
+            )
         return f"""
     <article class="char">
       <header class="char-head">
@@ -126,7 +141,7 @@ def render(data):
       </div>
       <footer class="char-foot">
         <span class="why">{html.escape(reason(r["why"]))}</span>
-        {live_chip}
+        <span class="chips">{live_chip}</span>
       </footer>
     </article>"""
 
@@ -210,6 +225,8 @@ def render(data):
     .live {{ display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; }}
     .live i {{ width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--hairline-strong); display: inline-block; }}
     .live.muted {{ color: var(--ink-3); }}
+    .live.changed {{ color: var(--ink); font-weight: 500; }}
+    .chips {{ display: inline-flex; flex-wrap: wrap; gap: 6px 14px; }}
     @media (max-width: 760px) {{
       .char-body {{ grid-template-columns: 96px minmax(0, 1fr); }}
       .main img {{ width: 96px; height: 136px; }}
@@ -224,7 +241,7 @@ def render(data):
     <div class="wrap">
       <div class="intro">
         <h1>Accent Sample Check</h1>
-        <p>Accent colours from the current candidate extractor (V24 in the accent lab) for five random characters from each image-count band of the live library, plus the characters from today’s review. Each row shows the main image, four gallery images spread across the character’s gallery, and the accent the extractor picked.</p>
+        <p>Accent colours from candidate extractor {data["method"]} in the accent lab for five random characters from each image-count band of the live library, plus the characters from today’s review. Each row shows the main image, four gallery images spread across the character’s gallery, and the accent the extractor picked.</p>
         <div class="facts">
           <span><b>{data["library"]}</b> characters ranked by image count</span>
           <span>Random seed <b>{data["seed"]}</b></span>
@@ -233,7 +250,7 @@ def render(data):
         </div>
       </div>
       <nav aria-label="Bands">{nav}</nav>
-      <p class="note">Worth checking by eye: 8 of the 25 random picks landed on a red. Some are right, but blush and lips sit in the same hue range and the skin damping does not reach them. The small chip on each row is the colour the site shows today, for comparison.</p>
+      {'<p class="note">' + html.escape(data["note"]) + "</p>" if data.get("note") else ""}
       {"".join(sections)}
     </div>
     """
@@ -241,8 +258,17 @@ def render(data):
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--method", default="v24", help="lab method name, e.g. v29")
+    parser.add_argument("--compare", default=None, help="a second method to show as a chip")
+    parser.add_argument("--note", default="", help="a short note shown above the rows")
+    args = parser.parse_args()
+    data = compute(args.method, args.compare)
+    data["note"] = args.note
     out = D / "accent-sample.html"
-    out.write_text(render(compute()))
+    out.write_text(render(data))
     print(out)
 
 

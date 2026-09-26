@@ -1170,3 +1170,62 @@ chosen accent alongside the review characters (`sample.py`, `showcase.py`).
 One pattern to watch: 8 of the 25 landed on a red. Some are right; blush and
 lips sit in the same hue range (0–10°) and the skin-zone damping does not reach
 them.
+
+---
+
+## 19. The random sample's reds (2026-09-26)
+
+### 19.1 The verdicts
+
+On the random sample (§18.6): the top 10% all good. Too red, where the owner
+expected something else — Mitsuri Kanroji (pale yellow, should be pink "no
+contest"), Sakurako Kawawa (should be creamy with hints of pink), Tohru (nearer
+orange), Mirio Togata (yellow/orange), Nadeko Sengoku (reddish pink, leaning
+pink), Tewi Inaba (pink, clearly wrong as red), Nagatoro-san (darker skin, not
+red). All of today's earlier characters good apart from Will Auceptin. Overall:
+**too many accents land on a murky brick red or terracotta.** These are now
+`SAMPLE_REVIEW` in `lab.py`; approved characters must stay near the colour the
+owner saw.
+
+### 19.2 Why
+
+- **Skin shadow, blush and lips** sit at HSV 355–10°, below the damped skin zone
+  (10–45°). For Tohru, Nadeko, Tewi, Mitsuri and Nagatoro the winning window was
+  centred at 18–28° — skin — and the aim settled at 2–8°.
+- **The vivid-core shade picks a band's deepest shading**, which in a pink band
+  is red: every shade rule built from saturated pixels alone gave Tewi, Nadeko
+  and Sakurako a salmon or red (rendered side by side).
+- **Pale pink clothes and hair are removed as skin.** The pale-skin rule (hue
+  335–38°) deletes Tewi's dress, Sakurako's cream-pink and Mitsuri's hair —
+  but freeing that range (V26) brought back skin highlights and pink
+  backgrounds: Panty turned pink, Nephis mauve, Shiki Ryougi red.
+
+### 19.3 Variants
+
+Scored on both review sets together (49 checks).
+
+| version | change | score |
+|---|---|---|
+| V24 | — | 42 |
+| V25 | skin zone wraps down to 350° with the dark rule | broke Superman, Poison Ivy, Dazai — dead end |
+| V26 | pale-skin rule starts at 352° (pale pink is not skin) | 38 |
+| V27 | V26 + skin shadow 355–10° damped (skin saturation, no dark rule) + shade blended with the bright half of both classes | 39–41 |
+| V28 | V24's classes + V27's blend (0.35) + skin-shadow damping | 43: Tohru orange, Mirio yellow-orange, Nagatoro blue-grey |
+| **V29** | V28 + pale pink at 335–352° counts once S > 0.25 (skin highlights are fainter) | **43**: adds Mitsuri pink; Narumi's light pink deepens |
+
+A pale/saturated ratio switch ("shade pinks from the bright half, reds from
+the vivid core") was measured first and does not separate them: pinks 0.39–0.66,
+approved reds 0.32–0.67.
+
+### 19.4 Where it stands
+
+V29 fixes Tohru, Mirio, Nagatoro and Mitsuri. **Still wrong: Tewi Inaba, Nadeko
+Sengoku and Sakurako Kawawa (salmon-red), Will Auceptin (gold), and Nephis
+(turns brown with the skin-shadow damping).** The limit is the same each time:
+at the pixel level, pale pink clothes and hair look like pale pink skin — same
+hue, overlapping saturation — so every rule that frees one character's pink lets
+skin through for another. A skin- or face-part model that labels skin, hair and
+clothes separately is the principled next step; the override covers the rest.
+
+The sample page now shows V29 with V24 and the live site's colour as chips
+(`showcase.py --method v29 --compare v24`).

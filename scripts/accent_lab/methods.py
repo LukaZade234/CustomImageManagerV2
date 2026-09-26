@@ -513,6 +513,11 @@ def is_pale_skin(h, s, v):
     )
 
 
+def _in_zone(hue, lo, hi):
+    """Whether `hue` lies in [lo, hi] on the wheel; lo > hi wraps through 0."""
+    return lo <= hue <= hi if lo <= hi else (hue >= lo or hue <= hi)
+
+
 def classify(
     img,
     *,
@@ -523,6 +528,7 @@ def classify(
     skin_val=0.6,
     warm_damp=None,
     warm_white=None,
+    warm_damp_light=None,
 ):
     """The shipped `measure_image`, with the experimental switches.
 
@@ -554,10 +560,16 @@ def classify(
             w = s**1.6 * A._light_pref(v)
             if (
                 warm_damp
-                and warm_damp[0] <= hue <= warm_damp[1]
+                and _in_zone(hue, warm_damp[0], warm_damp[1])
                 and (s <= warm_damp[2] or v < WARM_DARK_V)
             ):
                 w *= warm_damp[3]
+            elif (
+                warm_damp_light
+                and _in_zone(hue, warm_damp_light[0], warm_damp_light[1])
+                and s <= warm_damp_light[2]
+            ):
+                w *= warm_damp_light[3]
             sat_grid[key] = sat_grid.get(key, 0) + w
             st += w
             kept += 1
@@ -568,7 +580,7 @@ def classify(
                     pt += w  # still part of the image's pale total, so nothing renormalises
                     kept += 1
                 continue
-            if warm_damp and warm_damp[0] <= hue <= warm_damp[1]:
+            if warm_damp and _in_zone(hue, warm_damp[0], warm_damp[1]):
                 w *= warm_damp[3]
             pale_grid[key] = pale_grid.get(key, 0) + w
             pt += w
@@ -1585,3 +1597,299 @@ def v24(portrait, gallery, trace=None):
 
 def method_v24(portrait, gallery):
     return v24(portrait, gallery)
+
+
+# ---- V25: the skin zone reaches down through red ------------------------------------------
+#
+# The random sample's brick reds (Mitsuri Kanroji, Tohru, Nadeko Sengoku, Tewi
+# Inaba, Nagatoro-san) all won a window centred at 18-28 degrees: skin shadow,
+# blush and lips, which run from about 350 to 10 degrees -- below the damped
+# zone (10-45). The zone now wraps from WARM_ZONE_V25[0] through 0. Real reds
+# (hair, clothes) are more saturated than skin and keep their full vote.
+
+WARM_ZONE_V25 = (350, 45)
+WARM_SAT_MAX_V25 = 0.6
+
+
+def _no_skin_v25_hue(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v15,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE_V25, WARM_SAT_MAX_V25, WARM_FACTOR),
+        warm_white=WARM_WHITE,
+    )
+
+
+def _no_skin_v25_shade(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v15,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE_V25, WARM_SAT_MAX_V25, WARM_FACTOR),
+    )
+
+
+def v25(portrait, gallery, trace=None):
+    global _no_skin_v21, _no_skin_v20
+    saved = (_no_skin_v21, _no_skin_v20)
+    _no_skin_v21, _no_skin_v20 = _no_skin_v25_hue, _no_skin_v25_shade  # v24 reads both
+    try:
+        return v24(portrait, gallery, trace)
+    finally:
+        _no_skin_v21, _no_skin_v20 = saved
+
+
+def method_v25(portrait, gallery):
+    return v25(portrait, gallery)
+
+
+# ---- V26: pale pink is not skin -----------------------------------------------------------
+#
+# V15's pale-skin rule removed hue 335-38 at S <= 0.35 -- which also removes pale
+# pink clothes and hair (Tewi Inaba's dress, Sakurako Kawawa's cream-pink,
+# Mitsuri Kanroji's hair). What remained at that hue was skin shadow, eyes and
+# ribbons, shaded into brick red. Anime skin sits at roughly 352-38 degrees;
+# pale pink at 325-352. The rule now starts at PALE_SKIN_FROM.
+
+PALE_SKIN_FROM = 352
+
+
+def _is_skin_v26(h, s, v):
+    return (h >= PALE_SKIN_FROM or h <= 38) and s <= 0.35 and v >= 0.45
+
+
+def _no_skin_v26_hue(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v26,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+        warm_white=WARM_WHITE,
+    )
+
+
+def _no_skin_v26_shade(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v26,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+    )
+
+
+def v26(portrait, gallery, trace=None):
+    global _no_skin_v21, _no_skin_v20
+    saved = (_no_skin_v21, _no_skin_v20)
+    _no_skin_v21, _no_skin_v20 = _no_skin_v26_hue, _no_skin_v26_shade  # v24 reads both
+    try:
+        return v24(portrait, gallery, trace)
+    finally:
+        _no_skin_v21, _no_skin_v20 = saved
+
+
+def method_v26(portrait, gallery):
+    return v26(portrait, gallery)
+
+
+# ---- V27: skin shadow below 10 degrees damped; shade blends in the bright half ----------
+#
+# The random sample's pinks (Tewi Inaba, Nadeko Sengoku, Mitsuri Kanroji) came out
+# brick red for two reasons. Skin shadow and blush at 355-10 degrees kept pulling
+# the aim toward red; they are now damped like the rest of the skin zone, but only
+# at skin saturation and without the dark rule, which in V25 also damped dark red
+# clothes (Superman). And the vivid core picks a band's deepest shading, which in a
+# pink band is red. The shade now blends (SHADE_BLEND) the vivid core with the
+# most chromatic half of the band's *brighter* pixels, pale and saturated together.
+
+SKIN_SHADOW_ZONE = (355, 10, 0.55, WARM_FACTOR)
+SHADE_BLEND = 0.5
+
+
+def _classify_v27(img, whites):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v26,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+        warm_white=WARM_WHITE if whites else None,
+        warm_damp_light=SKIN_SHADOW_ZONE,
+    )
+
+
+def _no_skin_v27_hue(img):
+    return _classify_v27(img, True)
+
+
+def _no_skin_v27_shade(img):
+    return _classify_v27(img, False)
+
+
+def _band_cells(entries, hue, span, cls, scale):
+    grid = A._merged_band_grid(entries, hue, span, cls)
+    total = sum(grid.values()) or 1.0
+    out = []
+    for (hb, sb, vb), w in grid.items():
+        h = (hb + 0.5) * 5
+        if A._hue_distance(h, hue) > span:
+            continue
+        s, v = (sb + 0.5) / A.SAT_STEPS, (vb + 0.5) / A.VAL_STEPS
+        L, C, oh = A.rgb_to_oklch(*colorsys.hsv_to_rgb(h / 360, s, v))
+        out.append((L, C, oh, w / total * scale))
+    return out
+
+
+def _lab_mean(cells):
+    ww = sum(c[3] for c in cells) or 1.0
+    L = sum(c[0] * c[3] for c in cells) / ww
+    a = sum(c[1] * math.cos(math.radians(c[2])) * c[3] for c in cells) / ww
+    b = sum(c[1] * math.sin(math.radians(c[2])) * c[3] for c in cells) / ww
+    return L, a, b
+
+
+def bright_half(entries, hue, p=V8):
+    """OKLab mean of the most chromatic half of the band's brighter-than-median pixels."""
+    cells = _band_cells(entries, hue, p["conf_span"], "saturated", 1.0)
+    cells += _band_cells(entries, hue, p["conf_span"], "pale", 0.5)
+    if not cells:
+        return None
+    total = sum(c[3] for c in cells)
+    run, median_l = 0.0, cells[0][0]
+    for c in sorted(cells, key=lambda c: c[0]):
+        run += c[3]
+        if run >= total / 2:
+            median_l = c[0]
+            break
+    bright = sorted((c for c in cells if c[0] >= median_l), key=lambda c: -c[1])
+    bt = sum(c[3] for c in bright)
+    run, top = 0.0, []
+    for c in bright:
+        top.append(c)
+        run += c[3]
+        if run >= bt / 2:
+            break
+    return _lab_mean(top)
+
+
+def v27(portrait, gallery, trace=None):
+    global _no_skin_v21, _no_skin_v20, shade_v16
+    saved = (_no_skin_v21, _no_skin_v20, shade_v16)
+    original_shade = shade_v16
+
+    def blended(entries, hue, p=V8):
+        result, cls = original_shade(entries, hue, p)
+        bh = bright_half(entries, hue, p)
+        if result is None or bh is None or SHADE_BLEND <= 0:
+            return result, cls
+        r, g, b = (int(result["seed"][i : i + 2], 16) / 255 for i in (1, 3, 5))
+        L, C, h = A.rgb_to_oklch(r, g, b)
+        a0, b0 = C * math.cos(math.radians(h)), C * math.sin(math.radians(h))
+        t = SHADE_BLEND
+        mix = ((1 - t) * L + t * bh[0], (1 - t) * a0 + t * bh[1], (1 - t) * b0 + t * bh[2])
+        mc = math.hypot(mix[1], mix[2])
+        mh = math.degrees(math.atan2(mix[2], mix[1])) % 360
+        return describe(fit_in_gamut(mix[0], mc, mh)), f"{cls}, blended {t}"
+
+    _no_skin_v21, _no_skin_v20, shade_v16 = _no_skin_v27_hue, _no_skin_v27_shade, blended
+    try:
+        return v24(portrait, gallery, trace)
+    finally:
+        _no_skin_v21, _no_skin_v20, shade_v16 = saved
+
+
+def method_v27(portrait, gallery):
+    return v27(portrait, gallery)
+
+
+# ---- V28: V24's measurement with V27's blended shade -------------------------------------
+#
+# V26/V27's "pale pink is not skin" broke Panty (yellow -> pink), Nephis and Shiki
+# Ryougi; V27's blended shade was the part that helped the pinks. V28 keeps V24's
+# pixel classes and adds only the blend, optionally with the skin-shadow damping.
+
+V28_SHADOW = False
+
+
+def _v28_measure(whites):
+    def run(img):
+        return classify(
+            img,
+            reject_pale_skin=True,
+            skin=_is_skin_v15,
+            skin_hue=SKIN_HUE_V15,
+            warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+            warm_white=WARM_WHITE if whites else None,
+            warm_damp_light=SKIN_SHADOW_ZONE if V28_SHADOW else None,
+        )
+
+    return run
+
+
+def v28(portrait, gallery, trace=None):
+    global _no_skin_v27_hue, _no_skin_v27_shade
+    saved = (_no_skin_v27_hue, _no_skin_v27_shade)
+    _no_skin_v27_hue, _no_skin_v27_shade = _v28_measure(True), _v28_measure(False)
+    try:
+        return v27(portrait, gallery, trace)
+    finally:
+        _no_skin_v27_hue, _no_skin_v27_shade = saved
+
+
+def method_v28(portrait, gallery):
+    return v28(portrait, gallery)
+
+
+# ---- V29: V28 + pale pink counts once it is stronger than a skin highlight -----------
+#
+# Freeing all pale pink (V26) broke Panty, Nephis and Shiki Ryougi -- at 335-352
+# degrees there are skin highlights too. They are fainter than pink hair and
+# clothes, so between PALE_SKIN_FROM and 335 the pale-skin rule now only removes
+# pixels up to PINK_SKIN_SAT_MAX.
+
+PINK_SKIN_SAT_MAX = 0.25
+
+
+def _is_skin_v29(h, s, v):
+    if v < 0.45:
+        return False
+    if 335 <= h < PALE_SKIN_FROM:
+        return s <= PINK_SKIN_SAT_MAX
+    return (h >= PALE_SKIN_FROM or h <= 38) and s <= 0.35
+
+
+def _v29_measure(whites):
+    def run(img):
+        return classify(
+            img,
+            reject_pale_skin=True,
+            skin=_is_skin_v29,
+            skin_hue=SKIN_HUE_V15,
+            warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+            warm_white=WARM_WHITE if whites else None,
+            warm_damp_light=SKIN_SHADOW_ZONE,
+        )
+
+    return run
+
+
+def v29(portrait, gallery, trace=None):
+    global _no_skin_v27_hue, _no_skin_v27_shade, SHADE_BLEND
+    saved = (_no_skin_v27_hue, _no_skin_v27_shade, SHADE_BLEND)
+    _no_skin_v27_hue, _no_skin_v27_shade = _v29_measure(True), _v29_measure(False)
+    SHADE_BLEND = V29_BLEND
+    try:
+        return v27(portrait, gallery, trace)
+    finally:
+        _no_skin_v27_hue, _no_skin_v27_shade, SHADE_BLEND = saved
+
+
+V29_BLEND = 0.35
+
+
+def method_v29(portrait, gallery):
+    return v29(portrait, gallery)

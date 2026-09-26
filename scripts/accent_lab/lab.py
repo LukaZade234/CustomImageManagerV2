@@ -264,3 +264,51 @@ REVIEW = {
     "live:Audrey Hall": ("Audrey Hall: has a colour", _has_colour),
     "live:Tsumugi Kotobuki": ("Tsumugi: has a colour", _has_colour),
 }
+
+
+def _near(seed, dh=20, dl=0.12):
+    """Close to an approved seed: hue within dh degrees, lightness within dl."""
+    ref = describe(seed)
+    return lambda r: (
+        r is not None
+        and hue_gap(r["hue"], ref["hue"]) <= dh
+        and abs(r["lightness"] - ref["lightness"]) <= dl
+    )
+
+
+def _pinkish(min_l):
+    return lambda r: _hue_in(330, 18)(r) and r["lightness"] >= min_l
+
+
+# The owner's review of the random sample (2026-09-26, third round). "Approved"
+# rows must stay near the colour the owner saw and accepted.
+SAMPLE_REVIEW = {
+    "live:Sandrone": ("Sandrone: approved", _near("#a84347")),
+    "live:Sukuna": ("Sukuna: approved", _near("#b15741")),
+    "live:Kasane Teto": ("Kasane Teto: approved", _near("#cb3f55")),
+    "live:Nephis": ("Nephis: approved", _near("#d8d0b8", dh=40)),
+    "live:Akane Kurokawa": ("Akane Kurokawa: approved", _near("#354b86")),
+    "live:Mitsuri Kanroji": ("Mitsuri: pink, no contest", _pinkish(0.6)),
+    "live:Zero Two": ("Zero Two: approved", _near("#c03f49")),
+    "live:Sakurako Kawawa": (
+        "Sakurako: creamy with hints of pink",
+        lambda r: _hue_in(330, 60)(r) and r["lightness"] >= 0.68,
+    ),
+    "live:Hiyuki": ("Hiyuki: red or blue", lambda r: _hue_in(340, 50)(r) or _hue_in(220, 280)(r)),
+    "live:Shiki Ryougi": ("Shiki Ryougi: approved", _near("#404b8d")),
+    "live:Narumi Momose": ("Narumi Momose: approved", _near("#f3b3db")),
+    "live:Mystia Lorelei": ("Mystia Lorelei: approved", _near("#bd6071")),
+    "live:Superman (Clark Kent)": ("Superman: approved", _near("#c22d2b")),
+    "live:Hornet": ("Hornet: approved", _near("#b63c4b")),
+    "live:Tohru": ("Tohru: nearer orange", _hue_in(38, 75)),
+    "live:Mirio Togata": ("Mirio: yellow/orange", _hue_in(40, 100)),
+    "live:Nadeko Sengoku": ("Nadeko: reddish pink, leaning pink", _pinkish(0.58)),
+    "live:The Sandman": ("The Sandman: approved", _near("#364453")),
+    "live:Lisa": ("Lisa: approved", _near("#513b96")),
+    "live:Tewi Inaba": ("Tewi: pink", _pinkish(0.62)),
+    "live:Hange Zoë": ("Hange: approved", _near("#a88b50")),
+    "live:Aurore Lee": ("Aurore Lee: approved", _near("#466893")),
+    "live:Nagatoro-san": ("Nagatoro: not red", lambda r: r is not None and not _hue_in(0, 45)(r)),
+    "live:Luka": ("Luka: approved", _near("#8be6d9")),
+    "live:Daki": ("Daki: approved", _near("#b32d3a")),
+}
