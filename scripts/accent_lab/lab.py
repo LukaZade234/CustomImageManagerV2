@@ -144,6 +144,11 @@ def load_live(name, cap=60):
     return meta["name"], portrait, [i for i in imgs if i is not None]
 
 
+def live_names():
+    """Names of every character fetched into .data/live, sorted."""
+    return sorted(json.loads(m.read_text())["name"] for m in LIVE.glob("*/meta.json"))
+
+
 def library_ids(min_thumbs=6, limit=None):
     """Local characters with at least `min_thumbs` cached thumbnails."""
     conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
@@ -186,3 +191,59 @@ def portrait_schedule(entries_fn, portrait, gallery):
     if not entries:
         return None
     return entries_fn(entries)
+
+
+def fmt(r):
+    if not r:
+        return "None".ljust(30)
+    return f"{r['seed']} h{r['hue']:5.1f} C{r['chroma']:.3f} L{r['lightness']:.2f}"
+
+
+# The owner's review of the V12 contact sheet (2026-09-26), as checks. All live.
+# OKLCH hue ranges; "any" means only "has a colour" (the owner wants a fallback
+# over a decline). Lynae's cyan was accepted, so her range here is wider than in
+# PANEL.
+def _hue_in(lo, hi):
+    return lambda r: (
+        r is not None and (lo <= r["hue"] <= hi if lo < hi else (r["hue"] >= lo or r["hue"] <= hi))
+    )
+
+
+def _has_colour(r):
+    return r is not None
+
+
+REVIEW = {
+    "live:Lynae": ("Lynae: cyan/teal", lambda r: _hue_in(150, 215)(r) and r["chroma"] >= 0.09),
+    "live:Reze": ("Reze: violet", _hue_in(270, 320)),
+    "live:Ceres Fauna": ("Ceres Fauna: mint green", _hue_in(135, 180)),
+    "live:Rebecca": ("Rebecca: teal/cyan/green hair", _hue_in(140, 215)),
+    "live:Himeno": ("Himeno: blue-grey/navy/dark teal", _hue_in(200, 275)),
+    "live:Panty Anarchy": (
+        "Panty: clear yellow",
+        lambda r: _hue_in(80, 115)(r) and r["chroma"] >= 0.08,
+    ),
+    "live:Nico Robin": ("Nico Robin: has a colour", _has_colour),
+    "live:Yuta Okkotsu": ("Yuta: has a colour", _has_colour),
+    "live:Alisa Mikhailovna Kujou": ("Alisa: has a colour", _has_colour),
+    "live:Will Auceptin": ("Will Auceptin: has a colour", _has_colour),
+    "live:The Sandman": ("The Sandman: has a colour", _has_colour),
+    "live:Columbina": (
+        "Columbina: pink or light blue",
+        lambda r: _hue_in(330, 20)(r) or _hue_in(230, 280)(r),
+    ),
+    "live:Hiyuki": ("Hiyuki: red or blue", lambda r: _hue_in(0, 50)(r) or _hue_in(220, 280)(r)),
+    "live:Vertin": ("Vertin: grey-blue or purple", _hue_in(220, 320)),
+    "live:Hatsune Miku": ("Miku: teal", _hue_in(170, 240)),
+    "live:Madoka Kaname": ("Madoka: pink", lambda r: _hue_in(330, 25)(r) and r["chroma"] >= 0.08),
+    "live:Artoria Pendragon (Alter)": (
+        "Artoria (Alter): red",
+        lambda r: _hue_in(0, 40)(r) and r["chroma"] >= 0.08,
+    ),
+    "live:Lucy": ("Lucy: pale blue", lambda r: _hue_in(230, 290)(r) and r["lightness"] >= 0.7),
+    "live:Saber": ("Saber: deep blue", lambda r: _hue_in(240, 290)(r) and r["lightness"] < 0.6),
+    "live:Reimu Hakurei": ("Reimu: red", _hue_in(350, 50)),
+    "live:2B": ("2B: grey or none", lambda r: r is None or r["chroma"] < 0.06),
+    "live:Audrey Hall": ("Audrey Hall: has a colour", _has_colour),
+    "live:Tsumugi Kotobuki": ("Tsumugi: has a colour", _has_colour),
+}

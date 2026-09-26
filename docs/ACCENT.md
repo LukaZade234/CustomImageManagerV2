@@ -48,6 +48,12 @@ the open questions, including the dead ends.
   tie between violet and Bomb Devil red, her hair is too muted to vote, and the
   violet the panel expected came from her portrait's *background*. The harness
   is committed as `scripts/accent_lab/`.
+- **Owner's review (§17):** every character judged by eye. Two product rules
+  came out of it — a tie between two colours goes to whichever the main image
+  carries more of, and no character goes without an accent if its main image
+  has a colour. The resulting pipeline (V18) passes 21 of the 23 reviewed
+  characters (current: 17), leaves 2 of 80 accents near-grey (current: 24) and
+  declines none. Open: Ceres Fauna's gradient hair and a few warm-window cases.
 
 ---
 
@@ -760,7 +766,7 @@ segmentation (§5.2.1) remains the algorithmic answer, and the override the
 practical one.
 
 ### Reproducing the experiments
-Everything in §14–16 runs from `scripts/accent_lab/` — see its README. Each
+Everything in §14–17 runs from `scripts/accent_lab/` — see its README. Each
 variant in the tables is a `method_<name>` in `scripts/accent_lab/methods.py`.
 
 ---
@@ -899,3 +905,151 @@ Judged by eye on a contact sheet of every character V12 changes:
    change it to reflect the owner's intent explicitly (an override, or a
    hair-based check once one exists), and add Lynae, Madoka-with-all-images,
    Artoria (Alter) and Nico Robin.
+
+---
+
+## 17. The owner's review of V12, and V13–V18 (2026-09-26)
+
+### 17.1 The verdicts
+
+The owner went through the V12 contact sheet character by character:
+
+| character | verdict | what it means for the extractor |
+|---|---|---|
+| Lynae | cyan is good | accepted; turquoise-cyan is fine |
+| Columbina | V12's dark pink is fine (light blue or pink both are) | two-colour characters may take either |
+| Hiyuki | red or blue both fine | ditto |
+| Vertin | grey-blue or purple both fine | ditto |
+| Himeno | not brown — grey, leaning blue-grey or navy | |
+| Rebecca | her light teal/cyan/green **hair**, in every image | light colours must be able to win |
+| Ceres Fauna | overwhelmingly light mint green; blue is baffling | ditto |
+| Panty Anarchy | a stronger, clearer yellow | pale identities must still read as colour |
+| Reze | violet: compare the two main colours with the main image | **the main image breaks ties** |
+| Nico Robin | the main image should pick the main colourway | ditto |
+| Yuta, Alisa, Will Auceptin, The Sandman | should not decline | **fall back to the main image alone** rather than show no colour |
+
+Two of these are product rules, not tuning targets, and are now decided:
+**a tie between two colours goes to whichever the main image carries more of**
+(this settles §16.6 item 4), and **a character never goes without an accent
+when its main image has a colour**.
+
+### 17.2 A flaw in the earlier lab numbers
+
+The local working library has main images (`data/portrait_samples/`) for only
+the 13 panel characters. Every other character in §14–16 — Himeno, Yuta,
+Rebecca, Alisa, Will, The Sandman, Ceres, Panty — was measured **with no main
+image at all**, so neither a tie-breaker nor a fallback could act for them.
+Everything in this section uses characters fetched live (`fetch_live`), main
+images included: the 23 in the owner's review plus all 80 library characters.
+
+Two data problems surfaced on the way. The Sandman's main image was a dead
+ImgChest link with no R2 mirror (the owner has since replaced it). Vertin's main
+image is intact on the live site — both the Mudae original and the R2 copy.
+
+### 17.3 Why each was wrong
+
+`explain.py` traces one character through the pipeline; these are its findings.
+
+- **Yuta** declined on coverage: his red covers 1.2% of pixels against a 3% floor;
+  his art is mostly black and white. His main image is 82% blue.
+- **Himeno**'s gallery is an orange/red vs blue tie that fails the two-colour
+  margin (1.17 against 1.25). With her main image the tie goes to blue — the
+  brown came purely from the missing main image.
+- **Reze**: the gallery *has* a violet peak at 262° next to blue at 222°, but
+  V12's candidates had to be 60° apart, so violet was merged into blue and never
+  faced the main image. Her main image, whole, is 85% violet — the purple
+  background the owner is looking at.
+- **Rebecca and Ceres Fauna**: their identity is **light hair**. Light colours
+  only live in the pale class, which never voted on the hue — it could only take
+  over through the narrow pale-identity rule. Rebecca's pale teal/cyan appears
+  in about half her images, more than any saturated blue; Ceres's pale
+  yellow-green in 71%.
+- **Panty**: blonde hair sits at HSV 40–55°; the *shipped* skin rule removes
+  hue 12–48°. Her yellow barely registered.
+- **Very pale skin** (S < 0.12, peach) slipped under both skin rules into the
+  pale class, where it flooded the hue vote as beige (Himeno, Vertin, Yuta).
+- **Ceres Fauna's hair is a gradient** — yellow-green where lit, green through
+  the middle, teal at the tips (confirmed by masking which pixels are which).
+  "Mint" is the whole gradient; any one window catches only one end of it.
+
+### 17.4 The variants
+
+| version | change | result on the review (23) |
+|---|---|---|
+| V13 | pale votes on the hue; candidates 30° apart; the **whole** main image breaks ties; main-image fallback | Rebecca and fallbacks fixed; pale skin floods the vote (Reze, Madoka pink; Himeno beige) |
+| V14 | clusters between valleys; skin rule through orange | Reze violet, Alisa pink; clusters came out 170° wide |
+| V15 | skin stops at 38° (blonde survives); pale vs saturated compared directly for the shade; tie aim where gallery and main image agree | Panty clear yellow; Lucy lost pale |
+| V16 | fixed ±30° colour windows, shipped pale rule restored alongside | 19/23 |
+| V17 | V16 tuned: pale weight 0.5, presence pooling (√ per image), gallery-weighted aim; tinted pale identities lifted to C ≥ 0.09, grey ones left alone | 21/23 |
+| **V18** | V17 + the aim stays within ±15° of the winning colour; a tie with no main image takes the stronger side | **21/23**, and fixes the pale-gold drift below |
+| V19 | V18 + shaded skin (V 0.45–0.6) removed from the saturated class | no gain; Ishtar worse. Dead end. |
+
+**V17's pale-gold drift.** On the whole library V17 turned Ereshkigal, Ishtar and
+Will Auceptin pale gold. Their winning colour was correctly red, but the final
+hue was aimed anywhere in the ±30° window, whose edge (≈42°) is where pale
+blonde and skin pile up. V18 keeps the aim within ±15° of the window's centre:
+Ereshkigal returns to red.
+
+### 17.5 Results
+
+**The owner's review** (23 characters, all live, every image):
+
+| | current | V12 | V18 |
+|---|---|---|---|
+| passes | 17 | 14 | **21** |
+
+**All 80 library characters, live:**
+
+| | current | V12 | V18 |
+|---|---|---|---|
+| seeded | 79 | 75 | **79** |
+| median chroma | 0.081 | 0.123 | 0.119 |
+| median lightness | 0.50 | 0.54 | 0.55 |
+| darker than L 0.45 | 25 | 6 | 11 |
+| near-grey (C < 0.05) | 24 | 9 | **2** |
+
+V18 per review character: Lynae `#33b0c1`, Reze `#5c4293` (violet), Rebecca
+`#2ea6ac` (teal), Himeno `#336b7b` (dark blue-teal), Panty `#fee4a0` (yellow),
+Nico Robin `#445aa6` (her main image's blue), Yuta `#78222b` (red — his gallery
+now clears the coverage bar on its own), Alisa `#b25185`, Will Auceptin
+`#dcb65d`, The Sandman `#374454`, Columbina `#a3b2f0`, Hiyuki `#c6433c`, Vertin
+`#78a5d8`, Miku `#2e8aac`, Madoka `#c4536b`, Lucy `#9cace9`, Saber `#2f4b95`,
+Reimu `#bc4131`, 2B `#c9bea7` (grey-beige), Audrey `#c4a748`, Tsumugi `#bc9c58`.
+Elsewhere: Komi Shouko now dark purple (her hair), Illya pink, Eirin a purple
+where she used to decline.
+
+### 17.6 Still open
+
+- **Ceres Fauna** (`#ddefab`, pale yellow-green): the gradient case. Merging two
+  tied colours when there is "no real valley" between them was tested and
+  does not discriminate — her valley ratio (0.77) sits between genuinely
+  separate pairs (Hiyuki's red/blue 0.56, Reze's red→blue path 0.89). Hair
+  segmentation would read the whole gradient; the override is the answer today.
+- **Artoria (Alter)** comes out deep raspberry `#8b1c55` rather than crimson: her
+  red window leans magenta. Borderline.
+- **Warm windows**: Ishtar (brown `#966d43`), Osamu Dazai (pale gold), Will
+  Auceptin (gold) and Poison Ivy (gold) have an orange/gold window winning
+  outright — blonde (Ereshkigal in shared art), sepia and warm shading outweigh
+  their red. Extending the skin rule (V19) did not help.
+
+### 17.7 Where this leaves the recommendation
+
+§15 and §16.6 stand, with the pipeline now being V18's:
+
+1. Measure every image, segmented on the 600px thumbnail (unchanged).
+2. Skin: the shipped rule stops at 38° instead of 48° so blonde survives, and
+   pale pink-to-peach skin (hue 335–38°, S ≤ 0.35, V ≥ 0.45) is removed from both
+   classes.
+3. **Hue evidence** is saturated + ½ × pale, each image normalised, pooled by
+   square root (presence over mass). Colours are ±30° windows.
+4. **Ties** (within the shipped 1.25 margin) go to the main image, whole —
+   background included — and the final hue is aimed where gallery and main image
+   agree, within ±15° of the chosen colour.
+5. **Shade**: the vivid core of whichever class the band belongs to (pale when it
+   outweighs saturated 1.5×, or when the shipped pale rule says so); tinted pale
+   identities lifted to C ≥ 0.09.
+6. **Never empty-handed**: a tie with no main image takes the stronger side; a
+   gallery that cannot decide falls back to the main image alone.
+
+`method_v18` in `scripts/accent_lab/methods.py` is the reference
+implementation, and `REVIEW` in `lab.py` is the owner's review as checks.

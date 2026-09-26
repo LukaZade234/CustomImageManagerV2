@@ -22,11 +22,18 @@ def main() -> None:
     parser.add_argument("methods")
     parser.add_argument("--all", action="store_true", help="measure every image")
     parser.add_argument("--live", nargs="*", default=[], help="also include fetched live names")
+    parser.add_argument(
+        "--live-only", action="store_true", help="every fetched live character, no local ones"
+    )
     args = parser.parse_args()
     names = args.methods.split(",")
     fns = {m: resolve(m) for m in names}
     rows = []
-    for cid in lab.library_ids(6) + [f"live:{n}" for n in args.live]:
+    if args.live_only:
+        ids = [f"live:{n}" for n in lab.live_names()]
+    else:
+        ids = lab.library_ids(6) + [f"live:{n}" for n in args.live]
+    for cid in ids:
         name, portrait, gallery = lab.load_character(cid, None if args.all else 60)
         row = {"id": cid, "name": name, "n": len(gallery)}
         for m, fn in fns.items():

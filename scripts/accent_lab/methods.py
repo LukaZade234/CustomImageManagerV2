@@ -1,4 +1,4 @@
-"""Every extractor variant tried in docs/ACCENT.md sections 14-16.
+"""Every extractor variant tried in docs/ACCENT.md sections 14-17.
 
 Each `method_<name>(portrait, gallery)` takes the images `lab.load_character`
 returns and gives `lab.describe(seed)` or None. Names match the doc's tables.
@@ -15,6 +15,13 @@ app. Variants build on each other, so read them in order.
     v11   v10 + pale skin rejected                                fixes the leak
     v11d  v11 + drop scenes the mask cannot separate              Lynae #34b0c1
     v12   v11d + portrait breaks ties between gallery candidates  Reze -> navy
+    v13   pale votes on hue, 30-degree candidates, whole main
+          image breaks ties, main-image fallback                  skin floods pale
+    v14   valley clusters, skin rule through orange               clusters too wide
+    v15   skin stops at 38 (blonde survives), pale-vs-saturated
+          shade choice, agreed aim, presence pooling option       Panty yellow
+    v16   fixed +-30 degree colour windows                        19/23 of review
+    v17   v16 tuned + chroma floor for tinted pale identities     21/23, the candidate
 """
 
 from __future__ import annotations
@@ -499,8 +506,13 @@ def is_pale_skin(h, s, v):
     )
 
 
-def classify(img, *, gap=False, reject_pale_skin=False):
-    """The shipped `measure_image`, with the two experimental switches."""
+def classify(img, *, gap=False, reject_pale_skin=False, skin=None, skin_hue=None, skin_val=0.6):
+    """The shipped `measure_image`, with the experimental switches.
+
+    `skin` is the pale-skin predicate used when `reject_pale_skin` is set.
+    """
+    skin = skin or is_pale_skin
+    skin_lo, skin_hi = skin_hue or A.SKIN_HUE
     img = img.convert("RGB")
     sat_grid: dict = {}
     pale_grid: dict = {}
@@ -512,9 +524,9 @@ def classify(img, *, gap=False, reject_pale_skin=False):
         if v < 0.15 or (v >= 0.95 and s <= 0.15) or max(r, g, b) - min(r, g, b) < 1e-9:
             continue
         hue *= 360
-        if A.SKIN_HUE[0] <= hue <= A.SKIN_HUE[1] and 0.12 <= s <= 0.55 and v >= 0.6:
+        if skin_lo <= hue <= skin_hi and 0.12 <= s <= 0.55 and v >= skin_val:
             continue
-        if reject_pale_skin and s >= A.PALE_SAT_MIN and is_pale_skin(hue, s, v):
+        if reject_pale_skin and s >= A.PALE_SAT_MIN and skin(hue, s, v):
             continue
         key = (min(71, int(hue / 5)), min(19, int(s * 20)), min(19, int(v * 20)))
         if s >= A.SATURATED_SAT_MIN:
@@ -665,3 +677,602 @@ def method_v12(portrait, gallery):
     if pm is None and not gm:
         return None
     return _v12_decide(pm, gm)
+
+
+# ---- V13: the owner's review ----------------------------------------------------
+#
+# Three changes over V12, each from the review of its contact sheet:
+#
+# 1. Light colours vote on the hue. Pale pixels only ever entered through the
+#    narrow pale-identity rule, so a character whose colour is light hair
+#    (Ceres Fauna's mint, Rebecca's teal) lost the hue to saturated clothing and
+#    backgrounds. Hue evidence is now saturated + PALE_WEIGHT x pale, both
+#    normalised per image.
+# 2. Ties go to the main image, whole. Candidates are the evidence's peaks at
+#    least TIE_RATIO of the top one and CANDIDATE_SEP apart (60 degrees merged
+#    Reze's violet into blue); the main image -- background included, which on
+#    Mudae portraits is often the character's colour -- picks the one it carries
+#    most of. It still never adds a hue of its own.
+# 3. No colour from the gallery -> the main image alone decides (the owner
+#    prefers a semi-correct colour to none).
+
+PALE_WEIGHT = 1.0
+CANDIDATE_SEP = 30
+TIE_RATIO = 1 / A.MIN_MARGIN  # within the shipped two-colour margin = a tie
+TIE_BAND = 15  # +-degrees of the main image counted for a candidate
+
+
+def evidence(entries):
+    sat = A._pool_histogram(entries, "saturated")
+    pale = A._pool_histogram(entries, "pale")
+    return [s + PALE_WEIGHT * p for s, p in zip(sat, pale, strict=True)], sat, pale
+
+
+def peak_list(hist, sep=CANDIDATE_SEP):
+    """Smoothed peaks, strongest first, each `sep` degrees from any stronger one."""
+    smooth, total = A._smooth(hist)
+    if total <= 0:
+        return [], smooth
+    picked: list[int] = []
+    for i in sorted(range(A.HUE_BINS), key=lambda i: -smooth[i]):
+        if all(A._hue_distance((i + 0.5) * 5, (j + 0.5) * 5) >= sep for j in picked):
+            picked.append(i)
+    return picked, smooth
+
+
+def shade_at(entries, hue, p=V8):
+    """Vivid shade of `hue`: the shipped pale-identity rule picks the class."""
+    sat_hist = A._pool_histogram(entries, "saturated")
+    pale_hist = A._pool_histogram(entries, "pale")
+    smooth, total = A._smooth(sat_hist)
+    b = min(A.HUE_BINS - 1, int(hue / 5))
+    conf = smooth[b] / total if total > 0 else 0.0
+    pale_win = A._dominant_hue(pale_hist, A.MIN_CONFIDENCE, True)
+    sat_grid = A._merged_band_grid(entries, hue, p["conf_span"], "saturated")
+    pale_grid = A._merged_band_grid(entries, hue, p["conf_span"], "pale")
+    use_pale = not sat_grid or (pale_grid and _pale_identity(entries, hue, conf, pale_win))
+    grid = pale_grid if use_pale else sat_grid
+    if not grid:
+        return None
+    return describe(vivid_shade(grid, hue, p))
+
+
+def v13_decide_from(entries, portrait=None, p=V8):
+    """(result, reason). `portrait` is the whole main image's grids, for ties."""
+    if not entries:
+        return None, "no images"
+    hist, _, _ = evidence(entries)
+    peaks, smooth = peak_list(hist)
+    if not peaks:
+        return None, "no chromatic evidence"
+    top = smooth[peaks[0]]
+    tied = [i for i in peaks if smooth[i] >= TIE_RATIO * top]
+    rivals_far = [i for i in tied[1:] if A._hue_distance((i + 0.5) * 5, (peaks[0] + 0.5) * 5) >= 60]
+    choice = (peaks[0] + 0.5) * 5
+    reason = "clear winner"
+    if rivals_far:
+        if portrait is None:
+            return None, "two-colour tie, no main image to break it"
+        ph, _, _ = evidence([(portrait, 1.0)])
+        scores = {(i + 0.5) * 5: band_sum(ph, (i + 0.5) * 5, TIE_BAND) for i in tied}
+        choice = max(scores, key=scores.get)
+        if scores[choice] <= 0:
+            return None, "two-colour tie, main image carries neither"
+        reason = "tie broken by main image: " + ", ".join(
+            f"{h:.0f}deg {s:.2f}" for h, s in sorted(scores.items(), key=lambda t: -t[1])
+        )
+    share = band_sum(hist, choice, p["conf_span"]) / sum(hist)
+    if share < CANDIDATE_SHARE:
+        return None, f"winning band holds only {share:.2f}"
+    wsum = sum(w for _, w in entries)
+    cov = sum(band_sum(g.hist_cov, choice, p["conf_span"]) * w for g, w in entries) / wsum
+    pale_cov = (
+        sum(
+            sum(
+                w2
+                for (hb, _, _), w2 in g.pale.items()
+                if A._hue_distance((hb + 0.5) * 5, choice) <= 22.5
+            )
+            * w
+            for g, w in entries
+        )
+        / wsum
+    )
+    if cov < p["min_cov"] and pale_cov < 0.25:
+        return None, f"too little of the art wears it (coverage {cov:.3f})"
+    return shade_at(entries, choice, p), reason
+
+
+def v13(portrait, gallery, trace=None):
+    fp, fg = _segmented(portrait, gallery, drop_scenes=True)
+    gm = [x for x in (measure(i, _no_pale_skin) for i in fg) if x is not None]
+    whole = measure(portrait, _no_pale_skin) if portrait is not None else None
+    seg_p = measure(fp, _no_pale_skin) if fp is not None else None
+    n = len(gm)
+    share = A._portrait_share(n)
+    entries = [(g, 1.0) for g in gm]
+    if seg_p is not None and 0 < share < 1 and n:
+        entries.append((seg_p, share / (1 - share) * n))
+    result, reason = v13_decide_from(entries, whole)
+    source = "gallery"
+    if result is None and whole is not None:
+        fallback, why = v13_decide_from([(whole, 1.0)], None)
+        if fallback is not None:
+            result, source, reason = fallback, "main image (fallback)", f"{reason}; fallback: {why}"
+    if trace is not None:
+        trace.append(f"{source}: {reason}")
+    return result
+
+
+def method_v13(portrait, gallery):
+    return v13(portrait, gallery)
+
+
+# ---- V14: colour clusters, skin through orange, main image picks and aims -------
+#
+# V13's peaks split a colour that spans a range of hues (Ceres Fauna's mint to
+# teal, Reze's blue to violet) into small peaks that each lose to one compact
+# rival. V14 compares *clusters*: arcs of the hue wheel between valleys of a
+# broadly smoothed histogram, scored by the mass they hold. And very pale skin
+# (S < 0.12, peach) slipped under both skin rules into the pale class, so the
+# pale-skin rule now reaches through orange.
+
+CLUSTER_SIGMA = 2.5  # bins (12.5 degrees): broad enough to merge a colour's shading
+MIN_CLUSTER = 0.08  # share of evidence; smaller arcs are noise
+SKIN_V14 = {"hue_lo": 335, "hue_hi": 48, "sat_hi": 0.35, "val_lo": 0.45}
+
+
+def _is_skin_v14(h, s, v):
+    lo, hi = SKIN_V14["hue_lo"], SKIN_V14["hue_hi"]
+    return (h >= lo or h <= hi) and s <= SKIN_V14["sat_hi"] and v >= SKIN_V14["val_lo"]
+
+
+def _no_skin_v14(img):
+    return classify(img, reject_pale_skin=True, skin=_is_skin_v14)
+
+
+def _broad_smooth(hist):
+    r = int(3 * CLUSTER_SIGMA)
+    k = [math.exp(-(j * j) / (2 * CLUSTER_SIGMA**2)) for j in range(-r, r + 1)]
+    n = len(hist)
+    return [sum(hist[(i + j) % n] * k[j + r] for j in range(-r, r + 1)) for i in range(n)]
+
+
+def clusters(hist):
+    """[(lo_bin, hi_bin, mass_share, peak_bin)] strongest first; arcs are inclusive."""
+    n = len(hist)
+    total = sum(hist)
+    if total <= 0:
+        return []
+    sm = _broad_smooth(hist)
+    valleys = [i for i in range(n) if sm[i] <= sm[i - 1] and sm[i] < sm[(i + 1) % n]]
+    if not valleys:
+        peak = max(range(n), key=lambda i: sm[i])
+        return [(0, n - 1, 1.0, peak)]
+    out = []
+    for a, b in zip(valleys, valleys[1:] + valleys[:1], strict=True):
+        arc = [(a + k) % n for k in range((b - a) % n or n)]
+        mass = sum(hist[i] for i in arc) / total
+        peak = max(arc, key=lambda i: sm[i])
+        out.append((arc[0], arc[-1], mass, peak))
+    return sorted((c for c in out if c[2] >= MIN_CLUSTER), key=lambda c: -c[2])
+
+
+def _in_arc(i, lo, hi):
+    return lo <= i <= hi if lo <= hi else (i >= lo or i <= hi)
+
+
+def v14_decide_from(entries, portrait=None, p=V8):
+    if not entries:
+        return None, "no images"
+    hist, _, _ = evidence(entries)
+    cl = clusters(hist)
+    if not cl:
+        return None, "no chromatic evidence"
+    top = cl[0]
+    tied = [c for c in cl if c[2] >= TIE_RATIO * top[2]]
+    chosen, peak_bin = top, top[3]
+    reason = f"clear winner ({top[2]:.2f} vs {cl[1][2]:.2f})" if len(cl) > 1 else "single colour"
+    if len(tied) > 1:
+        if portrait is None:
+            return None, "two-colour tie, no main image to break it"
+        ph = evidence_v15([(portrait, 1.0)])
+        pt = sum(ph) or 1.0
+        scores = [
+            (sum(ph[i] for i in range(A.HUE_BINS) if _in_arc(i, c[0], c[1])) / pt, c) for c in tied
+        ]
+        best_score, chosen = max(scores, key=lambda t: t[0])
+        if best_score <= 0:
+            return None, "two-colour tie, main image carries neither"
+        # Aim at the main image's own peak inside the chosen colour.
+        arc = [i for i in range(A.HUE_BINS) if _in_arc(i, chosen[0], chosen[1])]
+        ps, _ = A._smooth(ph)
+        peak_bin = max(arc, key=lambda i: ps[i])
+        reason = "tie broken by main image: " + ", ".join(
+            f"{(c[3] + 0.5) * 5:.0f}deg {s:.2f}" for s, c in sorted(scores, key=lambda t: -t[0])
+        )
+    if chosen[2] < 0.15:
+        return None, f"winning colour holds only {chosen[2]:.2f}"
+    hue = (peak_bin + 0.5) * 5
+    wsum = sum(w for _, w in entries)
+    cov = sum(band_sum(g.hist_cov, hue, p["conf_span"]) * w for g, w in entries) / wsum
+    pale_share = (
+        sum(
+            sum(w2 for (hb, _, _), w2 in g.pale.items() if _in_arc(hb, chosen[0], chosen[1])) * w
+            for g, w in entries
+        )
+        / wsum
+    )
+    if cov < p["min_cov"] and pale_share < 0.25:
+        return None, f"too little of the art wears it (coverage {cov:.3f})"
+    return shade_at(entries, hue, p), reason
+
+
+def v14(portrait, gallery, trace=None, measure_image=None):
+    measure_image = measure_image or _no_skin_v14
+    fp, fg = _segmented(portrait, gallery, drop_scenes=True)
+    gm = [x for x in (measure(i, measure_image) for i in fg) if x is not None]
+    whole = measure(portrait, measure_image) if portrait is not None else None
+    seg_p = measure(fp, measure_image) if fp is not None else None
+    n = len(gm)
+    share = A._portrait_share(n)
+    entries = [(g, 1.0) for g in gm]
+    if seg_p is not None and 0 < share < 1 and n:
+        entries.append((seg_p, share / (1 - share) * n))
+    result, reason = v14_decide_from(entries, whole)
+    source = "gallery"
+    if result is None and whole is not None:
+        fallback, why = v14_decide_from([(whole, 1.0)], None)
+        if fallback is not None:
+            result, source, reason = fallback, "main image (fallback)", f"{reason}; fallback: {why}"
+    if trace is not None:
+        trace.append(f"{source}: {reason}")
+    return result
+
+
+def method_v14(portrait, gallery):
+    return v14(portrait, gallery)
+
+
+# ---- V15: blonde survives, pale colours shaded vividly, agreed aim ----------------
+#
+# From the owner's review of V14 against the art itself:
+# - The shipped skin rule (hue 12-48) also removes blonde hair at 40-48, which is
+#   why Panty's yellow barely registered. Anime skin sits at ~15-35; the rule
+#   stops at 38 here, and the pale-skin rule likewise.
+# - The shipped pale-identity rule misfires when asked about a hue other than
+#   the saturated peak it was built around (V14 turned Lynae pale). Instead the
+#   band's pale and saturated shares are compared directly.
+# - Pale colours are shaded from their most vivid pixels, as saturated ones are:
+#   a pale identity (Rebecca's hair) should still read as a colour.
+# - A tie broken by the main image aims where the gallery and the main image
+#   agree -- the product of their smoothed histograms -- not at the main image's
+#   own peak, which sent Artoria's red to her orange.
+
+SKIN_HUE_V15 = (12, 38)
+POOL_POW = 1.0  # 0.5 = presence-weighted: a colour in most images beats one heavy in a few
+
+
+def _hue_marginal(grid):
+    h = [0.0] * A.HUE_BINS
+    for (hb, _, _), w in grid.items():
+        h[hb] += w
+    return h
+
+
+def evidence_v15(entries):
+    """Per image: saturated + PALE_WEIGHT x pale, normalised, raised to POOL_POW."""
+    pooled = [0.0] * A.HUE_BINS
+    wsum = sum(w for _, w in entries) or 1.0
+    for g, w in entries:
+        h = [
+            s + PALE_WEIGHT * p
+            for s, p in zip(_hue_marginal(g.saturated), _hue_marginal(g.pale), strict=True)
+        ]
+        t = sum(h)
+        if t <= 0:
+            continue
+        h = [(x / t) ** POOL_POW for x in h]
+        t = sum(h)
+        for i in range(A.HUE_BINS):
+            pooled[i] += h[i] / t * w / wsum
+    return pooled
+
+
+PALE_OVER_SAT = 1.5  # pale must outweigh saturated this much in the band to shade from it
+
+
+def _is_skin_v15(h, s, v):
+    return (h >= 335 or h <= 38) and s <= 0.35 and v >= 0.45
+
+
+def _no_skin_v15(img):
+    return classify(img, reject_pale_skin=True, skin=_is_skin_v15, skin_hue=SKIN_HUE_V15)
+
+
+def shade_v15(entries, hue, p=V8):
+    sat_total = sum(A._pool_histogram(entries, "saturated")) or 1.0
+    pale_total = sum(A._pool_histogram(entries, "pale")) or 1.0
+    sat_grid = A._merged_band_grid(entries, hue, p["conf_span"], "saturated")
+    pale_grid = A._merged_band_grid(entries, hue, p["conf_span"], "pale")
+    sat_share = sum(sat_grid.values()) / sat_total
+    pale_share = sum(pale_grid.values()) / pale_total
+    use_pale = pale_grid and (not sat_grid or pale_share >= PALE_OVER_SAT * sat_share)
+    grid = pale_grid if use_pale else sat_grid
+    if not grid:
+        return None, "nothing in the band"
+    return describe(vivid_shade(grid, hue, p)), ("pale" if use_pale else "saturated")
+
+
+def v15_decide_from(entries, portrait=None, p=V8):
+    if not entries:
+        return None, "no images"
+    hist = evidence_v15(entries)
+    cl = clusters(hist)
+    if not cl:
+        return None, "no chromatic evidence"
+    top = cl[0]
+    tied = [c for c in cl if c[2] >= TIE_RATIO * top[2]]
+    chosen, peak_bin = top, top[3]
+    reason = f"clear winner ({top[2]:.2f} vs {cl[1][2]:.2f})" if len(cl) > 1 else "single colour"
+    if len(tied) > 1:
+        if portrait is None:
+            return None, "two-colour tie, no main image to break it"
+        ph = evidence_v15([(portrait, 1.0)])
+        pt = sum(ph) or 1.0
+        scores = [
+            (sum(ph[i] for i in range(A.HUE_BINS) if _in_arc(i, c[0], c[1])) / pt, c) for c in tied
+        ]
+        best_score, chosen = max(scores, key=lambda t: t[0])
+        if best_score <= 0:
+            return None, "two-colour tie, main image carries neither"
+        gs, gt = A._smooth(hist)
+        ps, pst = A._smooth(ph)
+        arc = [i for i in range(A.HUE_BINS) if _in_arc(i, chosen[0], chosen[1])]
+        peak_bin = max(arc, key=lambda i: (gs[i] / gt) * (ps[i] / pst))
+        reason = "tie broken by main image: " + ", ".join(
+            f"{(c[3] + 0.5) * 5:.0f}deg {s:.2f}" for s, c in sorted(scores, key=lambda t: -t[0])
+        )
+    if chosen[2] < 0.15:
+        return None, f"winning colour holds only {chosen[2]:.2f}"
+    hue = (peak_bin + 0.5) * 5
+    wsum = sum(w for _, w in entries)
+    cov = sum(band_sum(g.hist_cov, hue, p["conf_span"]) * w for g, w in entries) / wsum
+    pale_share = (
+        sum(
+            sum(w2 for (hb, _, _), w2 in g.pale.items() if _in_arc(hb, chosen[0], chosen[1])) * w
+            for g, w in entries
+        )
+        / wsum
+    )
+    if cov < p["min_cov"] and pale_share < 0.25:
+        return None, f"too little of the art wears it (coverage {cov:.3f})"
+    result, cls = shade_v15(entries, hue, p)
+    return result, f"{reason}; {hue:.0f}deg shaded from {cls}"
+
+
+def v15(portrait, gallery, trace=None):
+    fp, fg = _segmented(portrait, gallery, drop_scenes=True)
+    gm = [x for x in (measure(i, _no_skin_v15) for i in fg) if x is not None]
+    whole = measure(portrait, _no_skin_v15) if portrait is not None else None
+    seg_p = measure(fp, _no_skin_v15) if fp is not None else None
+    n = len(gm)
+    share = A._portrait_share(n)
+    entries = [(g, 1.0) for g in gm]
+    if seg_p is not None and 0 < share < 1 and n:
+        entries.append((seg_p, share / (1 - share) * n))
+    result, reason = v15_decide_from(entries, whole)
+    source = "gallery"
+    if result is None and whole is not None:
+        fallback, why = v15_decide_from([(whole, 1.0)], None)
+        if fallback is not None:
+            result, source, reason = fallback, "main image (fallback)", f"{reason}; fallback: {why}"
+    if trace is not None:
+        trace.append(f"{source}: {reason}")
+    return result
+
+
+def method_v15(portrait, gallery):
+    return v15(portrait, gallery)
+
+
+# ---- V16: fixed-width colour windows instead of valley clusters -------------------
+#
+# V14/V15's valley clusters came out 170 degrees wide (Ceres Fauna's mint, her
+# blue outfit and everything between were one "colour"), so a colour that owned
+# the art could not be told from its neighbours. A colour is now a window of
+# +-WINDOW degrees; candidates are window maxima at least 2 x WINDOW apart.
+
+WINDOW = 30
+AIM_GALLERY_POW = 1.0  # >1 keeps the aim nearer the gallery's own peak
+AIM_SPAN = WINDOW  # how far from the winning window's centre the final hue may move
+TIE_WITHOUT_MAIN = "decline"  # or "top": a tie with no main image takes the stronger side
+PALE_RULE_TOO = True  # also shade from pale when the shipped pale-identity rule says so
+
+
+def windows(hist):
+    """[(centre_deg, share)] strongest first, centres >= 2*WINDOW apart."""
+    total = sum(hist) or 1.0
+    w = [band_sum(hist, (i + 0.5) * 5, WINDOW) / total for i in range(A.HUE_BINS)]
+    out: list[tuple[float, float]] = []
+    for i in sorted(range(A.HUE_BINS), key=lambda i: -w[i]):
+        c = (i + 0.5) * 5
+        if all(A._hue_distance(c, o) >= 2 * WINDOW for o, _ in out):
+            out.append((c, w[i]))
+    return out
+
+
+def shade_v16(entries, hue, p=V8):
+    result, cls = shade_v15(entries, hue, p)
+    if cls == "saturated" and PALE_RULE_TOO:
+        sat_hist = A._pool_histogram(entries, "saturated")
+        win = peak_winner(sat_hist, p)
+        pale_win = A._dominant_hue(A._pool_histogram(entries, "pale"), A.MIN_CONFIDENCE, True)
+        if (
+            win
+            and A._hue_distance(win[0], hue) <= 22.5
+            and _pale_identity(entries, hue, win[2], pale_win)
+        ):
+            grid = A._merged_band_grid(entries, hue, p["conf_span"], "pale")
+            if grid:
+                return describe(vivid_shade(grid, hue, p)), "pale (shipped rule)"
+    return result, cls
+
+
+def v16_decide_from(entries, portrait=None, p=V8):
+    if not entries:
+        return None, "no images"
+    hist = evidence_v15(entries)
+    cands = windows(hist)
+    if not cands or cands[0][1] <= 0:
+        return None, "no chromatic evidence"
+    top_c, top_s = cands[0]
+    tied = [(c, s) for c, s in cands if s >= TIE_RATIO * top_s]
+    hue = top_c
+    reason = f"clear winner {top_c:.0f}deg {top_s:.2f} vs {cands[1][0]:.0f}deg {cands[1][1]:.2f}"
+    if len(cands) < 2:
+        reason = "single colour"
+    if len(tied) > 1 and portrait is None and TIE_WITHOUT_MAIN == "top":
+        tied = tied[:1]
+        reason = "two-colour tie, no main image: took the stronger side"
+    if len(tied) > 1:
+        if portrait is None:
+            return None, "two-colour tie, no main image to break it"
+        ph = evidence_v15([(portrait, 1.0)])
+        pt = sum(ph) or 1.0
+        scores = [(band_sum(ph, c, WINDOW) / pt, c) for c, _ in tied]
+        best, chosen = max(scores)
+        if best <= 0:
+            return None, "two-colour tie, main image carries neither"
+        gs, gt = A._smooth(hist)
+        ps, pst = A._smooth(ph)
+        near = [i for i in range(A.HUE_BINS) if A._hue_distance((i + 0.5) * 5, chosen) <= AIM_SPAN]
+        hue = (max(near, key=lambda i: (gs[i] / gt) ** AIM_GALLERY_POW * (ps[i] / pst)) + 0.5) * 5
+        reason = "tie broken by main image: " + ", ".join(
+            f"{c:.0f}deg {s:.2f}" for s, c in sorted(scores, reverse=True)
+        )
+    else:
+        gs, _ = A._smooth(hist)
+        near = [i for i in range(A.HUE_BINS) if A._hue_distance((i + 0.5) * 5, top_c) <= AIM_SPAN]
+        hue = (max(near, key=lambda i: gs[i]) + 0.5) * 5
+    share = band_sum(hist, hue, WINDOW) / (sum(hist) or 1.0)
+    if share < 0.15:
+        return None, f"winning colour holds only {share:.2f}"
+    wsum = sum(w for _, w in entries)
+    cov = sum(band_sum(g.hist_cov, hue, p["conf_span"]) * w for g, w in entries) / wsum
+    pale_share = (
+        sum(
+            sum(
+                w2
+                for (hb, _, _), w2 in g.pale.items()
+                if A._hue_distance((hb + 0.5) * 5, hue) <= WINDOW
+            )
+            * w
+            for g, w in entries
+        )
+        / wsum
+    )
+    if cov < p["min_cov"] and pale_share < 0.25:
+        return None, f"too little of the art wears it (coverage {cov:.3f})"
+    result, cls = shade_v16(entries, hue, p)
+    return result, f"{reason}; {hue:.0f}deg shaded from {cls}"
+
+
+def v16(portrait, gallery, trace=None):
+    fp, fg = _segmented(portrait, gallery, drop_scenes=True)
+    gm = [x for x in (measure(i, _no_skin_v15) for i in fg) if x is not None]
+    whole = measure(portrait, _no_skin_v15) if portrait is not None else None
+    seg_p = measure(fp, _no_skin_v15) if fp is not None else None
+    n = len(gm)
+    share = A._portrait_share(n)
+    entries = [(g, 1.0) for g in gm]
+    if seg_p is not None and 0 < share < 1 and n:
+        entries.append((seg_p, share / (1 - share) * n))
+    result, reason = v16_decide_from(entries, whole)
+    source = "gallery"
+    if result is None and whole is not None:
+        fallback, why = v16_decide_from([(whole, 1.0)], None)
+        if fallback is not None:
+            result, source, reason = fallback, "main image (fallback)", f"{reason}; fallback: {why}"
+    if trace is not None:
+        trace.append(f"{source}: {reason}")
+    return result
+
+
+def method_v16(portrait, gallery):
+    return v16(portrait, gallery)
+
+
+# ---- V17: V16 at its best setting, plus a chroma floor for pale identities --------
+#
+# A pale identity shaded from its own pixels is still pale (Panty's blonde came
+# out cream, C 0.05). The accent must read as a colour, so a pale-shaded seed is
+# lifted to PALE_MIN_CHROMA at the same hue and lightness (then gamut-fitted).
+
+PALE_MIN_CHROMA = 0.09
+PALE_LIFT_FROM = 0.035  # below this the pale colour is grey (2B), not a tint to strengthen
+
+
+def v17(portrait, gallery, trace=None):
+    global PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW
+    PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW = 0.5, 0.5, 30, 2.0
+    local_trace: list[str] = []
+    r = v16(portrait, gallery, local_trace)
+    pale_shaded = "pale" in local_trace[0].rsplit("shaded from", 1)[-1]
+    if r is not None and pale_shaded and PALE_LIFT_FROM <= r["chroma"] < PALE_MIN_CHROMA:
+        r = describe(fit_in_gamut(r["lightness"], PALE_MIN_CHROMA, r["hue"]))
+        local_trace[0] += f"; chroma lifted to {PALE_MIN_CHROMA}"
+    if trace is not None:
+        trace.extend(local_trace)
+    return r
+
+
+def method_v17(portrait, gallery):
+    return v17(portrait, gallery)
+
+
+# ---- V18: keep the aim near the winning colour; a tie without a main image ------
+#
+# V17 aimed anywhere in the +-30 window, so a red window (Ereshkigal, Ishtar,
+# Will Auceptin) was aimed at its 40-degree edge, where pale blonde and skin
+# pile up, and came out pale gold. The aim now stays within AIM_SPAN of the
+# window's centre. And a two-colour tie with no main image to break it takes the
+# stronger side instead of declining -- the owner prefers a semi-correct colour.
+
+
+def v18(portrait, gallery, trace=None):
+    global AIM_SPAN, TIE_WITHOUT_MAIN
+    AIM_SPAN, TIE_WITHOUT_MAIN = 15, "top"
+    try:
+        return v17(portrait, gallery, trace)
+    finally:
+        AIM_SPAN, TIE_WITHOUT_MAIN = WINDOW, "decline"
+
+
+def method_v18(portrait, gallery):
+    return v18(portrait, gallery)
+
+
+# ---- V19: V18 with shaded skin removed from the saturated class too --------------
+
+SKIN_VAL_V19 = 0.45
+
+
+def _no_skin_v19(img):
+    return classify(
+        img, reject_pale_skin=True, skin=_is_skin_v15, skin_hue=SKIN_HUE_V15, skin_val=SKIN_VAL_V19
+    )
+
+
+def v19(portrait, gallery, trace=None):
+    global _no_skin_v15
+    original = _no_skin_v15
+    _no_skin_v15 = _no_skin_v19  # v16 measures through this name
+    try:
+        return v18(portrait, gallery, trace)
+    finally:
+        _no_skin_v15 = original
+
+
+def method_v19(portrait, gallery):
+    return v19(portrait, gallery)
