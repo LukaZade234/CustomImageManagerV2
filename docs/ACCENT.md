@@ -1229,3 +1229,62 @@ clothes separately is the principled next step; the override covers the rest.
 
 The sample page now shows V29 with V24 and the live site's colour as chips
 (`showcase.py --method v29 --compare v24`).
+
+---
+
+## 20. Cost, and colour-profile paths (2026-09-26)
+
+The owner accepted V29 as "pretty decent": the remaining pink/red misses were
+the barely-passable ones, and Will Auceptin is bearable.
+
+### 20.1 What it costs
+
+Measured on the owner's desktop (Ryzen 9 7900X, 24 threads), lab code:
+
+| step | cost | notes |
+|---|---|---|
+| cut-out model (skytnt/anime-seg) | **176 MB** file, **~1.7 GB** peak RAM, **~0.4 s per image** | 1024×1024 input on the 600px thumbnail; once per image, ever, if stored |
+| colour measurement | ~65 ms per image | pure-Python pixel loops in the lab; vectorised (numpy) it is a few ms |
+| one character, masks cached | Reze (122 images): ~14 s | all measurement; with per-image results stored, a recompute is a sum of stored histograms — milliseconds |
+| whole library, from scratch | 9,440 images: **~65 min** for masks + ~10 min measuring | one-off |
+
+The origin is an Oracle Ampere A1 (ARM, 1–4 cores, 6–24 GB). Not measured
+there; per-image segmentation will be several times slower than on the desktop
+and the 1.7 GB peak is significant on a 6 GB box running the app. The shape that
+fits: run the one-off backfill on the desktop, store each image's measurement
+with its row, and on the server segment only new uploads, once each, off the
+request path.
+
+A body-part model: [siyeong0/Anime-Face-Segmentation](https://github.com/siyeong0/Anime-Face-Segmentation)
+(MIT; UNet on MobileNetV2, 512×512; classes background, hair, eye, mouth, face,
+skin, clothes) is the closest fit, but it is trained on **faces** — full-body
+images would need a face crop first, or accept lower accuracy. Its weights are
+undocumented in size; the architecture suggests tens of MB and a fraction of the
+cut-out model's time. Unmeasured.
+
+### 20.2 The owner's idea: different paths for different colour profiles
+
+Measured on the segmented character (median across each character's images):
+
+- **Monochrome** — share of pixels with real colour (S ≥ 0.15): 2B 0.28, A2 0.27,
+  The Sandman 0.22; everyone colourful 0.46–0.96. Borderline: Nephis 0.33 (cream,
+  approved), Alisa 0.31 (silver hair). A monochrome path is clearly detectable; it
+  would choose a neutral (black, white or a grey) with at most a slight tint,
+  instead of whichever small colourful part of a few images wins today.
+- **Pink-dominant** — share of colour evidence at hue 320–12° (pale pink kept) *and*
+  the pale share within it:
+
+  | | pink/red share | pale within it |
+  |---|---|---|
+  | Tewi, Nadeko, Sakurako, Mitsuri (want pink) | 0.77–0.94 | **0.11–0.30** |
+  | Zero Two, Kasane Teto, Reimu, Hornet, Daki (approved red) | 0.83–0.99 | **0.02–0.05** |
+  | Madoka, Mystia (fine already) | 0.68–0.69 | 0.09 |
+  | Panty, Shiki Ryougi (broke when pale pink was freed globally) | 0.36, 0.63 | 0.11, 0.07 |
+
+  Pink/red dominance alone does not separate pinks from reds; **pale share within
+  the pink/red does**, and together they exclude Panty and Shiki. That is the
+  point of a profile path: pale pink can count as identity *only* where the whole
+  gallery is pink, which is exactly what the global rule could not do. Caveat:
+  the thresholds come from four characters, and the gap to the reds (0.05 vs
+  0.11) is narrow — it needs the full library and the review checks before it
+  is trusted.
