@@ -292,7 +292,8 @@ SAMPLE_REVIEW = {
     "live:Sandrone": ("Sandrone: approved", _near("#a84347")),
     "live:Sukuna": ("Sukuna: approved", _near("#b15741")),
     "live:Kasane Teto": ("Kasane Teto: approved", _near("#cb3f55")),
-    "live:Nephis": ("Nephis: approved", _near("#d8d0b8", dh=40)),
+    # Fifth review: the brown V28+ gives Nephis is fine.
+    "live:Nephis": ("Nephis: approved (V29+ brown)", _near("#a38f6a", dh=30)),
     "live:Akane Kurokawa": ("Akane Kurokawa: approved", _near("#354b86")),
     "live:Mitsuri Kanroji": ("Mitsuri: pink, no contest", _pinkish(0.6)),
     "live:Zero Two": ("Zero Two: approved", _near("#c03f49")),
@@ -302,7 +303,11 @@ SAMPLE_REVIEW = {
     ),
     "live:Hiyuki": ("Hiyuki: red or blue", lambda r: _hue_in(340, 50)(r) or _hue_in(220, 280)(r)),
     "live:Shiki Ryougi": ("Shiki Ryougi: approved", _near("#404b8d")),
-    "live:Narumi Momose": ("Narumi Momose: approved", _near("#f3b3db")),
+    # Fifth review: V29's deeper pink is fine too.
+    "live:Narumi Momose": (
+        "Narumi Momose: approved",
+        lambda r: _near("#f3b3db")(r) or _near("#d872af")(r),
+    ),
     "live:Mystia Lorelei": ("Mystia Lorelei: approved", _near("#bd6071")),
     "live:Superman (Clark Kent)": ("Superman: approved", _near("#c22d2b")),
     "live:Hornet": ("Hornet: approved", _near("#b63c4b")),
@@ -317,4 +322,47 @@ SAMPLE_REVIEW = {
     "live:Nagatoro-san": ("Nagatoro: not red", lambda r: r is not None and not _hue_in(0, 45)(r)),
     "live:Luka": ("Luka: approved", _near("#8be6d9")),
     "live:Daki": ("Daki: approved", _near("#b32d3a")),
+}
+
+
+def _tinted_grey(r):
+    return r is not None and 0.03 <= r["chroma"] <= 0.06 and 0.3 <= r["lightness"] <= 0.75
+
+
+# The owner's review of the colour-profile paths (2026-09-27, fourth and fifth rounds).
+PROFILE_REVIEW = {
+    "live:Himeno": ("Himeno: V30's tinted blue-grey", _near("#465664", dh=30, dl=0.1)),
+    "live:Mei Mei": ("Mei Mei: V30's tinted grey", _near("#6f768d", dh=30, dl=0.1)),
+    "live:Akira Asai": ("Akira Asai: tinted grey, not too dark", _tinted_grey),
+    "live:Osaragi": (
+        "Osaragi: dark, at most a slight tint",
+        lambda r: r is not None and r["lightness"] <= 0.45 and r["chroma"] <= 0.05,
+    ),
+    "live:Will Auceptin": (
+        "Will: near-white",
+        lambda r: r is not None and r["lightness"] >= 0.85 and r["chroma"] < 0.03,
+    ),
+    "live:Ken Kaneki": ("Kaneki: his red highlight", _hue_in(0, 45)),
+    "live:Gu Yue Fang Yuan": (
+        "Gu Yue Fang Yuan: not the red of two images",
+        lambda r: r is not None and not _hue_in(340, 45)(r),
+    ),
+    "live:Semiramis": (
+        "Semiramis: warm grey, not lavender",
+        lambda r: r is not None and not _hue_in(240, 320)(r),
+    ),
+    "live:Annie Leonhart": ("Annie Leonhart: blonde (brown second)", _hue_in(50, 110)),
+    "live:Evernight Goddess": ("Evernight Goddess: red", _hue_in(0, 35)),
+    "live:Himiko Toga": (
+        "Himiko Toga: cream",
+        lambda r: r is not None and r["lightness"] >= 0.75 and _hue_in(40, 110)(r),
+    ),
+    "live:2B": (
+        "2B: white preferred (override), no tint",
+        lambda r: r is not None and r["lightness"] >= 0.85 and r["chroma"] < 0.03,
+    ),
+    "live:A2": (
+        "A2: white preferred (override), no tint",
+        lambda r: r is not None and r["lightness"] >= 0.85 and r["chroma"] < 0.03,
+    ),
 }

@@ -25,11 +25,14 @@ def main() -> None:
     parser.add_argument("--all", action="store_true", help="measure every image")
     parser.add_argument("--review", action="store_true", help="use the owner's review set")
     parser.add_argument("--sample-review", action="store_true", help="the random-sample review")
+    parser.add_argument("--profile-review", action="store_true", help="the colour-profile review")
     args = parser.parse_args()
     fns = [(m, resolve(m)) for m in args.methods.split(",")]
     panel = lab.REVIEW if args.review else lab.PANEL
     if args.sample_review:
         panel = lab.SAMPLE_REVIEW
+    if args.profile_review:
+        panel = lab.PROFILE_REVIEW
     for cid, (label, ok) in panel.items():
         try:
             name, portrait, gallery = lab.load_character(cid, None if args.all else 60)

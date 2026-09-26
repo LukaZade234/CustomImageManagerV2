@@ -37,7 +37,9 @@ app. Variants build on each other, so read them in order.
     v30   colour-profile paths: monochrome and pale pink          46/49
     v31   mono picks a side, tints only as far as the greys lean,
           takes a strong highlight; pale pink must be present     fixes 4 false pinks
-    v32   v31 + each pink shaded from its own lighter pinks       47/49, the candidate
+    v32   v31 + each pink shaded from its own lighter pinks       47/49
+    v33   dark-side mono back to a tinted mid tone; highlight
+          must recur in 3 images; tie candidates need real colour 56/59, the candidate
 """
 
 from __future__ import annotations
@@ -1184,9 +1186,12 @@ def v16_decide_from(entries, portrait=None, p=V8):
     top_c, top_s = cands[0]
     tied = [(c, s) for c, s in cands if s >= TIE_RATIO * top_s]
     hue = top_c
-    reason = f"clear winner {top_c:.0f}deg {top_s:.2f} vs {cands[1][0]:.0f}deg {cands[1][1]:.2f}"
     if len(cands) < 2:
         reason = "single colour"
+    else:
+        reason = (
+            f"clear winner {top_c:.0f}deg {top_s:.2f} vs {cands[1][0]:.0f}deg {cands[1][1]:.2f}"
+        )
     if len(tied) > 1 and portrait is None and TIE_WITHOUT_MAIN == "top":
         tied = tied[:1]
         reason = "two-colour tie, no main image: took the stronger side"
@@ -2297,3 +2302,76 @@ def v32(portrait, gallery, trace=None):
 
 def method_v32(portrait, gallery):
     return v32(portrait, gallery)
+
+
+# ---- V33: the owner's review of V32 ----------------------------------------------------------
+#
+# - Monochrome tone. Light-side characters (Will Auceptin, Sora Kasugano) stay
+#   near-white and neutral. Dark-side ones go back to V30's tinted mid tone, which the
+#   owner preferred for Himeno, Mei Mei and Akira Asai (V32's near-black was a
+#   downgrade). 2B and A2 measure the same as Mei Mei and Himeno -- dark-dominant, 57%
+#   cool lean -- so their preferred white needs the override.
+# - Highlight must recur. Ken Kaneki's red and Gu Yue Fang Yuan's both come mostly
+#   from two images; the difference is the tail: Kaneki's red clears 1% coverage in 4
+#   images, Gu Yue's in 2. The highlight now needs >= HIGHLIGHT_MIN_IMAGES such images.
+# - A tie candidate must be a real colour of the gallery. Semiramis's main image
+#   (lavender background) picked a lavender that exists in her gallery only as faint
+#   pale tints. Candidates need saturated coverage >= TIE_MIN_COV.
+
+HIGHLIGHT_MIN_IMAGES = 3
+TIE_MIN_COV = 0.01
+
+
+def v33(portrait, gallery, trace=None):
+    global _mono_highlight, _mono_seed_v31, windows
+    saved = (_mono_highlight, _mono_seed_v31, windows)
+    base_highlight, base_seed, base_windows = saved
+    _, fg = _segmented(portrait, gallery, drop_scenes=True)
+    cov_of = {}
+
+    def windows_v33(hist):
+        # the gallery's saturated coverage per window, from the V29 measurement
+        out = base_windows(hist)
+        return [
+            (c, s) for c, s in out if cov_of.get("fn", lambda _c: 1.0)(c) >= TIE_MIN_COV
+        ] or out[:1]
+
+    gm = [x for x in (measure(i, _v29_measure(True)) for i in fg) if x is not None]
+    if gm:
+        cov_of["fn"] = lambda c: sum(band_sum(g.hist_cov, c, WINDOW) for g in gm) / len(gm)
+
+    def seed_v33(images):
+        r, why = base_seed(images)
+        if r is not None and why.startswith("white"):
+            return r, why
+        return _mono_seed(images), "dark side: tinted mid tone (V30)"
+
+    _mono_highlight = lambda images: _mono_highlight_v33_with(images, base_highlight)  # noqa: E731
+    _mono_seed_v31 = seed_v33
+    windows = windows_v33
+    try:
+        return v32(portrait, gallery, trace)
+    finally:
+        _mono_highlight, _mono_seed_v31, windows = saved
+
+
+def _mono_highlight_v33_with(images, base):
+    covs = []
+    for f in images:
+        _, h, s, v = _hsv_arrays(f)
+        if len(h) < 50:
+            continue
+        hs = (s >= 0.55) & (v >= 0.35) & ~((h >= 12) & (h <= 40))
+        fam = ((h + 15) % 360 // 30).astype(int)
+        covs.append(np.bincount(fam[hs], minlength=12) / len(h))
+    if not covs:
+        return None
+    covs = np.array(covs)
+    top = int(np.argmax(covs.mean(0)))
+    if int((covs[:, top] > 0.01).sum()) < HIGHLIGHT_MIN_IMAGES:
+        return None
+    return base(images)
+
+
+def method_v33(portrait, gallery):
+    return v33(portrait, gallery)

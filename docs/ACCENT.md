@@ -1404,3 +1404,52 @@ instead of returning null before they can show on the site.
 - **Nephis** (brown since V28's skin-shadow damping) and **Narumi Momose** (a
   deeper pink since V29).
 - **Gu Yue Fang Yuan** took the highlight rule (red `#922426`) — unreviewed.
+
+---
+
+## 23. The owner's review of V32, and V33 (2026-09-27)
+
+### 23.1 The verdicts
+
+- **Monochrome tone.** Himeno and Mei Mei were clear downgrades at near-black;
+  V30's tinted greys suited them best. Akira Asai too dark. Osaragi fine either
+  way, perhaps with the slightest tint. 2B and A2 suit white more than black, and
+  are correctly given no tint.
+- **Semiramis**'s lavender comes only from her main image's background; none of
+  her gallery images has any.
+- **Himiko Toga** should be nearer cream — browns likely push her toward a
+  saturated brick red.
+- **Gu Yue Fang Yuan** should not take the red: two images hold a lot of it,
+  the rest none or next to none.
+- **Nephis** and **Narumi Momose** are fine as they are.
+
+### 23.2 V33
+
+- **Tone.** Light-side characters (Will Auceptin, Sora Kasugano) stay near-white
+  and neutral. Dark-side characters go back to V30's tinted mid tone: Himeno
+  `#465664`, Mei Mei `#6f768d`, Akira Asai `#6e7890`, Osaragi `#23333f`, The Sandman
+  `#1e313a`. **2B and A2 measure the same as Mei Mei and Himeno** — dark-dominant,
+  57% cool lean, similar light share — so no rule gives them white without taking
+  Mei Mei's tint away. White for them is an override.
+- **Highlight must recur.** Ken Kaneki's red and Gu Yue's both come mostly from two
+  images (93% and 98% of the total). The difference is the tail: Kaneki's red
+  clears 1% coverage in 4 images, Gu Yue's in 2. The highlight now needs at least
+  three. Gu Yue → blue-grey `#3e4c5b`; Kaneki keeps his red. Thin margin — one
+  example each side.
+- **Tie candidates must be real colours of the gallery** (saturated coverage ≥ 1%).
+  Semiramis's lavender tie is gone; she becomes a warm grey-beige `#906f53`. No
+  other tie changed (Reze, Nico Robin, Hiyuki, Sandrone, Artoria).
+
+**Checks: 56 of 59** across all four review rounds (`PROFILE_REVIEW` added).
+The three misses are known: 2B and A2 (override to white) and Himiko Toga.
+
+### 23.3 Still open
+
+- **Himiko Toga.** Her winning colour is the red-orange window (0.55) — skin and
+  blood — and her cream is not even the runner-up (her uniform's blue, 0.22):
+  cream is the pale warm yellow that §18.3 removed from the hue vote as "warm
+  whites" to stop Will, Dazai and Poison Ivy going gold. Her cream and their gold
+  are the same pixels.
+- **2B and A2** — white via the override.
+- **Frontend** — near-white, near-black and faintly tinted seeds under chroma
+  0.025 need `themeFromSeed` to build a neutral theme (§22.3).

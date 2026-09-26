@@ -32,8 +32,9 @@ D = lab.DATA
 EXTRA = [
     "2B", "A2", "The Sandman", "Tewi Inaba", "Nadeko Sengoku", "Sakurako Kawawa", "Mitsuri Kanroji",
     "Semiramis", "Annie Leonhart", "Himiko Toga", "Evernight Goddess", "Ken Kaneki", "Will Auceptin",
+    "Himeno", "Mei Mei", "Akira Asai", "Osaragi", "Gu Yue Fang Yuan",
 ]  # fmt: skip
-NEW, OLD, MID = "v32", "v29", "v30"
+NEW, OLD, MID = "v33", "v29", "v32"
 
 
 def _uri(path, box):
@@ -123,10 +124,10 @@ def _groups(rows):
         pool = [r for r in rest if r["band"] == band]
         sample += rng.sample(pool, min(k, len(pool)))
     return [
-        ("mono", "Monochrome path", f"Under {M.MONO_MAX_CHROMATIC:.0%} of the character's pixels carry real colour. V32 picks a side (near-white or near-black), tints only as far as the greys consistently lean cool, and uses a strong highlight colour instead when one shows across many images.", mono),
-        ("pink", "Pale-pink path", f"At least {M.PINK_MIN_SHARE:.0%} of the colour is pink/red and at least {M.PINK_MIN_PALE:.0%} of that is pale. V32 also requires real pale pink to be present (not warm-lit skin), and shades from the character's own lighter pinks.", pink),
+        ("mono", "Monochrome path", f"Under {M.MONO_MAX_CHROMATIC:.0%} of the character's pixels carry real colour. V33: light-side characters go near-white and neutral; dark-side characters get a mid tone with a faint tint; a highlight colour wins only when it shows clearly in at least three images.", mono),
+        ("pink", "Pale-pink path", f"At least {M.PINK_MIN_SHARE:.0%} of the colour is pink/red and at least {M.PINK_MIN_PALE:.0%} of that is pale. Real pale pink must be present (not warm-lit skin), and each pink is shaded from the character's own lighter pinks.", pink),
         ("near", "Near misses", "Just short of either threshold, left on the standard path. These show where the lines sit.", near_mono + near_pink),
-        ("rest", "Unchanged sample", "Standard path, drawn at random, weighted toward characters with 10–30 images. V29 and V32 give the same colour here.", sample),
+        ("rest", "Unchanged sample", "Standard path, drawn at random, weighted toward characters with 10–30 images. V29 and V33 give the same colour here.", sample),
     ]  # fmt: skip
 
 
@@ -172,7 +173,7 @@ def render(rows):
   <div class="char-body">
     <figure class="main">{main}</figure>
     <div class="customs">{customs}</div>
-    <div class="swatches">{swatch("V29", r["v29"], False)}{swatch("V30", r.get("mid"), False)}{swatch("V32", r["v30"], changed)}</div>
+    <div class="swatches">{swatch(OLD.upper(), r["v29"], False)}{swatch(MID.upper(), r.get("mid"), False)}{swatch(NEW.upper(), r["v30"], changed)}</div>
   </div>
   <footer class="char-foot">
     <span class="meter" title="share of pixels with real colour">colour <b>{p["chromatic"]:.0%}</b></span>
@@ -275,7 +276,7 @@ html {{ scroll-behavior: smooth; }}
 <div class="wrap">
   <div class="intro">
     <h1>Colour Profile Paths</h1>
-    <p>V32 profiles each character before choosing an accent. Mostly black-and-white characters take a monochrome path; characters whose colour is almost all pink, with real pale pink present, take a pale-pink path. Everyone else keeps V29. Each row shows V29, the V30 you reviewed, and V32; a bold border marks a colour V32 changed from V29. Near-white and near-black seeds need a small frontend change before the site can display them: today it falls back to its default accent.</p>
+    <p>V33 profiles each character before choosing an accent. Mostly black-and-white characters take a monochrome path; characters whose colour is almost all pink, with real pale pink present, take a pale-pink path. Everyone else keeps V29. Each row shows V29, the V32 you reviewed, and V33; a bold border marks a colour V33 changed from V29. Near-white and near-black seeds need a small frontend change before the site can display them: today it falls back to its default accent.</p>
     <div class="facts">
       <span><b>{len(rows)}</b> characters scanned ({scanned}, plus earlier examples)</span>
       <span><b>{n_mono}</b> on the monochrome path</span>
