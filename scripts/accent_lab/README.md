@@ -46,6 +46,11 @@ uv run --with numpy --with onnxruntime python -m scripts.accent_lab.library curr
 # Why one character lands where it does: families, peaks, margin, coverage, candidates.
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.explain "live:Himeno"
 
+# A random sample by image-count band (top 10%, 10-20, 20-30, 30-50, 50-70),
+# only characters whose main image loads; then the page for the owner to judge.
+uv run python -m scripts.accent_lab.sample
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.showcase
+
 # Contact sheet from the last library run, to judge colours by eye.
 uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
 ```
@@ -62,8 +67,8 @@ the first time: about half a second per image on a laptop CPU.
   at the top saying what each one tried and how it came out. `method_v24` is
   the current candidate.
 - `seg.py` — skytnt/anime-seg foreground masks.
-- `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py` — the
-  tools above.
+- `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py`,
+  `sample.py`, `showcase.py` — the tools above.
 
 ## Rules of thumb (from the doc)
 

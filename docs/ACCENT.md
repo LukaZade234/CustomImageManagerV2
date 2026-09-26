@@ -57,9 +57,7 @@ the open questions, including the dead ends.
 - **Second review (§18):** Ceres's yellow-green and Artoria's raspberry were
   approved; the gold drift (Will, Ishtar, Dazai, Poison Ivy) was traced to skin
   rewarded by presence pooling, warm whites and windows straddling two colours.
-  V24 answers 25 of 26 checks (current: 20). Separately, **all 107 main images
-  hosted on ImgChest are dead** — the cut-over cleanup never counted
-  `characters.main_image_url` as in use.
+  V24 answers 25 of 26 checks (current: 20).
 
 ---
 
@@ -1090,22 +1088,14 @@ Shiroko\*Terror and Tsukatsuki Rio** have no usable main image, and
 main image takes the stronger side", not from her main image. The lab now says
 so (`explain` prints "portrait NO").
 
-Checking why turned up a data problem well beyond the accent work. Paging
-through the public library listing (764 characters):
-
-- **All 107 characters whose main image is hosted on ImgChest have a dead main
-  image** (404), and none has an R2 copy (`main_image_thumb` is empty). The
-  Sandman was one of them until the owner replaced his.
-- Three more have no main image at all: lila rossi, Kuroyukihime, Bai Ning Bing.
-
-**Cause:** the cut-over's ImgChest reconciliation (`scripts/imgchest_cleanup.py`,
-4,510 files deleted) kept two sets — URLs in the Discord `$ai` export and rows
-in `custom_images`. `characters.main_image_url` was in neither, so every main
-image uploaded to ImgChest looked unused and was deleted. The pre-cut-over
-database had 350 such characters and had mirrored none of them to R2, so there
-is no copy on this side. ImgChest deletions cannot be undone. Recovery options
-are the owner's call: re-pick a main image (any gallery image, or the Mudae
-default) per character, perhaps in bulk.
+Checking why: of the 764 library characters, the 107 whose main image still
+points at ImgChest all return 404 (none has an R2 copy), and three more have no
+main image at all. **This is expected, not damage.** Main images are now direct
+Mudae links mirrored to R2 and no longer go through ImgChest, so the old ImgChest
+files going away (in the cut-over cleanup) is fine and partly intended; the
+characters without one simply have not been captured from Mudae yet and fill in
+gradually as people use the site (owner, 2026-09-26). Until then the extractor
+treats them as having no main image: no tie-breaker and no fallback.
 
 ### 18.3 Why gold, and the fixes (V20–V24)
 
@@ -1163,12 +1153,20 @@ median chroma 0.124 (current 0.081), 10 darker than L 0.45 (current 25),
 ### 18.5 Still open
 
 - **Will Auceptin** — gold over red (§18.3).
-- **Kotoko Ijichi** — V24 aims at her blonde, where the pale class dominates,
-  giving a near-white yellow `#fbeca6` (V18: gold `#cc9a30`; current: orange
-  `#d28f4f`). A lightness cap on pale shades would fix her but would also darken
-  Ceres's approved `#ddefab`; the owner's call.
-- **The dead main images** (§18.2) disable the tie-breaker and the fallback
-  for 110 characters until they have main images again.
+- **Kotoko Ijichi's** near-white yellow was accepted as good enough.
+- Characters not yet captured from Mudae (§18.2) get no tie-breaker or fallback
+  until they are.
 
 `method_v24` in `scripts/accent_lab/methods.py` is now the reference
 implementation, and `lab.REVIEW` holds both rounds of the owner's review.
+
+### 18.6 A random check across the library
+
+To see V24 away from the characters it was tuned on, 25 characters were drawn at
+random (seed 20260926) — five from each band of the library ranked by image
+count (top 10%, 10–20%, 20–30%, 30–50%, 50–70%), only characters whose main
+image loads — and shown with their main image, four gallery images and the
+chosen accent alongside the review characters (`sample.py`, `showcase.py`).
+One pattern to watch: 8 of the 25 landed on a red. Some are right; blush and
+lips sit in the same hue range (0–10°) and the skin-zone damping does not reach
+them.
