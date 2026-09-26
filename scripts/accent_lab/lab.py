@@ -214,9 +214,13 @@ def _has_colour(r):
 
 
 REVIEW = {
-    "live:Lynae": ("Lynae: cyan/teal", lambda r: _hue_in(150, 215)(r) and r["chroma"] >= 0.09),
+    "live:Lynae": (
+        "Lynae: vivid cyan (approved #34b0c1)",
+        lambda r: _hue_in(190, 225)(r) and r["lightness"] <= 0.78 and r["chroma"] >= 0.09,
+    ),
     "live:Reze": ("Reze: violet", _hue_in(270, 320)),
-    "live:Ceres Fauna": ("Ceres Fauna: mint green", _hue_in(135, 180)),
+    # "Mint" was loose: the pale yellow-green V18 gave (#ddefab) was approved.
+    "live:Ceres Fauna": ("Ceres Fauna: yellow-green", _hue_in(100, 150)),
     "live:Rebecca": ("Rebecca: teal/cyan/green hair", _hue_in(140, 215)),
     "live:Himeno": ("Himeno: blue-grey/navy/dark teal", _hue_in(200, 275)),
     "live:Panty Anarchy": (
@@ -226,7 +230,20 @@ REVIEW = {
     "live:Nico Robin": ("Nico Robin: has a colour", _has_colour),
     "live:Yuta Okkotsu": ("Yuta: has a colour", _has_colour),
     "live:Alisa Mikhailovna Kujou": ("Alisa: has a colour", _has_colour),
-    "live:Will Auceptin": ("Will Auceptin: has a colour", _has_colour),
+    # Second review: gold is a minority for these; red (or dark) should win.
+    "live:Will Auceptin": ("Will Auceptin: red", _hue_in(340, 45)),
+    "live:Ishtar": (
+        "Ishtar: red or dark, not gold",
+        lambda r: r is not None and not _hue_in(60, 110)(r),
+    ),
+    "live:Osamu Dazai": (
+        "Osamu Dazai: red/brown/navy, not gold",
+        lambda r: r is not None and not _hue_in(60, 110)(r),
+    ),
+    "live:Poison Ivy (Pamela Isley)": (
+        "Poison Ivy: green or red",
+        lambda r: _hue_in(340, 45)(r) or _hue_in(120, 160)(r),
+    ),
     "live:The Sandman": ("The Sandman: has a colour", _has_colour),
     "live:Columbina": (
         "Columbina: pink or light blue",
@@ -237,8 +254,8 @@ REVIEW = {
     "live:Hatsune Miku": ("Miku: teal", _hue_in(170, 240)),
     "live:Madoka Kaname": ("Madoka: pink", lambda r: _hue_in(330, 25)(r) and r["chroma"] >= 0.08),
     "live:Artoria Pendragon (Alter)": (
-        "Artoria (Alter): red",
-        lambda r: _hue_in(0, 40)(r) and r["chroma"] >= 0.08,
+        "Artoria (Alter): red or raspberry",
+        lambda r: _hue_in(340, 40)(r) and r["chroma"] >= 0.08,
     ),
     "live:Lucy": ("Lucy: pale blue", lambda r: _hue_in(230, 290)(r) and r["lightness"] >= 0.7),
     "live:Saber": ("Saber: deep blue", lambda r: _hue_in(240, 290)(r) and r["lightness"] < 0.6),

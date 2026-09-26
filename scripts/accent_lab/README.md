@@ -1,6 +1,6 @@
 # Accent lab
 
-The experiment harness behind `docs/ACCENT.md` §14–17: every extractor variant
+The experiment harness behind `docs/ACCENT.md` §14–18: every extractor variant
 that was tried, the calibration panel they were scored on, and the tools that
 produced the numbers and contact sheets in the doc. Nothing here is imported by
 the app, and the shipped extractor is still `accent_extract.py`.
@@ -25,6 +25,8 @@ Local panel characters come from the working library in `data/`
 anything reported against today's library should be fetched live. It also
 has main images for only the 13 panel characters, so a local character is
 measured with no main image -- which disables the tie-breaker and the fallback.
+Some live characters have no main image either (dead ImgChest links, §18.2);
+`fetch_live` then saves no `portrait.*`, and `explain` reports "portrait NO".
 
 ## Tools
 
@@ -36,16 +38,16 @@ uv run --with numpy --with onnxruntime python -m scripts.accent_lab.panel curren
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.library current,v8 --all
 
 # The owner's review (lab.REVIEW) instead of the calibration panel.
-uv run --with numpy --with onnxruntime python -m scripts.accent_lab.panel current,v18 --review
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.panel current,v24 --all --review
 
 # Every fetched live character, no local ones -- main images included.
-uv run --with numpy --with onnxruntime python -m scripts.accent_lab.library current,v18 --all --live-only
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.library current,v24 --all --live-only
 
 # Why one character lands where it does: families, peaks, margin, coverage, candidates.
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.explain "live:Himeno"
 
 # Contact sheet from the last library run, to judge colours by eye.
-uv run python -m scripts.accent_lab.sheet current,v18 --ids "live:Reze,live:Lynae"
+uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
 ```
 
 Outputs, masks and fetched characters live in `.data/` (`ACCENT_LAB_DATA`
@@ -56,8 +58,8 @@ the first time: about half a second per image on a laptop CPU.
 
 - `lab.py` — paths, loading (local ids and `live:<Name>`), `describe`, the
   panel, and `method_current` (the shipped extractor).
-- `methods.py` — every variant, `method_mcu` through `method_v19`, with a table
-  at the top saying what each one tried and how it came out. `method_v18` is
+- `methods.py` — every variant, `method_mcu` through `method_v24`, with a table
+  at the top saying what each one tried and how it came out. `method_v24` is
   the current candidate.
 - `seg.py` — skytnt/anime-seg foreground masks.
 - `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py` — the

@@ -1,4 +1,4 @@
-"""Every extractor variant tried in docs/ACCENT.md sections 14-17.
+"""Every extractor variant tried in docs/ACCENT.md sections 14-18.
 
 Each `method_<name>(portrait, gallery)` takes the images `lab.load_character`
 returns and gives `lab.describe(seed)` or None. Names match the doc's tables.
@@ -21,7 +21,14 @@ app. Variants build on each other, so read them in order.
     v15   skin stops at 38 (blonde survives), pale-vs-saturated
           shade choice, agreed aim, presence pooling option       Panty yellow
     v16   fixed +-30 degree colour windows                        19/23 of review
-    v17   v16 tuned + chroma floor for tinted pale identities     21/23, the candidate
+    v17   v16 tuned + chroma floor for tinted pale identities     21/23
+    v18   aim within +-15; a tie with no main image takes a side  21/23; gold drift
+    v19   v18 + shaded skin removed from the saturated class      no gain
+    v20   v18 + skin-tone zone damped to 1/4 (not dropped)        Ishtar red
+    v21   v20 + peak-centred windows + warm whites dropped        split: see below
+    v22   v20 + warm whites dropped, aim across the window        25/26; Lynae pale
+    v23   v22 + whites muted (not dropped), aim by sub-colour     worse
+    v24   v22's hue, v20's shade (whites only vote on the hue)    25/26, the candidate
 """
 
 from __future__ import annotations
@@ -506,10 +513,24 @@ def is_pale_skin(h, s, v):
     )
 
 
-def classify(img, *, gap=False, reject_pale_skin=False, skin=None, skin_hue=None, skin_val=0.6):
+def classify(
+    img,
+    *,
+    gap=False,
+    reject_pale_skin=False,
+    skin=None,
+    skin_hue=None,
+    skin_val=0.6,
+    warm_damp=None,
+    warm_white=None,
+):
     """The shipped `measure_image`, with the experimental switches.
 
     `skin` is the pale-skin predicate used when `reject_pale_skin` is set.
+    `warm_damp` is (hue_lo, hue_hi, sat_max, factor): pixels in that hue range at
+    or under that saturation vote with weight x factor instead of being dropped.
+    `warm_white` is (hue_lo, hue_hi, sat_below): pale pixels in that hue range
+    under that saturation are dropped -- cream paper, ivory, warm-lit whites.
     """
     skin = skin or is_pale_skin
     skin_lo, skin_hi = skin_hue or A.SKIN_HUE
@@ -531,11 +552,24 @@ def classify(img, *, gap=False, reject_pale_skin=False, skin=None, skin_hue=None
         key = (min(71, int(hue / 5)), min(19, int(s * 20)), min(19, int(v * 20)))
         if s >= A.SATURATED_SAT_MIN:
             w = s**1.6 * A._light_pref(v)
+            if (
+                warm_damp
+                and warm_damp[0] <= hue <= warm_damp[1]
+                and (s <= warm_damp[2] or v < WARM_DARK_V)
+            ):
+                w *= warm_damp[3]
             sat_grid[key] = sat_grid.get(key, 0) + w
             st += w
             kept += 1
         elif s >= A.PALE_SAT_MIN and v >= A.PALE_VAL_MIN:
             w = s * A.PALE_VOTE_WEIGHT
+            if warm_white and warm_white[0] <= hue <= warm_white[1] and s < warm_white[2]:
+                if len(warm_white) > 3 and warm_white[3] == "mute":
+                    pt += w  # still part of the image's pale total, so nothing renormalises
+                    kept += 1
+                continue
+            if warm_damp and warm_damp[0] <= hue <= warm_damp[1]:
+                w *= warm_damp[3]
             pale_grid[key] = pale_grid.get(key, 0) + w
             pt += w
             kept += 1
@@ -1213,9 +1247,9 @@ PALE_MIN_CHROMA = 0.09
 PALE_LIFT_FROM = 0.035  # below this the pale colour is grey (2B), not a tint to strengthen
 
 
-def v17(portrait, gallery, trace=None):
+def v17(portrait, gallery, trace=None, window=30):
     global PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW
-    PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW = 0.5, 0.5, 30, 2.0
+    PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW = 0.5, 0.5, window, 2.0
     local_trace: list[str] = []
     r = v16(portrait, gallery, local_trace)
     pale_shaded = "pale" in local_trace[0].rsplit("shaded from", 1)[-1]
@@ -1240,11 +1274,11 @@ def method_v17(portrait, gallery):
 # stronger side instead of declining -- the owner prefers a semi-correct colour.
 
 
-def v18(portrait, gallery, trace=None):
+def v18(portrait, gallery, trace=None, window=30):
     global AIM_SPAN, TIE_WITHOUT_MAIN
-    AIM_SPAN, TIE_WITHOUT_MAIN = 15, "top"
+    AIM_SPAN, TIE_WITHOUT_MAIN = min(15, window), "top"
     try:
-        return v17(portrait, gallery, trace)
+        return v17(portrait, gallery, trace, window=window)
     finally:
         AIM_SPAN, TIE_WITHOUT_MAIN = WINDOW, "decline"
 
@@ -1276,3 +1310,278 @@ def v19(portrait, gallery, trace=None):
 
 def method_v19(portrait, gallery):
     return v19(portrait, gallery)
+
+
+# ---- V20: damp the skin-tone zone instead of trusting presence there -----------------
+#
+# V17's presence pooling rewards what appears in every image -- and in anime art
+# that is skin and warm shading. Dazai, Poison Ivy, Will Auceptin and Ishtar all
+# won an orange window (22-32 degrees) that is skin and brown, then aimed and
+# shaded it into gold. The skin-tone zone (hue 10-45, S <= WARM_SAT_MAX; the
+# whole zone for pale pixels) now votes at WARM_FACTOR weight. Red hair (under
+# 10 degrees, or more saturated) and blonde (above 45) are untouched.
+
+WARM_ZONE = (10, 45)
+WARM_SAT_MAX = 0.65
+WARM_FACTOR = 0.25
+WARM_DARK_V = 0.55  # brown: dark warm pixels are damped however saturated
+
+
+def _no_skin_v20(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v15,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+    )
+
+
+V20_WINDOW = 30
+
+
+def v20(portrait, gallery, trace=None):
+    global _no_skin_v15
+    original = _no_skin_v15
+    _no_skin_v15 = _no_skin_v20  # v16 measures through this name
+    try:
+        return v18(portrait, gallery, trace, window=V20_WINDOW)
+    finally:
+        _no_skin_v15 = original
+
+
+def method_v20(portrait, gallery):
+    return v20(portrait, gallery)
+
+
+# ---- V21: windows centred on peaks; warm whites dropped ------------------------------
+#
+# V20 still went gold for Will Auceptin, Osamu Dazai and Poison Ivy. Two causes:
+# a +-30 window centred at 22-28 degrees summed red (0-20) and gold (40-60) --
+# two colours -- into one that beat either; and faint warm whites (pale, S under
+# 0.15, hue 35-70: cream paper, ivory, warm-lit highlights) fed the gold side.
+# Windows are now centred only on peaks of the smoothed evidence, and those
+# faint warm whites do not vote.
+
+WARM_WHITE = (35, 70, 0.15)
+
+
+def peak_windows(hist):
+    """Like `windows`, but every centre is a local maximum of the smoothed evidence."""
+    total = sum(hist) or 1.0
+    sm, _ = A._smooth(hist)
+    n = A.HUE_BINS
+    peaks = [i for i in range(n) if sm[i] >= sm[i - 1] and sm[i] >= sm[(i + 1) % n] and sm[i] > 0]
+    scored = sorted(
+        (((i + 0.5) * 5, band_sum(hist, (i + 0.5) * 5, WINDOW) / total) for i in peaks),
+        key=lambda t: -t[1],
+    )
+    out: list[tuple[float, float]] = []
+    for c, sc in scored:
+        if all(A._hue_distance(c, o) >= 2 * WINDOW for o, _ in out):
+            out.append((c, sc))
+    return out
+
+
+def _no_skin_v21(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v15,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+        warm_white=WARM_WHITE,
+    )
+
+
+def v21(portrait, gallery, trace=None):
+    global _no_skin_v15, windows
+    original_measure, original_windows = _no_skin_v15, windows
+    _no_skin_v15, windows = _no_skin_v21, peak_windows  # v16 reads both names
+    try:
+        return v18(portrait, gallery, trace)
+    finally:
+        _no_skin_v15, windows = original_measure, original_windows
+
+
+def method_v21(portrait, gallery):
+    return v21(portrait, gallery)
+
+
+def v21_whites_only(portrait, gallery, trace=None):
+    """V21's warm-white rule without its peak-centred windows."""
+    global _no_skin_v15
+    original = _no_skin_v15
+    _no_skin_v15 = _no_skin_v21
+    try:
+        return v18(portrait, gallery, trace)
+    finally:
+        _no_skin_v15 = original
+
+
+def v21_peaks_only(portrait, gallery, trace=None):
+    """V21's peak-centred windows without its warm-white rule (V20 measurement)."""
+    global _no_skin_v15, windows
+    original_measure, original_windows = _no_skin_v15, windows
+    _no_skin_v15, windows = _no_skin_v20, peak_windows
+    try:
+        return v18(portrait, gallery, trace)
+    finally:
+        _no_skin_v15, windows = original_measure, original_windows
+
+
+# ---- V22: V20 + warm whites dropped, aim across the whole window ---------------------
+#
+# Of V21's two changes only the warm-white rule helped (25/26); peak-centred
+# windows broke Panty, Rebecca and Tsumugi. V18 had narrowed the aim to +-15
+# degrees because pale skin and cream at the window's edge pulled it to gold;
+# with the skin zone damped and warm whites gone, the aim may use the whole
+# window again, which lets Will Auceptin's red peak (8 degrees) beat the gold
+# half of a window centred at 28.
+
+
+def v22(portrait, gallery, trace=None):
+    global _no_skin_v15, AIM_SPAN, TIE_WITHOUT_MAIN
+    original = _no_skin_v15
+    _no_skin_v15 = _no_skin_v21
+    try:
+        AIM_SPAN, TIE_WITHOUT_MAIN = 30, "top"
+        return v17(portrait, gallery, trace)
+    finally:
+        _no_skin_v15 = original
+        AIM_SPAN, TIE_WITHOUT_MAIN = WINDOW, "decline"
+
+
+def method_v22(portrait, gallery):
+    return v22(portrait, gallery)
+
+
+# ---- V23: mute warm whites, aim by sub-colour mass --------------------------------------
+#
+# Two fixes to V22. Dropping warm whites renormalised the pale class, so what was
+# left (Lynae's pale cyan) grew and flipped her shade to pale; muted whites still
+# count toward the pale total but cast no vote. And the aim compared single peak
+# heights, which a compact colour always wins: Will Auceptin's red spreads over
+# 40 degrees, his gold in three images is packed into 15. The aim now picks the
+# spot inside the chosen window whose +-AIM_BAND neighbourhood holds the most.
+
+AIM_BAND = 15
+
+
+def _no_skin_v23(img):
+    return classify(
+        img,
+        reject_pale_skin=True,
+        skin=_is_skin_v15,
+        skin_hue=SKIN_HUE_V15,
+        warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+        warm_white=(*WARM_WHITE, "mute"),
+    )
+
+
+def _aim_by_mass(hist, centre, span):
+    near = [i for i in range(A.HUE_BINS) if A._hue_distance((i + 0.5) * 5, centre) <= span]
+    return (max(near, key=lambda i: band_sum(hist, (i + 0.5) * 5, AIM_BAND)) + 0.5) * 5
+
+
+def v23(portrait, gallery, trace=None):
+    global _no_skin_v15, AIM_SPAN, TIE_WITHOUT_MAIN, v16_decide_from
+    global PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW
+    saved = (_no_skin_v15, v16_decide_from)
+    base_decide = v16_decide_from
+    _no_skin_v15 = _no_skin_v23
+    PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW = 0.5, 0.5, 30, 2.0
+    AIM_SPAN, TIE_WITHOUT_MAIN = 30, "top"
+
+    def decide(entries, portrait=None, p=V8):
+        result, reason = base_decide(entries, portrait, p)
+        if result is None or "tie broken" in reason or not entries:
+            return result, reason
+        hist = evidence_v15(entries)
+        hue = _aim_by_mass(hist, windows(hist)[0][0], AIM_SPAN)
+        shaded, cls = shade_v16(entries, hue, p)
+        return shaded, reason.split(";")[0] + f"; {hue:.0f}deg (mass aim) shaded from {cls}"
+
+    v16_decide_from = decide  # v16 calls it by name
+    try:
+        local: list[str] = []
+        r = v16(portrait, gallery, local)
+        pale_shaded = local and "pale" in local[0].rsplit("shaded from", 1)[-1]
+        if r is not None and pale_shaded and PALE_LIFT_FROM <= r["chroma"] < PALE_MIN_CHROMA:
+            r = describe(fit_in_gamut(r["lightness"], PALE_MIN_CHROMA, r["hue"]))
+            local[0] += f"; chroma lifted to {PALE_MIN_CHROMA}"
+        if trace is not None:
+            trace.extend(local)
+        return r
+    finally:
+        _no_skin_v15, v16_decide_from = saved
+        AIM_SPAN, TIE_WITHOUT_MAIN = WINDOW, "decline"
+
+
+def method_v23(portrait, gallery):
+    return v23(portrait, gallery)
+
+
+# ---- V24: V22's hue, V20's shade --------------------------------------------------------
+#
+# Dropping warm whites (V21/V22) fixed the gold drift but renormalised the pale
+# class, so the pale-versus-saturated shade decision tipped to pale for Lynae
+# (#7fdce9) and Kotoko Ijichi (#fcefa9). The two measurements now do separate
+# jobs: whites dropped for *which hue* (evidence, windows, ties, coverage),
+# whites kept for *which shade* of it.
+
+
+def v24(portrait, gallery, trace=None):
+    global shade_v16, AIM_SPAN, TIE_WITHOUT_MAIN, PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW
+    PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW = 0.5, 0.5, 30, 2.0
+    AIM_SPAN, TIE_WITHOUT_MAIN = 30, "top"
+    fp, fg = _segmented(portrait, gallery, drop_scenes=True)
+    pairs = [(measure(i, _no_skin_v21), measure(i, _no_skin_v20)) for i in fg]
+    pairs = [(a, b) for a, b in pairs if a is not None and b is not None]
+    whole = measure(portrait, _no_skin_v21) if portrait is not None else None
+    whole_shade = measure(portrait, _no_skin_v20) if portrait is not None else None
+    seg_p = measure(fp, _no_skin_v21) if fp is not None else None
+    seg_p_shade = measure(fp, _no_skin_v20) if fp is not None else None
+    n = len(pairs)
+    share = A._portrait_share(n)
+    hue_entries = [(a, 1.0) for a, _ in pairs]
+    shade_entries = [(b, 1.0) for _, b in pairs]
+    if seg_p is not None and seg_p_shade is not None and 0 < share < 1 and n:
+        wt = share / (1 - share) * n
+        hue_entries.append((seg_p, wt))
+        shade_entries.append((seg_p_shade, wt))
+
+    original_shade = shade_v16
+
+    def run(entries, shade_with, portrait_grids):
+        global shade_v16
+        shade_v16 = lambda _e, h, p=V8: original_shade(shade_with, h, p)  # noqa: E731
+        try:
+            return v16_decide_from(entries, portrait_grids)
+        finally:
+            shade_v16 = original_shade
+
+    try:
+        result, reason = run(hue_entries, shade_entries, whole)
+        source = "gallery"
+        if result is None and whole is not None:
+            fb, why = run([(whole, 1.0)], [(whole_shade, 1.0)], None)
+            if fb is not None:
+                result, source, reason = fb, "main image (fallback)", f"{reason}; fallback: {why}"
+        pale_shaded = "pale" in reason.rsplit("shaded from", 1)[-1]
+        if (
+            result is not None
+            and pale_shaded
+            and PALE_LIFT_FROM <= result["chroma"] < PALE_MIN_CHROMA
+        ):
+            result = describe(fit_in_gamut(result["lightness"], PALE_MIN_CHROMA, result["hue"]))
+            reason += f"; chroma lifted to {PALE_MIN_CHROMA}"
+        if trace is not None:
+            trace.append(f"{source}: {reason}")
+        return result
+    finally:
+        AIM_SPAN, TIE_WITHOUT_MAIN = WINDOW, "decline"
+
+
+def method_v24(portrait, gallery):
+    return v24(portrait, gallery)

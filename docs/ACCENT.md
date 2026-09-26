@@ -54,6 +54,12 @@ the open questions, including the dead ends.
   has a colour. The resulting pipeline (V18) passes 21 of the 23 reviewed
   characters (current: 17), leaves 2 of 80 accents near-grey (current: 24) and
   declines none. Open: Ceres Fauna's gradient hair and a few warm-window cases.
+- **Second review (§18):** Ceres's yellow-green and Artoria's raspberry were
+  approved; the gold drift (Will, Ishtar, Dazai, Poison Ivy) was traced to skin
+  rewarded by presence pooling, warm whites and windows straddling two colours.
+  V24 answers 25 of 26 checks (current: 20). Separately, **all 107 main images
+  hosted on ImgChest are dead** — the cut-over cleanup never counted
+  `characters.main_image_url` as in use.
 
 ---
 
@@ -766,7 +772,7 @@ segmentation (§5.2.1) remains the algorithmic answer, and the override the
 practical one.
 
 ### Reproducing the experiments
-Everything in §14–17 runs from `scripts/accent_lab/` — see its README. Each
+Everything in §14–18 runs from `scripts/accent_lab/` — see its README. Each
 variant in the tables is a `method_<name>` in `scripts/accent_lab/methods.py`.
 
 ---
@@ -1053,3 +1059,116 @@ where she used to decline.
 
 `method_v18` in `scripts/accent_lab/methods.py` is the reference
 implementation, and `REVIEW` in `lab.py` is the owner's review as checks.
+
+---
+
+## 18. Second review: the gold drift, and dead main images (2026-09-26)
+
+### 18.1 The verdicts
+
+- **Ceres Fauna's pale yellow-green (`#ddefab`) is right.** The earlier "mint"
+  was loose; §17.6's open item is closed.
+- **Artoria (Alter)'s raspberry (`#8b1c55`) is fine.**
+- **Gold is wrong for Will Auceptin, Ishtar, Osamu Dazai and Poison Ivy.**
+  - Will has some gold accents, one yellow background and blonde hair in a few
+    images, but it is a minority; red should win.
+  - Ishtar's gold is Ereshkigal's hair in shared images plus her golden
+    accessories; with little red and many dark tones, a dark grey or navy would
+    be expected before gold.
+  - Dazai is brown, grey and red with a few dark navies; yellow is in very few
+    images.
+  - Poison Ivy should be green (everywhere in her art), or red (her hair);
+    gold only appears as another character's blonde in two images and as her
+    saturated, dark skin.
+
+### 18.2 Correction: not every character had a main image
+
+§17.2 said the review was run "main images included". That was wrong for five
+of the 80 live characters: **Eirin Yagokoro, Eternity (R1999), Moghedien,
+Shiroko\*Terror and Tsukatsuki Rio** have no usable main image, and
+`fetch_live` silently saved none. Eirin's V18 purple came from "a tie with no
+main image takes the stronger side", not from her main image. The lab now says
+so (`explain` prints "portrait NO").
+
+Checking why turned up a data problem well beyond the accent work. Paging
+through the public library listing (764 characters):
+
+- **All 107 characters whose main image is hosted on ImgChest have a dead main
+  image** (404), and none has an R2 copy (`main_image_thumb` is empty). The
+  Sandman was one of them until the owner replaced his.
+- Three more have no main image at all: lila rossi, Kuroyukihime, Bai Ning Bing.
+
+**Cause:** the cut-over's ImgChest reconciliation (`scripts/imgchest_cleanup.py`,
+4,510 files deleted) kept two sets — URLs in the Discord `$ai` export and rows
+in `custom_images`. `characters.main_image_url` was in neither, so every main
+image uploaded to ImgChest looked unused and was deleted. The pre-cut-over
+database had 350 such characters and had mirrored none of them to R2, so there
+is no copy on this side. ImgChest deletions cannot be undone. Recovery options
+are the owner's call: re-pick a main image (any gallery image, or the Mudae
+default) per character, perhaps in bulk.
+
+### 18.3 Why gold, and the fixes (V20–V24)
+
+`explain` and per-image breakdowns found three mechanisms feeding the gold.
+
+- **Presence pooling rewards skin.** V17's square-root pooling favours a colour
+  present in most images — and in anime art that is skin and warm shading. All
+  four won an *orange* window (22–32°), not a gold one; the aim and the vivid
+  shade then turned brown and peach into gold.
+- **Warm whites.** Faint pale pixels at 35–70° (S < 0.15: cream paper, ivory,
+  warm-lit highlights) were a large share for Will (0.31 of his pale class) and
+  real for Dazai and Poison Ivy.
+- **Two colours in one window.** A ±30° window centred at 22–28° sums red
+  (0–20°) and gold (40–60°), two colours 35° apart, into one that beats either.
+
+| version | change | review (26) |
+|---|---|---|
+| V20 | the skin-tone zone (hue 10–45°, S ≤ 0.65, or any S when V < 0.55 — brown) votes at ¼ weight instead of being dropped or trusted | Ishtar red; Will, Dazai, Poison Ivy still gold |
+| V21 | V20 + windows centred only on peaks + warm whites dropped | the two parts disagree — tested apart: |
+| — whites only | | 25/26 (Dazai brown-red, Poison Ivy red) but Lynae pale |
+| — peaks only | | 22/26 (broke Panty, Rebecca, Tsumugi) — dead end |
+| V22 | V20 + warm whites dropped + aim across the whole window | 25/26; Lynae pale `#7fdce9`, Kotoko Ijichi near-white |
+| V23 | whites muted instead of dropped; aim by sub-colour mass | 22/26 — worse; dead end |
+| **V24** | V22's measurement decides the **hue**; V20's (whites kept) decides the **shade** | **25/26** |
+
+**Why V24 splits the two measurements.** Dropping warm whites removes pixels
+from the pale class, and because each class is normalised per image, what
+remains grows — Lynae's pale cyan then out-weighed her saturated cyan and her
+shade flipped to pale. Whites now vote on *which hue* but not on *which shade*.
+
+**Will Auceptin stays gold.** Red dominates 5–6 of his 11 images and gold 3,
+but those three are almost entirely gold, and every attempt to tip the balance
+(pale weight, pooling, aim span, mass-based aim) either left him gold or broke
+others. Two asymmetries are behind it: gold gets a pale-class vote that red
+cannot (pale red is pink, and pink is removed as skin), and his red spreads over
+40° while the gold is packed into 15°. Open.
+
+### 18.4 Results
+
+**The owner's review** (26 checks after this round, all live, every image):
+
+| | current | V18 | **V24** |
+|---|---|---|---|
+| passes | 20 | 22 | **25** |
+
+V24: Lynae `#34b0c0` (the approved cyan), Reze `#5c4292`, Ceres `#ddefab`,
+Rebecca `#34ada6`, Himeno `#336a7a`, Panty `#e1a929` (stronger than V18's
+pale yellow), Ishtar `#be3041`, Dazai `#934341`, Poison Ivy `#b13b2c`, Will
+`#e1bf5c` (still gold); the rest as §17.5.
+
+**All 79 live library characters** (V22, whose hue choices V24 shares):
+median chroma 0.124 (current 0.081), 10 darker than L 0.45 (current 25),
+2 near-grey (current 24), none declined.
+
+### 18.5 Still open
+
+- **Will Auceptin** — gold over red (§18.3).
+- **Kotoko Ijichi** — V24 aims at her blonde, where the pale class dominates,
+  giving a near-white yellow `#fbeca6` (V18: gold `#cc9a30`; current: orange
+  `#d28f4f`). A lightness cap on pale shades would fix her but would also darken
+  Ceres's approved `#ddefab`; the owner's call.
+- **The dead main images** (§18.2) disable the tie-breaker and the fallback
+  for 110 characters until they have main images again.
+
+`method_v24` in `scripts/accent_lab/methods.py` is now the reference
+implementation, and `lab.REVIEW` holds both rounds of the owner's review.
