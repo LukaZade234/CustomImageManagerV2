@@ -1,6 +1,6 @@
 # Accent lab
 
-The experiment harness behind `docs/ACCENT.md` §14–27: every extractor variant
+The experiment harness behind `docs/ACCENT.md` §14–29: every extractor variant
 that was tried, the calibration panel they were scored on, and the tools that
 produced the numbers and contact sheets in the doc. Nothing here is imported by
 the app, and the shipped extractor is still `accent_extract.py`.
@@ -62,6 +62,10 @@ uv run python -m scripts.accent_lab.fullcheck render
 #   fullcheck --method v36 --out full_v36 compute
 #   fullcheck --method v36 --out full_v36 --compare full --compare-label V33 render
 
+# Score versions against every review verdict in lab.py, and explain a character.
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.checks v36,v37
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.trace v37 "Reze|Kyouka Jirou"
+
 # Contact sheet from the last library run, to judge colours by eye.
 uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
 ```
@@ -79,7 +83,8 @@ the first time: about half a second per image on a laptop CPU.
   the current candidate.
 - `seg.py` — skytnt/anime-seg foreground masks.
 - `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py`,
-  `sample.py`, `showcase.py`, `profiles.py`, `fullcheck.py` — the tools above.
+  `sample.py`, `showcase.py`, `profiles.py`, `fullcheck.py`, `checks.py`, `trace.py`
+  — the tools above. See `docs/ACCENT.md` §29 for where things stand.
 
 ## Rules of thumb (from the doc)
 

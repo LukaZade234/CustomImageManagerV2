@@ -58,6 +58,18 @@ the open questions, including the dead ends.
   approved; the gold drift (Will, Ishtar, Dazai, Poison Ivy) was traced to skin
   rewarded by presence pooling, warm whites and windows straddling two colours.
   V24 answers 25 of 26 checks (current: 20).
+- **Random sample and profile paths (§19–23):** a random sample exposed murky
+  brick reds (skin shadow, and pale pink removed as skin). The owner's idea of
+  **colour-profile paths** was built: *monochrome* characters take a neutral
+  (near-white or a faintly tinted mid tone) or a recurring highlight colour; *pale
+  pink* characters (almost all pink/red, with real pale pink present) treat pale
+  pink as identity. V33.
+- **Full check and V34–V37 (§23.4–28):** V33 run over all 599 characters with 4+
+  images; the owner's review found greens split by HSV geometry, main-image
+  backgrounds deciding ties, near-monochrome misses and empty accents. **V37 is the
+  current candidate: 73 of 87 review checks.** Open items, the full list of flagged
+  characters that never changed, and the suggestions are in §28; how to resume is
+  §29.
 
 ---
 
@@ -1707,3 +1719,72 @@ Arisa, Griffith and Cheongmyeong (colours again).
    desktop; segment new uploads once, in the background, on the server (1.7 GB peak
    RAM — check the instance); and let `themeFromSeed` accept near-neutral seeds so
    monochrome accents display.
+
+
+---
+
+## 29. Resume here — state, locations, how to continue (2026-09-27)
+
+**Nothing has shipped.** All of this is lab work on the `accent-lab` branch (not
+pushed). The live site still runs the original `accent_extract.py`.
+
+**The candidate** is `method_v37` / `v37(portrait, gallery, trace)` in
+`scripts/accent_lab/methods.py`. It is built as a chain of switches on earlier
+versions (v37 → v36 → v35 → v34 → v33 → v32 → v31 → v29 → v27 → v24 → v16 …), so
+a production port should be a clean rewrite of the *behaviour* summarised below,
+not a copy of the chain.
+
+**What V37 does, in order:**
+1. Cut the character out of every gallery image (skytnt/anime-seg on the 600px
+   thumbnail; background painted out; scenes the model cannot separate dropped).
+2. Profile the character (share of pixels with real colour; share of colour that is
+   pink/red; share of that which is pale). **Monochrome** (< 30% real colour) →
+   a recurring saturated highlight if one clears 1% in ≥ 3 images (or 2 that are
+   half the gallery) *and* averages ≥ 1%; otherwise near-white if light dominates,
+   else V30's mid tone with a faint cool tint. **Pale pink** (≥ 70% pink/red, ≥ 10%
+   of it pale, and real pale pink present: ≥ 0.8% coverage or in ≥ 15% of images) →
+   the character's own lighter pinks (hue 320–355), most chromatic 35%.
+3. Otherwise the standard path: pixels classified in HSV (skin 12–38 removed; pale
+   skin 335–38 removed, 335–352 only up to S 0.25; warm zone 10–45 and skin shadow
+   355–10 damped to ¼; faint warm whites excluded from the hue vote); hue evidence =
+   saturated + ½ pale per image, square-root pooled; colour windows ±30° (green
+   family 75–170: counted from 50°, aim ≥ 75°); two colours within the 1.25 margin
+   are a tie, decided by the main image's cut-out *saturated* colour (whole image at
+   ¼), aimed with the whole main image; tie candidates must hold ≥ 10% of the colour
+   in ≥ 30% of gallery images; shade = vivid core blended 35% toward the brighter
+   half; pale identities lifted to chroma 0.09.
+4. Fallbacks: gallery too sparse → the whole main image → its dominant colour with no
+   minimum → the gallery's monochrome tone. Never empty.
+
+**Review verdicts** are executable checks in `scripts/accent_lab/lab.py`:
+`REVIEW`, `SAMPLE_REVIEW`, `PROFILE_REVIEW`, `FULL_REVIEW`, `V36_REVIEW` (and the
+original `PANEL`). Score any versions with `python -m scripts.accent_lab.checks
+v36,v37`; explain one character with `python -m scripts.accent_lab.trace v37 "Name"`.
+Scores so far: V33 59/80 → V36 69/80 → **V37 73/87** (the set grew).
+
+**Review pages** (private artifacts):
+- Full check, 10+ images (V37 beside V36): https://claude.ai/artifact/4aDYwNwRtsQVFBeemppsUE
+- Full check, 4–9 images (V37 beside V36): https://claude.ai/artifact/1eqMqdy4UtNYjpgJ9aSFZP
+- Colour Profile Paths (V29 / V32 / V33): https://claude.ai/artifact/3DjpxNkjShtDUyAh68EBJY
+- Accent Sample Check (V29 vs V24, random sample): https://claude.ai/artifact/3KiAqg1Znyes8hpcppSavf
+
+**Lab data** (`scripts/accent_lab/.data/`, gitignored, all regenerable):
+`live/` fetched characters (thumbnails, main image, meta); `masks/` cut-out cache
+(~6.5 GB; newer entries 8-bit); `isnetis.onnx` the model (176 MB); `full/`,
+`full_v36/`, `full_v37/` one JSON result per character for V33, V36, V37;
+`full_list.json` the 599 characters with 4+ images; `scan*.json` the profile-scan
+lists; `library_list.json` the whole library listing. Rebuild pages with
+`fullcheck --method v37 --out full_v37 --compare full_v36 --compare-label V36 render`.
+
+**The owner's standing rules** (also in the assistant's memory): the main image
+breaks two-colour ties (choosing among the gallery's colours, never adding one);
+never leave a character without an accent; vivid over dark or grey, except that
+genuinely monochrome characters go black or white rather than a tinted grey; pale
+skin is never a pink identity; judge by eye on contact sheets. Main images are now
+Mudae links mirrored on R2, and missing ones fill in as the site is used — not a
+bug. Sakurako Kawawa and Kasumi Yamabuki share one gallery on purpose.
+
+**Next decisions for the owner** (§28): whether to prototype the skin/body-part model;
+the small-gallery pale-pink gate; which characters to hand-pick with the override;
+and when to port V37 into the app (with the frontend change for neutral seeds and a
+per-image colour summary instead of stored masks).
