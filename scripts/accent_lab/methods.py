@@ -39,7 +39,14 @@ app. Variants build on each other, so read them in order.
           takes a strong highlight; pale pink must be present     fixes 4 false pinks
     v32   v31 + each pink shaded from its own lighter pinks       47/49
     v33   dark-side mono back to a tinted mid tone; highlight
-          must recur in 3 images; tie candidates need real colour 56/59, the candidate
+          must recur in 3 images; tie candidates need real colour 56/59
+    v34   OKLCH hue binning, darker fade, main image's cut-out
+          first, tie presence, recurring highlight, never empty   59/80: greens fixed,
+                                                                  warm colours broken
+    v35   v34 in HSV again; green-family windows +-45, no aim
+          into blonde; no darker fade                             greens and warm both
+    v36   v35 + main image votes on saturated colour for the
+          choice, reads the whole image for the aim               69/80, the candidate
 """
 
 from __future__ import annotations

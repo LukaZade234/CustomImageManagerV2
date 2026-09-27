@@ -400,7 +400,7 @@ FULL_REVIEW = {
     ),
     "live:Usagi Tsukino": (
         "Usagi: blonde yellow or bow red",
-        lambda r: _hue_in(70, 110)(r) or _hue_in(15, 40)(r),
+        lambda r: _hue_in(70, 110)(r) or _hue_in(0, 40)(r),
     ),
     "live:Alpha": (
         "Alpha: yellow, navy or black -- not pink",

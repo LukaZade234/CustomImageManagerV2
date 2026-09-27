@@ -1,6 +1,6 @@
 # Accent lab
 
-The experiment harness behind `docs/ACCENT.md` §14–23: every extractor variant
+The experiment harness behind `docs/ACCENT.md` §14–25: every extractor variant
 that was tried, the calibration panel they were scored on, and the tools that
 produced the numbers and contact sheets in the doc. Nothing here is imported by
 the app, and the shipped extractor is still `accent_extract.py`.
@@ -58,6 +58,9 @@ uv run --with numpy --with onnxruntime python -m scripts.accent_lab.profiles
 # The full check: every character with 4+ images, in parallel, then two review pages.
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.fullcheck compute
 uv run python -m scripts.accent_lab.fullcheck render
+# ... or a new version beside an earlier run:
+#   fullcheck --method v36 --out full_v36 compute
+#   fullcheck --method v36 --out full_v36 --compare full --compare-label V33 render
 
 # Contact sheet from the last library run, to judge colours by eye.
 uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
@@ -71,8 +74,8 @@ the first time: about half a second per image on a laptop CPU.
 
 - `lab.py` — paths, loading (local ids and `live:<Name>`), `describe`, the
   panel, and `method_current` (the shipped extractor).
-- `methods.py` — every variant, `method_mcu` through `method_v33`, with a table
-  at the top saying what each one tried and how it came out. `method_v33` is
+- `methods.py` — every variant, `method_mcu` through `method_v36`, with a table
+  at the top saying what each one tried and how it came out. `method_v36` is
   the current candidate.
 - `seg.py` — skytnt/anime-seg foreground masks.
 - `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py`,
