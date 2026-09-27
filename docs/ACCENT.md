@@ -2331,3 +2331,6 @@ the bar was raised. At 85% **only two characters change across all 599**:
 
 Checks unchanged: 83 of 96. **Review page:** https://claude.ai/artifact/NX5Mw9oVg2LE63MN57hr7Z
 If both are accepted, V43 replaces V40 as the candidate.
+
+The owner accepted both ("it seems good"): **V43 is the candidate** (83 of 96 checks;
+differs from V40 only on Gon Freecss and Neferpitou).
