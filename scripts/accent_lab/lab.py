@@ -366,3 +366,63 @@ PROFILE_REVIEW = {
         lambda r: r is not None and r["lightness"] >= 0.85 and r["chroma"] < 0.03,
     ),
 }
+
+
+def _greenish(min_c=0.05, max_l=1.0, min_l=0.0):
+    return lambda r: (
+        _hue_in(118, 175)(r) and r["chroma"] >= min_c and min_l <= r["lightness"] <= max_l
+    )
+
+
+# The owner's review of the full 4+ check (2026-09-27), the themes V34 targets:
+# greens, the main image's background, highlights and never-empty.
+FULL_REVIEW = {
+    "live:Maki Zenin": ("Maki Zenin: dark green", _greenish(max_l=0.62)),
+    "live:Nefer": ("Nefer: darker green", _greenish(max_l=0.7)),
+    "live:Maomao": ("Maomao: darker green", _greenish(max_l=0.7)),
+    "live:Roronoa Zoro": ("Zoro: green", _greenish()),
+    "live:N": ("N: light green", _greenish(min_l=0.6)),
+    "live:Noriaki Kakyoin": (
+        "Noriaki: green (or wine red)",
+        lambda r: _greenish()(r) or _hue_in(350, 20)(r),
+    ),
+    "live:Sanae Kochiya": ("Sanae: green", _greenish()),
+    "live:Daiyousei": ("Daiyousei: green", _greenish()),
+    "live:Green Lantern (John Stewart)": ("Green Lantern: strong green", _greenish(min_c=0.12)),
+    "live:Jiu Niangzi": (
+        "Jiu Niangzi: green or earthy brown",
+        lambda r: _greenish()(r) or (_hue_in(40, 90)(r) and r["lightness"] < 0.6),
+    ),
+    "live:Kyouka Jirou": ("Kyouka Jirou: purple", _hue_in(275, 325)),
+    "live:Suika Ibuki": (
+        "Suika Ibuki: not the main image's purple",
+        lambda r: r is not None and not _hue_in(275, 330)(r),
+    ),
+    "live:Usagi Tsukino": (
+        "Usagi: blonde yellow or bow red",
+        lambda r: _hue_in(70, 110)(r) or _hue_in(15, 40)(r),
+    ),
+    "live:Alpha": (
+        "Alpha: yellow, navy or black -- not pink",
+        lambda r: r is not None and not _hue_in(320, 20)(r),
+    ),
+    "live:Shizuku Murasaki": (
+        "Shizuku: dark grey or red, not blue",
+        lambda r: r is not None and not _hue_in(220, 280)(r),
+    ),
+    "live:Ellen Joe": (
+        "Ellen Joe: hot pink/red or dark, not the background",
+        lambda r: r is not None and (_hue_in(340, 30)(r) or r["lightness"] < 0.35),
+    ),
+    "live:Rio Futaba": (
+        "Rio Futaba: not pink",
+        lambda r: r is not None and not _hue_in(330, 20)(r),
+    ),
+    "live:Tsukatsuki Rio": ("Tsukatsuki Rio: red highlight", _hue_in(0, 45)),
+    "live:Alucard (Hellsing)": ("Alucard: red highlight", _hue_in(0, 45)),
+    "live:Griffith": (
+        "Griffith: a colour (light blue from the main image)",
+        lambda r: r is not None,
+    ),
+    "live:Cheongmyeong": ("Cheongmyeong: a colour", lambda r: r is not None),
+}

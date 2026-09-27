@@ -131,11 +131,32 @@ def fit_in_gamut(L, C, hue):
 
 
 def pale_seed(entries, hue):
+    if HUE_SPACE == "oklch":
+        return _pale_seed_oklch(entries, hue)
     rep = A._representative(
         A._merged_band_grid(entries, hue, A.BAND_SPAN, "pale"), hue, A.BAND_SPAN
     )
     r = A._seed_from_representative(rep) if rep else None
     return r["seed"] if r else None
+
+
+def _pale_seed_oklch(entries, hue):
+    """The shipped pale representative (0.6/0.55 percentiles) read from OKLCH cells."""
+    cells = []
+    for (hb, b1, b2), w in A._merged_band_grid(entries, hue, A.BAND_SPAN, "pale").items():
+        L, C, h, _ = cell_lch(hb, b1, b2)
+        if A._hue_distance(h, hue) <= A.BAND_SPAN:
+            cells.append((L, C, h, w))
+    if not cells:
+        return None
+    sx = sum(math.sin(math.radians(c[2])) * c[3] for c in cells)
+    cx = sum(math.cos(math.radians(c[2])) * c[3] for c in cells)
+    mh = math.degrees(math.atan2(sx, cx)) % 360
+    L = A._grid_percentile([(c[0], c[3]) for c in cells], A.VAL_PERCENTILE)
+    C = A._grid_percentile([(c[1], c[3]) for c in cells], A.SAT_PERCENTILE)
+    if C < A.MIN_CHROMA:
+        return None
+    return fit_in_gamut(L, C, mh)
 
 
 # ---- MCU ------------------------------------------------------------------------
@@ -332,8 +353,7 @@ def vivid_shade(grid, peak, p):
         hue = (hb + 0.5) * 5
         if A._hue_distance(hue, peak) > p["conf_span"]:
             continue
-        s, v = (sb + 0.5) / A.SAT_STEPS, (vb + 0.5) / A.VAL_STEPS
-        L, C, h = A.rgb_to_oklch(*colorsys.hsv_to_rgb(hue / 360, s, v))
+        L, C, h, s = cell_lch(hb, sb, vb)
         cells.append((s if p["rank"] == "hsv" else C, L, C, h, w, hue))
     if not cells:
         return None
@@ -1147,14 +1167,35 @@ TIE_WITHOUT_MAIN = "decline"  # or "top": a tie with no main image takes the str
 PALE_RULE_TOO = True  # also shade from pale when the shipped pale-identity rule says so
 
 
+GREEN_HSV = None  # V35: (75, 170) -- HSV's wide green family gets wider windows
+GREEN_SPAN = 45
+
+
+def _is_green(c):
+    return GREEN_HSV is not None and GREEN_HSV[0] <= c <= GREEN_HSV[1]
+
+
+def _span(c, default):
+    """Half-width of a colour window centred at `c` (HSV degrees)."""
+    return max(default, GREEN_SPAN) if _is_green(c) else default
+
+
+def _aim_ok(h, centre):
+    """Inside a green window the aim may not drift into blonde and gold."""
+    return not _is_green(centre) or h >= GREEN_HSV[0]
+
+
 def windows(hist):
     """[(centre_deg, share)] strongest first, centres >= 2*WINDOW apart."""
     total = sum(hist) or 1.0
-    w = [band_sum(hist, (i + 0.5) * 5, WINDOW) / total for i in range(A.HUE_BINS)]
+    w = [
+        band_sum(hist, (i + 0.5) * 5, _span((i + 0.5) * 5, WINDOW)) / total
+        for i in range(A.HUE_BINS)
+    ]
     out: list[tuple[float, float]] = []
     for i in sorted(range(A.HUE_BINS), key=lambda i: -w[i]):
         c = (i + 0.5) * 5
-        if all(A._hue_distance(c, o) >= 2 * WINDOW for o, _ in out):
+        if all(A._hue_distance(c, o) >= _span(c, WINDOW) + _span(o, WINDOW) for o, _ in out):
             out.append((c, w[i]))
     return out
 
@@ -1198,28 +1239,45 @@ def v16_decide_from(entries, portrait=None, p=V8):
     if len(tied) > 1:
         if portrait is None:
             return None, "two-colour tie, no main image to break it"
-        ph = evidence_v15([(portrait, 1.0)])
+        main_entries = portrait if isinstance(portrait, list) else [(portrait, 1.0)]
+        # the aim reads the whole main image (the last entry when a list is given)
+        ph_all = evidence_v15([(main_entries[-1][0], 1.0)])
+        # Skin in the main image is mostly pale; its hair and clothes are not. So the
+        # choice between colours uses saturated colour only, while the aim inside the
+        # chosen colour still reads everything (Reze's violet is in her background).
+        ph = A._pool_histogram(main_entries, "saturated") if MAIN_SAT_ONLY else ph_all
         pt = sum(ph) or 1.0
-        scores = [(band_sum(ph, c, WINDOW) / pt, c) for c, _ in tied]
+        scores = [(band_sum(ph, c, _span(c, WINDOW)) / pt, c) for c, _ in tied]
         best, chosen = max(scores)
         if best <= 0:
             return None, "two-colour tie, main image carries neither"
         gs, gt = A._smooth(hist)
-        ps, pst = A._smooth(ph)
-        near = [i for i in range(A.HUE_BINS) if A._hue_distance((i + 0.5) * 5, chosen) <= AIM_SPAN]
+        ps, pst = A._smooth(ph_all)
+        near = [
+            i
+            for i in range(A.HUE_BINS)
+            if A._hue_distance((i + 0.5) * 5, chosen) <= _span(chosen, AIM_SPAN)
+            and _aim_ok((i + 0.5) * 5, chosen)
+        ]
         hue = (max(near, key=lambda i: (gs[i] / gt) ** AIM_GALLERY_POW * (ps[i] / pst)) + 0.5) * 5
         reason = "tie broken by main image: " + ", ".join(
             f"{c:.0f}deg {s:.2f}" for s, c in sorted(scores, reverse=True)
         )
     else:
         gs, _ = A._smooth(hist)
-        near = [i for i in range(A.HUE_BINS) if A._hue_distance((i + 0.5) * 5, top_c) <= AIM_SPAN]
+        near = [
+            i
+            for i in range(A.HUE_BINS)
+            if A._hue_distance((i + 0.5) * 5, top_c) <= _span(top_c, AIM_SPAN)
+            and _aim_ok((i + 0.5) * 5, top_c)
+        ]
         hue = (max(near, key=lambda i: gs[i]) + 0.5) * 5
-    share = band_sum(hist, hue, WINDOW) / (sum(hist) or 1.0)
+    share = band_sum(hist, hue, _span(hue, WINDOW)) / (sum(hist) or 1.0)
     if share < 0.15:
         return None, f"winning colour holds only {share:.2f}"
     wsum = sum(w for _, w in entries)
-    cov = sum(band_sum(g.hist_cov, hue, p["conf_span"]) * w for g, w in entries) / wsum
+    cov_span = WINDOW if HUE_SPACE == "oklch" else p["conf_span"]  # OKLCH spreads blue-cyan wider
+    cov = sum(band_sum(g.hist_cov, hue, cov_span) * w for g, w in entries) / wsum
     pale_share = (
         sum(
             sum(
@@ -1588,10 +1646,24 @@ def v24(portrait, gallery, trace=None):
             shade_v16 = original_shade
 
     try:
-        result, reason = run(hue_entries, shade_entries, whole)
+        tie_main = whole
+        if MAIN_FG and seg_p is not None and whole is not None:
+            tie_main = [(seg_p, 1.0), (whole, MAIN_BG_WEIGHT)]
+        result, reason = run(hue_entries, shade_entries, tie_main)
         source = "gallery"
         if result is None and whole is not None:
-            fb, why = run([(whole, 1.0)], [(whole_shade, 1.0)], None)
+            _FALLBACK_DEPTH[0] = True
+            try:
+                if MAIN_FG and seg_p is not None and seg_p_shade is not None:
+                    fb, why = run(
+                        [(seg_p, 1.0), (whole, MAIN_BG_WEIGHT)],
+                        [(seg_p_shade, 1.0), (whole_shade, MAIN_BG_WEIGHT)],
+                        None,
+                    )
+                else:
+                    fb, why = run([(whole, 1.0)], [(whole_shade, 1.0)], None)
+            finally:
+                _FALLBACK_DEPTH[0] = False
             if fb is not None:
                 result, source, reason = fb, "main image (fallback)", f"{reason}; fallback: {why}"
         pale_shaded = "pale" in reason.rsplit("shaded from", 1)[-1]
@@ -1752,8 +1824,7 @@ def _band_cells(entries, hue, span, cls, scale):
         h = (hb + 0.5) * 5
         if A._hue_distance(h, hue) > span:
             continue
-        s, v = (sb + 0.5) / A.SAT_STEPS, (vb + 0.5) / A.VAL_STEPS
-        L, C, oh = A.rgb_to_oklch(*colorsys.hsv_to_rgb(h / 360, s, v))
+        L, C, oh, _ = cell_lch(hb, sb, vb)
         out.append((L, C, oh, w / total * scale))
     return out
 
@@ -2319,6 +2390,7 @@ def method_v32(portrait, gallery):
 #   pale tints. Candidates need saturated coverage >= TIE_MIN_COV.
 
 HIGHLIGHT_MIN_IMAGES = 3
+HIGHLIGHT_SMALL_GALLERY = False  # V34 sets True
 TIE_MIN_COV = 0.01
 
 
@@ -2368,10 +2440,326 @@ def _mono_highlight_v33_with(images, base):
         return None
     covs = np.array(covs)
     top = int(np.argmax(covs.mean(0)))
-    if int((covs[:, top] > 0.01).sum()) < HIGHLIGHT_MIN_IMAGES:
+    if not _highlight_recurs(int((covs[:, top] > 0.01).sum()), len(covs)):
         return None
     return base(images)
 
 
+def _highlight_recurs(n_clear, n_images):
+    """V33: clear (>1%) in >= 3 images. V34 also accepts 2 that are half the gallery."""
+    if n_clear >= HIGHLIGHT_MIN_IMAGES:
+        return True
+    return HIGHLIGHT_SMALL_GALLERY and n_clear >= 2 and n_clear / max(n_images, 1) >= 0.5
+
+
 def method_v33(portrait, gallery):
     return v33(portrait, gallery)
+
+
+# ---- V34: hue measured in OKLCH, the main image's character not its background,
+#           highlights that recur, and never an empty accent ---------------------------
+#
+# From the owner's review of the full check (docs/ACCENT.md 24):
+# - HSV spreads green over ~100 degrees and squeezes yellow and orange, so a
+#   character's green was split into thin slices and its biggest slice sat beside
+#   blonde and skin (Maki 74%, Daiyousei 65%, N 57%, Noriaki 53% of green pixels
+#   under HSV 100). V34 bins every pixel by OKLCH hue, lightness and chroma: equal
+#   steps of hue are equal steps of perceived colour. Class rules (skin, pale,
+#   saturated) still read HSV per pixel, as tuned.
+# - Dark colours count a little more (Green Lantern's greens were 68% dark and
+#   voted at half weight): the lightness fade starts at V 0.10 instead of 0.18.
+# - Ties and the fallback read the main image's cut-out character, with the whole
+#   image (background included) as a quarter-weight second vote; a tie candidate
+#   must show in at least TIE_MIN_PRESENCE of the gallery's images.
+# - A monochrome highlight needs to show clearly (>1% of the character) in at
+#   least three images, or two that are half the gallery -- no average-coverage
+#   test, which large galleries like Tsukatsuki Rio's (8 of 39) could never pass.
+# - Never empty: gallery, then main image, then the main image's dominant colour
+#   with no minimum, then the gallery's monochrome tone.
+
+HUE_SPACE = "hsv"  # V34 sets "oklch"
+LIGHT_LO = (0.18, 0.12)  # V34: (0.10, 0.12) -- where the dark fade starts and its width
+TIE_MIN_PRESENCE = 0.30
+MAIN_BG_WEIGHT = 0.25
+MAIN_FG = False  # V34 sets True
+MAIN_SAT_ONLY = False  # V36: the main image votes with saturated colour only
+_FALLBACK_DEPTH = [False]  # set while V24's fallback runs on the main image alone
+
+
+def _light_pref_np(v, lo=None):
+    a, b = lo or LIGHT_LO
+    return np.clip((v - a) / b, 0, 1) * np.clip((0.97 - v) / 0.07, 0, 1)
+
+
+def _pixels(img):
+    """(rgb 0..1, HSV h/s/v, OKLCH L/C/h) for every pixel of an RGB image."""
+    a = np.asarray(img.convert("RGB"), dtype=np.float64).reshape(-1, 3) / 255.0
+    mx, mn = a.max(1), a.min(1)
+    d = mx - mn
+    dd = np.maximum(d, 1e-9)
+    r, g, b = a.T
+    h = (
+        np.where(mx == r, ((g - b) / dd) % 6, np.where(mx == g, (b - r) / dd + 2, (r - g) / dd + 4))
+        * 60
+    )
+    s = np.where(mx > 1e-9, d / np.maximum(mx, 1e-9), 0.0)
+    L, C, oh = _to_oklch(img)
+    return a, h, s, mx, d, L, C, oh
+
+
+def classify_np(
+    img,
+    *,
+    skin=None,
+    skin_hue=None,
+    skin_val=0.6,
+    warm_damp=None,
+    warm_white=None,
+    warm_damp_light=None,
+    space=None,
+):
+    """Vectorised `classify` (reject_pale_skin on), optionally keyed by OKLCH."""
+    space = space or HUE_SPACE
+    a, h, s, v, d, L, C, oh = _pixels(img)
+    n = len(h)
+    keep = (v >= 0.15) & ~((v >= 0.95) & (s <= 0.15)) & (d >= 1e-9)
+    lo, hi = skin_hue or A.SKIN_HUE
+    keep &= ~((h >= lo) & (h <= hi) & (s >= 0.12) & (s <= 0.55) & (v >= skin_val))
+    if skin is not None:
+        sk = np.fromiter((skin(hh, ss, vv) for hh, ss, vv in zip(h, s, v, strict=True)), bool, n)
+        keep &= ~((s >= A.PALE_SAT_MIN) & sk)
+
+    def zone(lo_, hi_):
+        return (h >= lo_) & (h <= hi_) if lo_ <= hi_ else (h >= lo_) | (h <= hi_)
+
+    sat = keep & (s >= A.SATURATED_SAT_MIN)
+    pale = keep & ~sat & (s >= A.PALE_SAT_MIN) & (v >= A.PALE_VAL_MIN)
+    w_sat = s**1.6 * _light_pref_np(v)
+    if warm_damp:
+        wz = zone(warm_damp[0], warm_damp[1])
+        damp = wz & ((s <= warm_damp[2]) | (v < WARM_DARK_V))
+        w_sat = np.where(damp, w_sat * warm_damp[3], w_sat)
+        if warm_damp_light:
+            lz = zone(warm_damp_light[0], warm_damp_light[1]) & (s <= warm_damp_light[2]) & ~damp
+            w_sat = np.where(lz, w_sat * warm_damp_light[3], w_sat)
+    elif warm_damp_light:
+        lz = zone(warm_damp_light[0], warm_damp_light[1]) & (s <= warm_damp_light[2])
+        w_sat = np.where(lz, w_sat * warm_damp_light[3], w_sat)
+    if warm_white:
+        pale &= ~(zone(warm_white[0], warm_white[1]) & (s < warm_white[2]))
+    w_pale = s * A.PALE_VOTE_WEIGHT
+    if warm_damp:
+        w_pale = np.where(zone(warm_damp[0], warm_damp[1]), w_pale * warm_damp[3], w_pale)
+    if int(sat.sum() + pale.sum()) < 24:
+        return None
+    if space == "oklch":
+        k0 = np.minimum((oh / 5).astype(int), 71)
+        k1 = np.minimum((L * 20).astype(int), 19)
+        k2 = np.minimum((C / 0.02).astype(int), 19)
+    else:
+        k0 = np.minimum((h / 5).astype(int), 71)
+        k1 = np.minimum((s * 20).astype(int), 19)
+        k2 = np.minimum((v * 20).astype(int), 19)
+    keys = k0 * 400 + k1 * 20 + k2
+
+    def grid(mask, w):
+        tot = float(w[mask].sum())
+        if tot <= 0:
+            return {}
+        acc = np.bincount(keys[mask], weights=w[mask], minlength=72 * 400)
+        nz = np.nonzero(acc)[0]
+        return {(int(i // 400), int((i // 20) % 20), int(i % 20)): float(acc[i] / tot) for i in nz}
+
+    sg, pg = grid(sat, w_sat), grid(pale, w_pale)
+    if not sg and not pg:
+        return None
+    return A.ImageGrids(sg, pg)
+
+
+def measure_np(img, measure_image):
+    """`measure` with a vectorised coverage pass binned in the current hue space."""
+    key = (id(img), measure_image, HUE_SPACE)
+    hit = _cache.get(key)
+    if hit and hit[0] is img:
+        return hit[1]
+    base = measure_image(img)
+    result = None
+    if base is not None:
+        a, h, s, v, d, L, C, oh = _pixels(img)
+        white = np.all(a >= 0.999, axis=1)
+        ok = (v >= 0.15) & (s >= A.SATURATED_SAT_MIN) & ~white
+        ok &= ~((h >= A.SKIN_HUE[0]) & (h <= A.SKIN_HUE[1]) & (s <= 0.55) & (v >= 0.6))
+        hue = oh if HUE_SPACE == "oklch" else h
+        bins = np.minimum((hue / 5).astype(int), 71)
+        cov = np.bincount(bins[ok], minlength=72) / len(h)
+        result = Grids(base.saturated, base.pale, float(cov.sum()), [float(x) for x in cov])
+    _cache[key] = (img, result)
+    return result
+
+
+def cell_lch(hb, b1, b2):
+    """(L, C, OKLCH hue, HSV-ish saturation) at a grid cell's centre, in either space."""
+    if HUE_SPACE == "oklch":
+        return (b1 + 0.5) / 20, (b2 + 0.5) * 0.02, (hb + 0.5) * 5, (b2 + 0.5) / 20
+    hue = (hb + 0.5) * 5
+    s, v = (b1 + 0.5) / A.SAT_STEPS, (b2 + 0.5) / A.VAL_STEPS
+    L, C, h = A.rgb_to_oklch(*colorsys.hsv_to_rgb(hue / 360, s, v))
+    return L, C, h, s
+
+
+def _v34_measure(whites):
+    def run(img):
+        return classify_np(
+            img,
+            skin=_is_skin_v29,
+            skin_hue=SKIN_HUE_V15,
+            warm_damp=(*WARM_ZONE, WARM_SAT_MAX, WARM_FACTOR),
+            warm_white=WARM_WHITE if whites else None,
+            warm_damp_light=SKIN_SHADOW_ZONE,
+        )
+
+    return run
+
+
+_V34_HUE, _V34_SHADE = _v34_measure(True), _v34_measure(False)
+V34_OKLCH = V34_DARK = V34_MAINFG = V34_PRESENCE = True  # switches, for ablation
+
+
+def _main_dominant(portrait):
+    """The main image's dominant colour, cut-out first, with no minimum coverage."""
+    fp = foreground_only(portrait)
+    seg_p, whole = measure_np(fp, _V34_HUE), measure_np(portrait, _V34_HUE)
+    seg_s, whole_s = measure_np(fp, _V34_SHADE), measure_np(portrait, _V34_SHADE)
+    hue_e = [(g, w) for g, w in ((seg_p, 1.0), (whole, MAIN_BG_WEIGHT)) if g is not None]
+    shade_e = [(g, w) for g, w in ((seg_s, 1.0), (whole_s, MAIN_BG_WEIGHT)) if g is not None]
+    if not hue_e or not shade_e:
+        return None
+    hist = evidence_v15(hue_e)
+    cands = windows(hist)
+    if not cands or cands[0][1] <= 0:
+        return None
+    result, _ = shade_v16(shade_e, cands[0][0], V8)
+    return result
+
+
+def v34(portrait, gallery, trace=None):
+    global HUE_SPACE, LIGHT_LO, MAIN_FG, HIGHLIGHT_SMALL_GALLERY, measure, _v29_measure, windows
+    global MONO_HIGHLIGHT_COV, MONO_HIGHLIGHT_PRESENCE
+    saved = (
+        HUE_SPACE, LIGHT_LO, MAIN_FG, HIGHLIGHT_SMALL_GALLERY, measure, _v29_measure, windows,
+        MONO_HIGHLIGHT_COV, MONO_HIGHLIGHT_PRESENCE,
+    )  # fmt: skip
+    base_windows = windows
+    HUE_SPACE = "oklch" if V34_OKLCH else "hsv"
+    LIGHT_LO = (0.10, 0.12) if V34_DARK else LIGHT_LO
+    MAIN_FG, HIGHLIGHT_SMALL_GALLERY = V34_MAINFG, True
+    MONO_HIGHLIGHT_COV = MONO_HIGHLIGHT_PRESENCE = 0.0  # recurrence is the test now
+    measure = measure_np
+    _v29_measure = lambda whites: _V34_HUE if whites else _V34_SHADE  # noqa: E731
+    try:
+        _, fg = _segmented(portrait, gallery, drop_scenes=True)
+        gm = [x for x in (measure_np(i, _V34_HUE) for i in fg) if x is not None]
+
+        def presence(c):
+            """Share of images where this colour holds >= 10% of the image's colour evidence."""
+            if not gm:
+                return 1.0
+            hits = 0
+            for g in gm:
+                ev = evidence_v15([(g, 1.0)])
+                t = sum(ev) or 1.0
+                hits += band_sum(ev, c, _span(c, WINDOW)) / t >= 0.10
+            return hits / len(gm)
+
+        def windows_v34(hist):
+            out = base_windows(hist)
+            if not V34_PRESENCE:
+                return out
+            kept = [(c, s) for c, s in out if presence(c) >= TIE_MIN_PRESENCE]
+            return kept or out[:1]
+
+        windows = windows_v34
+        local: list[str] = []
+        r = v33(portrait, gallery, local)
+        why = local[0] if local else ""
+        if r is None and portrait is not None:
+            r = _main_dominant(portrait)
+            why = f"{why}; safety net: main image's dominant colour"
+        if r is None and fg:
+            r, how = _mono_seed_v31(fg)
+            if r is None or not how.startswith("white"):
+                r = _mono_seed(fg)
+            why = f"{why}; safety net: the gallery's monochrome tone"
+        if trace is not None:
+            trace.append(why)
+        return r
+    finally:
+        (
+            HUE_SPACE, LIGHT_LO, MAIN_FG, HIGHLIGHT_SMALL_GALLERY, measure, _v29_measure, windows,
+            MONO_HIGHLIGHT_COV, MONO_HIGHLIGHT_PRESENCE,
+        ) = saved  # fmt: skip
+
+
+def method_v34(portrait, gallery):
+    return v34(portrait, gallery)
+
+
+# ---- V35: V34 without the OKLCH switch and dark fade; greens get wide windows ---------------
+#
+# The V34 ablation: OKLCH binning fixed the greens and several ties but broke the
+# warm characters whose tuning is all in HSV (Tohru, Mirio, Panty, Poison Ivy, Miku,
+# Artoria); the darker fade hurt Miku and Artoria. V35 keeps HSV and targets green
+# directly: windows centred in HSV's green family (75-170) are +-45 wide instead of
+# +-30, and the aim inside one cannot drift below 75 (blonde, gold). The main-image,
+# presence, highlight and never-empty changes stay.
+
+
+def v35(portrait, gallery, trace=None):
+    global V34_OKLCH, V34_DARK, GREEN_HSV
+    saved = (V34_OKLCH, V34_DARK, GREEN_HSV)
+    V34_OKLCH, V34_DARK, GREEN_HSV = False, False, (75, 170)
+    try:
+        return v34(portrait, gallery, trace)
+    finally:
+        V34_OKLCH, V34_DARK, GREEN_HSV = saved
+
+
+def method_v35(portrait, gallery):
+    return v35(portrait, gallery)
+
+
+# ---- V36: V35 + the main image votes with saturated colour only ---------------------------
+#
+# With the background gone, the main image's cut-out includes skin, and pale skin
+# and blush vote pink/magenta: Reze's tie went 302 (magenta) over 242 (her violet),
+# Kyouka's to pink. Skin is mostly in the pale class and hair and clothes are not,
+# so when the main image votes -- breaking a tie, or deciding alone as the fallback
+# -- only its saturated colours count.
+
+
+def v36(portrait, gallery, trace=None):
+    global MAIN_SAT_ONLY, v16_decide_from
+    saved = (MAIN_SAT_ONLY, v16_decide_from)
+    base = v16_decide_from
+
+    def decide(entries, portrait_grids=None, p=V8):
+        # the fallback is the only caller that passes a main image alone, with no tie grids
+        global PALE_WEIGHT
+        if portrait_grids is None and _FALLBACK_DEPTH[0]:
+            saved_pw = PALE_WEIGHT
+            PALE_WEIGHT = 0.0
+            try:
+                return base(entries, portrait_grids, p)
+            finally:
+                PALE_WEIGHT = saved_pw
+        return base(entries, portrait_grids, p)
+
+    MAIN_SAT_ONLY, v16_decide_from = True, decide
+    try:
+        return v35(portrait, gallery, trace)
+    finally:
+        MAIN_SAT_ONLY, v16_decide_from = saved
+
+
+def method_v36(portrait, gallery):
+    return v36(portrait, gallery)

@@ -30,8 +30,10 @@ from PIL import Image
 from . import lab
 
 D = lab.DATA
-OUT = D / "full"
+OUT = D / "full"  # results of METHOD; COMPARE_DIR holds the version shown beside it
 METHOD = "v33"
+COMPARE_DIR = None
+COMPARE_LABEL = None
 PAGES = [("4–9 images", 4, 9, "full-4-9.html"), ("10+ images", 10, 10**9, "full-10plus.html")]
 
 
@@ -139,11 +141,22 @@ def _card(r):
         else '<div class="main nomain">No main image yet</div>'
     )
     seed = r["seed"]
-    swatch = (
-        f'<div class="swatch" style="background:{seed}"></div><strong>{seed}</strong><span>L {r["L"]} · C {r["C"]}</span>'
-        if seed
-        else '<div class="swatch none">none</div><strong>—</strong>'
-    )
+    old = None
+    if COMPARE_DIR is not None and (COMPARE_DIR / f"{lab.slug(r['name'])}.json").is_file():
+        old = json.loads((COMPARE_DIR / f"{lab.slug(r['name'])}.json").read_text()).get("seed")
+
+    def one(label, sd, strong):
+        if not sd:
+            return f'<div class="sw"><div class="swatch none">none</div><span>{label}</span></div>'
+        return (
+            f'<div class="sw{" strong" if strong else ""}"><div class="swatch" style="background:{sd}"></div>'
+            f"<span>{label}</span><strong>{sd}</strong></div>"
+        )
+
+    if COMPARE_DIR is not None:
+        swatch = one(COMPARE_LABEL, old, False) + one(METHOD.upper(), seed, old != seed)
+    else:
+        swatch = one(METHOD.upper(), seed, False)
     live = r["live_seed"]
     live_chip = (
         f'<span class="live"><i style="background:{live}"></i>site today {live}</span>'
@@ -151,7 +164,7 @@ def _card(r):
         else '<span class="live">site today: none</span>'
     )
     return (
-        f'<article class="char" data-path="{r["path"]}" data-name="{html.escape(r["name"].lower())}">'
+        f'<article class="char" data-path="{r["path"]}" data-changed="{"1" if COMPARE_DIR is not None and old != seed else "0"}" data-name="{html.escape(r["name"].lower())}">'
         f'<header><h3>{html.escape(r["name"])}</h3><span class="count">{r["count"]} images</span></header>'
         f'<div class="body">{main}<div class="customs">{customs}</div><div class="accent">{swatch}</div></div>'
         f'<footer><span class="tag tag-{r["path"]}">{html.escape(_reason(r))}</span>{live_chip}</footer>'
@@ -203,14 +216,16 @@ h1 { font-size: clamp(1.4rem, 3vw, 1.75rem); font-weight: 700; letter-spacing: -
 .char header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .char h3 { font-size: 0.92rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .count { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.body { display: grid; grid-template-columns: 78px minmax(0, 1fr) 92px; gap: 10px; align-items: start; }
+.body { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
 .main { width: 78px; height: 112px; object-fit: cover; border-radius: 6px; border: 1px solid var(--hairline); display: block; }
 .nomain { display: grid; place-items: center; text-align: center; font-size: 11px; color: var(--ink-3); background: var(--chip); }
 .customs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .custom { width: 100%; height: 112px; object-fit: cover; border-radius: 6px; border: 1px solid var(--hairline); display: block; }
-.accent { display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.accent strong { color: var(--ink); font-weight: 500; font-size: 12px; }
-.swatch { width: 92px; height: 78px; border-radius: 8px; border: 1px solid var(--hairline); }
+.accent { display: flex; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.sw { display: flex; flex-direction: column; gap: 2px; width: 84px; }
+.sw strong { color: var(--ink); font-weight: 500; font-size: 11.5px; }
+.sw.strong .swatch { border: 2px solid var(--ink); }
+.swatch { width: 84px; height: 72px; border-radius: 8px; border: 1px solid var(--hairline); }
 .swatch.none { display: grid; place-items: center; background: var(--chip); font-family: var(--sans); }
 .char footer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; border-top: 1px solid var(--hairline); padding-top: 7px; font-size: 11.5px; color: var(--ink-3); }
 .tag { padding: 0 8px; border-radius: 999px; border: 1px solid var(--hairline-strong); color: var(--ink-2); }
@@ -224,7 +239,8 @@ h1 { font-size: clamp(1.4rem, 3vw, 1.75rem); font-weight: 700; letter-spacing: -
   .customs { grid-column: 1 / -1; grid-row: 2; }
   .main { width: 70px; height: 100px; }
   .accent { grid-column: 2; grid-row: 1; }
-  .swatch { width: 100%; height: 64px; }
+  .sw { width: 50%; }
+  .swatch { width: 100%; height: 60px; }
 }
 """
 
@@ -239,7 +255,8 @@ JS = """
     const q = search.value.trim().toLowerCase();
     let n = 0;
     for (const c of cards) {
-      const ok = (path === 'all' || c.dataset.path === path) && (!q || c.dataset.name.includes(q));
+      const byPath = path === 'all' || c.dataset.path === path || (path === 'changed' && c.dataset.changed === '1');
+      const ok = byPath && (!q || c.dataset.name.includes(q));
       c.hidden = !ok;
       if (ok) n++;
     }
@@ -268,6 +285,12 @@ def render():
         n_pink = sum(r["path"] == "pale-pink" for r in members)
         n_nomain = sum(not r["portrait"] for r in members)
         n_none = sum(not r["seed"] for r in members)
+        n_changed = 0
+        if COMPARE_DIR is not None:
+            for r in members:
+                f = COMPARE_DIR / f"{lab.slug(r['name'])}.json"
+                if f.is_file() and json.loads(f.read_text()).get("seed") != r["seed"]:
+                    n_changed += 1
         cards = "".join(_card(r) for r in members)
         page = f"""<title>Accent Check · {title}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -277,13 +300,14 @@ def render():
 <div class="wrap">
   <div class="intro">
     <h1>Accent Check · {title}</h1>
-    <p>The candidate extractor ({METHOD.upper()}) on every character in the library with {title.replace("images", "gallery images")}, ordered by image count. Each card shows the main image, four gallery images spread across the gallery, the chosen accent, and the colour the site shows today. Near-white and near-black accents need a small frontend change before the site can display them.</p>
+    <p>The candidate extractor ({METHOD.upper()}) on every character in the library with {title.replace("images", "gallery images")}, ordered by image count. Each card shows the main image, four gallery images spread across the gallery, {("the previous version (" + COMPARE_LABEL + ") beside the new one — a bold border marks a colour that changed — and ") if COMPARE_DIR is not None else "the chosen accent and "}the colour the site shows today. Near-white and near-black accents need a small frontend change before the site can display them.</p>
     <div class="facts">
       <span><b>{len(members)}</b> characters</span>
       <span><b>{n_mono}</b> monochrome path</span>
       <span><b>{n_pink}</b> pale-pink path</span>
       <span><b>{n_nomain}</b> without a main image yet</span>
       <span><b>{n_none}</b> with no accent</span>
+      {f"<span><b>{n_changed}</b> changed from {COMPARE_LABEL}</span>" if COMPARE_DIR is not None else ""}
     </div>
   </div>
   <div class="tools" role="toolbar" aria-label="Filter characters">
@@ -291,6 +315,7 @@ def render():
     <button type="button" data-path="monochrome" aria-pressed="false">Monochrome</button>
     <button type="button" data-path="pale-pink" aria-pressed="false">Pale pink</button>
     <button type="button" data-path="standard" aria-pressed="false">Standard</button>
+    {'<button type="button" data-path="changed" aria-pressed="false">Changed</button>' if COMPARE_DIR is not None else ""}
     <input id="search" type="search" placeholder="Find a character" aria-label="Find a character">
     <span class="shown" id="shown"></span>
   </div>
@@ -306,13 +331,23 @@ def render():
 
 
 def main() -> None:
+    global METHOD, OUT, COMPARE_DIR, COMPARE_LABEL
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--method", default="v33")
+    parser.add_argument("--out", default="full", help="results folder in .data for --method")
+    parser.add_argument(
+        "--compare", default=None, help="results folder of the version to show beside it"
+    )
+    parser.add_argument("--compare-label", default="previous")
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compute")
     c.add_argument("--workers", type=int, default=6)
     c.add_argument("--threads", type=int, default=4, help="onnxruntime threads per worker")
     sub.add_parser("render")
     args = parser.parse_args()
+    METHOD, OUT = args.method, D / args.out
+    if args.compare:
+        COMPARE_DIR, COMPARE_LABEL = D / args.compare, args.compare_label
     if args.cmd == "compute":
         compute(args.workers, args.threads)
     else:

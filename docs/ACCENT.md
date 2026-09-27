@@ -1532,3 +1532,48 @@ wanted, Vertin blue (previously purple or muted teal).
 
 Main images added since the run: Arthur Leywin, Centurion, Arisa, Tooth Fairy,
 Green Lantern (refetched).
+
+---
+
+## 25. V34–V36: greens, the main image, highlights, never empty (2026-09-27)
+
+The owner chose themes 2, 3 and 4 of §24.
+
+**V34** did all three at once: every pixel binned by OKLCH hue (perceptually
+even), a later dark fade, ties and the fallback read on the main image's cut-out
+(whole image at ¼ weight), tie candidates present in ≥ 30% of gallery images, a
+highlight that recurs (clear in ≥ 3 images, or 2 that are half the gallery — no
+average-coverage test), and a never-empty safety net. It fixed eleven flagged
+characters and broke ten approved ones: 59/80, no better than V33. The per-pixel
+work was vectorised (numpy) along the way; a python/numpy comparison differs by
+at most 0.5% of any cell (pixels rounding across a bin edge).
+
+**Ablation** (turning each V34 change off in turn): the OKLCH switch was what
+fixed the greens and several ties — and what broke the warm characters (Tohru,
+Mirio, Panty, Poison Ivy, Miku, Artoria), whose tuning is all in HSV. The later
+dark fade hurt Miku and Artoria and helped little. The cut-out main image helped
+(Kyouka, Lynae). Presence changed nothing.
+
+**V35** returned to HSV and targeted green directly: windows centred in HSV's
+green family (75–170°) are ±45° wide instead of ±30°, and the aim inside one
+cannot drift below 75° into blonde and gold. Greens and warm colours both held —
+but the tie fixes OKLCH had supplied were lost, and Reze went magenta: with the
+background removed, the main image's cut-out includes skin, and pale skin and
+blush vote pink.
+
+**V36**: when the main image breaks a tie or decides alone, the *choice* between
+colours uses only its saturated colour (skin is mostly pale; hair and clothes are
+not), while the *aim* inside the chosen colour reads the whole main image at full
+weight (Reze's violet is her background). Presence counts pale colour too (Luka's
+mint hair is pale; saturated-only presence had filtered it out).
+
+**Checks: 69 of 80** (V33: 59). Fixed: Zoro, N, Noriaki, Sanae, Daiyousei (green),
+Suika, Alpha, Usagi (her bow's red), Tsukatsuki Rio and Alucard (red highlight),
+Griffith (a colour again). **The full 4+ run took under two minutes** — cut-outs
+cached, measurement vectorised.
+
+**Still open:** Maki Zenin (now a very dark teal, `#163948`), Nefer (a teal-green,
+darker as asked but bluer), Maomao (still pale), Kyouka Jirou (her main image's
+saturated colour is also pink), Shizuku Murasaki, Ellen Joe and Rio Futaba (the
+main-image fallback still picks a background-like colour), Himiko Toga, 2B and A2
+(override), and Nephis, who moved from the approved brown to a dark mauve.
