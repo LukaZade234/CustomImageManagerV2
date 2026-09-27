@@ -1650,3 +1650,60 @@ run rather than the earlier blue.
 **Still open:** Maki, N, Xurkitree, Ruka, Jotaro, Kyouka, Nefer (bluer, but
 accepted as a step), Maomao, Shizuku, Ellen Joe, Rio Futaba, Himiko Toga, and 2B
 and A2 (override).
+
+---
+
+## 28. Where the accent picker stands (2026-09-27)
+
+The owner's review of V37: Xurkitree's teal-cyan is not right either, but not
+important; N, Maki Zenin, Suwako Moriya and Audrey Hall regressed. **The green
+trade-off:** V36's wide green window swallowed warm pixels, which turned N, Maki,
+Suwako and Audrey greener — and Yotsuba and David Martinez green too. V37 stops the
+swallowing; the first four go back, the last two are fixed. No floor tried gets all
+six (§27).
+
+**Jiu Niangzi**, rechecked with her newly added main image: still burnt orange
+`#b14918` — the tie is orange (38°) against green (112°), and her main image's
+saturated colour is 73% in the orange window.
+
+**Flagged in the full-check review (§24) and never changed by V34–V37 — 37 of 53:**
+
+- *Skin and warm tones outvote the real colour* — Sharron, Himiko Toga, Kim
+  Soleum, Sukuna, Aoi Todo, Izumi Miyamura, Chizuru Ichinose, Tetsurou Kuroo, Jiu
+  Niangzi, Anya Forger, Loki, Makoto Kino, Eiki Shiki, Tooth Fairy.
+- *Pink identities* — Anya Forger, Aemeath, Tsubasa Hanekawa, Yae Miko, Yuyuko
+  Saigyouji (missed or too red); Centurion and Umbreon (false pale-pink path — in a
+  6–7 image gallery one image already passes the 15% presence test).
+- *Nearly monochrome* — Kim Dokja, Mai Sakurajima, Han Sooyoung, Sharron, Gon
+  Freecss (monochrome white where green is wanted), Mahoraga (could be whiter).
+- *The main image's background decides* — Rio Futaba, Ellen Joe, Kyouka Jirou,
+  Shizuku Murasaki.
+- *Greens* — Maki Zenin, N, Maomao.
+- *Shade and other* — Airani Iofifteen (too dark), Zeus (gold wanted), Vertin (blue;
+  purple or muted teal wanted), Arthur Leywin (blue), Shouko Nishimiya (blue; her
+  pinkish light-brown hair wanted).
+
+Changed (16): Tsukatsuki Rio, Alucard (red highlights), Daiyousei, Zoro, Sanae,
+Noriaki, Green Lantern, Nefer (greens), Alpha, Suika, Usagi (ties), Arceus (now
+gold, as preferred), Gloria Martinez (now wine red, the owner's second choice),
+Arisa, Griffith and Cheongmyeong (colours again).
+
+### Suggestions
+
+1. **A skin/body-part model** is the largest remaining lever: the first group (14)
+   and parts of the pink and main-image groups are skin winning. Candidate:
+   siyeong0/Anime-Face-Segmentation (hair / skin / clothes classes; faces only, so
+   it needs a face crop from the cut-out). Prototype it offline against the review
+   checks before anything ships.
+2. **Pale-pink gate for small galleries**: require the pale pink in at least two
+   images (Centurion, Umbreon). Cheap; test against the 106 small galleries first,
+   as §27's small-gallery rule showed how easily they move.
+3. **Use the manual override** for the stubborn remainder: 2B and A2 (white), Maki,
+   N, Kyouka, Rio Futaba, Ellen Joe, Himiko Toga, Jotaro Kujo, Ruka Urushibara — about
+   ten characters of 599. The override already exists and each pick is a label for
+   future tuning.
+4. **Before shipping**: port V37 into `accent_extract.py` (vectorised), store a small
+   per-image colour summary and discard masks; run the one-off backfill on the
+   desktop; segment new uploads once, in the background, on the server (1.7 GB peak
+   RAM — check the instance); and let `themeFromSeed` accept near-neutral seeds so
+   monochrome accents display.
