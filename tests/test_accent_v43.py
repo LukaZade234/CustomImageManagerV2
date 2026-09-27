@@ -283,6 +283,27 @@ class TestRecompute:
         assert set(clean_db.get_accent_image_data([1, 2, 3])) == {2, 3}
 
 
+class TestQueuePriority:
+    def test_someone_waiting_goes_ahead_of_bulk_work(self, clean_db):
+        for name in ("Bulk A", "Bulk B", "Lucy"):
+            clean_db.add_character(name, "Series", "S", "")
+        clean_db.enqueue_accent("Bulk A", priority=0)
+        clean_db.enqueue_accent("Bulk B", priority=0)
+        clean_db.enqueue_accent("Lucy")  # a visitor's page: priority 1
+        assert clean_db.next_accent_job()[1] == "Lucy"
+
+    def test_a_visit_raises_a_queued_bulk_job(self, clean_db):
+        for name in ("Bulk A", "Lucy"):
+            clean_db.add_character(name, "Series", "S", "")
+        clean_db.enqueue_accent("Bulk A", priority=0)
+        clean_db.enqueue_accent("Lucy", priority=0)
+        assert clean_db.next_accent_job()[1] == "Bulk A"
+        assert clean_db.enqueue_accent("Lucy") is False  # already queued ...
+        assert clean_db.next_accent_job()[1] == "Lucy"  # ... but now first
+        clean_db.enqueue_accent("Lucy", priority=0)  # never lowered
+        assert clean_db.next_accent_job()[1] == "Lucy"
+
+
 class TestWorker:
     def test_a_job_is_done_and_removed(self, clean_db, monkeypatch):
         import accent_worker

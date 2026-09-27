@@ -460,7 +460,7 @@ def import_bundle(bundle: Path, *, apply: bool, queue_rest: bool) -> None:
         else:
             counts["queued (changed)"] += 1
             if apply:
-                db.enqueue_accent(name)
+                db.enqueue_accent(name, priority=0)
 
     if queue_rest:
         for (name,) in conn.execute(
@@ -471,7 +471,7 @@ def import_bundle(bundle: Path, *, apply: bool, queue_rest: bool) -> None:
             if name not in covered:
                 counts["queued (not in bundle)"] += 1
                 if apply:
-                    db.enqueue_accent(name)
+                    db.enqueue_accent(name, priority=0)
 
     print(("APPLIED" if apply else "DRY RUN -- nothing written; add --apply") + ":")
     for k, v in counts.items():

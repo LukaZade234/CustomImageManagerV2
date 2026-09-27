@@ -2660,3 +2660,12 @@ wanted. `sudo systemctl disable --now imgmanager-accent` stops the worker.
 
 **Next:** the owner's overrides for the open list (§29), with the staff picker.
 
+
+**First issue after going live — a reset waited behind the backfill.** The owner reset
+Lucy's hand-picked colour ("Reset to measured"). The import had skipped her (overrides
+are never touched), so no V43 seed was stored; clearing the override left none, the
+page fell back to teal, and her recompute was queued *behind* the ~1,000 bulk jobs
+the import had just queued — over an hour away, for a recompute that takes seconds
+(her images' data is stored). Fixed with a queue priority (migration 027): the gallery
+endpoint queues at priority 1 and raises an existing job to it; the import queues at 0.
+Lucy's V43 colour is a pale periwinkle, `#95a4e1`.

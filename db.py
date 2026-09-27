@@ -293,14 +293,32 @@ def put_accent_main_data(url: str, version: str, data: bytes, face_hair: str, n_
         )
 
 
-def enqueue_accent(name: str) -> bool:
-    """Queue a character for the accent worker. True if it was not already queued."""
+def enqueue_accent(name: str, priority: int = 1) -> bool:
+    """Queue a character for the accent worker. True if it was not already queued.
+
+    Priority 1 (the default) is for a character somebody is looking at; it goes
+    ahead of bulk work (priority 0, the rollout's import). Queuing an existing job
+    again can raise its priority but never lowers it, and leaves a failed job's
+    retry time alone.
+    """
     now = _now()
     with transaction() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM accent_queue q JOIN characters c ON c.id = q.character_id"
+            " WHERE c.name = ?",
+            (name,),
+        ).fetchone()
+        if exists:
+            conn.execute(
+                "UPDATE accent_queue SET priority = MAX(priority, ?)"
+                " WHERE character_id = (SELECT id FROM characters WHERE name = ?)",
+                (priority, name),
+            )
+            return False
         cur = conn.execute(
-            "INSERT OR IGNORE INTO accent_queue (character_id, queued_at, next_try_at)"
-            " SELECT id, ?, ? FROM characters WHERE name = ?",
-            (now, now, name),
+            "INSERT INTO accent_queue (character_id, queued_at, next_try_at, priority)"
+            " SELECT id, ?, ?, ? FROM characters WHERE name = ?",
+            (now, now, priority, name),
         )
         return cur.rowcount > 0
 
@@ -312,7 +330,7 @@ def next_accent_job() -> tuple[int, str, int] | None:
         "SELECT q.character_id, c.name, q.attempts FROM accent_queue q"
         "  JOIN characters c ON c.id = q.character_id"
         " WHERE q.next_try_at <= ?"
-        " ORDER BY q.next_try_at, q.queued_at LIMIT 1",
+        " ORDER BY q.priority DESC, q.next_try_at, q.queued_at LIMIT 1",
         (_now(),),
     ).fetchone()
     return (int(row[0]), row[1], int(row[2])) if row else None
