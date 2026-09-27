@@ -1010,6 +1010,13 @@ def decide(portrait: Prepared | None, gallery: Sequence[Prepared]) -> Result:
             "safety net",
             f"{result.reason}; safety net: the gallery's monochrome tone",
         )
+    if result.seed is None and gallery:
+        result = Result(
+            _whole_images(gallery),
+            "standard",
+            "safety net",
+            f"{result.reason}; safety net: the gallery's whole images",
+        )
 
     # A monochrome character whose art carries one colour in nearly every image (Gon's
     # green) takes it as a tint.
@@ -1101,3 +1108,29 @@ def _main_dominant(portrait, fp, gal):
         return None
     result, _ = _shade(shade_e, cands[0][0], blend=False)
     return result
+
+
+def _whole_images(gallery: Sequence[Prepared]):
+    """Last resort: the gallery's images uncut, when nothing else could decide.
+
+    Beyond the reviewed V43, which never met the case -- every character the lab
+    measured had four or more images. It is a one-image gallery whose cut-out
+    failed, with no usable main image (the backfill found four). Rather than leave
+    the character without an accent, the images are measured whole, as the
+    original extractor did, and failing that their tone is used.
+    """
+    px = [p.rgb.reshape(-1, 3) for p in gallery]
+    pairs = [(a, b) for a, b in ((_measure_hue(x), _classify(x, False)) for x in px) if a and b]
+    if pairs:
+        seed, _ = _decide_from(
+            [(a, 1.0) for a, _ in pairs],
+            [(b, 1.0) for _, b in pairs],
+            _Gallery([a for a, _ in pairs]),
+            None,
+        )
+        if seed is not None:
+            return seed
+    seed, how = _mono_side(px)
+    if seed is None or not how.startswith("white"):
+        seed = _mono_tone(px)
+    return seed

@@ -105,6 +105,14 @@ class TestDecision:
         assert r.seed is not None
         assert _hue_gap(r.seed["hue"], RED_HUE) < 25
 
+    def test_a_lone_uncut_image_with_no_main_image_still_gets_a_colour(self):
+        # One image the cut-out could not separate, and no main image: measured whole
+        # rather than left empty (the owner's "never empty" rule).
+        rgb, _ = _figure(RED, background=BLUE)
+        r = V.decide(None, [V.Prepared(rgb=rgb, mask=np.ones(rgb.shape[:2], bool))])
+        assert r.seed is not None
+        assert r.source == "safety net"
+
     def test_nothing_in_nothing_out(self):
         r = V.decide(None, [])
         assert r.seed is None

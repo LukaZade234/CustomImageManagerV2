@@ -11,6 +11,8 @@ measured here and the result carried over. Three steps, in order:
   compute    Desktop. Runs the models on every image and V43 on every character,
              into one bundle file (SQLite). Re-runs reuse what is already in the
              bundle; --lab-cache reuses the accent lab's cut-out and face caches.
+  review     Desktop. A page of the result beside what the site shows today
+             (read from the public catalog), for the owner to look over first.
   import     Server. Writes the bundle into the database: each image's model
              data, and each character's seed -- but a seed only where the
              character's gallery and main image are exactly what was measured.
@@ -21,6 +23,7 @@ measured here and the result carried over. Three steps, in order:
 
     uv run python scripts/accent_backfill.py snapshot
     uv run python scripts/accent_backfill.py compute [--lab-cache scripts/accent_lab/.data]
+    uv run python scripts/accent_backfill.py review [--reviewed scripts/accent_lab/.data/full_v43]
     # copy data/accent_backfill/bundle.db to the server, then there:
     python scripts/accent_backfill.py import bundle.db            # dry run
     python scripts/accent_backfill.py import bundle.db --apply --queue-rest
@@ -84,7 +87,7 @@ def snapshot(work: Path) -> None:
     mains.mkdir(parents=True, exist_ok=True)
     names, page = [], 1
     while True:
-        listing = _get(f"{API}/api/customs?page={page}&per_page=100&sort=name").json()
+        listing = _get(f"{API}/api/customs?page={page}&per_page=100&sort=name_asc").json()
         names += [item["name"] for item in listing["items"]]
         if page >= listing["total_pages"]:
             break
@@ -230,6 +233,165 @@ def compute(work: Path, lab: Path | None) -> None:
     print(f"bundle: {work / 'bundle.db'}")
 
 
+# ---- review (desktop) --------------------------------------------------------------
+
+
+def _live_seeds(work: Path, names) -> dict:
+    """What the site shows today, per character (the public catalog record; read-only)."""
+    import requests
+
+    path = work / "live_seeds.json"
+    out = json.loads(path.read_text()) if path.is_file() else {}
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    for name in names:
+        if name in out:
+            continue
+        quoted = urllib.parse.quote(name, safe="")
+        for _ in range(6):
+            r = session.get(f"{API}/api/catalog/character?name={quoted}", timeout=30)
+            if r.status_code == 429:
+                time.sleep(15)
+                continue
+            if r.ok:
+                out[name] = (r.json().get("character") or {}).get("accent_seed")
+            break
+        time.sleep(0.5)
+    path.write_text(json.dumps(out))
+    return out
+
+
+def _thumb_uri(path: Path, height=150):
+    import base64
+    import io
+
+    from PIL import Image
+
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        img.thumbnail((height * 2, height))
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=72)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def review(work: Path, reviewed: Path | None) -> None:
+    import html
+
+    from scripts.accent_lab.fullcheck import CSS, _oklab
+
+    manifest = {m["name"]: m for m in json.loads((work / "manifest.json").read_text())}
+    conn = sqlite3.connect(work / "bundle.db")
+    seeds = {
+        r[0]: r
+        for r in conn.execute("SELECT name, seed, source, path, reason, image_ids FROM seeds")
+    }
+    live = _live_seeds(work, list(manifest))
+
+    def dist(a, b):
+        if not a or not b:
+            return 9.0 if a != b else 0.0
+        return sum((p - q) ** 2 for p, q in zip(_oklab(a), _oklab(b), strict=True)) ** 0.5
+
+    def lab_seed(name):
+        if reviewed is None:
+            return None
+        import re
+
+        f = reviewed / (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") + ".json")
+        return json.loads(f.read_text()).get("seed") if f.is_file() else None
+
+    new, drifted, same_as_lab = [], [], 0
+    for name, (_, seed, *_rest) in seeds.items():
+        ref = lab_seed(name)
+        if ref is None:
+            new.append(name)
+        elif ref == seed:
+            same_as_lab += 1
+        else:
+            drifted.append(name)
+    changed_live = sum(dist(live.get(n), seeds[n][1]) >= 0.08 for n in seeds)
+
+    def card(name):
+        _, seed, source, path, reason, ids_json = seeds[name]
+        entry, old = manifest[name], live.get(name)
+        ids = json.loads(ids_json)
+        main = (
+            f'<img class="main" src="{_thumb_uri(work / "main" / entry["main_file"])}" alt="">'
+            if entry["main_file"]
+            else '<div class="main nomain">No main image</div>'
+        )
+        step = max(1, len(ids) // 4)
+        customs = "".join(
+            f'<img class="custom" src="{_thumb_uri(work / "thumbs" / f"{i}.webp")}" alt="">'
+            for i in ids[::step][:4]
+            if (work / "thumbs" / f"{i}.webp").is_file()
+        )
+
+        def sw(label, sd, strong=False):
+            if not sd:
+                return (
+                    f'<div class="sw"><div class="swatch none">none</div><span>{label}</span></div>'
+                )
+            cls = "sw strong" if strong else "sw"
+            return (
+                f'<div class="{cls}"><div class="swatch" style="background:{sd}"></div>'
+                f"<span>{label}</span><strong>{sd}</strong></div>"
+            )
+
+        moved = dist(old, seed) >= 0.08
+        why = html.escape((reason or "").split(";")[0][:90])
+        return (
+            f'<article class="char" data-path="{"changed" if moved else "same"}" data-changed="{int(moved)}"'
+            f' data-name="{html.escape(name.lower())}">'
+            f'<header><h3>{html.escape(name)}</h3><span class="count">{len(ids)} images</span></header>'
+            f'<div class="body">{main}<div class="customs">{customs}</div>'
+            f'<div class="accent">{sw("Site today", old)}{sw("V43", seed, moved)}</div></div>'
+            f'<footer><span class="tag">{html.escape(path or "")}{" / " + html.escape(source) if source and source != path else ""}</span>'
+            f'<span class="live">{why}</span></footer></article>'
+        )
+
+    def section(title, note, names):
+        names = sorted(names, key=lambda n: -dist(live.get(n), seeds[n][1]))
+        cards = "".join(card(n) for n in names)
+        return (
+            f'<section class="group"><div class="ghead"><h2>{html.escape(title)} <span>{len(names)}</span></h2>'
+            f'<p>{html.escape(note)}</p></div><div class="grid">{cards}</div></section>'
+        )
+
+    body = section(
+        "Never reviewed: galleries of 1-3 images",
+        "The lab only measured characters with 4 or more images, so these are new to you. "
+        "Largest change from the site's current colour first.",
+        new,
+    )
+    if drifted:
+        body += section(
+            "Changed since you reviewed them",
+            "Their gallery grew or changed after the lab's copy, so V43 now lands elsewhere.",
+            drifted,
+        )
+    page = f"""<title>Accent Rollout Check</title>
+<style>{CSS}
+.group {{ display: flex; flex-direction: column; gap: 10px; }}
+.ghead {{ display: flex; flex-direction: column; gap: 2px; padding-top: 8px; }}
+.ghead h2 {{ font-size: 1.05rem; font-weight: 600; margin: 0; }}
+.ghead h2 span {{ font-weight: 500; color: var(--ink-3); }}
+.ghead p {{ margin: 0; color: var(--ink-2); font-size: 13px; max-width: 78ch; }}
+</style>
+<div class="wrap">
+  <div class="intro">
+    <h1>Accent rollout check</h1>
+    <p>The V43 accents about to be imported, beside the colour each character shows on the site today. Of the {len(seeds)} characters with a gallery, {same_as_lab} are exactly what you reviewed in the lab; {changed_live} differ visibly from what the site shows now (the site still runs the original extractor). Shown here are only the ones you have not seen as V43.</p>
+  </div>
+  {body}
+</div>
+"""
+    out = work / "review.html"
+    out.write_text(page)
+    print(f"review page: {out} ({len(new)} never reviewed, {len(drifted)} changed since reviewed)")
+
+
 # ---- import (server) ----------------------------------------------------------------
 
 
@@ -326,6 +488,9 @@ def main() -> None:
     c = sub.add_parser("compute")
     c.add_argument("--work", type=Path, default=WORK)
     c.add_argument("--lab-cache", type=Path, default=None, help="scripts/accent_lab/.data")
+    r = sub.add_parser("review")
+    r.add_argument("--work", type=Path, default=WORK)
+    r.add_argument("--reviewed", type=Path, default=None, help="scripts/accent_lab/.data/full_v43")
     i = sub.add_parser("import")
     i.add_argument("bundle", type=Path)
     i.add_argument("--apply", action="store_true")
@@ -335,6 +500,8 @@ def main() -> None:
         snapshot(args.work)
     elif args.cmd == "compute":
         compute(args.work, args.lab_cache)
+    elif args.cmd == "review":
+        review(args.work, args.reviewed)
     else:
         import logs
 

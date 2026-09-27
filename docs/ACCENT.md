@@ -2589,3 +2589,25 @@ deploy with the engine off; install the worker; `snapshot` + `compute` on the de
 copy the bundle over and `import` (dry run, then `--apply --queue-rest`); set
 `ACCENT_ENGINE=v43`; verify; then the owner's overrides for the open list.
 
+
+**Phase 2 — precompute (2026-09-27, done):**
+- `snapshot` (read-only, 29 min): 771 characters with a gallery, 9,493 thumbnails, 669
+  main images. 99 main images are old ImgChest links that now return 404 — dead by
+  design (main images are Mudae links mirrored on R2 and fill in as the site is used);
+  the server's worker gets the same 404, so those characters have no main image for now.
+- `compute` (8.5 min, the lab's caches reused): 771 seeds; paths: 685 standard, 59
+  monochrome, 27 pale-pink. **597 of the 599 characters the lab measured are
+  byte-identical to the reviewed V43**; the two others changed because their gallery
+  grew since the lab's copy — Jinx (invisible) and Poison Ivy (11 → 20 images: a new tie
+  between yellow-green and red, broken by her main image to a pale yellow-green
+  `#bdcd8a`; her verdict allows green or red).
+- **Four characters came out empty** (Iguin, Kuroyukihime, Ping, Pomp and Circumstance):
+  one gallery image the cut-out could not separate and no usable main image — a case
+  the lab never met. A last resort was added to `accent_v43.decide`, after every other
+  step: the gallery's images measured whole, as the original extractor did, then their
+  tone. It cannot fire for anything the lab measured (still 599/599 identical); all
+  four now have a colour.
+- 551 of 771 seeds differ visibly from what the site shows today (the original
+  extractor). The 172 characters with 1–3 images were never in the lab's reviews.
+- `review`: a page of the unreviewed ones (172) and the two that changed, each beside
+  the site's current colour: https://claude.ai/artifact/UywrwNEauXp5qurkrkWjqC
