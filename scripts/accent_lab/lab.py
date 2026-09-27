@@ -455,3 +455,43 @@ V36_REVIEW = {
         lambda r: _near("#163948", dh=40, dl=0.15)(r) or _greenish(max_l=0.62)(r),
     ),
 }
+
+
+# The owner's review of the V38e trial (2026-09-27): the 34 characters whose colour
+# visibly changed from V37 when parsed hair counts twice.
+V38_REVIEW = {
+    # Owner prefers the old green; with her main image the tie now goes to her red hair.
+    "live:Daphnis et Chloé": ("Daphnis et Chloe: green preferred", _greenish()),
+    "live:Izumi Miyamura": (
+        "Izumi Miyamura: either (cream or dark red)",
+        lambda r: _near("#e8d792")(r) or _near("#7c2217")(r),
+    ),
+    "live:Lillie": (
+        "Lillie: old paler yellow (nitpick)",
+        lambda r: _near("#fbe7a1", dh=15)(r) and r["lightness"] >= 0.88,
+    ),
+    "live:Tanya Degurechaff": (
+        "Tanya: either (blonde or blood red)",
+        lambda r: _near("#e9cf8c")(r) or _near("#9b312f")(r),
+    ),
+    "live:Anya Forger": (
+        "Anya Forger: pink (clearer is better)",
+        lambda r: _hue_in(330, 25)(r) and r["chroma"] >= 0.1,
+    ),
+    "live:Ellen Joe": ("Ellen Joe: V38e red, very good", _near("#c5546d")),
+    "live:Omaru Polka": (
+        "Omaru Polka: old paler yellow (nitpick)",
+        lambda r: _near("#f5e39d", dh=15)(r) and r["lightness"] >= 0.88,
+    ),
+    "live:Panty Anarchy": (
+        "Panty: vibrant yellow, not washed out",
+        lambda r: _hue_in(75, 110)(r) and r["chroma"] >= 0.12,
+    ),
+    "live:Kyouka Jirou": ("Kyouka Jirou: V38e purple", _near("#63529c")),
+    "live:Aemeath": ("Aemeath: V38e pink", _near("#c86e8b")),
+    "live:Ibuki Mioda": (
+        "Ibuki Mioda: blue or purple-pink (slight preference purple)",
+        lambda r: _near("#6988c2")(r) or _near("#d2559d")(r),
+    ),
+    "live:Jade (HSR)": ("Jade (HSR): V38e lilac", _near("#d5a2d4")),
+}

@@ -7,7 +7,7 @@
 The verdicts are the dictionaries in lab.py -- PANEL (the original calibration
 panel, local ids), REVIEW (first two rounds), SAMPLE_REVIEW (the random sample),
 PROFILE_REVIEW (the colour-profile paths), FULL_REVIEW (the full 4+ check) and
-V36_REVIEW. By default every live set is used (PANEL needs the local library).
+V36_REVIEW and V38_REVIEW. By default every live set is used (PANEL needs the local library).
 Each version is any `method_<name>` / `<name>(portrait, gallery, trace)` in
 methods.py, or `current` for the shipped extractor.
 """
@@ -19,7 +19,7 @@ import argparse
 from . import lab
 from . import methods as M
 
-SETS = ["SAMPLE_REVIEW", "REVIEW", "PROFILE_REVIEW", "FULL_REVIEW", "V36_REVIEW"]
+SETS = ["SAMPLE_REVIEW", "REVIEW", "PROFILE_REVIEW", "FULL_REVIEW", "V36_REVIEW", "V38_REVIEW"]
 
 
 def main() -> None:

@@ -1960,3 +1960,58 @@ summary would be folded into each image's stored colour summary, like the cut-ou
 
 **Open for the owner:** judge the 34 changes on the review page. If V38e holds,
 it replaces V37 as the candidate; face-skin removal should be dropped.
+
+---
+
+## 32. The owner's review of V38e (2026-09-27)
+
+Verdicts on the 34 changed characters, recorded as `V38_REVIEW` in `lab.py`
+(V37 passes 6 of 12, V38e 8):
+
+- **Much better / very good:** Kyouka Jirou, Aemeath, Jade (HSR), Ellen Joe, Anya
+  Forger (the pink could be clearer; `#bc5b63` is a little muddy).
+- **Either is fine:** Izumi Miyamura, Tanya Degurechaff (blonde hair vs blood red),
+  Ibuki Mioda (blue or the old purple-pink; slight preference for the old).
+- **Old preferred:** Panty Anarchy (strongly: the old vivid yellow, not the washed-out
+  one), Lillie and Omaru Polka (the old paler yellow; nitpicks).
+- **Daphnis et Chloé:** the old green is preferred. Her main image has since been
+  added (refetched): with it, V37 and V38e both give brick red `#b15041` — a genuine
+  tie between her red braids and green dress, and the main image votes red 0.61 to
+  0.37. Under the tie rule that is the expected answer; green needs an exception or
+  the override.
+- Everything else on the page was accepted. Overall: a mostly positive change.
+
+**Unchanged by V38e:** Audrey Hall (`#c5b459` → `#c7b559`), Reze (`#6e599f` →
+`#6d589e`), Columbina (`#9aabe8` → `#9aaae7`). Columbina's hair *is* found (221 of
+253 images, 19% of the cut-out), but what the parser labels as her hair is mixed:
+~41% blue-violet and ~29% wine/magenta by hue. Doubling it raises both, so her
+light blue (0.44) still beats wine (0.34).
+
+**The three shade misses share one cause.** The hue choice is unchanged for Panty,
+Lillie and Omaru; the *shade* moved because the shade step also sees the doubled
+hair. Panty's pale blonde hair tipped her shade to the pale class (washed out);
+Lillie's and Omaru's darker hair made theirs darker.
+
+**Several characters in one image.** The face detector finds every face; the
+parser labels each crop; all hair is counted, whoever's it is. Measured over the
+9,092 gallery images of the 4+ characters: 9% no face, 78% one, **13% two or
+more**; for 33 of 599 characters at least half the images have 2+ faces (Himiko
+Toga 7 of 11, Izumi 4 of 5, Panty 58%, Sandrone 66%; Sakurako/Kasumi and
+Popola/Devola 100% — shared or paired galleries). It measurably mixes in the
+other character: Himiko's hair in her one-face images is ash-blonde (`#b19b89`,
+`#d1b5aa`), in her pair images browner (`#875c49`, `#99594e`); Izumi's own hair is
+near-black (`#313e45`) while his pair images' "hair" is Hori's brown (`#4a2c17`) —
+his accepted dark red comes from her hair.
+
+**Suggestions:**
+1. **Shade from the plain cut-out** — the extra hair votes on *which colour*, not
+   on *how light*. Targets Panty, Lillie and Omaru.
+2. **Count only the character's own hair.** Cheapest: learn the character's hair
+   colour from their one-face images (78% of all images) and, in images with
+   several faces, boost only the face whose hair matches it. No new model; it
+   cannot work where nearly every image is a pair (Popola/Devola), which then keep
+   V37's behaviour. The principled alternative is deepghs's character-identity
+   model (CCIP, openrail licence, **150 MB**): pick the face that matches the
+   character across the gallery. Heavier — about the size of the cut-out model —
+   so only if the cheap rule falls short.
+3. **Daphnis**: override to green, or accept red under the tie rule.
