@@ -83,9 +83,11 @@ def faces(arr):
 
 
 def _parse(arr, boxes):
+    """Labels, and which face (1-based, best first; 0 = none) each labelled pixel came from."""
     h, w = arr.shape[:2]
     lab = np.zeros((h, w), np.uint8)
-    for x0, y0, x1, y1, _ in boxes:
+    fid = np.zeros((h, w), np.uint8)
+    for k, (x0, y0, x1, y1, _) in enumerate(boxes, start=1):
         side = max(x1 - x0, y1 - y0) * CROP_GROW
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2 + (y1 - y0) * 0.1
         X0, Y0 = round(cx - side / 2), round(cy - side / 2)
@@ -103,20 +105,28 @@ def _parse(arr, boxes):
         region = p[sy0 - Y0 : sy1 - Y0, sx0 - X0 : sx1 - X0]
         cur = lab[sy0:sy1, sx0:sx1]
         cur[region > 0] = region[region > 0]
-    return lab
+        fid[sy0:sy1, sx0:sx1][region > 0] = k
+    return lab, fid
 
 
 def labels_for(img: Image.Image) -> np.ndarray:
     """Per-pixel parser label shaped like `img` (0 outside every face crop)."""
+    return labels_and_faces(img)[0]
+
+
+def labels_and_faces(img: Image.Image):
+    """(labels, face index) shaped like `img`; face index is 1-based, best face first."""
     rgb = img.convert("RGB")
     key = hashlib.sha1(rgb.tobytes() + repr(rgb.size).encode()).hexdigest()[:16]
     cached = CACHE / f"{key}.npz"
     if cached.is_file():
-        return np.load(cached)["l"]
+        z = np.load(cached)
+        if "f" in z:  # older entries hold labels only; recompute those
+            return z["l"], z["f"]
     arr = np.asarray(rgb)
-    lab = _parse(arr, faces(arr))
+    lab, fid = _parse(arr, faces(arr))
     CACHE.mkdir(parents=True, exist_ok=True)
     tmp = cached.with_suffix(f".{os.getpid()}.tmp.npz")
-    np.savez_compressed(tmp, l=lab)
+    np.savez_compressed(tmp, l=lab, f=fid)
     os.replace(tmp, cached)
-    return lab
+    return lab, fid

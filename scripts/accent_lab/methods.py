@@ -69,13 +69,14 @@ from .lab import A, describe, portrait_schedule
 class Grids:
     """Shipped per-image grids plus how much of the frame each hue covers."""
 
-    __slots__ = ("saturated", "pale", "sat_cov", "hist_cov")
+    __slots__ = ("saturated", "pale", "sat_cov", "hist_cov", "plain")
 
     def __init__(self, saturated, pale, sat_cov, hist_cov):
         self.saturated = saturated
         self.pale = pale
         self.sat_cov = sat_cov  # share of all pixels in the saturated class
         self.hist_cov = hist_cov  # hue bin -> share of all pixels (saturated class)
+        self.plain = None  # V39: the same image measured without the extra hair
 
 
 _cache: dict = {}
@@ -688,7 +689,7 @@ def foreground_only(img):
     if not (FACE_SKIN_OUT or HAIR_BOOST):
         return Image.fromarray(arr)
     share = float((arr != 255).any(axis=2).mean())  # the scene test reads the cut-out as V37 did
-    out = Image.fromarray(_face_parsed(arr, keep, _full_res(src) if src else img))
+    out = Image.fromarray(_face_parsed(arr, keep, _full_res(src) if src else img, src))
     out.info["fg_share"] = share
     out.info["base_h"] = arr.shape[0]
     return out
@@ -699,16 +700,19 @@ FACE_SKIN_OUT = False  # paint face skin, skin and mouth white (ignored like bac
 HAIR_BOOST = 0  # count hair pixels this many extra times
 
 
-def _face_parsed(arr, keep, src_img):
+def _face_parsed(arr, keep, src_img, src=None):
     from . import faceparse as FP
 
-    lab = FP.labels_for(src_img)
+    lab, fid = FP.labels_and_faces(src_img)
     if lab.shape != arr.shape[:2]:
         lab = np.asarray(Image.fromarray(lab).resize(arr.shape[1::-1], Image.NEAREST))
+        fid = np.asarray(Image.fromarray(fid).resize(arr.shape[1::-1], Image.NEAREST))
     if FACE_SKIN_OUT:
         arr[np.isin(lab, (FP.FACE, FP.SKIN, FP.MOUTH)) & keep] = 255
     if HAIR_BOOST:
-        hair = arr[(lab == FP.HAIR) & keep]
+        own = _OWN_FACES.get(src) if OWN_HAIR else None
+        mine = np.isin(fid, list(own)) if own else True
+        hair = arr[(lab == FP.HAIR) & keep & mine]
         if len(hair):
             # extra rows of hair pixels, white-padded: every measurement ignores white
             extra = np.concatenate([hair] * HAIR_BOOST)
@@ -1302,6 +1306,10 @@ def v16_decide_from(entries, portrait=None, p=V8):
     cands = windows(hist)
     if not cands or cands[0][1] <= 0:
         return None, "no chromatic evidence"
+    # V39: extra hair chooses the colour; the aim inside it reads the plain cut-out
+    aim_hist = hist
+    if AIM_PLAIN:
+        aim_hist = evidence_v15([(getattr(g, "plain", None) or g, w) for g, w in entries])
     top_c, top_s = cands[0]
     tied = [(c, s) for c, s in cands if s >= TIE_RATIO * top_s]
     hue = top_c
@@ -1331,7 +1339,7 @@ def v16_decide_from(entries, portrait=None, p=V8):
         best, chosen = max(scores)
         if best <= 0:
             return None, "two-colour tie, main image carries neither"
-        gs, gt = A._smooth(hist)
+        gs, gt = A._smooth(aim_hist)
         ps, pst = A._smooth(ph_all)
         near = [i for i in range(A.HUE_BINS) if _in_window((i + 0.5) * 5, chosen, AIM_SPAN)]
         hue = (max(near, key=lambda i: (gs[i] / gt) ** AIM_GALLERY_POW * (ps[i] / pst)) + 0.5) * 5
@@ -1339,7 +1347,7 @@ def v16_decide_from(entries, portrait=None, p=V8):
             f"{c:.0f}deg {s:.2f}" for s, c in sorted(scores, reverse=True)
         )
     else:
-        gs, _ = A._smooth(hist)
+        gs, _ = A._smooth(aim_hist)
         near = [i for i in range(A.HUE_BINS) if _in_window((i + 0.5) * 5, top_c, AIM_SPAN)]
         hue = (max(near, key=lambda i: gs[i]) + 0.5) * 5
     share = win_sum(hist, hue, WINDOW) / (sum(hist) or 1.0)
@@ -2687,6 +2695,9 @@ def measure_np(img, measure_image):
         bins = np.minimum((hue / 5).astype(int), 71)
         cov = np.bincount(bins[ok], minlength=72) / len(h)
         result = Grids(base.saturated, base.pale, float(cov.sum()), [float(x) for x in cov])
+        plain = _unboosted(img) if AIM_PLAIN else img
+        if plain is not img:
+            result.plain = measure_np(plain, measure_image)  # V39: the aim reads this
     _cache[key] = (img, result)
     return result
 
@@ -3000,3 +3011,125 @@ def v38e(portrait, gallery, trace=None):
 
 def method_v38e(portrait, gallery):
     return v38e(portrait, gallery)
+
+
+# ---- V39: the owner's review of V38e (ACCENT.md §33) ---------------------------------------------
+#
+# - The shade reads the cut-out without the extra hair: hair votes on which colour
+#   and where inside it, not on how light (Panty washed out, Lillie darker).
+# - Only the character's own hair counts. Their hair colour is learnt from the images
+#   where they are alone; in an image with several faces, only the face whose hair is
+#   nearest that colour is boosted. A gallery with too few solo images is a "package
+#   deal" (Popola and Devola): every face counts, as in V38e.
+
+SHADE_PLAIN = False  # the shade reads the cut-out without the extra hair
+AIM_PLAIN = False  # the aim does too (V39p: tried; loses Anya's pink hair, see §33)
+OWN_HAIR = False
+_OWN_FACES: dict = {}  # src path -> face indexes whose hair counts (missing: all faces)
+OWN_MIN_SOLO = 0.25  # share of face images that must show one face, else package deal
+OWN_MIN_HAIR_PX = 150
+
+
+def _oklab_np(rgb):
+    """sRGB 0..1 (N, 3) -> Oklab (N, 3)."""
+    c = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    lms = c @ np.array(
+        [[0.4122214708, 0.2119034982, 0.0883024619],
+         [0.5363325363, 0.6806995451, 0.2817188376],
+         [0.0514459929, 0.1073969566, 0.6299787005]]
+    )  # fmt: skip
+    lms = np.cbrt(lms)
+    return lms @ np.array(
+        [[0.2104542553, 1.9779984951, 0.0259040371],
+         [0.7936177850, -2.4285922050, 0.7827717662],
+         [-0.0040720468, 0.4505937099, -0.8086757660]]
+    )  # fmt: skip
+
+
+def _face_hair(src):
+    """Median Oklab hair colour per detected face in one image: {face index: colour}."""
+    from . import faceparse as FP
+
+    full = _full_res(src)
+    lab, fid = FP.labels_and_faces(full)
+    keep = seg.mask_for(full) >= FG_THRESHOLD
+    rgb = np.asarray(full, dtype=np.float64) / 255.0
+    out = {}
+    for k in np.unique(fid[fid > 0]):
+        m = (lab == FP.HAIR) & (fid == k) & keep
+        if m.sum() >= OWN_MIN_HAIR_PX:
+            out[int(k)] = np.median(_oklab_np(rgb[m]), axis=0)
+    return out, int(fid.max())
+
+
+def _prepare_own_faces(portrait, gallery, trace=None):
+    _OWN_FACES.clear()
+    info = {}
+    for im in [portrait, *gallery]:
+        src = im.info.get("src") if im is not None else None
+        if src and src not in info:
+            info[src] = _face_hair(src)
+    with_faces = [v for v in info.values() if v[1] > 0]
+    solo = [next(iter(h.values())) for h, n in with_faces if n == 1 and h]
+    if not with_faces or len(solo) < max(2, OWN_MIN_SOLO * len(with_faces)):
+        if trace is not None:
+            trace.append(f"own hair: package deal ({len(solo)} solo of {len(with_faces)})")
+        return
+    ref = np.median(np.array(solo), axis=0)
+    for src, (hair, n) in info.items():
+        if n >= 2 and hair:
+            d = {
+                k: float(np.sqrt((0.5 * (c[0] - ref[0])) ** 2 + ((c[1:] - ref[1:]) ** 2).sum()))
+                for k, c in hair.items()
+            }
+            _OWN_FACES[src] = {min(d, key=d.get)}
+
+
+_V34_SHADE_BASE = _V34_SHADE
+
+
+def _v34_shade(img):
+    return _V34_SHADE_BASE(_unboosted(img) if SHADE_PLAIN else img)
+
+
+_V34_SHADE = _v34_shade
+
+
+def _v39(portrait, gallery, trace, own, aim_plain=False):
+    global SHADE_PLAIN, AIM_PLAIN, OWN_HAIR
+    saved = (SHADE_PLAIN, AIM_PLAIN, OWN_HAIR)
+    SHADE_PLAIN, AIM_PLAIN, OWN_HAIR = True, aim_plain, own
+    try:
+        if own:
+            _prepare_own_faces(portrait, gallery, trace)
+        return v38e(portrait, gallery, trace)
+    finally:
+        SHADE_PLAIN, AIM_PLAIN, OWN_HAIR = saved
+        _OWN_FACES.clear()
+
+
+def v39a(portrait, gallery, trace=None):
+    """V38e with the shade read without the extra hair."""
+    return _v39(portrait, gallery, trace, False)
+
+
+def v39(portrait, gallery, trace=None):
+    """V39a, boosting only the character's own hair (package deals keep every face)."""
+    return _v39(portrait, gallery, trace, True)
+
+
+def v39p(portrait, gallery, trace=None):
+    """V39 with the aim also read without the extra hair (tried; see ACCENT.md §33)."""
+    return _v39(portrait, gallery, trace, True, aim_plain=True)
+
+
+def method_v39p(portrait, gallery):
+    return v39p(portrait, gallery)
+
+
+def method_v39a(portrait, gallery):
+    return v39a(portrait, gallery)
+
+
+def method_v39(portrait, gallery):
+    return v39(portrait, gallery)

@@ -460,8 +460,12 @@ V36_REVIEW = {
 # The owner's review of the V38e trial (2026-09-27): the 34 characters whose colour
 # visibly changed from V37 when parsed hair counts twice.
 V38_REVIEW = {
-    # Owner prefers the old green; with her main image the tie now goes to her red hair.
-    "live:Daphnis et Chloé": ("Daphnis et Chloe: green preferred", _greenish()),
+    # Old green preferred at first; with her main image the tie goes to her red hair,
+    # which the owner then accepted as "still characteristic of her enough".
+    "live:Daphnis et Chloé": (
+        "Daphnis et Chloe: red (main image) or green",
+        lambda r: _greenish()(r) or _near("#b15041")(r),
+    ),
     "live:Izumi Miyamura": (
         "Izumi Miyamura: either (cream or dark red)",
         lambda r: _near("#e8d792")(r) or _near("#7c2217")(r),

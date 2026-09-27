@@ -79,6 +79,10 @@ the open questions, including the dead ends.
   window is not face skin) and costs approved colours; counting hair twice does.
   **V38e** (V37 + hair counted twice in the colour vote) scores **75 of 87** (V37:
   73) and visibly changes 34 of 599 characters — review page linked in §31.
+- **V39 (§32–33):** the owner reviewed V38e (mostly positive). V39 reads the shade
+  without the extra hair and counts only the character's own hair in multi-character
+  images (shared "package deal" galleries count every face): **83 of 96** checks
+  (V37 79). The current candidate.
 
 ---
 
@@ -1771,7 +1775,7 @@ original `PANEL`). Score any versions with `python -m scripts.accent_lab.checks
 v36,v37`; explain one character with `python -m scripts.accent_lab.trace v37 "Name"`.
 Scores so far: V33 59/80 → V36 69/80 → **V37 73/87** (the set grew).
 
-**Review pages** (private artifacts; V38e trial page in §31):
+**Review pages** (private artifacts; V38e trial page in §31, V39 page in §33):
 - Full check, 10+ images (V37 beside V36): https://claude.ai/artifact/4aDYwNwRtsQVFBeemppsUE
 - Full check, 4–9 images (V37 beside V36): https://claude.ai/artifact/1eqMqdy4UtNYjpgJ9aSFZP
 - Colour Profile Paths (V29 / V32 / V33): https://claude.ai/artifact/3DjpxNkjShtDUyAh68EBJY
@@ -2015,3 +2019,55 @@ his accepted dark red comes from her hair.
    character across the gallery. Heavier — about the size of the cut-out model —
    so only if the cheap rule falls short.
 3. **Daphnis**: override to green, or accept red under the tie rule.
+
+---
+
+## 33. V39: shade without the extra hair, own hair only (2026-09-27)
+
+The owner accepted Daphnis et Chloé's red under the tie rule ("still characteristic
+of her enough"; her check now accepts red or green), agreed to §32's suggestions,
+and set a rule for shared galleries: **when nearly all of a character's images
+feature the same partner, they are a "package deal" and both may contribute.**
+
+**V39** is V38e plus two switches (`methods.py`, "V39"):
+
+- **The shade reads the cut-out without the extra hair** (`SHADE_PLAIN`). Hair
+  still decides which colour, and where inside it the aim lands.
+- **Only the character's own hair counts** (`OWN_HAIR`). `faceparse.py` now also
+  caches which face each labelled pixel belongs to (older cache entries are
+  recomputed). A gallery pre-pass takes the median Oklab hair colour of each face;
+  the character's hair colour is the median over images with exactly one face; in
+  an image with several faces only the face whose hair is nearest (lightness at
+  half weight) is boosted, main image included. **Package deal:** fewer than 2 solo
+  images, or solo images under 25% of the images with a face → every face counts,
+  as in V38e. 29 of 599 galleries qualify: Popola/Devola, Sakurako/Kasumi, Izumi
+  Miyamura, Tadano Hitohito, Natsu Dragneel, and characters the face detector
+  rarely finds (BMO, Doraemon, Pochita, Arceus…), for which nothing changes.
+
+**Tried and kept as V39p: the aim without the extra hair too** (`AIM_PLAIN`). It
+restores Omaru Polka's old paler yellow and turns Rio Futaba from pink to brick
+red (`#ad5147`), but loses Anya Forger's pink: her winning window is the warm one
+at ~20° in every version, and it is her hair that moves the aim inside it from
+48° (skin/cream) to 358° (her pink hair). Omaru's hair moves hers from 48° to 42°,
+where the saturated class decides the shade. Anya was "much better", Omaru a
+nitpick, so V39 keeps hair in the aim.
+
+**Checks: V39 83 of 96** (V38e 81, V37 79, V39p 84 — the set now includes
+`V38_REVIEW`). V39 keeps every V38e gain the owner liked (Kyouka, Ellen Joe,
+Aemeath, Jade, Anya, and the accepted "either" cases) and fixes Panty (vivid
+`#e4b546`) and Lillie (`#fbe7a1`). Still off from this round: Omaru (`#d0af61`,
+a nitpick). Himiko Toga is back to V37's `#a25348` exactly — her own hair is
+ash-blonde and does not move the warm window. Lelouch changed again: V38e's
+lilac became a dark purple-navy `#464789`.
+
+**Visible changes against V37: 18 of 599** (V38e: 33). The 16 V38e changes V39
+undid were shade-only, back to V37's lightness: Aki Hayakawa, Chun-li, Cola,
+Edward Elric, Finn, Hitagi, Kogasa, Komi Shouko, Nightwing, Ritsu, Tadano,
+Tsumugi, Zhezhi, Lillie, Panty, plus Lelouch's new shade.
+
+**Review page** (V39 beside V38e, only what moved since the V38e page):
+https://claude.ai/artifact/1GY72otrTP7BDpRKczpqy3
+
+**Open for the owner:** that page; whether V39 replaces V37 as the candidate.
+Unchanged by every variant so far: the skin/warm group, the greens (Maki, N,
+Maomao, Nefer), Shizuku, Ruka, Xurkitree, Jotaro, 2B and A2.
