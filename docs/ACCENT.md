@@ -2239,3 +2239,38 @@ backgrounds are gold too.
 Cost: nothing new — the background is the inverse of the mask already computed.
 Canaries in the checks: Lynae, Kyouka, Eiki, and the gold-drift set (Will, Ishtar,
 Dazai, Poison Ivy).
+
+---
+
+## 38. V41: parsed hair skips the skin rules — tried, rejected (2026-09-27)
+
+The owner chose §36's fix 1 first. `HAIR_EXEMPT` passes each cut-out's own-hair
+mask (including the boosted rows) to `classify_np` and the coverage pass.
+
+| variant | what hair skips | checks (of 96) | visibly changed |
+|---|---|---|---|
+| V40 | — | 83 | — |
+| V41 | skin-hue and pale-skin rules, warm damping, warm-white exclusion | **71** | 103 |
+| V41b | only the pale-skin rule and skin-shadow damping, only at hue 335–12 (pink side) | **76** | 43 |
+
+**V41** freed brown and blonde hair from the warm damping, and with hair counted
+twice the warm window won almost everywhere: Saber and Jeanne d'Arc blue → gold,
+Zoro green → red, Sandrone, Luka, Kyouka, Panty, Lillie, Tanya, Artoria and Dazai
+(back to the gold the owner rejected) all broke; 103 characters turned tan, gold or
+peach. The warm damping exists precisely because brown and blonde are everywhere.
+
+**V41b** fixed the targets it could — Shouko Nishimiya (pink-brown `#cb938f`),
+Airani Iofifteen (light pink `#f6aaac`), Rio Futaba (terracotta `#b26056`, no longer
+pink) — but broke seven approved characters (Nephis, Shiki Ryougi, Narumi, Tohru,
+Nagatoro, Luka, Usagi, David Martinez) and turned many others brick or dusty red
+(Marin Kitagawa, Lucy Heartfilia, Alice, Twinkle Star). The parser's "hair"
+includes the shaded edge where hair meets skin and warm-lit strands, which sit at
+exactly the hues (350–12) the skin-shadow rule was written for; the brick-red
+problem of §19 comes straight back.
+
+**Conclusion:** the skin rules are doing necessary work even inside the parsed hair
+region, so a global exemption does not work. Vertin was unmoved by either (her hair
+is too grey to vote, not removed). Shouko, Airani and Rio are better handled by the
+override, or by a per-character gate (exempt only when the character's own hair is
+consistently a pink identity), which has not been tried. Code stays in `methods.py`
+(`v41`, `v41b`) for the record; V40 remains the candidate.

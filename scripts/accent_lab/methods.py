@@ -689,7 +689,10 @@ def foreground_only(img):
     if not (FACE_SKIN_OUT or HAIR_BOOST):
         return Image.fromarray(arr)
     share = float((arr != 255).any(axis=2).mean())  # the scene test reads the cut-out as V37 did
+    _LAST_HAIR[0] = None
     out = Image.fromarray(_face_parsed(arr, keep, _full_res(src) if src else img, src))
+    if _LAST_HAIR[0] is not None:
+        out.info["hair"] = _LAST_HAIR[0]
     out.info["fg_share"] = share
     out.info["base_h"] = arr.shape[0]
     return out
@@ -712,7 +715,9 @@ def _face_parsed(arr, keep, src_img, src=None):
     if HAIR_BOOST:
         own = _OWN_FACES.get(src) if OWN_HAIR else None
         mine = np.isin(fid, list(own)) if own else True
-        hair = arr[(lab == FP.HAIR) & keep & mine]
+        hair_mask = (lab == FP.HAIR) & keep & mine
+        _LAST_HAIR[0] = hair_mask.reshape(-1)
+        hair = arr[hair_mask]
         if len(hair):
             # extra rows of hair pixels, white-padded: every measurement ignores white
             extra = np.concatenate([hair] * HAIR_BOOST)
@@ -720,7 +725,20 @@ def _face_parsed(arr, keep, src_img, src=None):
             pad = (-len(extra)) % w
             extra = np.concatenate([extra, np.full((pad, 3), 255, arr.dtype)])
             arr = np.concatenate([arr, extra.reshape(-1, w, 3)])
+            _LAST_HAIR[0] = np.concatenate([_LAST_HAIR[0], np.ones(len(extra), bool)])
     return arr
+
+
+_LAST_HAIR = [None]  # the hair mask of the last _face_parsed call, handed to its image
+HAIR_EXEMPT = False  # V41 True: parsed hair skips the skin rules and warm damping; "pink": V41b
+
+
+def _hair_exempt(img, n):
+    """Pixels exempt from the skin rules: the image's parsed own hair, when V41 is on."""
+    m = img.info.get("hair") if HAIR_EXEMPT else None
+    if m is None or len(m) < n:
+        return np.zeros(n, bool)
+    return m[:n]
 
 
 def _unboosted(img):
@@ -2627,11 +2645,17 @@ def classify_np(
     a, h, s, v, d, L, C, oh = _pixels(img)
     n = len(h)
     keep = (v >= 0.15) & ~((v >= 0.95) & (s <= 0.15)) & (d >= 1e-9)
+    hair_ex = _hair_exempt(img, n)  # V41: parsed hair is never skin
+    if HAIR_EXEMPT == "pink":  # V41b: only on the pink side; brown and blonde keep the rules
+        pink_ex = hair_ex & ((h >= 335) | (h <= 12))
+        notex, notex_pink = np.ones(n, bool), ~pink_ex
+    else:
+        notex = notex_pink = ~hair_ex
     lo, hi = skin_hue or A.SKIN_HUE
-    keep &= ~((h >= lo) & (h <= hi) & (s >= 0.12) & (s <= 0.55) & (v >= skin_val))
+    keep &= ~((h >= lo) & (h <= hi) & (s >= 0.12) & (s <= 0.55) & (v >= skin_val) & notex)
     if skin is not None:
         sk = np.fromiter((skin(hh, ss, vv) for hh, ss, vv in zip(h, s, v, strict=True)), bool, n)
-        keep &= ~((s >= A.PALE_SAT_MIN) & sk)
+        keep &= ~((s >= A.PALE_SAT_MIN) & sk & notex_pink)
 
     def zone(lo_, hi_):
         return (h >= lo_) & (h <= hi_) if lo_ <= hi_ else (h >= lo_) | (h <= hi_)
@@ -2641,19 +2665,20 @@ def classify_np(
     w_sat = s**1.6 * _light_pref_np(v)
     if warm_damp:
         wz = zone(warm_damp[0], warm_damp[1])
-        damp = wz & ((s <= warm_damp[2]) | (v < WARM_DARK_V))
+        damp = wz & ((s <= warm_damp[2]) | (v < WARM_DARK_V)) & notex
         w_sat = np.where(damp, w_sat * warm_damp[3], w_sat)
         if warm_damp_light:
             lz = zone(warm_damp_light[0], warm_damp_light[1]) & (s <= warm_damp_light[2]) & ~damp
-            w_sat = np.where(lz, w_sat * warm_damp_light[3], w_sat)
+            w_sat = np.where(lz & notex_pink, w_sat * warm_damp_light[3], w_sat)
     elif warm_damp_light:
         lz = zone(warm_damp_light[0], warm_damp_light[1]) & (s <= warm_damp_light[2])
-        w_sat = np.where(lz, w_sat * warm_damp_light[3], w_sat)
+        w_sat = np.where(lz & notex_pink, w_sat * warm_damp_light[3], w_sat)
     if warm_white:
-        pale &= ~(zone(warm_white[0], warm_white[1]) & (s < warm_white[2]))
+        pale &= ~(zone(warm_white[0], warm_white[1]) & (s < warm_white[2]) & notex)
     w_pale = s * A.PALE_VOTE_WEIGHT
     if warm_damp:
-        w_pale = np.where(zone(warm_damp[0], warm_damp[1]), w_pale * warm_damp[3], w_pale)
+        wz_p = zone(warm_damp[0], warm_damp[1]) & notex
+        w_pale = np.where(wz_p, w_pale * warm_damp[3], w_pale)
     if int(sat.sum() + pale.sum()) < 24:
         return None
     if space == "oklch":
@@ -2692,7 +2717,8 @@ def measure_np(img, measure_image):
         a, h, s, v, d, L, C, oh = _pixels(img)
         white = np.all(a >= 0.999, axis=1)
         ok = (v >= 0.15) & (s >= A.SATURATED_SAT_MIN) & ~white
-        ok &= ~((h >= A.SKIN_HUE[0]) & (h <= A.SKIN_HUE[1]) & (s <= 0.55) & (v >= 0.6))
+        skin_px = (h >= A.SKIN_HUE[0]) & (h <= A.SKIN_HUE[1]) & (s <= 0.55) & (v >= 0.6)
+        ok &= ~(skin_px & ~(_hair_exempt(img, len(h)) & (HAIR_EXEMPT != "pink")))
         hue = oh if HUE_SPACE == "oklch" else h
         bins = np.minimum((hue / 5).astype(int), 71)
         cov = np.bincount(bins[ok], minlength=72) / len(h)
@@ -3156,3 +3182,42 @@ def v40(portrait, gallery, trace=None):
 
 def method_v40(portrait, gallery):
     return v40(portrait, gallery)
+
+
+# ---- V41: parsed hair is never skin (ACCENT.md §38) ------------------------------------------------
+#
+# The skin rules were tuned by colour alone before the face parser existed, and they
+# deleted light, warm and pink hair: 73% of Shouko Nishimiya's pink-brown hair went as
+# "pale skin" (§36). Pixels the parser calls the character's own hair now skip the
+# skin-hue and pale-skin rules, the warm damping and the warm-white exclusion.
+
+
+def v41(portrait, gallery, trace=None):
+    global HAIR_EXEMPT
+    saved, HAIR_EXEMPT = HAIR_EXEMPT, True
+    try:
+        return v40(portrait, gallery, trace)
+    finally:
+        HAIR_EXEMPT = saved
+
+
+def method_v41(portrait, gallery):
+    return v41(portrait, gallery)
+
+
+# V41b: V41 failed (71 of 96: brown and blonde hair, freed from the warm damping, turned
+# 103 characters tan, gold or peach). Only the pink side is exempt now: parsed hair at
+# hue 335-12 skips the pale-skin rule and the skin-shadow damping.
+
+
+def v41b(portrait, gallery, trace=None):
+    global HAIR_EXEMPT
+    saved, HAIR_EXEMPT = HAIR_EXEMPT, "pink"
+    try:
+        return v40(portrait, gallery, trace)
+    finally:
+        HAIR_EXEMPT = saved
+
+
+def method_v41b(portrait, gallery):
+    return v41b(portrait, gallery)
