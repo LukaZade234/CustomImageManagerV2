@@ -71,6 +71,11 @@ uv run --with numpy --with onnxruntime python -m scripts.accent_lab.trace v37 "R
 uv run --no-project --with numpy --with onnxruntime --with pillow --with requests \
     python -m scripts.accent_lab.skinbench speed
 
+# Only the characters that visibly changed between two runs, one page:
+#   fullcheck --method v38e --out full_v38e --compare full_v37 --compare-label V37 \
+#       --min-change 0.08 --changed-only render
+# (V38a-e use face-parser labels from faceparse.py; models as in skinbench.py.)
+
 # Contact sheet from the last library run, to judge colours by eye.
 uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
 ```

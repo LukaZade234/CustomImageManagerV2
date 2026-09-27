@@ -34,6 +34,37 @@ OUT = D / "full"  # results of METHOD; COMPARE_DIR holds the version shown besid
 METHOD = "v33"
 COMPARE_DIR = None
 COMPARE_LABEL = None
+MIN_CHANGE = 0.0  # Oklab distance for "changed"; 0 = any hex difference
+CHANGED_ONLY = False  # one page holding only the changed characters
+
+
+def _oklab(hx):
+    r, g, b = (int(hx[i : i + 2], 16) / 255 for i in (1, 3, 5))
+    r, g, b = (c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b))
+    l_ = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m_ = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s_ = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_,
+    )
+
+
+def _is_changed(old, seed):
+    if old == seed:
+        return False
+    if not old or not seed or MIN_CHANGE <= 0:
+        return True
+    d = sum((a - b) ** 2 for a, b in zip(_oklab(old), _oklab(seed), strict=True)) ** 0.5
+    return d >= MIN_CHANGE
+
+
+def _old_seed(r):
+    f = COMPARE_DIR / f"{lab.slug(r['name'])}.json" if COMPARE_DIR is not None else None
+    return json.loads(f.read_text()).get("seed") if f is not None and f.is_file() else None
+
+
 PAGES = [("4–9 images", 4, 9, "full-4-9.html"), ("10+ images", 10, 10**9, "full-10plus.html")]
 
 
@@ -141,9 +172,8 @@ def _card(r):
         else '<div class="main nomain">No main image yet</div>'
     )
     seed = r["seed"]
-    old = None
-    if COMPARE_DIR is not None and (COMPARE_DIR / f"{lab.slug(r['name'])}.json").is_file():
-        old = json.loads((COMPARE_DIR / f"{lab.slug(r['name'])}.json").read_text()).get("seed")
+    old = _old_seed(r)
+    changed = COMPARE_DIR is not None and _is_changed(old, seed)
 
     def one(label, sd, strong):
         if not sd:
@@ -154,7 +184,7 @@ def _card(r):
         )
 
     if COMPARE_DIR is not None:
-        swatch = one(COMPARE_LABEL, old, False) + one(METHOD.upper(), seed, old != seed)
+        swatch = one(COMPARE_LABEL, old, False) + one(METHOD.upper(), seed, changed)
     else:
         swatch = one(METHOD.upper(), seed, False)
     live = r["live_seed"]
@@ -164,7 +194,7 @@ def _card(r):
         else '<span class="live">site today: none</span>'
     )
     return (
-        f'<article class="char" data-path="{r["path"]}" data-changed="{"1" if COMPARE_DIR is not None and old != seed else "0"}" data-name="{html.escape(r["name"].lower())}">'
+        f'<article class="char" data-path="{r["path"]}" data-changed="{"1" if changed else "0"}" data-name="{html.escape(r["name"].lower())}">'
         f'<header><h3>{html.escape(r["name"])}</h3><span class="count">{r["count"]} images</span></header>'
         f'<div class="body">{main}<div class="customs">{customs}</div><div class="accent">{swatch}</div></div>'
         f'<footer><span class="tag tag-{r["path"]}">{html.escape(_reason(r))}</span>{live_chip}</footer>'
@@ -277,7 +307,11 @@ JS = """
 def render():
     rows = [json.loads(p.read_text()) for p in sorted(OUT.glob("*.json"))]
     outputs = []
-    for title, lo, hi, fname in PAGES:
+    pages = PAGES
+    if CHANGED_ONLY:
+        rows = [r for r in rows if _is_changed(_old_seed(r), r["seed"])]
+        pages = [(f"changed from {COMPARE_LABEL}", 0, 10**9, f"changed-{METHOD}.html")]
+    for title, lo, hi, fname in pages:
         members = sorted(
             (r for r in rows if lo <= r["count"] <= hi), key=lambda r: (r["count"], r["name"])
         )
@@ -287,10 +321,7 @@ def render():
         n_none = sum(not r["seed"] for r in members)
         n_changed = 0
         if COMPARE_DIR is not None:
-            for r in members:
-                f = COMPARE_DIR / f"{lab.slug(r['name'])}.json"
-                if f.is_file() and json.loads(f.read_text()).get("seed") != r["seed"]:
-                    n_changed += 1
+            n_changed = sum(_is_changed(_old_seed(r), r["seed"]) for r in members)
         cards = "".join(_card(r) for r in members)
         page = f"""<title>Accent Check · {title}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -300,7 +331,7 @@ def render():
 <div class="wrap">
   <div class="intro">
     <h1>Accent Check · {title}</h1>
-    <p>The candidate extractor ({METHOD.upper()}) on every character in the library with {title.replace("images", "gallery images")}, ordered by image count. Each card shows the main image, four gallery images spread across the gallery, {("the previous version (" + COMPARE_LABEL + ") beside the new one — a bold border marks a colour that changed — and ") if COMPARE_DIR is not None else "the chosen accent and "}the colour the site shows today. Near-white and near-black accents need a small frontend change before the site can display them.</p>
+    <p>The candidate extractor ({METHOD.upper()}) on {("every character whose colour visibly changed from " + str(COMPARE_LABEL)) if CHANGED_ONLY else ("every character in the library with " + title.replace("images", "gallery images"))}, ordered by image count. Each card shows the main image, four gallery images spread across the gallery, {("the previous version (" + COMPARE_LABEL + ") beside the new one — a bold border marks a colour that changed — and ") if COMPARE_DIR is not None else "the chosen accent and "}the colour the site shows today. Near-white and near-black accents need a small frontend change before the site can display them.</p>
     <div class="facts">
       <span><b>{len(members)}</b> characters</span>
       <span><b>{n_mono}</b> monochrome path</span>
@@ -331,7 +362,7 @@ def render():
 
 
 def main() -> None:
-    global METHOD, OUT, COMPARE_DIR, COMPARE_LABEL
+    global METHOD, OUT, COMPARE_DIR, COMPARE_LABEL, MIN_CHANGE, CHANGED_ONLY
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--method", default="v33")
     parser.add_argument("--out", default="full", help="results folder in .data for --method")
@@ -339,6 +370,10 @@ def main() -> None:
         "--compare", default=None, help="results folder of the version to show beside it"
     )
     parser.add_argument("--compare-label", default="previous")
+    parser.add_argument(
+        "--min-change", type=float, default=0.0, help="Oklab distance that counts as changed"
+    )
+    parser.add_argument("--changed-only", action="store_true", help="one page of changes only")
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compute")
     c.add_argument("--workers", type=int, default=6)
@@ -346,6 +381,7 @@ def main() -> None:
     sub.add_parser("render")
     args = parser.parse_args()
     METHOD, OUT = args.method, D / args.out
+    MIN_CHANGE, CHANGED_ONLY = args.min_change, args.changed_only
     if args.compare:
         COMPARE_DIR, COMPARE_LABEL = D / args.compare, args.compare_label
     if args.cmd == "compute":

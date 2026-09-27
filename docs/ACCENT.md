@@ -75,6 +75,10 @@ the open questions, including the dead ends.
   labels face skin and hair, but only around the head; no small full-body anime
   parser exists, and photo-trained models fail on anime. Whether it moves the
   flagged characters is untested.
+- **Skin trial (§31):** removing face skin does *not* help (the skin group's warm
+  window is not face skin) and costs approved colours; counting hair twice does.
+  **V38e** (V37 + hair counted twice in the colour vote) scores **75 of 87** (V37:
+  73) and visibly changes 34 of 599 characters — review page linked in §31.
 
 ---
 
@@ -1767,7 +1771,7 @@ original `PANEL`). Score any versions with `python -m scripts.accent_lab.checks
 v36,v37`; explain one character with `python -m scripts.accent_lab.trace v37 "Name"`.
 Scores so far: V33 59/80 → V36 69/80 → **V37 73/87** (the set grew).
 
-**Review pages** (private artifacts):
+**Review pages** (private artifacts; V38e trial page in §31):
 - Full check, 10+ images (V37 beside V36): https://claude.ai/artifact/4aDYwNwRtsQVFBeemppsUE
 - Full check, 4–9 images (V37 beside V36): https://claude.ai/artifact/1eqMqdy4UtNYjpgJ9aSFZP
 - Colour Profile Paths (V29 / V32 / V33): https://claude.ai/artifact/3DjpxNkjShtDUyAh68EBJY
@@ -1837,10 +1841,10 @@ baseline of ~70 MB): face detector **+70 MB**, face parser **+200 MB** (together
 ≈ 270 MB), SegFormer +490 MB, cut-out model **+1,600 MB**. Thread count made no
 difference.
 
-**Whole library** (9,440 images): about 20 minutes for the face path in one
-4-thread process; a few minutes split across processes as the full check does
-(estimated from that run's scaling, not measured). Once per image, like the
-cut-out.
+**Whole library**: measured in §31 — the full 4+ run (599 characters, 8,506
+images face-parsed from scratch, plus all colour measurement) took **6.5 minutes**
+with 6 processes; about 2.5 minutes once labels are cached. Labels cache at about
+7 KB per image compressed. Once per image, like the cut-out.
 
 **The server** (Oracle Ampere A1, ARM Neoverse N1) is not measured — reads on the
 production box need the owner's go-ahead. An N1 core is roughly 2–3× slower than
@@ -1886,3 +1890,73 @@ The unmeasured question is the one that matters: *does removing face skin, or
 weighting hair, move the flagged characters?* That needs a prototype variant
 (face/skin labels removed before measurement; optionally hair counted extra)
 scored with `checks`, which is a method change and awaits the owner.
+
+---
+
+## 31. The skin trial: V38a–V38e (2026-09-27)
+
+The owner asked for a trial of §30's face parser, scored. Labels are computed
+once per image (`scripts/accent_lab/faceparse.py`, cached in `.data/faceparse/`)
+and applied to the cut-out in `foreground_only` (switches `FACE_SKIN_OUT`,
+`HAIR_BOOST`). Removed pixels are painted white, like background; extra hair is
+appended as rows of hair pixels, so every later measurement sees it without
+changes. V37 itself is untouched (checked: identical 73/87 and seeds).
+
+| variant | what it does | checks (of 87) |
+|---|---|---|
+| V37 | — | 73 |
+| V38a | face, skin and mouth labels removed | 68 |
+| V38b | V38a + hair counted twice | 72 |
+| V38c | hair counted twice, skin left in | 74 |
+| V38d | hair counted three times, skin left in | 74 |
+| **V38e** | V38c, but the colour profile reads the plain cut-out | **75** |
+
+**A pitfall, fixed before these numbers.** V37 drops a gallery image as an
+unseparable scene when the cut-out covers > 85% of the frame. Painting the face
+white lowered that share, so close-ups V37 had dropped were suddenly counted
+(with backgrounds the cut-out model had kept): Luka went mint → brown for that
+reason alone. The scene test now reads the cut-out as V37 did, before face edits.
+
+**Removing face skin does not fix the skin group.** Face skin is ~6% of the
+cut-out, and ≥ 90% of it is hue 0–60° as expected (the parser does not mislabel
+hair), yet all fourteen skin-group characters keep essentially the same colour
+without it: **their winning warm window is not face skin** — it is body skin,
+brown shading, warm clothes and lighting, which the parser does not reach. And
+it costs approved colours: Superman's red was partly his own face in the
+red-shadow zone (without it, blue ties and his main image picks blue); Alpha goes
+pink; Nephis crosses into the monochrome path.
+
+**Counting hair helps.** Hair is labelled reliably and is often the signature
+colour. V38e's changes on the checks: **Kyouka Jirou → purple, Ellen Joe → red**,
+nothing lost. Among flagged characters without a check: Anya Forger cream → pink
+and Aemeath blue → pink (both wanted), Arthur Leywin blue → red (his hair),
+Lelouch cream → purple, Mirio orange (wanted yellow/orange). Three times (V38d)
+also fixes A2 (white), N and Rio Futaba but loses Nadeko, Usagi and Alpha —
+too strong. V38c turned Nephis, Seidou, Crona and Alisa monochrome white (silver
+hair counted twice pushes them under the 30% colour line); V38e fixes that by
+letting only the colour vote see the extra hair.
+
+**Unchanged by any variant:** the skin/warm group (Sharron, Himiko Toga, Kim
+Soleum, Sukuna, Aoi Todo, Tetsurou Kuroo, Jiu Niangzi, Loki, Eiki Shiki, Tooth
+Fairy), Maki Zenin, N, Maomao, Nefer, Shizuku, Rio Futaba, Ruka, Xurkitree, 2B and
+A2. Jotaro Kujo got navy only in V38b (skin out + hair), not in V38e.
+
+**V38e visibly changes 34 of 599 characters** (Oklab distance ≥ 0.08; 530 change
+by an invisible hex step). Several are unreviewed and could go either way:
+Izumi Miyamura cream → dark red, Aqua Hoshino blue → blonde (the owner accepted
+either earlier), Tanya Degurechaff red → blonde, Suwako Moriya purple → khaki,
+Jade (HSR) blue → lilac, Ibuki Mioda pink → blue, Osamu Dazai → wine.
+
+**Review page** (V38e beside V37, changed characters only):
+https://claude.ai/artifact/1mRbXVm2iuf32oiKba1tYH — rebuild with
+`fullcheck --method v38e --out full_v38e --compare full_v37 --compare-label V37
+--min-change 0.08 --changed-only render` (new options: `--min-change` in Oklab,
+`--changed-only` for one page of changes).
+
+**Cost, measured:** the full 4+ run with face parsing from scratch took 6.5
+minutes (6 processes × 4 threads; 8,506 images labelled), 2.5 minutes with labels
+cached. Labels are ~7 KB per image compressed. In production the hair-label
+summary would be folded into each image's stored colour summary, like the cut-out.
+
+**Open for the owner:** judge the 34 changes on the review page. If V38e holds,
+it replaces V37 as the candidate; face-skin removal should be dropped.

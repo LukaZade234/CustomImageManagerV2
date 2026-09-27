@@ -685,10 +685,53 @@ def foreground_only(img):
         return img
     arr = np.asarray(img.convert("RGB")).copy()
     arr[~keep] = 255
-    return Image.fromarray(arr)
+    if not (FACE_SKIN_OUT or HAIR_BOOST):
+        return Image.fromarray(arr)
+    share = float((arr != 255).any(axis=2).mean())  # the scene test reads the cut-out as V37 did
+    out = Image.fromarray(_face_parsed(arr, keep, _full_res(src) if src else img))
+    out.info["fg_share"] = share
+    out.info["base_h"] = arr.shape[0]
+    return out
+
+
+# V38 (the skin trial, ACCENT.md §31): face-parser labels applied to the cut-out.
+FACE_SKIN_OUT = False  # paint face skin, skin and mouth white (ignored like background)
+HAIR_BOOST = 0  # count hair pixels this many extra times
+
+
+def _face_parsed(arr, keep, src_img):
+    from . import faceparse as FP
+
+    lab = FP.labels_for(src_img)
+    if lab.shape != arr.shape[:2]:
+        lab = np.asarray(Image.fromarray(lab).resize(arr.shape[1::-1], Image.NEAREST))
+    if FACE_SKIN_OUT:
+        arr[np.isin(lab, (FP.FACE, FP.SKIN, FP.MOUTH)) & keep] = 255
+    if HAIR_BOOST:
+        hair = arr[(lab == FP.HAIR) & keep]
+        if len(hair):
+            # extra rows of hair pixels, white-padded: every measurement ignores white
+            extra = np.concatenate([hair] * HAIR_BOOST)
+            w = arr.shape[1]
+            pad = (-len(extra)) % w
+            extra = np.concatenate([extra, np.full((pad, 3), 255, arr.dtype)])
+            arr = np.concatenate([arr, extra.reshape(-1, w, 3)])
+    return arr
+
+
+def _unboosted(img):
+    """The cut-out without HAIR_BOOST's extra rows (the rows appended below the image)."""
+    h = img.info.get("base_h")
+    if h is None or h >= img.height:
+        return img
+    out = img.crop((0, 0, img.width, h))
+    out.info.update(img.info)
+    return out
 
 
 def fg_share(img):
+    if "fg_share" in img.info:
+        return img.info["fg_share"]
     return float((np.asarray(img) != 255).any(axis=2).mean())
 
 
@@ -2870,3 +2913,90 @@ def v37(portrait, gallery, trace=None):
 
 def method_v37(portrait, gallery):
     return v37(portrait, gallery)
+
+
+# ---- V38: the skin trial (ACCENT.md §31) ---------------------------------------------------------
+#
+# V37 on cut-outs with the face parser's labels applied: V38a removes face skin (face,
+# skin and mouth labels, around each detected face only); V38b also counts hair twice;
+# V38c/d count hair twice/three times with skin left in; V38e (the best) is V38c with
+# the colour profile reading the plain cut-out. Scores and findings: ACCENT.md §31.
+
+
+def _v38(portrait, gallery, trace, hair, skin_out=True):
+    global FACE_SKIN_OUT, HAIR_BOOST
+    saved = (FACE_SKIN_OUT, HAIR_BOOST)
+    FACE_SKIN_OUT, HAIR_BOOST = skin_out, hair
+    try:
+        return v37(portrait, gallery, trace)
+    finally:
+        FACE_SKIN_OUT, HAIR_BOOST = saved
+
+
+def v38a(portrait, gallery, trace=None):
+    return _v38(portrait, gallery, trace, 0)
+
+
+def v38b(portrait, gallery, trace=None):
+    return _v38(portrait, gallery, trace, 1)
+
+
+def method_v38a(portrait, gallery):
+    return v38a(portrait, gallery)
+
+
+def method_v38b(portrait, gallery):
+    return v38b(portrait, gallery)
+
+
+# V38c/d: hair counted extra with face skin left in (V38a showed removing it alone hurt).
+def v38c(portrait, gallery, trace=None):
+    return _v38(portrait, gallery, trace, 1, skin_out=False)
+
+
+def v38d(portrait, gallery, trace=None):
+    return _v38(portrait, gallery, trace, 2, skin_out=False)
+
+
+def method_v38c(portrait, gallery):
+    return v38c(portrait, gallery)
+
+
+def method_v38d(portrait, gallery):
+    return v38d(portrait, gallery)
+
+
+# V38e: V38c, but the colour profile (monochrome / pale-pink paths, and their tones)
+# reads the cut-out without the extra hair: silver hair counted twice pushed Nephis,
+# Seidou, Crona and Alisa under the monochrome line.
+PROFILE_UNBOOSTED = False
+_PROFILE_FNS = (
+    "colour_profile", "_mono_seed", "pale_pink_presence", "_mono_highlight", "_mono_seed_v31",
+    "_mono_highlight_v33_with",
+)  # fmt: skip
+
+
+def _profile_wrap(fn):
+    def run(images, *a, **k):
+        if PROFILE_UNBOOSTED:
+            images = [_unboosted(f) for f in images]
+        return fn(images, *a, **k)
+
+    return run
+
+
+for _n in _PROFILE_FNS:
+    globals()[_n] = _profile_wrap(globals()[_n])
+
+
+def v38e(portrait, gallery, trace=None):
+    global PROFILE_UNBOOSTED
+    saved, PROFILE_UNBOOSTED = PROFILE_UNBOOSTED, True
+    try:
+        return _v38(portrait, gallery, trace, 1, skin_out=False)
+    finally:
+        PROFILE_UNBOOSTED = saved
+
+
+def method_v38e(portrait, gallery):
+    return v38e(portrait, gallery)
