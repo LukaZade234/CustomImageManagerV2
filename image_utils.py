@@ -36,6 +36,9 @@ MAX_OUTPUT_BYTES = 30 * 1024 * 1024
 # also what keeps images at full resolution — the shrink loop below exists
 # because a PNG often would not fit ImgChest's limit, and at an eighth the size
 # it now almost never runs.
+#
+# The exception is an animated GIF, which is uploaded untouched and must keep a
+# `.gif` name: `imgchest_utils.upload_to_imgchest` swaps the suffix for it.
 WEBP_QUALITY = 90
 UPLOAD_SUFFIX = ".png"
 

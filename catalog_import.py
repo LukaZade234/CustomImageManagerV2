@@ -95,6 +95,10 @@ _MARKER_TAILS = (
     r"\(\s*\$?serverdisable\s*\)",  # ($serverdisable) / (serverdisable)
     r"\$serverdisable",  # $serverdisable
     r"\$[a-z]{2}\s+DISABLED",  # $wa DISABLED
+    # A personal note typed after the name in the owner's own lists
+    # ("Sora (HCLW) | wish later"). Only this exact note: a bare "|" is part of
+    # real names ("●●|●●●●●|●●|●"), so the pipe alone is not enough.
+    r"\|\s*wish\s+later",
 )
 _DISABLED_MARKER_RE = re.compile(
     rf"\s*(?:{_MARKER_SYMBOL}+\s*)*(?:{'|'.join(_MARKER_TAILS)})\s*$",

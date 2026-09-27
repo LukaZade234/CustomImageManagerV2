@@ -164,6 +164,19 @@ class TestAccountMarkers:
         assert ci.strip_account_marker("Rem  $serverdisable") == "Rem"
         assert ci.strip_account_marker("Rem 🚫  (serverdisable)") == "Rem"
 
+    def test_the_wish_later_note_is_stripped(self):
+        # Seven catalog names arrived as "Sora (HCLW) | wish later".
+        assert ci.strip_account_marker("Sora (HCLW) | wish later") == "Sora (HCLW)"
+        assert ci.strip_account_marker("Xiao Ning'er  |wish later") == "Xiao Ning'er"
+        result = ci.parse_text(
+            "Hardcore Leveling Warrior - 1/9\n"
+            "#35,585 - Sora (HCLW) | wish later · ($wa) - https://mudae.net/uploads/8456844/OQAWVFB~e058uyt.png"
+        )
+        assert [c.name for c in result.characters.values()] == ["Sora (HCLW)"]
+
+    def test_a_pipe_inside_a_real_name_survives(self):
+        assert ci.strip_account_marker("●●|●●●●●|●●|●") == "●●|●●●●●|●●|●"
+
     def test_every_marker_is_stripped_when_a_character_has_several_pools(self):
         # A multi-pool character carries one marker per pool; only stripping the
         # last would leave the rest in the name.
