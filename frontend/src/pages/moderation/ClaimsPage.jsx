@@ -25,9 +25,10 @@ import {
  * it. Unlike the rest of this surface, this page *acts* — the transfer is the
  * one thing a claimant cannot do for themselves.
  *
- * Two filters, as asked for: by character and by user. The per-user view also
- * gets the bulk approve, for the common case where someone obviously owns a run
- * of characters and approving them one at a time is busywork.
+ * Two filters, as asked for: by character and by user, each matching part of
+ * the name. When the user filter narrows the list to one person, the page also
+ * offers the bulk approve, for the common case where someone obviously owns a
+ * run of characters and approving them one at a time is busywork.
  */
 
 function formatDate(iso) {
@@ -147,25 +148,28 @@ function ClaimItem({ item, onDecide, busy }) {
 export default function ClaimsPage() {
   const [status, setStatus] = useState('pending')
   const [character, setCharacter] = useState('')
-  const [userRef, setUserRef] = useState('')
+  const [claimant, setClaimant] = useState('')
   const [draft, setDraft] = useState('')
+  const [claimantDraft, setClaimantDraft] = useState('')
   const [bulkConfirm, setBulkConfirm] = useState(false)
   const [bulkMessage, setBulkMessage] = useState('')
 
-  // The character box is debounced, matching the contributor work views: typing
-  // must not refetch on every keystroke.
+  // Both boxes are debounced, matching the contributor work views: typing must
+  // not refetch on every keystroke.
   useEffect(() => {
     const timer = setTimeout(() => {
       const next = draft.trim()
       if (next !== character) setCharacter(next)
+      const nextClaimant = claimantDraft.trim()
+      if (nextClaimant !== claimant) setClaimant(nextClaimant)
     }, 250)
     return () => clearTimeout(timer)
-  }, [draft, character])
+  }, [draft, character, claimantDraft, claimant])
 
   const { data, isPending, isError, error, refetch } = useModerationClaims({
     status,
     char: character,
-    user: userRef,
+    claimant,
   })
   const decide = useDecideModerationClaim()
   const approveAll = useApproveAllModerationClaims()
@@ -186,8 +190,9 @@ export default function ClaimsPage() {
 
   const handleApproveAll = async () => {
     setBulkConfirm(false)
+    if (!bulkUser) return
     try {
-      const result = await approveAll.mutateAsync(userRef)
+      const result = await approveAll.mutateAsync(bulkUser.ref)
       setBulkMessage(
         result.remaining > 0
           ? `Approved ${result.approved_count} claims; ${result.remaining} still pending — run it again.`
@@ -198,7 +203,15 @@ export default function ClaimsPage() {
     }
   }
 
-  const filteringByUser = Boolean(userRef)
+  // The bulk approve acts on one person, so it is offered only when the user
+  // filter has narrowed the list to a single claimant. A partial name such as
+  // "a" can match several people, and approving all of them at once is not what
+  // anyone typing a name means.
+  const refs = new Set(items.map((item) => item.user_ref))
+  const bulkUser =
+    claimant && refs.size === 1 && items[0].user_ref
+      ? { ref: items[0].user_ref, name: items[0].claimant ?? 'this user' }
+      : null
 
   return (
     <>
@@ -221,7 +234,7 @@ export default function ClaimsPage() {
             { value: 'rejected', label: `Rejected (${counts.rejected})` },
           ]}
         />
-        <Field label="Character">
+        <Field label="Character" className="claims__filter">
           {({ id }) => (
             <Input
               id={id}
@@ -231,17 +244,16 @@ export default function ClaimsPage() {
             />
           )}
         </Field>
-        <Field label="User" hint="A user reference from the queue.">
-          {({ id, describedBy }) => (
+        <Field label="User" className="claims__filter">
+          {({ id }) => (
             <Input
               id={id}
-              aria-describedby={describedBy}
-              value={userRef}
+              value={claimantDraft}
               onChange={(e) => {
-                setUserRef(e.target.value.trim())
+                setClaimantDraft(e.target.value)
                 setBulkMessage('')
               }}
-              placeholder="Filter by user ref…"
+              placeholder="Filter by user…"
             />
           )}
         </Field>
@@ -267,7 +279,7 @@ export default function ClaimsPage() {
         <EmptyState
           title={status === 'pending' ? 'No pending claims' : `No ${status} claims`}
           description={
-            character || userRef
+            character || claimant
               ? 'Nothing matches these filters.'
               : status === 'pending'
                 ? 'Nobody is waiting to reclaim a character.'
@@ -284,27 +296,27 @@ export default function ClaimsPage() {
             ))}
           </ul>
 
-          {filteringByUser && status === 'pending' && (
+          {bulkUser && status === 'pending' && (
             <div className="claims__bulk">
               <span className="text-meta">
-                Approving every pending claim for this user, up to the server&apos;s cap.
+                Approving every pending claim for {bulkUser.name}, up to the server&apos;s cap.
               </span>
               <Button variant="primary" onClick={() => setBulkConfirm(true)} disabled={busy}>
-                Approve all {items.length} for this user
+                Approve all {items.length} for {bulkUser.name}
               </Button>
             </div>
           )}
         </>
       )}
 
-      {bulkConfirm && (
+      {bulkConfirm && bulkUser && (
         <ConfirmDialog
-          title="Approve every pending claim for this user?"
+          title={`Approve every pending claim for ${bulkUser.name}?`}
           body={
             <>
               <p>
-                This approves all {items.length} pending claims currently listed for this user, and
-                grants every unowned image on each of those characters.
+                This approves all {items.length} pending claims currently listed for {bulkUser.name}
+                , and grants every unowned image on each of those characters.
               </p>
               <p>
                 If more remain than the server will do at once, you will be told to run it again.

@@ -3346,10 +3346,16 @@ def list_ownership_claims(
     *,
     char_name: str | None = None,
     identity_id: str | None = None,
+    claimant: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
     """The moderation queue, filtered by status, character and/or claimant.
+
+    `char_name` and `claimant` are what the two filter boxes type, so both match
+    part of the name, case-insensitively: a moderator knows someone as
+    "brisk", not by their public ref. `identity_id` is the exact form, for the
+    API's `user` ref.
 
     `status` is required and must be one of CLAIM_STATUSES -- unlike reports,
     "all at once" is not a useful view here, because pending is the work and the
@@ -3367,16 +3373,21 @@ def list_ownership_claims(
     where = ["cl.status = ?"]
     params: list[object] = [status]
     if char_name:
-        where.append("c.name = ?")
-        params.append(char_name)
+        where.append("c.name LIKE ? ESCAPE '\\' COLLATE NOCASE")
+        params.append(f"%{_like_escape(char_name)}%")
     if identity_id:
         where.append("cl.identity_id = ?")
         params.append(identity_id)
+    if claimant:
+        where.append("claimant.handle LIKE ? ESCAPE '\\' COLLATE NOCASE")
+        params.append(f"%{_like_escape(claimant)}%")
     clause = " AND ".join(where)
 
     total = conn.execute(
         f"SELECT COUNT(*) AS n FROM ownership_claims cl"
-        f"  JOIN characters c ON c.id = cl.character_id WHERE {clause}",
+        f"  JOIN characters c ON c.id = cl.character_id"
+        f"  LEFT JOIN identities claimant ON claimant.id = cl.identity_id"
+        f" WHERE {clause}",
         params,
     ).fetchone()["n"]
 

@@ -1,7 +1,7 @@
 /**
  * The ownership-claim queue. The two things it must get right: a decision is
- * sent with the right verb, and the per-user bulk approve appears only when a
- * user filter is actually applied.
+ * sent with the right verb, and the per-user bulk approve appears only when the
+ * user filter has narrowed the list to one person.
  */
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -84,9 +84,42 @@ describe('ClaimsPage', () => {
     expect(api.listModerationClaims).toHaveBeenCalledWith({
       status: 'pending',
       char: '',
-      user: '',
+      claimant: '',
       page: 1,
     })
+  })
+
+  it('filters by part of the user name', async () => {
+    renderPage()
+    await screen.findByText('Rem')
+    await userEvent.type(screen.getByLabelText('User'), 'ada')
+    await waitFor(() =>
+      expect(api.listModerationClaims).toHaveBeenLastCalledWith({
+        status: 'pending',
+        char: '',
+        claimant: 'ada',
+        page: 1,
+      }),
+    )
+  })
+
+  it('offers no bulk approve when the name matches more than one user', async () => {
+    api.listModerationClaims.mockResolvedValue({
+      ...PENDING,
+      items: [
+        PENDING.items[0],
+        { ...PENDING.items[1], claimant: 'Adam Finch', user_ref: 'ref-adam' },
+      ],
+    })
+    renderPage()
+    await screen.findByText('Rem')
+    await userEvent.type(screen.getByLabelText('User'), 'ada')
+    await waitFor(() =>
+      expect(api.listModerationClaims).toHaveBeenLastCalledWith(
+        expect.objectContaining({ claimant: 'ada' }),
+      ),
+    )
+    expect(screen.queryByRole('button', { name: /approve all/i })).not.toBeInTheDocument()
   })
 
   it('says what an approval would move', async () => {
@@ -135,14 +168,16 @@ describe('ClaimsPage', () => {
     await screen.findByText('Rem')
     expect(screen.queryByRole('button', { name: /approve all/i })).not.toBeInTheDocument()
 
-    await userEvent.type(screen.getByLabelText('User'), 'ref-ada')
-    expect(await screen.findByRole('button', { name: /approve all 2/i })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('User'), 'Ada Otter')
+    expect(
+      await screen.findByRole('button', { name: /approve all 2 for ada otter/i }),
+    ).toBeInTheDocument()
   })
 
   it('bulk approves every pending claim for the filtered user', async () => {
     renderPage()
     await screen.findByText('Rem')
-    await userEvent.type(screen.getByLabelText('User'), 'ref-ada')
+    await userEvent.type(screen.getByLabelText('User'), 'Ada Otter')
     await userEvent.click(await screen.findByRole('button', { name: /approve all/i }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve all' }))
     await waitFor(() => expect(api.approveAllModerationClaims).toHaveBeenCalledWith('ref-ada'))
@@ -157,7 +192,7 @@ describe('ClaimsPage', () => {
     })
     renderPage()
     await screen.findByText('Rem')
-    await userEvent.type(screen.getByLabelText('User'), 'ref-ada')
+    await userEvent.type(screen.getByLabelText('User'), 'Ada Otter')
     await userEvent.click(await screen.findByRole('button', { name: /approve all/i }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve all' }))
     expect(await screen.findByText(/3 still pending/i)).toBeInTheDocument()

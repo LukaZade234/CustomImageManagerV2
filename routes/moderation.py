@@ -106,8 +106,9 @@ def moderation_claims():
 
     `status` is required: pending is the work, decided is the audit trail, and
     "everything at once" answers neither question. `char` and `user` narrow it,
-    which is what the two filter controls map to; `user` is a public ref, so the
-    identity id never travels.
+    which is what the two filter controls map to. `claimant` matches part of the
+    claimant's name, which is what the page's User box sends; `user` is an exact
+    public ref, so the identity id never travels.
     """
     status = request.args.get("status", default="pending", type=str)
     if status not in db.CLAIM_STATUSES:
@@ -115,6 +116,7 @@ def moderation_claims():
 
     char_name = (request.args.get("char") or "").strip() or None
     user_ref = (request.args.get("user") or "").strip() or None
+    claimant = (request.args.get("claimant") or "").strip() or None
     identity_id = None
     if user_ref:
         identity_id = db.identity_by_ref(user_ref)
@@ -127,6 +129,7 @@ def moderation_claims():
         status,
         char_name=char_name,
         identity_id=identity_id,
+        claimant=claimant,
         limit=per_page,
         offset=(page - 1) * per_page,
     )

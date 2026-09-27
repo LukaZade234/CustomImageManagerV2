@@ -279,6 +279,33 @@ class TestModerationQueue:
         assert body["items"][0]["claimant"] == "Brisk Greenshank"
         assert body["items"][0]["user_ref"] == ref
 
+    def test_filtering_by_part_of_the_claimants_name(
+        self, client, clean_db, identity_id, make_moderator
+    ):
+        _seed(clean_db)
+        clean_db.file_ownership_claim("Rem", OTHER)
+        clean_db.file_ownership_claim("Rem", identity_id)
+        make_moderator()
+        # Handles are generated, so pin both: a random one could share the term.
+        with clean_db.transaction() as conn:
+            conn.execute("UPDATE identities SET handle = 'Quiet Heron' WHERE id = ?", (identity_id,))
+            conn.execute(
+                "UPDATE identities SET handle = 'Brisk Greenshank' WHERE id = ?", (OTHER,)
+            )
+        body = client.get("/api/moderation/claims?claimant=greensh").get_json()
+        assert [i["claimant"] for i in body["items"]] == ["Brisk Greenshank"]
+        assert body["total"] == 1
+        assert client.get("/api/moderation/claims?claimant=nobody").get_json()["total"] == 0
+
+    def test_the_character_filter_matches_part_of_the_name(
+        self, client, clean_db, identity_id, make_moderator
+    ):
+        _seed(clean_db)
+        clean_db.file_ownership_claim("Rem", OTHER)
+        make_moderator()
+        body = client.get("/api/moderation/claims?char=re").get_json()
+        assert [i["character"] for i in body["items"]] == ["Rem"]
+
     def test_an_unknown_user_filter_is_404(self, client, clean_db, identity_id, make_moderator):
         make_moderator()
         assert client.get("/api/moderation/claims?user=nope").status_code == 404
