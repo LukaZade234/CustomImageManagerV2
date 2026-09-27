@@ -2274,3 +2274,36 @@ is too grey to vote, not removed). Shouko, Airani and Rio are better handled by 
 override, or by a per-character gate (exempt only when the character's own hair is
 consistently a pink identity), which has not been tried. Code stays in `methods.py`
 (`v41`, `v41b`) for the record; V40 remains the candidate.
+
+---
+
+## 39. V42: failed cut-outs kept at a reduced weight — tried, rejected (2026-09-27)
+
+The narrow form of the owner's background idea (§37, point 1). Images where the
+cut-out misses the character (< 3% foreground) or cannot separate the scene
+(> 85%) are measured whole at `SCENE_WEIGHT` instead of dropped — in the colour
+vote, the presence and coverage tests and the colour profile (weighted median),
+but not in the monochrome tone, highlight or pale-pink seed.
+
+| variant | weight | checks (of 96) | visibly changed |
+|---|---|---|---|
+| V40 | dropped | 83 | — |
+| V42 | 0.25 | 78 | 50 |
+| V42h | 0.5 | 77 | 70 |
+
+**Gon does not move.** Of his 7 images, 3 separate (his figure: colour share 0.02,
+0.09, 0.14) and 4 are forest scenes (0.52–0.83 colour, 24–43% green). Even at 0.5
+the scenes weigh 2 against the separated images' 3, so the weighted median stays at
+0.14 — monochrome. It would take a weight above 0.75, more background than is safe.
+His figure genuinely is nearly colourless; the green is his surroundings.
+
+**Everyone else moves a lot.** Whole scenes bring their backgrounds into the vote:
+Luka, Nadeko, Zoro, David Martinez and Jade (HSR) break at both weights; Jotaro
+turns violet (his Stand), Tanya and Aoi Todo red, Suwako back to purple, Hina
+Kagiyama teal → red. A few land where the owner wanted them — Zeus gold, Xurkitree
+blue and Maki Zenin dark teal at 0.5 — but by accident of background, not reliably.
+
+**Conclusion:** rejected; V40 stays the candidate. For Gon specifically, §36's fix 2
+(a monochrome tint from a colour that recurs across images) could now read the
+scene images for its hue without them voting in the standard path — the only
+remaining non-override route, and a narrow one. `v42`/`v42h` stay in `methods.py`.

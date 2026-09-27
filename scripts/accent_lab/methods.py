@@ -763,9 +763,21 @@ def _segmented(portrait, gallery, drop_scenes):
     for g in gallery:
         f = foreground_only(g)
         if drop_scenes and fg_share(f) > MAX_FG:
+            if SCENE_WEIGHT > 0:  # V42: measured whole at a reduced weight instead of dropped
+                whole = g.copy()
+                whole.info.update(g.info)
+                whole.info["weight"] = SCENE_WEIGHT
+                fg.append(whole)
             continue
         fg.append(f)
     return fp, fg
+
+
+SCENE_WEIGHT = 0.0  # V42: weight of images the cut-out could not separate (0 = dropped)
+
+
+def _wt(img):
+    return img.info.get("weight", 1.0)
 
 
 def _seg_method(measure_image=None, drop_scenes=False):
@@ -1716,16 +1728,16 @@ def v24(portrait, gallery, trace=None):
     PALE_WEIGHT, POOL_POW, WINDOW, AIM_GALLERY_POW = 0.5, 0.5, 30, 2.0
     AIM_SPAN, TIE_WITHOUT_MAIN = 30, "top"
     fp, fg = _segmented(portrait, gallery, drop_scenes=True)
-    pairs = [(measure(i, _no_skin_v21), measure(i, _no_skin_v20)) for i in fg]
-    pairs = [(a, b) for a, b in pairs if a is not None and b is not None]
+    pairs = [(measure(i, _no_skin_v21), measure(i, _no_skin_v20), _wt(i)) for i in fg]
+    pairs = [(a, b, w) for a, b, w in pairs if a is not None and b is not None]
     whole = measure(portrait, _no_skin_v21) if portrait is not None else None
     whole_shade = measure(portrait, _no_skin_v20) if portrait is not None else None
     seg_p = measure(fp, _no_skin_v21) if fp is not None else None
     seg_p_shade = measure(fp, _no_skin_v20) if fp is not None else None
     n = len(pairs)
     share = A._portrait_share(n)
-    hue_entries = [(a, 1.0) for a, _ in pairs]
-    shade_entries = [(b, 1.0) for _, b in pairs]
+    hue_entries = [(a, w) for a, _, w in pairs]
+    shade_entries = [(b, w) for _, b, w in pairs]
     if seg_p is not None and seg_p_shade is not None and 0 < share < 1 and n:
         wt = share / (1 - share) * n
         hue_entries.append((seg_p, wt))
@@ -2107,6 +2119,7 @@ def colour_profile(images):
     """Medians across images: chromatic share, pink/red share, pale share within it."""
     chrom, pink, pale_in = [], [], []
     for f in images:
+        wt = _wt(f)
         arr = np.asarray(f.convert("RGB"), dtype=np.float64).reshape(-1, 3) / 255.0
         arr = arr[~np.all(arr >= 0.999, axis=1)]  # painted-out background
         if len(arr) < 50:
@@ -2123,18 +2136,29 @@ def colour_profile(images):
             * 60
         )
         lit = v >= 0.15
-        chrom.append(float(((s >= 0.15) & lit).sum() / len(arr)))
+        chrom.append((float(((s >= 0.15) & lit).sum() / len(arr)), wt))
         ev = lit & (s >= 0.08) & ~((h >= 12) & (h <= 38))
         w = np.where(s < 0.22, 0.5, 1.0) * s * ev
         pr = (h >= PINK_RANGE[0]) | (h < PINK_RANGE[1])
         total = w.sum()
         if total > 0:
             pw = (w * pr).sum()
-            pink.append(float(pw / total))
-            pale_in.append(float((w * pr * (s < 0.22)).sum() / pw) if pw > 0 else 0.0)
+            pink.append((float(pw / total), wt))
+            pale_in.append((float((w * pr * (s < 0.22)).sum() / pw) if pw > 0 else 0.0, wt))
 
     def med(xs):
-        return sorted(xs)[len(xs) // 2] if xs else 0.0
+        """Weighted median (plain median when every image weighs 1)."""
+        if not xs:
+            return 0.0
+        xs = sorted(xs)
+        if all(w == 1.0 for _, w in xs):
+            return xs[len(xs) // 2][0]
+        half, acc = sum(w for _, w in xs) / 2, 0.0
+        for x, w in xs:
+            acc += w
+            if acc >= half:
+                return x
+        return xs[-1][0]
 
     return {"chromatic": med(chrom), "pink": med(pink), "pale_in_pink": med(pale_in)}
 
@@ -2508,9 +2532,11 @@ def v33(portrait, gallery, trace=None):
             (c, s) for c, s in out if cov_of.get("fn", lambda _c: 1.0)(c) >= TIE_MIN_COV
         ] or out[:1]
 
-    gm = [x for x in (measure(i, _v29_measure(True)) for i in fg) if x is not None]
+    gm = [(x, _wt(i)) for i in fg if (x := measure(i, _v29_measure(True))) is not None]
     if gm:
-        cov_of["fn"] = lambda c: sum(band_sum(g.hist_cov, c, WINDOW) for g in gm) / len(gm)
+        cov_of["fn"] = lambda c: (
+            sum(band_sum(g.hist_cov, c, WINDOW) * w for g, w in gm) / sum(w for _, w in gm)
+        )
 
     def seed_v33(images):
         r, why = base_seed(images)
@@ -2791,18 +2817,18 @@ def v34(portrait, gallery, trace=None):
     _v29_measure = lambda whites: _V34_HUE if whites else _V34_SHADE  # noqa: E731
     try:
         _, fg = _segmented(portrait, gallery, drop_scenes=True)
-        gm = [x for x in (measure_np(i, _V34_HUE) for i in fg) if x is not None]
+        gm = [(x, _wt(i)) for i in fg if (x := measure_np(i, _V34_HUE)) is not None]
 
         def presence(c):
             """Share of images where this colour holds >= 10% of the image's colour evidence."""
             if not gm:
                 return 1.0
-            hits = 0
-            for g in gm:
+            hits = 0.0
+            for g, w in gm:
                 ev = evidence_v15([(g, 1.0)])
                 t = sum(ev) or 1.0
-                hits += win_sum(ev, c, WINDOW) / t >= PRESENCE_SHARE
-            return hits / len(gm)
+                hits += w * (win_sum(ev, c, WINDOW) / t >= PRESENCE_SHARE)
+            return hits / sum(w for _, w in gm)
 
         def windows_v34(hist):
             out = base_windows(hist)
@@ -3015,17 +3041,19 @@ _PROFILE_FNS = (
 )  # fmt: skip
 
 
-def _profile_wrap(fn):
+def _profile_wrap(fn, keep_scenes=False):
     def run(images, *a, **k):
         if PROFILE_UNBOOSTED:
             images = [_unboosted(f) for f in images]
+        if not keep_scenes:  # V42: whole scenes would bring their backgrounds into the tone
+            images = [f for f in images if "weight" not in f.info] or images
         return fn(images, *a, **k)
 
     return run
 
 
-for _n in _PROFILE_FNS:
-    globals()[_n] = _profile_wrap(globals()[_n])
+for _n in (*_PROFILE_FNS, "_pink_seed", "_pink_seed_v32"):
+    globals()[_n] = _profile_wrap(globals()[_n], keep_scenes=_n == "colour_profile")
 
 
 def v38e(portrait, gallery, trace=None):
@@ -3221,3 +3249,38 @@ def v41b(portrait, gallery, trace=None):
 
 def method_v41b(portrait, gallery):
     return v41b(portrait, gallery)
+
+
+# ---- V42: images the cut-out cannot separate count at a reduced weight (ACCENT.md §39) -----------
+#
+# Images where the cut-out misses the character (< 3% foreground) or cannot separate
+# the scene (> 85%) were dropped. Gon Freecss lost 5 of 7 images that way -- the forest
+# images that carry his green. They are now measured whole at SCENE_WEIGHT: in the
+# colour vote, the presence and coverage tests, and the colour profile (weighted
+# median), but not in the monochrome tone, highlight or pale-pink seed, where a whole
+# scene's background would decide the tone.
+
+
+def _v42(portrait, gallery, trace, weight):
+    global SCENE_WEIGHT
+    saved, SCENE_WEIGHT = SCENE_WEIGHT, weight
+    try:
+        return v40(portrait, gallery, trace)
+    finally:
+        SCENE_WEIGHT = saved
+
+
+def v42(portrait, gallery, trace=None):
+    return _v42(portrait, gallery, trace, 0.25)
+
+
+def v42h(portrait, gallery, trace=None):
+    return _v42(portrait, gallery, trace, 0.5)
+
+
+def method_v42(portrait, gallery):
+    return v42(portrait, gallery)
+
+
+def method_v42h(portrait, gallery):
+    return v42h(portrait, gallery)
