@@ -70,6 +70,10 @@ uv run python -m scripts.accent_lab.fullcheck render
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.checks v37,v43
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.trace v43 "Reze|Kyouka Jirou"
 
+# Does the app's port (accent_v43.py) reproduce V43? All 599, from the lab's caches;
+# --fresh runs the app's own models instead (the end-to-end check).
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.portcheck [--fresh --limit 60]
+
 # Characters whose accent visibly changed between two full runs (Oklab >= 0.08).
 uv run python -m scripts.accent_lab.changes full_v40 full_v43
 

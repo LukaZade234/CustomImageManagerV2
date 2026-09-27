@@ -14,8 +14,9 @@ the open questions, including the dead ends.
 
 > **Where it ended (2026-09-27):** the lab work stopped at **V43** by the owner's
 > decision (§43) — 84 of 96 review checks, against 59 of 80 when the review sets
-> began. It is not in the app yet: §29 has its behaviour step by step, the list of
-> characters still open (for the manual override), and the checklist for porting it.
+> began. §29 has its behaviour step by step and the characters still open (for the
+> manual override). **It is now ported into the app (§44)** — reproducing the lab's
+> seeds byte for byte — but switched off until the rollout in §44 is done.
 
 - **Shipped and merged-ready:**
   - Portrait weighting by gallery size (`accent_extract._portrait_share`).
@@ -1750,10 +1751,10 @@ Arisa, Griffith and Cheongmyeong (colours again).
 
 ## 29. Resume here — the final state (updated 2026-09-27, after §43)
 
-**The work stopped at V43 by the owner's decision (§43).** Nothing has shipped: all
-of this is lab work on the `accent-lab` branch (not pushed), and the live site still
-runs the original `accent_extract.py`. Porting V43 into the app is the next step and
-has not been started; its checklist is below.
+**The work stopped at V43 by the owner's decision (§43).** It is now ported into the
+app (§44: `accent_v43.py`, `accent_models.py`, `accent_worker.py`) behind
+`ACCENT_ENGINE`, which is off; the live site still runs the original extractor until
+the rollout in §44 is finished.
 
 **The candidate** is `v43(portrait, gallery, trace)` in
 `scripts/accent_lab/methods.py`, also reachable as `candidate` / `method_candidate`.
@@ -1840,7 +1841,7 @@ colour tags for 119 characters; older scratch scripts from the rounds. Rebuild a
 page with `fullcheck --method v43 --out full_v43 --compare full_v40
 --compare-label V40 --min-change 0.08 --changed-only render`.
 
-**Porting V43 into the app — checklist:**
+**Porting V43 into the app — checklist** (items 1–5 built in §44; 6 partly):
 1. Rewrite the behaviour above in `accent_extract.py`, vectorised (numpy), keeping
    the override's precedence. Models run through onnxruntime only (no torch): the
    cut-out (176 MB) and the face detector + parser (18 MB, converted with
@@ -2543,4 +2544,48 @@ ones; what remains is individual, which is what the manual override is for.
 **Next, when the owner chooses:** port V43 into the app (§29's checklist), then apply
 overrides to the open list. The lab stays as the reference and regression bench for
 that port.
+
+---
+
+## 44. V43 in the app (Phase 1 of the rollout, 2026-09-27)
+
+The owner asked to push V43 to the site, with every accent computed in advance and
+moved over. The order agreed: build locally with the new engine switched off
+(Phase 1, this section), precompute on the desktop (Phase 2), then deploy, import and
+switch on (Phase 3), each production step with the owner's go-ahead.
+
+**What was built** (branch `accent-v43`):
+
+| piece | what it does |
+|---|---|
+| `accent_v43.py` | The decision: `decide(main image, gallery) -> Result`. Every switch of the lab's chain fixed at its V43 value; the arithmetic follows the lab's order of operations. No models, no database. |
+| `accent_models.py` | The cut-out (skytnt/anime-seg) and the face detector + parser through onnxruntime; `prepare()` reduces one image to `ImageData` — mask, labels and face ids at the 200px measurement size, each face's hair colour — about 3 KB compressed. Upstream models fetched at pinned revisions and sha256-checked; the converted face parser is bundled at `models/face_parse.onnx` (6 MB, MIT). |
+| migration 026 | `characters.accent_version` (NULL = original extractor, `v43`), `accent_image_data` (per image, deleted with it), `accent_main_data` (per main-image URL), `accent_queue`. |
+| `accent_extract.py` | `ACCENT_ENGINE` (`legacy` default, `v43`). Under V43 `ensure_accent` never measures: a stale seed — new images, a new main image, a partial measurement, or any seed not from V43 — is queued and the stored one served. `recompute_accent_v43` runs the models only on images without stored data. Overrides are never overwritten, even if set mid-computation. |
+| `accent_worker.py` | The background service (`deploy/imgmanager-accent.service`: 2 cores at most, lower priority, 3 GB ceiling). Works the queue, retries failures with backoff, releases the models after ten idle minutes. `deploy/update.sh` restarts it only once it is enabled. |
+| frontend | `themeFromSeed` themes near-neutral seeds (C < 0.025) in greys instead of declining them, so monochrome accents (2B, Kaine, Will) show. |
+| `scripts/accent_backfill.py` | `snapshot` (desktop, public API and CDN), `compute` (desktop; reuses the lab's caches with `--lab-cache`), `import` (server; dry run by default; a seed only where the gallery and main image are unchanged since the snapshot, the rest queued; `--queue-rest` queues characters without a gallery; short transactions so the live site keeps writing). |
+
+**Verified:**
+- **Decision layer = lab, 599 of 599 characters byte-identical**
+  (`python -m scripts.accent_lab.portcheck`, fed the lab's own masks and labels).
+- **End to end = lab, 60 of 60 identical** (`portcheck --fresh`: the app's models run
+  from the thumbnails, no caches).
+- `compute` on four test characters reproduces the lab's seeds (Gon's tint, Kyouka's
+  tie, Mitsuri's pale pink, the Popola package deal).
+- The real worker on a throwaway database: Kyouka Jirou queued, 34 images through
+  both models in **47 s** on 2 desktop threads, **1.86 GB** peak, seed `#63529e` —
+  the lab's — then served as fresh without requeueing. On the ARM server expect
+  roughly 3–4 s per new image.
+- Tests: `tests/test_accent_v43.py` (36: rules on synthetic images, storage round
+  trip, the engine switch, queueing, the recompute with stub models, the worker,
+  the import, and byte-identical seeds for 12 reviewed characters when the lab's data
+  is present); backend suite 838 passed; frontend 630 passed; lint clean.
+- Dependencies: numpy and onnxruntime added (aarch64 wheels in the lock; no existing
+  version changed). The web workers import neither.
+
+**Remaining** (Phases 2–3, `docs/DEPLOYMENT.md` "Accent worker (V43)"): merge and
+deploy with the engine off; install the worker; `snapshot` + `compute` on the desktop;
+copy the bundle over and `import` (dry run, then `--apply --queue-rest`); set
+`ACCENT_ENGINE=v43`; verify; then the owner's overrides for the open list.
 

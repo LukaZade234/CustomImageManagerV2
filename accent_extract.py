@@ -649,6 +649,22 @@ def gallery_fingerprint(char_name: str) -> tuple[int, str | None, list[int]]:
     return len(rows), (latest or None), [int(r["id"]) for r in rows]
 
 
+# ---- which extractor ---------------------------------------------------------
+#
+# ACCENT_ENGINE=legacy (the default) is the original extractor below, measured
+# inline on the gallery request. ACCENT_ENGINE=v43 is accent_v43: it needs two
+# models, so it never runs inside a request -- a stale seed is queued for
+# accent_worker.py and the stored seed is served meanwhile. Every seed records the
+# algorithm that produced it (`accent_version`), which is how the V43 engine knows
+# a seed from the original extractor is stale.
+
+V43 = "v43"
+
+
+def engine() -> str:
+    return os.environ.get("ACCENT_ENGINE", "legacy").strip().lower()
+
+
 def accent_state(char_name: str) -> dict | None:
     import db
 
@@ -656,7 +672,7 @@ def accent_state(char_name: str) -> dict | None:
     row = conn.execute(
         "SELECT accent_seed, accent_hue, accent_gallery_count, accent_gallery_latest,"
         "       accent_portrait_url, accent_partial, accent_updated_at, main_image_url,"
-        "       accent_override"
+        "       accent_override, accent_version"
         "  FROM characters WHERE name = ?",
         (char_name,),
     ).fetchone()
@@ -669,15 +685,18 @@ def _store_accent(
     fingerprint: tuple[int, str | None, list[int]],
     portrait_url: str | None,
     partial: bool,
+    version: str | None = None,
 ) -> None:
     import db
 
     count, latest, _ = fingerprint
     with db.transaction() as conn:
+        # Never over a hand-picked colour, even if one was set mid-computation.
         conn.execute(
             "UPDATE characters SET accent_seed = ?, accent_hue = ?, accent_source = ?,"
             " accent_gallery_count = ?, accent_gallery_latest = ?, accent_portrait_url = ?,"
-            " accent_partial = ?, accent_updated_at = ? WHERE name = ?",
+            " accent_partial = ?, accent_updated_at = ?, accent_version = ?"
+            " WHERE name = ? AND accent_override IS NULL",
             (
                 result["seed"] if result else None,
                 result["hue"] if result else None,
@@ -687,6 +706,7 @@ def _store_accent(
                 portrait_url,
                 1 if partial else 0,
                 db._now(),
+                version,
                 char_name,
             ),
         )
@@ -789,6 +809,21 @@ def ensure_accent(char_name: str) -> str | None:
         and state["accent_gallery_latest"] == latest
         and (state["accent_portrait_url"] or None) == (state["main_image_url"] or None)
     )
+
+    if engine() == V43:
+        # Never measured inline: a stale seed (new images, a new main image, a
+        # partial measurement, or a seed from the original extractor) goes to the
+        # worker, and the stored one is served until the new one lands.
+        if fresh and not state["accent_partial"] and state["accent_version"] == V43:
+            return state["accent_seed"]
+        import db
+
+        try:
+            db.enqueue_accent(char_name)
+        except Exception:
+            log.exception("accent.enqueue_failed", character=char_name)
+        return state["accent_seed"]
+
     if fresh and not state["accent_partial"]:
         return state["accent_seed"]
 
@@ -804,3 +839,118 @@ def ensure_accent(char_name: str) -> str | None:
         log.exception("accent.ensure_failed", character=char_name)
         return state["accent_seed"]
     return result["seed"] if result else None
+
+
+# ---- the V43 recompute (run by accent_worker.py, never inside a request) ----------
+
+
+def _gallery_inputs(image_ids, models, *, fetch_missing):
+    """accent_v43 inputs for the gallery, running the models only on images not yet done.
+
+    Returns (inputs in gallery order, number of images whose thumbnail was unavailable).
+    """
+    import numpy as np
+
+    import accent_models
+    import db
+
+    stored = db.get_accent_image_data(image_ids)
+    inputs, missing = [], 0
+    for image_id in image_ids:
+        path = thumbnails.cache_path(image_id)
+        if not path.is_file() and fetch_missing:
+            _materialise_thumbnail(image_id)
+        if not path.is_file():
+            missing += 1
+            continue
+        try:
+            with Image.open(path) as img:
+                img.load()
+                full = accent_models.composite(img)
+        except Exception:
+            log.warning("accent.thumbnail_unreadable", image_id=image_id)
+            missing += 1
+            continue
+        row = stored.get(image_id)
+        if row is not None and row["version"] == accent_models.DATA_VERSION:
+            data = accent_models.ImageData.from_row(
+                row["data"], row["face_hair"], row["n_faces"], row["version"]
+            )
+        else:
+            data = accent_models.prepare(models, full)
+            db.put_accent_image_data(
+                image_id, data.version, data.to_blob(), data.hair_json(), data.n_faces
+            )
+        rgb = np.asarray(accent_models.measurement_copy(full))
+        if rgb.shape[:2] != data.mask.shape:  # a re-rendered thumbnail: measure it afresh
+            data = accent_models.prepare(models, full)
+            db.put_accent_image_data(
+                image_id, data.version, data.to_blob(), data.hair_json(), data.n_faces
+            )
+        inputs.append(data.prepared(rgb))
+    return inputs, missing
+
+
+def _main_input(url, models):
+    """accent_v43 input for the main image, or None when it cannot be fetched."""
+    import numpy as np
+
+    import accent_models
+    import db
+
+    raw = fetch_portrait_bytes(url)
+    if raw is None:
+        return None
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            img.load()
+            full = accent_models.composite(img)
+    except Exception:
+        return None
+    row = db.get_accent_main_data(url)
+    rgb = np.asarray(accent_models.measurement_copy(full))
+    data = None
+    if row is not None and row["version"] == accent_models.DATA_VERSION:
+        data = accent_models.ImageData.from_row(
+            row["data"], row["face_hair"], row["n_faces"], row["version"]
+        )
+        if data.mask.shape != rgb.shape[:2]:
+            data = None
+    if data is None:
+        data = accent_models.prepare(models, full)
+        db.put_accent_main_data(url, data.version, data.to_blob(), data.hair_json(), data.n_faces)
+    return data.prepared(rgb)
+
+
+def recompute_accent_v43(char_name: str, models, *, fetch_missing: bool = True):
+    """Measure one character with V43 and store the seed. Returns the accent_v43.Result.
+
+    Runs the models only for images (and the main image) that have no stored data
+    yet. A hand-picked override is never overwritten; returns None then.
+    """
+    import accent_v43
+    import db
+
+    if db.get_accent_override(char_name):
+        return None
+    portrait = db.get_character_portrait(char_name)
+    portrait_url = portrait[1] if portrait else None
+    fingerprint = gallery_fingerprint(char_name)
+    gallery, missing = _gallery_inputs(fingerprint[2], models, fetch_missing=fetch_missing)
+    main = _main_input(portrait_url, models) if portrait_url else None
+    result = accent_v43.decide(main, gallery)
+    seed = None
+    if result.seed is not None:
+        source = result.source if result.path == "standard" else result.path
+        seed = {**result.seed, "source": source}
+    _store_accent(char_name, seed, fingerprint, portrait_url, partial=missing > 0, version=V43)
+    log.info(
+        "accent.recomputed_v43",
+        character=char_name,
+        seed=seed["seed"] if seed else None,
+        path=result.path,
+        images=len(gallery),
+        missing=missing,
+        main_image=main is not None,
+    )
+    return result

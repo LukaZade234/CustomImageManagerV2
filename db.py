@@ -238,6 +238,105 @@ def clear_accent_override(name: str) -> bool:
         return cur.rowcount > 0
 
 
+# The V43 accent's per-image model data and its work queue (migration 026). The
+# models run once per image in accent_worker.py; these rows are what they found.
+
+
+def get_accent_image_data(image_ids: list[int]) -> dict[int, sqlite3.Row]:
+    """Stored model data for these gallery images, by image id (missing ones absent)."""
+    if not image_ids:
+        return {}
+    conn = get_connection()
+    out: dict[int, sqlite3.Row] = {}
+    for i in range(0, len(image_ids), 500):
+        chunk = image_ids[i : i + 500]
+        marks = ",".join("?" * len(chunk))
+        for row in conn.execute(
+            f"SELECT image_id, version, data, face_hair, n_faces FROM accent_image_data"
+            f" WHERE image_id IN ({marks})",
+            chunk,
+        ):
+            out[int(row["image_id"])] = row
+    return out
+
+
+def put_accent_image_data(
+    image_id: int, version: str, data: bytes, face_hair: str, n_faces: int
+) -> None:
+    with transaction() as conn:
+        conn.execute(
+            "INSERT INTO accent_image_data (image_id, version, data, face_hair, n_faces, computed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT (image_id) DO UPDATE SET version = excluded.version,"
+            "   data = excluded.data, face_hair = excluded.face_hair,"
+            "   n_faces = excluded.n_faces, computed_at = excluded.computed_at",
+            (image_id, version, data, face_hair, n_faces, _now()),
+        )
+
+
+def get_accent_main_data(url: str) -> sqlite3.Row | None:
+    conn = get_connection()
+    return conn.execute(
+        "SELECT url, version, data, face_hair, n_faces FROM accent_main_data WHERE url = ?", (url,)
+    ).fetchone()
+
+
+def put_accent_main_data(url: str, version: str, data: bytes, face_hair: str, n_faces: int) -> None:
+    with transaction() as conn:
+        conn.execute(
+            "INSERT INTO accent_main_data (url, version, data, face_hair, n_faces, computed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT (url) DO UPDATE SET version = excluded.version,"
+            "   data = excluded.data, face_hair = excluded.face_hair,"
+            "   n_faces = excluded.n_faces, computed_at = excluded.computed_at",
+            (url, version, data, face_hair, n_faces, _now()),
+        )
+
+
+def enqueue_accent(name: str) -> bool:
+    """Queue a character for the accent worker. True if it was not already queued."""
+    now = _now()
+    with transaction() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO accent_queue (character_id, queued_at, next_try_at)"
+            " SELECT id, ?, ? FROM characters WHERE name = ?",
+            (now, now, name),
+        )
+        return cur.rowcount > 0
+
+
+def next_accent_job() -> tuple[int, str, int] | None:
+    """(character id, name, attempts so far) of the job most due now, or None."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT q.character_id, c.name, q.attempts FROM accent_queue q"
+        "  JOIN characters c ON c.id = q.character_id"
+        " WHERE q.next_try_at <= ?"
+        " ORDER BY q.next_try_at, q.queued_at LIMIT 1",
+        (_now(),),
+    ).fetchone()
+    return (int(row[0]), row[1], int(row[2])) if row else None
+
+
+def finish_accent_job(character_id: int) -> None:
+    with transaction() as conn:
+        conn.execute("DELETE FROM accent_queue WHERE character_id = ?", (character_id,))
+
+
+def fail_accent_job(character_id: int, error: str, retry_at: str) -> None:
+    with transaction() as conn:
+        conn.execute(
+            "UPDATE accent_queue SET attempts = attempts + 1, last_error = ?, next_try_at = ?"
+            " WHERE character_id = ?",
+            (error[:500], retry_at, character_id),
+        )
+
+
+def accent_queue_size() -> int:
+    conn = get_connection()
+    return int(conn.execute("SELECT COUNT(*) FROM accent_queue").fetchone()[0])
+
+
 def _name_key(name: str) -> str:
     """The folded match key. `catalog_import` owns the folding rules."""
     import catalog_import

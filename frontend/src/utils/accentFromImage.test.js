@@ -48,9 +48,24 @@ describe('themeFromSeed', () => {
     expect(contrast(theme.light.accent, '#ffffff')).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('declines a seed too grey to theme a page with', () => {
-    expect(themeFromSeed('#808080')).toBeNull()
-    expect(themeFromSeed('#14171d')).toBeNull()
+  it('themes a neutral seed in greys instead of declining it', () => {
+    // Black-and-white characters (2B, Kaine) get a near-white or near-black
+    // accent on purpose; the page follows it in greys, legibly.
+    for (const seed of ['#e8e8e8', '#e5e7f1', '#808080', '#14171d']) {
+      const theme = themeFromSeed(seed)
+      expect(theme).not.toBeNull()
+      expect(theme.neutral).toBe(true)
+      expect(contrast(theme.light.accent, '#ffffff')).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(theme.dark.accent, '#14171d')).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(theme.light.fg, theme.light.accent)).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(theme.dark.fg, theme.dark.accent)).toBeGreaterThanOrEqual(4.5)
+      const [r, g, b] = toRgb(theme.light.accent)
+      expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(0.08) // still a grey
+    }
+  })
+
+  it('marks a coloured seed as not neutral', () => {
+    expect(themeFromSeed('#1cb0b6').neutral).toBe(false)
   })
 
   it('declines absent and malformed seeds', () => {

@@ -134,10 +134,12 @@ function fitMixToward(fromRgb, towardRgb, bg, target) {
  * the text colour that sits on a solid accent fill.
  */
 
-// An OKLCH chroma this low is a grey wearing a hue label; the server declines
-// those before storing a seed, and this declines any that reach the client
-// anyway (a hand-edited row, a stale payload).
-const MIN_CHROMA = 0.025
+// Below this OKLCH chroma a seed is a neutral: a genuinely black-and-white
+// character (2B, Kaine) whose accent is near-white or near-black by design, at
+// most faintly tinted. It themes the page in greys -- the same contrast fitting
+// walks its lightness -- keeping whatever faint tint it carries, rather than
+// falling back to the site accent.
+const NEUTRAL_CHROMA = 0.025
 
 function deriveTheme(L, C, h) {
   const white = [1, 1, 1]
@@ -192,12 +194,11 @@ function parseSeed(seed) {
 
 /**
  * The eight-token theme for a stored accent seed, or null when the seed is
- * absent, malformed, or too grey to theme a page with.
+ * absent or malformed. A neutral seed gives a grey theme (`neutral: true`).
  */
 export function themeFromSeed(seed) {
   const rgb = parseSeed(seed)
   if (!rgb) return null
   const { L, C, h } = rgbToOklch(...rgb)
-  if (C < MIN_CHROMA) return null
-  return deriveTheme(L, C, h)
+  return { ...deriveTheme(L, C, h), neutral: C < NEUTRAL_CHROMA }
 }

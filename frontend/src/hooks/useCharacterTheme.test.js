@@ -46,10 +46,16 @@ describe('useCharacterTheme', () => {
     expect(result.current).not.toBeNull()
   })
 
-  it('treats a declined seed as no theme at all', () => {
-    // A grey the extractor should never have stored; the page keeps the
-    // system accent rather than theming itself with mud.
-    const { result } = renderHook(() => useCharacterTheme('2B', '#808080'))
+  it('themes a neutral seed in greys', () => {
+    // Black-and-white characters are given a near-white or near-black accent on
+    // purpose (the V43 extractor's monochrome path); the page follows it.
+    const { result } = renderHook(() => useCharacterTheme('2B', '#e8e8e8'))
+    expect(result.current).not.toBeNull()
+    expect(result.current.neutral).toBe(true)
+  })
+
+  it('treats a missing seed as no theme at all', () => {
+    const { result } = renderHook(() => useCharacterTheme('2B', null))
     expect(result.current).toBeNull()
   })
 })
