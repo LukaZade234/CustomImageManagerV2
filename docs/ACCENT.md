@@ -1577,3 +1577,37 @@ darker as asked but bluer), Maomao (still pale), Kyouka Jirou (her main image's
 saturated colour is also pink), Shizuku Murasaki, Ellen Joe and Rio Futaba (the
 main-image fallback still picks a background-like colour), Himiko Toga, 2B and A2
 (override), and Nephis, who moved from the approved brown to a dark mauve.
+
+---
+
+## 26. The owner's review of V36 (2026-09-27)
+
+Now fine: Maki Zenin (the dark teal is good), Aqua Hoshino (either colour),
+Nefer (bluer than wanted, but a step in the right direction). Everything not
+listed below was accepted.
+
+| character | V33 → V36 | cause |
+|---|---|---|
+| Yotsuba Nakano | orange → yellow-green | the ±45° green window centred at 78° reaches back to 33° and swallows orange and blonde, then shades them chartreuse |
+| David Martinez | yellow → yellow-green | same |
+| Yuuki (SYMK) | white → wine red | the relaxed highlight rule: wine red clears 1% in 4 of 27 images |
+| Kaine | white → blue | same: 4 of 34 images |
+| Ruka Urushibara | teal → red | the tie presence rule: her teal is 75% of one image and absent from the other three |
+| Xurkitree | blue → olive | the fallback now reads the main image's cut-out on saturated colour only |
+| Nephis | brown → dark mauve | same |
+| Jotaro Kujo | navy → cream | tie between his navy and the gallery's skin window; the main image's saturated colour is his gold chain and hat pin plus tan skin |
+| Kyouka Jirou | pink (unchanged) | her main image's cut-out is correct; her hair (purple, the largest area) is dark and votes little, while the small bright red tie and pink headphones vote strongly |
+
+Measurements behind the suggestions:
+- **Highlight.** Mean coverage across *all* images: Tsukatsuki Rio 0.015, Kaneki
+  0.044, Alucard 0.100 against Yuuki and Kaine 0.003 (both clear in 12–15% of
+  images, Rio 21%, Kaneki 18%).
+- **Ruka's tie.** Per-image share of colour near 192° (teal): 0.00, 0.00, 0.00,
+  0.75; near 352° (red): 0.52, 0.40, 0.51, 0.23.
+- **Main-image cut-outs** worked for both Kyouka (65% foreground) and Jotaro (32%).
+
+Suggestions (§27 if taken): keep green's extra width on the cool side only; the
+highlight must also average ≥ 1% across all images; the fallback goes back to
+V33's whole-main-image read; tie votes from the main image weigh colours by area,
+not saturation; and, as a judgement call, presence counts a colour that fills one
+image of a very small gallery.
