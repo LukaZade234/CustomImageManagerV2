@@ -2201,3 +2201,41 @@ through them:
    instead of the cool/warm lean of the greys. Targets Gon.
 3. Ruka, Yuyuko and Eiki are gallery-shape problems (dark hair, hidden hair, a few
    single-colour artworks); the override is the realistic route.
+
+---
+
+## 37. The owner's idea: measure backgrounds too (2026-09-27, not built)
+
+§36's suggestions are parked. The owner's idea: instead of discarding backgrounds,
+measure them separately and let an overwhelming, non-white background colour lean
+the result (Gon's forests; perhaps Audrey Hall). Probe (`.data/bgprobe.py`, using the
+pipeline's own cut-out decisions; colour = S ≥ 0.12):
+
+| character | images | background's top colours (mean share of background) | note |
+|---|---|---|---|
+| Gon Freecss | 7: **5 where the cut-out misses him**, 2 separated | green 16%, cyan 7%, yellow 7% | the green is there, but the real loss is that 5 of 7 images are thrown away |
+| Audrey Hall | 28 (24 separated) | yellow 15%, orange 13%, green 12% | backgrounds are gold-lit like her; would push gold harder |
+| Lynae | 96 (81 separated) | sky blue 16%, cyan 14% | sky blue is what made her wrong in §16 |
+| Kyouka Jirou | 34 | orange 13%, pink 8% | against her purple |
+| Eiki Shiki | 5 | orange 22% | reinforces the gold that already beats her green |
+| Reze | 122 | red 11%, sky blue 11% | |
+| Superman | 13 | orange 14%, red 10%, sky blue 10% | red agrees |
+
+**Finding:** backgrounds are dominated by two generic families — warm light
+(orange/yellow: sunsets, interiors, lamplight) and sky blue — whatever the
+character. Counted directly they would strengthen exactly the errors the lab spent
+most of its effort removing (gold drift, Lynae's sky blue), and Audrey's
+backgrounds are gold too.
+
+**A narrower form that fits the data:**
+1. **Images where the cut-out cannot find the character** (under 3% foreground)
+   or cannot separate it (over 85%) are measured whole at a reduced weight instead
+   of dropped. This is where Gon's green is (5 of 7 images); Lynae has 15 such
+   images, so the weight must stay low.
+2. **The background may only reinforce a colour already on the character** (in a
+   minimum share of separated images), never introduce one — the same rule as the
+   main image's tie-break. Gon's green is on him in 1 of 2 separated images, so this
+   alone would barely move him; (1) matters more.
+Cost: nothing new — the background is the inverse of the mask already computed.
+Canaries in the checks: Lynae, Kyouka, Eiki, and the gold-drift set (Will, Ishtar,
+Dazai, Poison Ivy).
