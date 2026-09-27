@@ -82,7 +82,14 @@ the open questions, including the dead ends.
 - **V39 (§32–33):** the owner reviewed V38e (mostly positive). V39 reads the shade
   without the extra hair and counts only the character's own hair in multi-character
   images (shared "package deal" galleries count every face): **83 of 96** checks
-  (V37 79). The current candidate.
+  (V37 79).
+- **V40–V43 (§34–40):** a pale-pink gate (Centurion), two rejected global rules
+  (hair exempt from skin rules, V41; failed cut-outs kept, V42) and a recurring
+  monochrome tint (Gon pale green). **V43 is the candidate** (83 of 96).
+- **Final research (§41):** the one untried method with evidence is semantic —
+  Danbooru's colour tags, locally via the WD tagger (378 MB, ~0.35 s per image),
+  which names the wanted colour for most of the greens, hair identities and Audrey.
+  Otherwise ship V43 with overrides.
 
 ---
 
@@ -2334,3 +2341,67 @@ If both are accepted, V43 replaces V40 as the candidate.
 
 The owner accepted both ("it seems good"): **V43 is the candidate** (83 of 96 checks;
 differs from V40 only on Gon Freecss and Neferpitou).
+
+---
+
+## 41. Final check: other methods, researched (2026-09-27)
+
+The owner asked for a careful read of this document and an online search for
+methods others use, to decide whether to stop here.
+
+**Already covered by the lab** (in some form, with results above):
+- **Palette extraction by clustering** (k-means, median cut, colour-thief,
+  Android's Palette / node-vibrant "vibrant swatch") — these answer *dominant*
+  colour, the same question as the pooled histogram; Material Color Utilities'
+  quantiser + `Score`, the most refined of them, was tried and failed (§14.4).
+- **Saliency / subject masks** — superseded by the anime cut-out model (§16).
+- **Body-part parsing** — the face parser (§30–33); no small full-body anime parser
+  exists; See-Through (SIGGRAPH 2026) is diffusion-based, 2–3 min per image on a GPU.
+- **Training a colour predictor** — rejected early for lack of labels (§11).
+- Research on anime colour (reference-based colourisation, colour design sheets)
+  solves a different problem: filling line art, not naming a character's colour.
+
+**Not tried — a semantic signal.** Everything above measures pixels, and §7's
+first reason this is hard is that *dominant is not signature*. There is one source
+that names signature colours directly: **Danbooru's tag vocabulary** (`green_hair`,
+`blonde_hair`, `green_dress`, `red_eyes`…), which fans apply by meaning, not by
+pixels.
+
+- **Danbooru related tags** (public API): `audrey_hall` → blonde_hair 0.84,
+  green_eyes 0.60, **green_dress 0.53**; `gon_freecss` → black_hair 0.50,
+  green_shorts 0.22, green_jacket 0.18 (and white_hair 0.43 — Killua, from pair
+  art); `reze_(chainsaw_man)` → purple_hair 0.40. Needs a name → tag mapping, suffers
+  from co-occurring characters, and misses originals and memes.
+- **The WD tagger** (SmilingWolf, Apache-2.0; trained on Danbooru) tags each image
+  locally with the same vocabulary — no name mapping, covers every image.
+  `wd-vit-tagger-v3`: **378 MB**, **~700 MB** extra RAM, **0.35 s per image at 4
+  threads** (1.3 s at 1 thread) on the desktop; ~55 min for the library on 4 threads.
+  Other sizes: moat-v2 326 MB, convnext-v3 395 MB, swinv2-v3 468 MB, eva02-large
+  1.26 GB.
+
+**Probe** (`.data/tagprobe.py`, colour tags at ≥ 0.35, share of each gallery's
+images): the tagger names the colour the owner wanted for many of the cases pixels
+cannot solve — **Maki Zenin green_hair 46%, N green_hair 100%, Maomao green_hair
+61%, Nefer green_hair 100%, Eiki Shiki green_hair 100%, Gon green_shorts 71%,
+Himiko Toga blonde_hair 100% (cream), Sharron blonde_hair 100%, Yae Miko and
+Yuyuko pink_hair 100%, Airani pink_hair 83%, Shouko brown_hair 75% + pink_hair 25%,
+2B white_hair 100%**, and **Audrey Hall green_dress 75%, green_eyes 64%** (beside
+blonde_hair 86%). It disagrees with the owner where the wish is not the hair:
+**Lynae blonde_hair 95%** (her teal is accessories), Ruka black_hair (teal wanted),
+Vertin grey_hair, Tsubasa black_hair; and it says little for non-humans (Xurkitree,
+Umbreon). The skin-group characters with black hair (Aoi Todo, Tetsurou Kuroo, Kim
+Soleum, Shizuku, Kim Dokja, Mai) come back mostly `black_*`: nearly monochrome, as
+the owner saw.
+
+**How it would be used, if built:** as a semantic prior, never the decider — the
+tags name which of the gallery's *own* colour windows is the character's (hair, then
+a prominent clothing colour, then eyes), in the spirit of the main image's
+tie-break; the pixels still decide the shade, and a clear gallery winner (Lynae) is
+not overturned. Store a few tag ids per image; tag new uploads in the background.
+
+**Verdict:** this is the only untried method with evidence behind it, and it targets
+the largest remaining failure (the semantic gap: greens, hair identities, Audrey).
+It is a larger step than the variants of §31–43 — a third model and a new decision
+input — and it would not fix Lynae or Ruka, whose wanted colours are not their hair.
+Otherwise the pixel approach has reached its limit (§38–39): ship V43 and use the
+override for the rest.
