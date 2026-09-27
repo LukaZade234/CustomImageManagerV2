@@ -66,6 +66,11 @@ uv run python -m scripts.accent_lab.fullcheck render
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.checks v36,v37
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.trace v37 "Reze|Kyouka Jirou"
 
+# Skin/body-part models (ACCENT.md §30): speed, memory, and a contact sheet of what
+# each marks. Model download and ONNX conversion are in the module docstring.
+uv run --no-project --with numpy --with onnxruntime --with pillow --with requests \
+    python -m scripts.accent_lab.skinbench speed
+
 # Contact sheet from the last library run, to judge colours by eye.
 uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
 ```

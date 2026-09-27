@@ -70,6 +70,11 @@ the open questions, including the dead ends.
   current candidate: 73 of 87 review checks.** Open items, the full list of flagged
   characters that never changed, and the suggestions are in §28; how to resume is
   §29.
+- **Skin models measured (§30):** an anime face detector plus a face parser
+  (18 MB, ~270 MB RAM, ~0.12 s per image — a sixth of the cut-out) reliably
+  labels face skin and hair, but only around the head; no small full-body anime
+  parser exists, and photo-trained models fail on anime. Whether it moves the
+  flagged characters is untested.
 
 ---
 
@@ -1788,3 +1793,96 @@ bug. Sakurako Kawawa and Kasumi Yamabuki share one gallery on purpose.
 the small-gallery pale-pink gate; which characters to hand-pick with the override;
 and when to port V37 into the app (with the frontend change for neutral seeds and a
 per-image colour summary instead of stored masks).
+
+---
+
+## 30. Skin and body-part models: size and speed, measured (2026-09-27)
+
+Research only; V37 unchanged. The goal was hard numbers for §28's first
+suggestion. Tool: `scripts/accent_lab/skinbench.py` (models in `.data/skin/`,
+commands in its docstring). All numbers are the owner's desktop (Ryzen 9 7900X),
+onnxruntime on CPU, real 600px gallery thumbnails.
+
+**Candidates**
+
+| model | what it marks | licence | weights | status |
+|---|---|---|---|---|
+| [siyeong0/Anime-Face-Segmentation](https://github.com/siyeong0/Anime-Face-Segmentation) | background, hair, eye, mouth, face, skin, clothes — trained on face crops | MIT | `UNet.pth` 6.4 MB (1.55 M params); **6.2 MB as ONNX** | measured |
+| [deepghs/anime_face_detection](https://huggingface.co/deepghs/anime_face_detection) `face_detect_v1.4_n` | face boxes (YOLOv8n, F1 0.94) — the crop the parser needs | MIT | **12.1 MB ONNX** | measured |
+| [isjackwild/segformer-b0 skin-hair-clothing](https://huggingface.co/isjackwild/segformer-b0-finetuned-segments-skin-hair-clothing) | skin, hair, clothing — trained on **photos** | — | 15.0 MB ONNX (3.7 M params) | measured, rejected |
+| [See-Through](https://github.com/shitagaki-lab/see-through) (SIGGRAPH 2026) | up to 23 anime body-part layers | Apache-2.0 | SDXL-based diffusion | rejected unmeasured: 12–16 GB GPU, 2–3 min per image (≈ 2 weeks of GPU for the library) |
+| Anzhc YOLO face / head-hair seg | one-class face or head masks | AGPL-3.0 | ~6 MB | not tried: one class, and AGPL on a server |
+
+The PyTorch models were converted to ONNX once (`skinbench export`), so running
+them needs only onnxruntime — the same runtime the cut-out model uses; no torch
+on the server.
+
+**Speed** (ms per image, averaged over 40 thumbnails, 1.3 faces per image):
+
+| step | 1 thread | 4 threads | all 24 threads |
+|---|---|---|---|
+| face detector | 71 | 56 | 76 |
+| face parser, once per detected face | 116 | 61 | 111 |
+| **face path total** | **≈ 190** | **≈ 120** | ≈ 190 |
+| face parser on the whole image (for comparison) | 89 | 45 | 66 |
+| SegFormer | 187 | 69 | 104 |
+| cut-out model (isnetis), for comparison | **2,440** | **700** | ≈ 400 (§20.1) |
+
+The small models run *slower* on all 24 threads (thread overhead outweighs the
+work); 1–4 threads is the right setting, which suits the server. The face path
+costs about **a sixth of the cut-out at 4 threads, a thirteenth at 1 thread**.
+
+**Memory** (peak resident, each model alone, over the Python + onnxruntime
+baseline of ~70 MB): face detector **+70 MB**, face parser **+200 MB** (together
+≈ 270 MB), SegFormer +490 MB, cut-out model **+1,600 MB**. Thread count made no
+difference.
+
+**Whole library** (9,440 images): about 20 minutes for the face path in one
+4-thread process; a few minutes split across processes as the full check does
+(estimated from that run's scaling, not measured). Once per image, like the
+cut-out.
+
+**The server** (Oracle Ampere A1, ARM Neoverse N1) is not measured — reads on the
+production box need the owner's go-ahead. An N1 core is roughly 2–3× slower than
+a Zen 4 core for this kind of work, which puts the face path at about 0.4–0.6 s
+per image on one core (the cut-out: about 5–7 s), in ~300 MB of RAM. Running
+`skinbench speed` there would replace the estimate with a measurement.
+
+**What each model actually marks** (contact sheet of 54 images from the
+skin-group characters, 3 each: `skinbench sheet` → `.data/skin/sheet.png`):
+
+- **Face parser on face crops — good where it reaches.** Faces, hands in frame,
+  hair and collars come out right, including the hard cases for colour rules:
+  Himiko Toga's blonde hair is *hair* (the colour rules cannot separate it from
+  skin), Eiki Shiki's green and Makoto Kino's brown hair are hair. But it covers
+  **only the head and whatever falls in the crop** — arms, legs and torsos are not
+  reached (Makoto's arms, Chizuru's legs, Jotaro's chest). Face skin is a median 6% of the
+  cut-out in these images (quartiles 2–10%; up to 26% in close-ups).
+- **The face detector** found a face in **48 of 54 images (89%)**. The misses are
+  scenes where the face is not readable (Sukuna's three dark images — which the
+  cut-out model also drops — one Aoi Todo, one Kim Soleum). Group shots give
+  several faces (Kim Soleum: 5–6), all parsed.
+- **Face parser on the whole image — unusable.** Outside a face crop it paints
+  hair and clothes labels at random over bodies and backgrounds.
+- **SegFormer — unusable.** Trained on photos, it calls nearly all anime pixels
+  "clothing" and finds skin only on some faces and legs.
+- **Extending skin from the face by colour** (learn this image's skin colour from
+  the parsed face, mark matching pixels anywhere on the cut-out): **unreliable**.
+  It catches bare legs and arms well in some images (Izumi Miyamura, Chizuru) but
+  swallows anything skin-coloured: Himiko's blonde hair, Makoto's cream trousers,
+  Jotaro's gold, and Tooth Fairy's and Reze's whole dark bodies (81–95% of the
+  cut-out). As tried it is worse than the HSV skin rules V37 already has.
+
+**What this means for §28's suggestion 1.** A face-crop parser is cheap — 18 MB
+of models, ~270 MB RAM, ~0.12 s per image on the desktop — small enough to run
+on the server beside the cut-out (which dominates at 1.6 GB and ~0.7 s). What it
+buys is reliable **face skin removal** and, possibly more useful, a **hair
+label**: hair is often the signature colour, and it is exactly where the colour
+rules confuse blonde, pink and cream with skin. It does **not** solve body skin.
+No small full-body anime parser was found; the only full-body one is a diffusion
+model far too heavy to run here.
+
+The unmeasured question is the one that matters: *does removing face skin, or
+weighting hair, move the flagged characters?* That needs a prototype variant
+(face/skin labels removed before measurement; optionally hair counted extra)
+scored with `checks`, which is a method change and awaits the owner.
