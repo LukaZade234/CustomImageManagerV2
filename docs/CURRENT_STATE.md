@@ -607,13 +607,14 @@ so every read path shows it. The extractor returns it and refuses to recompute
 over it, including `scripts/recompute_accents.py`; clearing drops both and the
 next visit measures afresh. The picks double as a labelled calibration set.
 
-**The V43 accent (built, not yet switched on).** The accent the owner reviewed over
+**The V43 accent (live since 2026-09-27).** The accent the owner reviewed over
 nine rounds is ported into the app as `accent_v43.py` (the decision, reproducing the
 lab's seeds byte for byte), `accent_models.py` (a cut-out and a face parser through
 onnxruntime) and `accent_worker.py` (a background service, `imgmanager-accent`,
-that runs the models once per image and recomputes queued characters). It is off
-until `ACCENT_ENGINE=v43` is set; until then the original extractor runs as before.
-Rollout steps: [DEPLOYMENT.md](DEPLOYMENT.md), "Accent worker (V43)".
+that runs the models once per image and recomputes queued characters), switched on
+with `ACCENT_ENGINE=v43`. A gallery change queues the character for the worker; the
+stored colour is served until the new one lands. Setup and rollback:
+[DEPLOYMENT.md](DEPLOYMENT.md), "Accent worker (V43)"; history: ACCENT.md section 44.
 
 The full history of the accent logic — every idea tried, every version reverted,
 and the numbers behind each — is in **[ACCENT.md](ACCENT.md)**.
