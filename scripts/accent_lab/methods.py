@@ -46,7 +46,10 @@ app. Variants build on each other, so read them in order.
     v35   v34 in HSV again; green-family windows +-45, no aim
           into blonde; no darker fade                             greens and warm both
     v36   v35 + main image votes on saturated colour for the
-          choice, reads the whole image for the aim               69/80, the candidate
+          choice, reads the whole image for the aim               69/80
+    v37   green windows count from 50 (not into orange/yellow)
+          but aim from 75; highlight must average >= 1%;
+          fallback reads the whole main image again               73/87, the candidate
 """
 
 from __future__ import annotations
@@ -1192,13 +1195,38 @@ def _aim_ok(h, centre):
     return not _is_green(centre) or h >= GREEN_HSV[0]
 
 
+GREEN_ASYM = False  # V37: green's extra width only on the cool side
+
+
+GREEN_FLOOR = 50  # counted from here (yellow-green); blonde and orange sit below
+
+
+def _bounds(c, default):
+    """(low, high) of a green window when GREEN_ASYM: wide, but never into blonde/orange."""
+    span = max(default, GREEN_SPAN)
+    return max(c - span, GREEN_FLOOR), c + span
+
+
+def win_sum(hist, c, default):
+    """Mass in the colour window centred at `c`."""
+    if GREEN_ASYM and _is_green(c):
+        lo, hi = _bounds(c, default)
+        return sum(hist[i] for i in range(A.HUE_BINS) if lo <= (i + 0.5) * 5 <= hi)
+    return band_sum(hist, c, _span(c, default))
+
+
+def _in_window(h, c, default):
+    """Where the aim may land: a green window counts from GREEN_FLOOR but aims from 75."""
+    if GREEN_ASYM and _is_green(c):
+        lo, hi = _bounds(c, default)
+        return max(lo, GREEN_HSV[0]) <= h <= hi
+    return A._hue_distance(h, c) <= _span(c, default) and _aim_ok(h, c)
+
+
 def windows(hist):
     """[(centre_deg, share)] strongest first, centres >= 2*WINDOW apart."""
     total = sum(hist) or 1.0
-    w = [
-        band_sum(hist, (i + 0.5) * 5, _span((i + 0.5) * 5, WINDOW)) / total
-        for i in range(A.HUE_BINS)
-    ]
+    w = [win_sum(hist, (i + 0.5) * 5, WINDOW) / total for i in range(A.HUE_BINS)]
     out: list[tuple[float, float]] = []
     for i in sorted(range(A.HUE_BINS), key=lambda i: -w[i]):
         c = (i + 0.5) * 5
@@ -1253,33 +1281,25 @@ def v16_decide_from(entries, portrait=None, p=V8):
         # choice between colours uses saturated colour only, while the aim inside the
         # chosen colour still reads everything (Reze's violet is in her background).
         ph = A._pool_histogram(main_entries, "saturated") if MAIN_SAT_ONLY else ph_all
+        if AREA_TIE and _MAIN_AREA[0] is not None:
+            ph = _MAIN_AREA[0]
         pt = sum(ph) or 1.0
-        scores = [(band_sum(ph, c, _span(c, WINDOW)) / pt, c) for c, _ in tied]
+        scores = [(win_sum(ph, c, WINDOW) / pt, c) for c, _ in tied]
         best, chosen = max(scores)
         if best <= 0:
             return None, "two-colour tie, main image carries neither"
         gs, gt = A._smooth(hist)
         ps, pst = A._smooth(ph_all)
-        near = [
-            i
-            for i in range(A.HUE_BINS)
-            if A._hue_distance((i + 0.5) * 5, chosen) <= _span(chosen, AIM_SPAN)
-            and _aim_ok((i + 0.5) * 5, chosen)
-        ]
+        near = [i for i in range(A.HUE_BINS) if _in_window((i + 0.5) * 5, chosen, AIM_SPAN)]
         hue = (max(near, key=lambda i: (gs[i] / gt) ** AIM_GALLERY_POW * (ps[i] / pst)) + 0.5) * 5
         reason = "tie broken by main image: " + ", ".join(
             f"{c:.0f}deg {s:.2f}" for s, c in sorted(scores, reverse=True)
         )
     else:
         gs, _ = A._smooth(hist)
-        near = [
-            i
-            for i in range(A.HUE_BINS)
-            if A._hue_distance((i + 0.5) * 5, top_c) <= _span(top_c, AIM_SPAN)
-            and _aim_ok((i + 0.5) * 5, top_c)
-        ]
+        near = [i for i in range(A.HUE_BINS) if _in_window((i + 0.5) * 5, top_c, AIM_SPAN)]
         hue = (max(near, key=lambda i: gs[i]) + 0.5) * 5
-    share = band_sum(hist, hue, _span(hue, WINDOW)) / (sum(hist) or 1.0)
+    share = win_sum(hist, hue, WINDOW) / (sum(hist) or 1.0)
     if share < 0.15:
         return None, f"winning colour holds only {share:.2f}"
     wsum = sum(w for _, w in entries)
@@ -1656,12 +1676,13 @@ def v24(portrait, gallery, trace=None):
         tie_main = whole
         if MAIN_FG and seg_p is not None and whole is not None:
             tie_main = [(seg_p, 1.0), (whole, MAIN_BG_WEIGHT)]
+        _MAIN_AREA[0] = _area_hist(fp, portrait) if AREA_TIE and portrait is not None else None
         result, reason = run(hue_entries, shade_entries, tie_main)
         source = "gallery"
         if result is None and whole is not None:
             _FALLBACK_DEPTH[0] = True
             try:
-                if MAIN_FG and seg_p is not None and seg_p_shade is not None:
+                if MAIN_FG and not FALLBACK_WHOLE and seg_p is not None and seg_p_shade is not None:
                     fb, why = run(
                         [(seg_p, 1.0), (whole, MAIN_BG_WEIGHT)],
                         [(seg_p_shade, 1.0), (whole_shade, MAIN_BG_WEIGHT)],
@@ -2398,6 +2419,7 @@ def method_v32(portrait, gallery):
 
 HIGHLIGHT_MIN_IMAGES = 3
 HIGHLIGHT_SMALL_GALLERY = False  # V34 sets True
+HIGHLIGHT_MIN_MEAN = 0.0  # V37: 0.01 -- the highlight's coverage averaged over all images
 TIE_MIN_COV = 0.01
 
 
@@ -2449,6 +2471,8 @@ def _mono_highlight_v33_with(images, base):
     top = int(np.argmax(covs.mean(0)))
     if not _highlight_recurs(int((covs[:, top] > 0.01).sum()), len(covs)):
         return None
+    if covs[:, top].mean() < HIGHLIGHT_MIN_MEAN:
+        return None
     return base(images)
 
 
@@ -2487,10 +2511,30 @@ def method_v33(portrait, gallery):
 HUE_SPACE = "hsv"  # V34 sets "oklch"
 LIGHT_LO = (0.18, 0.12)  # V34: (0.10, 0.12) -- where the dark fade starts and its width
 TIE_MIN_PRESENCE = 0.30
+PRESENCE_SHARE = 0.10  # an image "has" a colour when it holds this share of its evidence
 MAIN_BG_WEIGHT = 0.25
 MAIN_FG = False  # V34 sets True
 MAIN_SAT_ONLY = False  # V36: the main image votes with saturated colour only
 _FALLBACK_DEPTH = [False]  # set while V24's fallback runs on the main image alone
+FALLBACK_WHOLE = False  # V37: the fallback reads the whole main image again (as V33)
+AREA_TIE = False  # V37: the main image's tie vote weighs colours by area
+_MAIN_AREA = [None]
+
+
+def _area_hist(fp, whole):
+    """Main image colour by area: saturated, non-skin pixels per HSV bin, cut-out first."""
+
+    def one(img):
+        a, h, s, v = _hsv_arrays(img)
+        if len(h) < 50:
+            return np.zeros(A.HUE_BINS)
+        ok = (s >= A.SATURATED_SAT_MIN) & (v >= 0.15)
+        ok &= ~((h >= 10) & (h <= 45) & ((s <= 0.65) | (v < WARM_DARK_V)))  # skin, brown
+        ok &= ~((h >= 352) | (h <= 10)) | (s > 0.55)  # blush, lips
+        return np.bincount(np.minimum((h[ok] / 5).astype(int), 71), minlength=A.HUE_BINS) / len(h)
+
+    total = one(fp) + MAIN_BG_WEIGHT * one(whole) if fp is not None else one(whole)
+    return [float(x) for x in total]
 
 
 def _light_pref_np(v, lo=None):
@@ -2675,7 +2719,7 @@ def v34(portrait, gallery, trace=None):
             for g in gm:
                 ev = evidence_v15([(g, 1.0)])
                 t = sum(ev) or 1.0
-                hits += band_sum(ev, c, _span(c, WINDOW)) / t >= 0.10
+                hits += win_sum(ev, c, WINDOW) / t >= PRESENCE_SHARE
             return hits / len(gm)
 
         def windows_v34(hist):
@@ -2752,7 +2796,7 @@ def v36(portrait, gallery, trace=None):
     def decide(entries, portrait_grids=None, p=V8):
         # the fallback is the only caller that passes a main image alone, with no tie grids
         global PALE_WEIGHT
-        if portrait_grids is None and _FALLBACK_DEPTH[0]:
+        if portrait_grids is None and _FALLBACK_DEPTH[0] and not FALLBACK_WHOLE:
             saved_pw = PALE_WEIGHT
             PALE_WEIGHT = 0.0
             try:
@@ -2770,3 +2814,59 @@ def v36(portrait, gallery, trace=None):
 
 def method_v36(portrait, gallery):
     return v36(portrait, gallery)
+
+
+# ---- V37: the owner's review of V36 --------------------------------------------------------------
+#
+# - Green's extra width only toward the cool side: a green window never reaches
+#   below 75 degrees (V36's window at 78 swallowed Yotsuba's orange and David
+#   Martinez's yellow).
+# - A monochrome highlight must also average >= 1% of the character over all images
+#   (Rio 0.015, Kaneki 0.044, Alucard 0.100; Yuuki and Kaine 0.003).
+# - The fallback reads the whole main image again, as V33 did (V36's cut-out,
+#   saturated-only fallback fixed nothing and lost Xurkitree's blue and Nephis's brown).
+# - The main image's tie vote weighs colours by area, not by saturation: Jotaro's
+#   navy coat and Kyouka's purple hair are the largest areas but lost to a small gold
+#   chain and a bright red tie.
+
+PRESENCE_SMALL = False  # judgement call: one strong image counts in a small gallery
+
+
+def v37(portrait, gallery, trace=None):
+    global \
+        GREEN_ASYM, \
+        HIGHLIGHT_MIN_MEAN, \
+        FALLBACK_WHOLE, \
+        AREA_TIE, \
+        PRESENCE_SHARE, \
+        TIE_MIN_PRESENCE
+    saved = (
+        GREEN_ASYM,
+        HIGHLIGHT_MIN_MEAN,
+        FALLBACK_WHOLE,
+        AREA_TIE,
+        PRESENCE_SHARE,
+        TIE_MIN_PRESENCE,
+    )
+    # AREA_TIE was tried and dropped: it turned Sanae and Daiyousei blue and Maki red,
+    # and did not help Jotaro (his main image's cut-out barely includes his coat) or
+    # Kyouka (0.47 against 0.40).
+    GREEN_ASYM, HIGHLIGHT_MIN_MEAN, FALLBACK_WHOLE, AREA_TIE = True, 0.01, True, False
+    if PRESENCE_SMALL and len(gallery) <= 5:
+        PRESENCE_SHARE, TIE_MIN_PRESENCE = 0.5, 0.2  # one image filled by the colour counts
+    try:
+        return v36(portrait, gallery, trace)
+    finally:
+        _MAIN_AREA[0] = None
+        (
+            GREEN_ASYM,
+            HIGHLIGHT_MIN_MEAN,
+            FALLBACK_WHOLE,
+            AREA_TIE,
+            PRESENCE_SHARE,
+            TIE_MIN_PRESENCE,
+        ) = saved
+
+
+def method_v37(portrait, gallery):
+    return v37(portrait, gallery)

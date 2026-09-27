@@ -1611,3 +1611,42 @@ highlight must also average ≥ 1% across all images; the fallback goes back to
 V33's whole-main-image read; tie votes from the main image weigh colours by area,
 not saturation; and, as a judgement call, presence counts a colour that fills one
 image of a very small gallery.
+
+---
+
+## 27. V37 (2026-09-27)
+
+From §26's suggestions:
+
+- **Green windows no longer reach into orange and yellow.** They count from 50°
+  (yellow-green; blonde and orange sit below) instead of reaching back to ~33°,
+  but the aim inside one still lands at 75° or above. A first cut floored the
+  window at 75°/58° and lost Zoro, Sanae, Daiyousei and N again: **part of V36's
+  green wins had come from the warm pixels its wide window swallowed**, and a
+  character's green hair sits in HSV's yellow-green (60–100°). Sweeping the floor
+  over the greens and the yellow/orange characters: 40° → 10/18, 45° → 13, 50° →
+  14, 55° → 12; 45° recovers N but gives Yotsuba and David their green tint back.
+- **A monochrome highlight must also average ≥ 1%** across all images: Yuuki and
+  Kaine are white again; Rio, Kaneki and Alucard keep red.
+- **The fallback reads the whole main image again** (Xurkitree, Nephis).
+- **Tried and dropped: an area-weighted tie vote.** It turned Sanae and Daiyousei
+  blue and Maki red, and did not help Jotaro (his main image's cut-out barely
+  includes his coat, so gold wins by area too) or Kyouka (0.47 against 0.40).
+- **Tried and dropped: one strong image counts in small galleries.** It brings
+  Ruka's teal back but changes 13 of the 106 characters with ≤ 5 images, among
+  them Gloria Martinez back to the pale yellow the owner rejected, and complete
+  hue changes for Spider-Ham, Bambietta and Kaoruko.
+
+**Checks: 73 of 87** (V36: 70), with this round's verdicts added (`V36_REVIEW`).
+Fixed: Yotsuba (orange), David Martinez (yellow), Yuuki and Kaine (white), Nephis
+(approved brown). 26 of 599 characters changed from V36; none is empty.
+
+**Lost:** Maki Zenin and N. Maki's accepted dark teal in V36 came from the safety
+net (her gallery was too sparse to decide); in V37 her gallery decides a near-coin
+flip, red 0.15 against green 0.14. N's green window now centres at 68°, below the
+green family, so its aim drifts to gold. Xurkitree came out teal-cyan in the full
+run rather than the earlier blue.
+
+**Still open:** Maki, N, Xurkitree, Ruka, Jotaro, Kyouka, Nefer (bluer, but
+accepted as a step), Maomao, Shizuku, Ellen Joe, Rio Futaba, Himiko Toga, and 2B
+and A2 (override).

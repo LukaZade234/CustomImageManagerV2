@@ -426,3 +426,32 @@ FULL_REVIEW = {
     ),
     "live:Cheongmyeong": ("Cheongmyeong: a colour", lambda r: r is not None),
 }
+
+
+# The owner's review of V36 (2026-09-27).
+V36_REVIEW = {
+    "live:Yotsuba Nakano": ("Yotsuba Nakano: orange", _hue_in(35, 70)),
+    "live:David Martinez": ("David Martinez: pure yellow", _hue_in(80, 105)),
+    "live:Yuuki (SYMK)": (
+        "Yuuki (SYMK): white/blue-white, not wine red",
+        lambda r: r is not None and r["lightness"] >= 0.8,
+    ),
+    "live:Kaine": (
+        "Kaine: white",
+        lambda r: r is not None and r["lightness"] >= 0.85 and r["chroma"] < 0.03,
+    ),
+    "live:Ruka Urushibara": ("Ruka Urushibara: teal (as before)", _hue_in(180, 230)),
+    "live:Xurkitree": ("Xurkitree: blue (as before)", _hue_in(220, 270)),
+    "live:Jotaro Kujo": (
+        "Jotaro Kujo: navy or gold, not skin",
+        lambda r: (
+            _hue_in(240, 290)(r)
+            or (_hue_in(70, 100)(r) and r["chroma"] >= 0.1 and r["lightness"] < 0.85)
+        ),
+    ),
+    "live:Nephis": ("Nephis: approved brown", _near("#a38f6a", dh=30)),
+    "live:Maki Zenin": (
+        "Maki Zenin: V36's dark teal (or dark green)",
+        lambda r: _near("#163948", dh=40, dl=0.15)(r) or _greenish(max_l=0.62)(r),
+    ),
+}
