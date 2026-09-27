@@ -8,6 +8,7 @@ import requests
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
 import logs
+from image_utils import detect_format
 
 
 class ImgChestError(Exception):
@@ -73,6 +74,22 @@ def _size_clause_mb(file_size_mb, limit_mb=30.0):
     )
 
 
+def _name_for_bytes(name, file_path):
+    """The upload name, with `.gif` in place of its suffix when the file is a GIF.
+
+    ImgChest takes the link's extension from the name it is given, not from the
+    bytes. Every upload is named `.png` because Mudae wants that for stills (see
+    `image_utils.UPLOAD_SUFFIX`), but a GIF under that name comes back as a
+    `.png` link: the gallery then treats it as a still and thumbnails its first
+    frame, and a `$ai` command carrying it fails in Mudae. Animated GIFs are the one upload kept
+    as-is, so they are the one case that has to keep its real extension.
+    """
+    if detect_format(file_path) != "GIF":
+        return name
+    base, _ = os.path.splitext(name)
+    return f"{base}.gif"
+
+
 def upload_to_imgchest(file_path, upload_name=None):
     """Upload one image. `upload_name` is what it will be called on ImgChest.
 
@@ -100,7 +117,7 @@ def upload_to_imgchest(file_path, upload_name=None):
 
     url = "https://api.imgchest.com/v1/post"
     headers = {"Authorization": f"Bearer {API_KEY}"}
-    display_name = upload_name or os.path.basename(file_path)
+    display_name = _name_for_bytes(upload_name or os.path.basename(file_path), file_path)
     payload = {
         "title": display_name,
         "privacy": "hidden",

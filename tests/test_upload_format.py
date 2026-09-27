@@ -5,8 +5,9 @@ Two rules, both learned the hard way from what is already in the library:
 - Decide by the file's **bytes**, never its name. Deciding by extension is how
   WebP files ended up stored under `.png` names, and how uploads skipped the
   dimension cap entirely — there is an 11,036px image in there because of it.
-- Keep the `.png` extension regardless. Mudae's $ai command will not accept a
-  URL that does not end in .png, but it renders whatever bytes arrive.
+- Keep the `.png` extension for everything re-encoded. Mudae's $ai command will
+  not accept a still whose URL does not end in .png, but it renders whatever
+  bytes arrive. An animated GIF, kept as-is, is the one upload named `.gif`.
 """
 
 import hashlib
@@ -164,6 +165,45 @@ class TestNaming:
         """Mudae rejects a URL that does not end in .png, whatever the bytes are."""
         for args in [("Lucy", 1), ("Lucy", None, "main"), ("", 999)]:
             assert imgchest_filename(*args).endswith(".png")
+
+
+class TestGifKeepsItsExtension:
+    """The one exception to `.png`. ImgChest takes the link's extension from the
+    name, so an animated GIF sent as `lucy-013-….png` came back as a `.png` link:
+    thumbnailed to a still in the gallery and broken in `$ai`."""
+
+    def _upload(self, monkeypatch, path, name):
+        import imgchest_utils
+
+        sent = {}
+
+        class _Response:
+            status_code = 200
+
+            def json(self):
+                return {"data": {"id": "p1", "images": [{"link": "https://cdn/x"}]}}
+
+        def fake_post(url, headers, data, files, timeout):
+            sent["name"] = files["images[]"][0]
+            sent["title"] = data["title"]
+            return _Response()
+
+        monkeypatch.setattr(imgchest_utils, "API_KEY", "test-key")
+        monkeypatch.setattr(imgchest_utils.requests, "post", fake_post)
+        imgchest_utils.upload_to_imgchest(path, upload_name=name)
+        return sent
+
+    def test_an_animated_gif_is_sent_as_gif(self, tmp_path, monkeypatch):
+        frames = [Image.new("RGB", (32, 32), c) for c in ("red", "blue")]
+        path = tmp_path / "in.gif"
+        frames[0].save(path, "GIF", save_all=True, append_images=frames[1:])
+        sent = self._upload(monkeypatch, str(path), "lucy-013-20260927.png")
+        assert sent == {"name": "lucy-013-20260927.gif", "title": "lucy-013-20260927.gif"}
+
+    def test_webp_bytes_keep_the_png_name(self, tmp_path, monkeypatch):
+        path = _write(tmp_path, "in.png", "WEBP", size=(32, 32))
+        sent = self._upload(monkeypatch, path, "lucy-013-20260927.png")
+        assert sent["name"] == "lucy-013-20260927.png"
 
 
 class TestIndexNeverRepeats:
