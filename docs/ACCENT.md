@@ -15,8 +15,8 @@ the open questions, including the dead ends.
 > **Where it ended (2026-09-27):** the lab work stopped at **V43** by the owner's
 > decision (§43) — 84 of 96 review checks, against 59 of 80 when the review sets
 > began. §29 has its behaviour step by step and the characters still open (for the
-> manual override). **It is now ported into the app (§44)** — reproducing the lab's
-> seeds byte for byte — but switched off until the rollout in §44 is done.
+> manual override). **It is live on the site since 2026-09-27 (§44)**, ported into the
+> app byte for byte, with every accent precomputed on the desktop and imported.
 
 - **Shipped and merged-ready:**
   - Portrait weighting by gallery size (`accent_extract._portrait_share`).
@@ -1751,10 +1751,9 @@ Arisa, Griffith and Cheongmyeong (colours again).
 
 ## 29. Resume here — the final state (updated 2026-09-27, after §43)
 
-**The work stopped at V43 by the owner's decision (§43).** It is now ported into the
-app (§44: `accent_v43.py`, `accent_models.py`, `accent_worker.py`) behind
-`ACCENT_ENGINE`, which is off; the live site still runs the original extractor until
-the rollout in §44 is finished.
+**The work stopped at V43 by the owner's decision (§43).** It is live on the site
+(§44: `accent_v43.py`, `accent_models.py`, `accent_worker.py`, `ACCENT_ENGINE=v43`,
+the `imgmanager-accent` worker).
 
 **The candidate** is `v43(portrait, gallery, trace)` in
 `scripts/accent_lab/methods.py`, also reachable as `candidate` / `method_candidate`.
@@ -2629,3 +2628,35 @@ off"); Jinx and Poison Ivy fine. Two asked about:
   no tie for the main image to break; the shade then comes from the pale blue cloth
   (lifted to chroma 0.09), which is why it is light rather than navy.
 Both are the override's job (§29), not a rule change.
+
+**Phase 3 — live (2026-09-27):**
+1. `accent-v43` merged to `main` (PR); the auto-deploy installed numpy and onnxruntime
+   and applied migration 026 with the engine off.
+2. `imgmanager-accent` installed and enabled; the first start downloaded both models
+   (checksums matched) into `/var/lib/imgmanager/models`.
+3. The bundle's dry run: 9,493 image rows, 669 main-image rows, **764 seeds to write, 0
+   changed since the snapshot**, 7 hand-picked colours kept, 1,064 characters without a
+   gallery to queue.
+4. The current accents were saved to `~ubuntu/accents-before-v43.json` on the origin,
+   then the import applied with `--queue-rest`.
+5. `ACCENT_ENGINE=v43` added to `/etc/imgmanager/secrets.env`; the API restarted
+   healthy.
+
+**Measured on the server** (4 ARM cores, worker capped at 2): a character coloured from
+its main image alone takes **~5.5 s** (fetch, both models at 1024px, seed); the 1,064
+queued characters take about 1.6 hours in the background. Worker memory **1.5 GB** of
+its 3 GB cap. onnxruntime logs two harmless warnings on first load (it cannot persist a
+telemetry id under the read-only filesystem, and does not recognise the VM's virtio
+PCI name).
+
+**Confirmed from outside** (public catalog): Kyouka Jirou `#63529e`, Gon Freecss
+`#dcf1c7`, Anya Forger `#ba5960`, Lynae `#4cb9c5`, Panty Anarchy `#e4b546` — exactly the
+reviewed V43 — and Esdeath from the worker.
+
+**Rollback:** remove `ACCENT_ENGINE=v43` from `/etc/imgmanager/secrets.env` and restart
+`imgmanager` (the original extractor then re-measures a character when its gallery
+changes); the old seeds are in `~ubuntu/accents-before-v43.json` to restore by hand if
+wanted. `sudo systemctl disable --now imgmanager-accent` stops the worker.
+
+**Next:** the owner's overrides for the open list (§29), with the staff picker.
+
