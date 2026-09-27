@@ -10,6 +10,7 @@ Roughly half a second per image on a laptop CPU.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 
 import numpy as np
@@ -31,7 +32,11 @@ def _sess():
 
         if not MODEL.is_file():
             sys.exit(f"segmentation model missing: run `python -m {__name__} --download`")
-        _session = ort.InferenceSession(str(MODEL), providers=["CPUExecutionProvider"])
+        opts = ort.SessionOptions()
+        threads = int(os.environ.get("ACCENT_LAB_ORT_THREADS", "0"))
+        if threads:
+            opts.intra_op_num_threads = threads
+        _session = ort.InferenceSession(str(MODEL), opts, providers=["CPUExecutionProvider"])
     return _session
 
 
@@ -42,7 +47,8 @@ def mask_for(img: Image.Image) -> np.ndarray:
     CACHE.mkdir(parents=True, exist_ok=True)
     cached = CACHE / f"{key}.npy"
     if cached.is_file():
-        return np.load(cached)
+        m = np.load(cached)
+        return m.astype(np.float32) / 255.0 if m.dtype == np.uint8 else m
     w, h = rgb.size
     scale = SIZE / max(w, h)
     nw, nh = max(1, round(w * scale)), max(1, round(h * scale))
@@ -52,9 +58,9 @@ def mask_for(img: Image.Image) -> np.ndarray:
     canvas[ph : ph + nh, pw : pw + nw] = arr
     out = _sess().run(None, {"img": canvas.transpose(2, 0, 1)[None]})[0][0, 0]
     crop = (out[ph : ph + nh, pw : pw + nw] * 255).astype(np.uint8)
-    mask = np.asarray(Image.fromarray(crop).resize((w, h), Image.BILINEAR), dtype=np.float32) / 255
-    np.save(cached, mask)
-    return mask
+    mask8 = np.asarray(Image.fromarray(crop).resize((w, h), Image.BILINEAR), dtype=np.uint8)
+    np.save(cached, mask8)  # 8-bit: a quarter of the float cache, same result after /255
+    return mask8.astype(np.float32) / 255.0
 
 
 if __name__ == "__main__":

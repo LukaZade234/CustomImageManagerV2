@@ -1453,3 +1453,19 @@ The three misses are known: 2B and A2 (override to white) and Himiko Toga.
 - **2B and A2** — white via the override.
 - **Frontend** — near-white, near-black and faintly tinted seeds under chroma
   0.025 need `themeFromSeed` to build a neutral theme (§22.3).
+
+### 23.4 The full check
+
+V33 on every library character with 4 or more gallery images — 599 characters,
+9,113 images — in two review pages (4–9 images: 287; 10+: 312), each card showing
+the main image, four gallery images, the accent and the colour on the site today
+(`fullcheck.py`). About 16 minutes of computing on the owner's desktop (6 worker
+processes × 4 onnxruntime threads), plus the downloads. Masks are now cached as
+8-bit, a quarter of the earlier float cache.
+
+Paths: 537 standard, 41 monochrome, 21 pale pink. 2 characters got no accent; 72
+have no main image yet. 12 accents are near-neutral and need the frontend change
+(§22.3) to show.
+
+The owner accepted Eto's move from green to red: a red highlight against her
+green theme still fits.

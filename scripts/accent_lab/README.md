@@ -55,6 +55,10 @@ uv run --with numpy --with onnxruntime python -m scripts.accent_lab.showcase
 # monochrome and pale-pink paths (scan list in .data/scan.json).
 uv run --with numpy --with onnxruntime python -m scripts.accent_lab.profiles
 
+# The full check: every character with 4+ images, in parallel, then two review pages.
+uv run --with numpy --with onnxruntime python -m scripts.accent_lab.fullcheck compute
+uv run python -m scripts.accent_lab.fullcheck render
+
 # Contact sheet from the last library run, to judge colours by eye.
 uv run python -m scripts.accent_lab.sheet current,v24 --ids "live:Reze,live:Lynae"
 ```
@@ -72,7 +76,7 @@ the first time: about half a second per image on a laptop CPU.
   the current candidate.
 - `seg.py` — skytnt/anime-seg foreground masks.
 - `fetch_live.py`, `panel.py`, `library.py`, `explain.py`, `sheet.py`,
-  `sample.py`, `showcase.py`, `profiles.py` — the tools above.
+  `sample.py`, `showcase.py`, `profiles.py`, `fullcheck.py` — the tools above.
 
 ## Rules of thumb (from the doc)
 
