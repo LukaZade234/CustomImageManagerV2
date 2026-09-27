@@ -2144,3 +2144,8 @@ recomputed.
 `--changed-only` page.
 
 **Review page:** https://claude.ai/artifact/SS55GbUYFySLed16KhVwp9
+
+**Open-cases page** (every flagged character V40 has not fixed, grouped by issue,
+V40 beside V37, plus Jotaro, Makoto Kino and Suwako Moriya to confirm):
+https://claude.ai/artifact/JU9XM5YNbvCSQ39mZt6zsK — for the owner to decide
+whether to ship with overrides or keep tuning.
