@@ -2149,3 +2149,55 @@ recomputed.
 V40 beside V37, plus Jotaro, Makoto Kino and Suwako Moriya to confirm):
 https://claude.ai/artifact/JU9XM5YNbvCSQ39mZt6zsK — for the owner to decide
 whether to ship with overrides or keep tuning.
+
+---
+
+## 36. Why distinct hair loses (2026-09-27)
+
+The owner picked eight characters whose hair colour is very distinct and asked why
+it was not picked up: Shouko Nishimiya, Vertin, Airani Iofifteen, Rio Futaba, Ruka
+Urushibara, Yuyuko Saigyouji, Eiki Shiki, Sharron; and Gon Freecss, green in every
+image yet a plain white monochrome accent. Tool: `python -m scripts.accent_lab.hairwhy
+"Name|Name"` replays V40's own classifier on the pixels the face parser calls hair.
+
+**The main cause: the skin rules delete light, warm and pink hair.** They were
+tuned before the parser existed, by colour alone, and parsed hair still goes
+through them:
+
+| character | hair (median HSV) | what V40's rules do to the hair | hair's share of the vote now → if hair skipped the skin rules |
+|---|---|---|---|
+| Shouko Nishimiya | pinkish light brown | **73% removed as pale skin** | 17% → **81%** (her pink-brown, 352–8°) |
+| Rio Futaba | light olive-brown, h 32 s 0.14 | 55% removed as skin, 16% too grey | 9% → **51%** (light brown, 32°) |
+| Sharron | blonde, h 26 s 0.25 | 31% damped to ¼ (warm zone), 34% removed as skin | 22% → 50% (22°, the window that already wins; the shade is the issue) |
+| Airani Iofifteen | pale pink/cream | 55% removed as skin | 12% → 21% |
+| Vertin | ash grey-blonde, h 70 s 0.13 | 33% too grey to vote, 23% removed as skin | 15% → 32% (warm grey-blonde, 32–38°) |
+
+**Other causes:**
+- **Ruka Urushibara** — her hair is a very dark teal-green (V 0.25): 39% too grey
+  and 21% too dark to vote; the rest does vote teal (172–178°) but only 30% of the
+  vote, against red in every image. Dark colour votes weakly by design (vivid over
+  dark).
+- **Yuyuko Saigyouji** — her pink hair does vote pink, but the parser finds only
+  9% of the cut-out as hair (her hat and scenes cover it), 4% of the vote; her blue
+  kimono dominates.
+- **Eiki Shiki** — her green hair is counted, but only 4 of 5 images are usable and
+  each image counts equally: one sepia artwork (57% gold) and one red-fire artwork
+  vote whole, while her green-teal hair spreads over three hue bands in the other
+  two. Gold wins on image count.
+- **Gon Freecss** — 4 of his 7 images are forest scenes the cut-out cannot separate
+  and are dropped; in the other 3 his green is dull (below the 0.15 saturation that
+  counts as colour), so he is monochrome (colour share 0.11). The monochrome tint
+  looks only at near-grey pixels and only asks whether they lean cool or warm: his
+  lean cool 58%, which gives a tint of 0.003 — none. A highlight needs saturation
+  ≥ 0.55; his green is not.
+
+**Possible fixes (not built):**
+1. **Parsed hair skips the skin rules and the warm damping** (own hair only). Targets
+   Shouko, Rio, Airani, Vertin, Sharron's shade. Risk: it re-opens the gold drift
+   (Will, Ishtar, Dazai, Poison Ivy) for blonde and brown-haired characters, and any
+   skin the parser labels as hair would vote — the checks would show both.
+2. **Monochrome tint from a recurring dull colour**: when one hue family recurs in
+   most images, even below colour saturation, it sets the tint's hue and strength
+   instead of the cool/warm lean of the greys. Targets Gon.
+3. Ruka, Yuyuko and Eiki are gallery-shape problems (dark hair, hidden hair, a few
+   single-colour artworks); the override is the realistic route.
