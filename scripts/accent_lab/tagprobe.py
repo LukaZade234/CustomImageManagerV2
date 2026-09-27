@@ -8,16 +8,23 @@ Run from the repo root:
       python scripts/accent_lab/tagprobe.py "Gon Freecss|Audrey Hall"
 """
 
-import csv, json, os, re, sys, time
+import csv
+import json
+import os
+import re
+import sys
+import time
+
 import numpy as np
-from PIL import Image
 import onnxruntime as ort
+from PIL import Image
 
 D = "scripts/accent_lab/.data"
 o = ort.SessionOptions()
 o.intra_op_num_threads = 8
 S = ort.InferenceSession(f"{D}/skin/wd-vit.onnx", o, providers=["CPUExecutionProvider"])
-tags = [r["name"] for r in csv.DictReader(open(f"{D}/skin/wd-tags.csv"))]
+with open(f"{D}/skin/wd-tags.csv", newline="") as f:
+    tags = [r["name"] for r in csv.DictReader(f)]
 COLOURS = "red|orange|yellow|green|aqua|blue|purple|pink|brown|black|white|grey|blonde|silver|gold"
 PARTS = "hair|eyes|dress|shirt|jacket|skirt|shorts|kimono|coat|bow|ribbon|hoodie|sweater|cape|gloves|bodysuit|leotard|headwear|hat|pants|necktie|scarf|clothes"
 pat = re.compile(rf"^({COLOURS})_({PARTS})$")
@@ -39,7 +46,8 @@ def slug(n):
 t_all = 0
 n_all = 0
 for name in sys.argv[1].split("|"):
-    meta = json.load(open(f"{D}/live/{slug(name)}/meta.json"))
+    with open(f"{D}/live/{slug(name)}/meta.json") as f:
+        meta = json.load(f)
     paths = [f"{D}/live/{slug(name)}/thumbs/{i}.webp" for i in meta["image_ids"]]
     paths = [p for p in paths if os.path.isfile(p)][:40]
     hits = {}

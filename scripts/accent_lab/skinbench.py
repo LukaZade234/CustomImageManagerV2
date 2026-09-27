@@ -192,7 +192,7 @@ def skin_from_face(arr, lab, fg):
     rb = max(0.04, 2.5 * np.median(np.abs(Bs[keep] - mb)))
     lmin = max(0.0, np.percentile(Ls[keep], 2) - 0.25)  # shaded skin is allowed darker
     m = ((A - ma) / ra) ** 2 + ((B - mb) / rb) ** 2 <= 1.0
-    m &= L >= lmin
+    m &= lmin <= L
     return m.reshape(lab.shape) & fg
 
 
@@ -374,8 +374,9 @@ def cmd_export():
     """PyTorch weights → ONNX (the server would need only onnxruntime)."""
     os.chdir(HERE)
     sys.path.insert(0, str(HERE))
-    import torch, torchvision
     import network
+    import torch
+    import torchvision
 
     # avoid downloading ImageNet weights: the state dict overwrites them anyway
     network.MobileNet_V2_Weights = type("W", (), {"IMAGENET1K_V1": None})

@@ -1,9 +1,10 @@
-"""Every extractor variant tried in docs/ACCENT.md sections 14-18.
+"""Every extractor variant tried in docs/ACCENT.md sections 14-43.
 
 Each `method_<name>(portrait, gallery)` takes the images `lab.load_character`
 returns and gives `lab.describe(seed)` or None. Names match the doc's tables.
 Only `method_current` (in lab.py) is what ships; nothing here is wired into the
-app. Variants build on each other, so read them in order.
+app. Variants build on each other, so read them in order. The final candidate is
+`candidate` (= v43); its behaviour is summarised in docs/ACCENT.md section 29.
 
     mcu   Material Color Utilities' quantiser + Score, pooled.    dead end
     v5    band-share winner and confidence, vivid core            Reze -> pink
@@ -49,7 +50,20 @@ app. Variants build on each other, so read them in order.
           choice, reads the whole image for the aim               69/80
     v37   green windows count from 50 (not into orange/yellow)
           but aim from 75; highlight must average >= 1%;
-          fallback reads the whole main image again               73/87, the candidate
+          fallback reads the whole main image again               73/87
+    v38a  v37 + face skin removed (face parser, faceparse.py)     68/87: no help
+    v38b  v38a + parsed hair counted twice                        72/87
+    v38c  hair counted twice, skin left in (v38d: three times)    74/87
+    v38e  v38c, the colour profile reads the plain cut-out        75/87
+    v39   v38e + shade without the extra hair + only the
+          character's own hair counts ("package deals" all)       83/96
+    v39a  v39 without own-hair; v39p: aim without extra hair too  84/96, loses Anya
+    v40   v39 + pale pink must appear in two images               83/96 (Centurion)
+    v41   v40 + parsed hair skips the skin rules                  71/96: gold drift
+    v41b  v40 + only pink-side hair skips them                    76/96: brick reds
+    v42   v40 + failed cut-outs kept whole at 1/4 (v42h: 1/2)     78/96, 77/96
+    v43   v40 + monochrome tint from a colour in >= 85% of
+          images (Gon)                                            84/96, the candidate
 """
 
 from __future__ import annotations
@@ -3363,3 +3377,9 @@ def v43(portrait, gallery, trace=None):
 
 def method_v43(portrait, gallery):
     return v43(portrait, gallery)
+
+
+# ---- The candidate ------------------------------------------------------------------------------
+
+candidate = v43
+method_candidate = method_v43

@@ -442,12 +442,10 @@ V36_REVIEW = {
     ),
     "live:Ruka Urushibara": ("Ruka Urushibara: teal (as before)", _hue_in(180, 230)),
     "live:Xurkitree": ("Xurkitree: blue (as before)", _hue_in(220, 270)),
+    # Later accepted: "jotaro is fine gold" -- V39+ gives a pale gold (#f4e29c).
     "live:Jotaro Kujo": (
         "Jotaro Kujo: navy or gold, not skin",
-        lambda r: (
-            _hue_in(240, 290)(r)
-            or (_hue_in(70, 100)(r) and r["chroma"] >= 0.1 and r["lightness"] < 0.85)
-        ),
+        lambda r: _hue_in(240, 290)(r) or (_hue_in(70, 100)(r) and r["chroma"] >= 0.08),
     ),
     "live:Nephis": ("Nephis: approved brown", _near("#a38f6a", dh=30)),
     "live:Maki Zenin": (

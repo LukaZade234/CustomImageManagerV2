@@ -12,6 +12,11 @@ the open questions, including the dead ends.
 
 ## TL;DR
 
+> **Where it ended (2026-09-27):** the lab work stopped at **V43** by the owner's
+> decision (§43) — 84 of 96 review checks, against 59 of 80 when the review sets
+> began. It is not in the app yet: §29 has its behaviour step by step, the list of
+> characters still open (for the manual override), and the checklist for porting it.
+
 - **Shipped and merged-ready:**
   - Portrait weighting by gallery size (`accent_extract._portrait_share`).
   - A 10+-image gallery ignores the portrait entirely.
@@ -1743,71 +1748,124 @@ Arisa, Griffith and Cheongmyeong (colours again).
 
 ---
 
-## 29. Resume here — state, locations, how to continue (2026-09-27)
+## 29. Resume here — the final state (updated 2026-09-27, after §43)
 
-**Nothing has shipped.** All of this is lab work on the `accent-lab` branch (not
-pushed). The live site still runs the original `accent_extract.py`.
+**The work stopped at V43 by the owner's decision (§43).** Nothing has shipped: all
+of this is lab work on the `accent-lab` branch (not pushed), and the live site still
+runs the original `accent_extract.py`. Porting V43 into the app is the next step and
+has not been started; its checklist is below.
 
-**The candidate** is `method_v37` / `v37(portrait, gallery, trace)` in
-`scripts/accent_lab/methods.py`. It is built as a chain of switches on earlier
-versions (v37 → v36 → v35 → v34 → v33 → v32 → v31 → v29 → v27 → v24 → v16 …), so
-a production port should be a clean rewrite of the *behaviour* summarised below,
+**The candidate** is `v43(portrait, gallery, trace)` in
+`scripts/accent_lab/methods.py`, also reachable as `candidate` / `method_candidate`.
+It is a chain of switches on earlier versions (v43 → v40 → v39 → v38e → v37 → v36 →
+… → v16), so a production port should be a clean rewrite of the *behaviour* below,
 not a copy of the chain.
 
-**What V37 does, in order:**
-1. Cut the character out of every gallery image (skytnt/anime-seg on the 600px
-   thumbnail; background painted out; scenes the model cannot separate dropped).
-2. Profile the character (share of pixels with real colour; share of colour that is
-   pink/red; share of that which is pale). **Monochrome** (< 30% real colour) →
-   a recurring saturated highlight if one clears 1% in ≥ 3 images (or 2 that are
-   half the gallery) *and* averages ≥ 1%; otherwise near-white if light dominates,
-   else V30's mid tone with a faint cool tint. **Pale pink** (≥ 70% pink/red, ≥ 10%
-   of it pale, and real pale pink present: ≥ 0.8% coverage or in ≥ 15% of images) →
-   the character's own lighter pinks (hue 320–355), most chromatic 35%.
-3. Otherwise the standard path: pixels classified in HSV (skin 12–38 removed; pale
-   skin 335–38 removed, 335–352 only up to S 0.25; warm zone 10–45 and skin shadow
-   355–10 damped to ¼; faint warm whites excluded from the hue vote); hue evidence =
-   saturated + ½ pale per image, square-root pooled; colour windows ±30° (green
-   family 75–170: counted from 50°, aim ≥ 75°); two colours within the 1.25 margin
-   are a tie, decided by the main image's cut-out *saturated* colour (whole image at
-   ¼), aimed with the whole main image; tie candidates must hold ≥ 10% of the colour
-   in ≥ 30% of gallery images; shade = vivid core blended 35% toward the brighter
-   half; pale identities lifted to chroma 0.09.
-4. Fallbacks: gallery too sparse → the whole main image → its dominant colour with no
-   minimum → the gallery's monochrome tone. Never empty.
+**What V43 does, in order:**
+1. **Cut-out.** skytnt/anime-seg on each 600px thumbnail; the background is painted
+   white. An image whose cut-out covers under 3% (the character was missed) or over
+   85% (a scene it cannot separate) is dropped from the colour work.
+2. **Face parsing.** An anime face detector (deepghs `face_detect_v1.4_n`) finds
+   faces; a face parser (siyeong0 UNet) labels hair, face, skin, eyes, mouth and
+   clothes on each face crop. **Own hair:** the character's hair colour is the median
+   (Oklab) of their hair in images with exactly one face; in an image with several
+   faces, only the face whose hair is nearest counts. **Package deal:** with fewer
+   than 2 solo images, or solo images under 25% of the images with a face, every face
+   counts (Popola/Devola, Sakurako/Kasumi). The own hair is counted **twice** in the
+   colour vote.
+3. **Profile** (read on the plain cut-out, without the extra hair): share of pixels
+   with real colour, share of colour that is pink/red, share of that which is pale.
+   - **Monochrome** (< 30% real colour) → a recurring saturated highlight if one
+     clears 1% in ≥ 3 images (or 2 that are half the gallery) and averages ≥ 1%;
+     otherwise, if one hue family other than skin/brown/orange appears in ≥ 85% of
+     images (scenes read whole) and on the figure itself, it tints the tone (up to
+     chroma 0.06; Gon's pale green); otherwise near-white or near-black with at most
+     the greys' own slight lean.
+   - **Pale pink** (≥ 70% pink/red, ≥ 10% of it pale, and real pale pink present:
+     median coverage ≥ 0.8%, or in ≥ 15% of images *and* at least two) → the
+     character's own lighter pinks (hue 320–355), most chromatic 35%.
+4. **Standard path.** Pixels classified in HSV: skin 12–38 removed; pale skin 335–38
+   removed (335–352 only up to S 0.25); warm zone 10–45 and skin shadow 355–10 damped
+   to ¼; faint warm whites out of the hue vote. Hue evidence per image = saturated +
+   ½ pale, normalised, square-root pooled. Colour windows ±30° (the green family
+   75–170 counts from 50° with its aim ≥ 75°). Two colours within a 1.25 margin tie;
+   the main image's cut-out *saturated* colour (whole image at ¼) breaks it and the
+   whole main image aims it; tie candidates must hold ≥ 10% of the colour in ≥ 30% of
+   images. The extra hair votes on the choice and the aim; **the shade reads the
+   cut-out without it**: the vivid core blended 35% toward the brighter half; pale
+   identities lifted to chroma 0.09.
+5. **Fallbacks:** gallery too sparse → the whole main image → its dominant colour
+   with no minimum → the gallery's monochrome tone. Never empty.
 
-**Review verdicts** are executable checks in `scripts/accent_lab/lab.py`:
-`REVIEW`, `SAMPLE_REVIEW`, `PROFILE_REVIEW`, `FULL_REVIEW`, `V36_REVIEW` (and the
-original `PANEL`). Score any versions with `python -m scripts.accent_lab.checks
-v36,v37`; explain one character with `python -m scripts.accent_lab.trace v37 "Name"`.
-Scores so far: V33 59/80 → V36 69/80 → **V37 73/87** (the set grew).
+**Review verdicts** are executable checks in `scripts/accent_lab/lab.py`: `REVIEW`,
+`SAMPLE_REVIEW`, `PROFILE_REVIEW`, `FULL_REVIEW`, `V36_REVIEW`, `V38_REVIEW` (and the
+original `PANEL`). Score versions with `python -m scripts.accent_lab.checks v37,v43`;
+explain a character with `python -m scripts.accent_lab.trace v43 "Name"`. Scores:
+V33 59/80 → V37 73/87 → V39 83/96 → **V43 84/96** (83 before Jotaro's check took the
+gold the owner accepted). The 12 failures are all on the open list below.
 
-**Review pages** (private artifacts; V38e trial page in §31, V39 page in §33):
-- Full check, 10+ images (V37 beside V36): https://claude.ai/artifact/4aDYwNwRtsQVFBeemppsUE
-- Full check, 4–9 images (V37 beside V36): https://claude.ai/artifact/1eqMqdy4UtNYjpgJ9aSFZP
-- Colour Profile Paths (V29 / V32 / V33): https://claude.ai/artifact/3DjpxNkjShtDUyAh68EBJY
-- Accent Sample Check (V29 vs V24, random sample): https://claude.ai/artifact/3KiAqg1Znyes8hpcppSavf
+**Still open under V43** (grouped, with causes, in §34 and on the open-cases page):
+the skin/warm group (Sharron, Himiko Toga, Kim Soleum, Sukuna, Aoi Todo, Chizuru,
+Tetsurou Kuroo, Jiu Niangzi, Loki, Eiki Shiki, Tooth Fairy, Centurion); pinks
+(Tsubasa, Yae Miko, Yuyuko, Umbreon); nearly monochrome (Kim Dokja, Mai Sakurajima,
+Han Sooyoung, Mahoraga, 2B and A2 — white wanted); ties (Rio Futaba, Shizuku, Ruka);
+greens (Maki Zenin, N, Maomao, Nefer); one-offs (Airani, Zeus, Vertin, Shouko
+Nishimiya, Xurkitree, Omaru); Audrey Hall (lore). Why distinct hair loses: §36.
+These are for the manual override.
 
-**Lab data** (`scripts/accent_lab/.data/`, gitignored, all regenerable):
-`live/` fetched characters (thumbnails, main image, meta); `masks/` cut-out cache
-(~6.5 GB; newer entries 8-bit); `isnetis.onnx` the model (176 MB); `full/`,
-`full_v36/`, `full_v37/` one JSON result per character for V33, V36, V37;
-`full_list.json` the 599 characters with 4+ images; `scan*.json` the profile-scan
-lists; `library_list.json` the whole library listing. Rebuild pages with
-`fullcheck --method v37 --out full_v37 --compare full_v36 --compare-label V36 render`.
+**Tried and rejected after V37** (do not repeat without a new idea): removing face
+skin (§31); letting parsed hair skip the skin rules (V41/V41b, §38); keeping failed
+cut-outs at reduced weight (V42, §39); counting backgrounds (§37); the aim read
+without the extra hair (V39p, loses Anya); the WD tagger as a tie-breaker (§41–42:
+~4 fixes against 3–4 backfires, for a third model).
+
+**Review pages** (private artifacts):
+- Open cases under V40/V43, grouped by issue: https://claude.ai/artifact/JU9XM5YNbvCSQ39mZt6zsK
+- V43 recurring tint (Gon, Neferpitou): https://claude.ai/artifact/NX5Mw9oVg2LE63MN57hr7Z
+- V40 pale-pink gate (+ Jotaro): https://claude.ai/artifact/SS55GbUYFySLed16KhVwp9
+- V39 own hair (beside V38e): https://claude.ai/artifact/1GY72otrTP7BDpRKczpqy3
+- V38e hair trial (beside V37): https://claude.ai/artifact/1mRbXVm2iuf32oiKba1tYH
+- Full check 10+ and 4–9 (V37 beside V36; older): https://claude.ai/artifact/4aDYwNwRtsQVFBeemppsUE,
+  https://claude.ai/artifact/1eqMqdy4UtNYjpgJ9aSFZP
+- Colour Profile Paths (V29/V32/V33): https://claude.ai/artifact/3DjpxNkjShtDUyAh68EBJY
+- Accent Sample Check (V29 vs V24): https://claude.ai/artifact/3KiAqg1Znyes8hpcppSavf
+
+**Lab data** (`scripts/accent_lab/.data/`, gitignored, all regenerable): `live/`
+fetched characters; `masks/` cut-out cache (~6.5 GB); `faceparse/` face labels with
+face indexes (~7 KB each); `isnetis.onnx` (176 MB); `skin/` the face detector,
+face parser and SegFormer as ONNX, plus the WD tagger (`wd-vit.onnx`, 378 MB);
+`full_vNN/` one JSON result per character per version (`full/` is V33);
+`full_list.json` the 599 characters with 4+ images; `tagscan.json` the tagger's
+colour tags for 119 characters; older scratch scripts from the rounds. Rebuild a
+page with `fullcheck --method v43 --out full_v43 --compare full_v40
+--compare-label V40 --min-change 0.08 --changed-only render`.
+
+**Porting V43 into the app — checklist:**
+1. Rewrite the behaviour above in `accent_extract.py`, vectorised (numpy), keeping
+   the override's precedence. Models run through onnxruntime only (no torch): the
+   cut-out (176 MB) and the face detector + parser (18 MB, converted with
+   `skinbench export`).
+2. Per image, store a small colour summary (the hue/shade grids, coverage, profile
+   figures and the hair-labelled share) with the image row instead of masks; a
+   character's accent is then a sum over its images — milliseconds.
+3. Backfill on the desktop (cut-outs are cached for the 4+ characters; ~65 min for the
+   whole library from scratch, face labels ~7 min).
+4. On the server (4 ARM cores, 23 GB), process new uploads once, in one background
+   process, never inside the web workers: ~1.9 GB peak with both models loaded, a few
+   seconds per image (§42).
+5. Frontend: let `themeFromSeed` accept near-neutral seeds (chroma < 0.025) so
+   monochrome accents (2B, Kaine, Will) display instead of falling back to teal.
+6. Carry the verdicts in `lab.py` over as regression tests, and apply the owner's
+   overrides for the open list.
 
 **The owner's standing rules** (also in the assistant's memory): the main image
 breaks two-colour ties (choosing among the gallery's colours, never adding one);
 never leave a character without an accent; vivid over dark or grey, except that
 genuinely monochrome characters go black or white rather than a tinted grey; pale
-skin is never a pink identity; judge by eye on contact sheets. Main images are now
-Mudae links mirrored on R2, and missing ones fill in as the site is used — not a
-bug. Sakurako Kawawa and Kasumi Yamabuki share one gallery on purpose.
-
-**Next decisions for the owner** (§28): whether to prototype the skin/body-part model;
-the small-gallery pale-pink gate; which characters to hand-pick with the override;
-and when to port V37 into the app (with the frontend change for neutral seeds and a
-per-image colour summary instead of stored masks).
+skin is never a pink identity; pinks stay distinct; a character is measured from
+their own features, except "package deals" whose images nearly always show the same
+pair; judge by eye on contact sheets. Main images are Mudae links mirrored on R2, and
+missing ones fill in as the site is used — not a bug.
 
 ---
 
@@ -2215,7 +2273,7 @@ through them:
 
 §36's suggestions are parked. The owner's idea: instead of discarding backgrounds,
 measure them separately and let an overwhelming, non-white background colour lean
-the result (Gon's forests; perhaps Audrey Hall). Probe (`.data/bgprobe.py`, using the
+the result (Gon's forests; perhaps Audrey Hall). Probe (`python -m scripts.accent_lab.bgprobe`, using the
 pipeline's own cut-out decisions; colour = S ≥ 0.12):
 
 | character | images | background's top colours (mean share of background) | note |
@@ -2410,7 +2468,7 @@ override for the rest.
 
 ## 42. How much the tagger would help, and what it costs (2026-09-27)
 
-**Simulation** (`.data/tagscan.py`, `.data/tagsim2.py`): the WD tagger on all 119
+**Simulation** (`python -m scripts.accent_lab.tagsim scan`, then `simulate`): the WD tagger on all 119
 characters with a verdict or on the open list (≤ 20 images each); V43's own candidate
 windows; the tag may only choose among them (≥ 0.4× the winner's strength), never
 add a colour. Only distinctive tags count: hair colours other than black, white,
@@ -2458,3 +2516,31 @@ for the 4+ characters (65 min from scratch) and face labels take ~7 min.
 **Verdict:** affordable, but a poor trade on its own — a third model and ~30% more
 work per image for roughly four fixes against three backfires. Recorded as the one
 untried semantic lever; not recommended over shipping V43 with overrides.
+
+---
+
+## 43. Stopped at V43 (2026-09-27)
+
+After §42 the owner agreed that the pixel approach had reached its limit and that the
+tagger was not worth a third model: **the lab work stops at V43.** The last three
+broad rules (V41, V41b, V42) each fixed a few characters and broke more approved
+ones; what remains is individual, which is what the manual override is for.
+
+**State of the branch** (`accent-lab`, not pushed; nothing in the app changed):
+- `scripts/accent_lab/` holds every variant (`methods.py`, `candidate` = V43), the
+  owner's verdicts as executable checks (`lab.py`), and the tools behind every number
+  in this document, each runnable from the repo root (README).
+- Jotaro Kujo's check now accepts the pale gold the owner accepted, so V43 scores
+  84 of 96; the 12 remaining failures are all on §29's open list.
+- The live extractor (`accent_extract.py`) and its tests are untouched: against
+  `critique-fixes-v2`, which `accent-lab` was branched from, the lab only *adds*
+  files under `scripts/accent_lab/` plus this document. `critique-fixes-v2` is not
+  in `main` yet, so it merges first (or the lab commits are rebased onto `main`).
+- CI's checks pass (`ruff check .`, `pytest`: 802 passed). Pyright reports type
+  noise in the lab (numpy/onnxruntime are deliberately not project dependencies;
+  older Pillow constant names); CI does not run it.
+
+**Next, when the owner chooses:** port V43 into the app (§29's checklist), then apply
+overrides to the open list. The lab stays as the reference and regression bench for
+that port.
+
