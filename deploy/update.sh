@@ -13,6 +13,7 @@ APP_DIR="${APP_DIR:-/opt/imgmanager}"
 APP_USER="${APP_USER:-imgmanager}"
 SERVICE="${SERVICE:-imgmanager}"
 MUDAE_SERVICE="${MUDAE_SERVICE:-imgmanager-mudae}"
+ACCENT_SERVICE="${ACCENT_SERVICE:-imgmanager-accent}"
 HEALTH_URL="${HEALTH_URL:-http://localhost:8080/api/health}"
 BRANCH="${BRANCH:-main}"
 UV="${UV:-/usr/local/bin/uv}"
@@ -25,6 +26,15 @@ log() { echo "[$(date -Is)] $*"; }
 restart_mudae() {
     systemctl restart "$MUDAE_SERVICE" 2>/dev/null \
         || log "note: $MUDAE_SERVICE not installed or not restarted (Mudae features only)"
+}
+
+# The accent worker is optional: restarted only once it has been installed and
+# enabled (deploy/imgmanager-accent.service), so a deploy never starts it.
+restart_accent() {
+    if systemctl is-enabled --quiet "$ACCENT_SERVICE" 2>/dev/null; then
+        systemctl restart "$ACCENT_SERVICE" \
+            || log "note: $ACCENT_SERVICE did not restart (accent colours only)"
+    fi
 }
 
 # One deploy at a time. The timer could otherwise fire again mid-run.
@@ -76,12 +86,14 @@ if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
         sudo -u "$APP_USER" -H "$UV" sync --locked --no-dev --directory "$APP_DIR" || true
         systemctl restart "$SERVICE"
         restart_mudae
+        restart_accent
         exit 1
     fi
 fi
 
 systemctl restart "$SERVICE"
 restart_mudae
+restart_accent
 
 if health_ok; then
     log "deployed ${REMOTE:0:8} successfully"
@@ -97,6 +109,7 @@ if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
 fi
 systemctl restart "$SERVICE"
 restart_mudae
+restart_accent
 
 if health_ok; then
     log "rollback to ${LOCAL:0:8} succeeded; site is up on the previous commit"

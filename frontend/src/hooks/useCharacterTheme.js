@@ -17,9 +17,10 @@ import { themeFromSeed } from '../utils/accentFromImage'
  * longer existed, and keep no accent at all through the arrival of the
  * thumbnails that would have given her one.
  *
- * A null seed (the server declined: greyscale or honestly two-coloured art)
- * yields a null theme, and the page keeps the system accent — see the
- * "Per-character accent" block in tokens.css.
+ * A null seed (none measured yet, or the original extractor declined) yields a
+ * null theme, and the page keeps the system accent — see the "Per-character
+ * accent" block in tokens.css. A neutral seed (a black-and-white character's
+ * near-white or near-black) is a real answer and themes the page in greys.
  */
 
 const themeBySeed = new Map()

@@ -525,6 +525,9 @@ round overwrites the live database with itself.
 | `FRONTEND_URL` | origin | no | Where to send the browser after sign-in. Defaults to the first `CORS_ORIGINS` entry |
 | `VITE_API_BASE_URL` | Pages | yes | Build-time |
 | `VITE_IMAGE_BASE_URL` | Pages | yes | Build-time |
+| `ACCENT_ENGINE` | origin | no | `legacy` (default): the original accent extractor, inline on the gallery request. `v43`: the V43 accent; stale seeds are queued for the accent worker and never measured inline. Set for the API in `/etc/imgmanager/secrets.env`. See "Accent worker" |
+| `ACCENT_MODEL_DIR` | origin | with the worker | Where the worker keeps the two downloaded models (~190 MB). `/var/lib/imgmanager/models`, set in the unit |
+| `ACCENT_THREADS` | origin | no | onnxruntime threads per model in the worker. Default 2 |
 
 ## Mudae import (optional)
 
@@ -570,6 +573,39 @@ and point `.env` at the same path.
 > deliberate (see `DECISIONS.md` §8, "The self-bot is a liability"). A parse
 > failure is logged with the raw reply, since Mudae's embed format can change
 > without notice.
+
+## Accent worker (V43)
+
+The character accent (docs/ACCENT.md, section 29) needs two models -- a cut-out
+and a face parser, about 1.9 GB of memory and a few seconds per image on this box --
+so it runs in its own service, `imgmanager-accent`, never in the web workers. It
+processes each image once, stores what the models found with the image row
+(migration 026), and recomputes the characters the gallery endpoint queued.
+
+Rollout, in this order (each step is safe on its own; nothing changes for visitors
+until step 5):
+
+1. **Deploy the code.** Migration 026 applies on start-up; `ACCENT_ENGINE` is unset,
+   so the site keeps the original extractor.
+2. **Install the worker** (it idles on an empty queue):
+   ```bash
+   sudo cp deploy/imgmanager-accent.service /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now imgmanager-accent
+   journalctl -u imgmanager-accent -f     # first start downloads the models, checksummed
+   ```
+3. **Precompute on a desktop** (read-only against the site):
+   `uv run python scripts/accent_backfill.py snapshot`, then `... compute`.
+4. **Import** the bundle on the origin -- first as a dry run, then with `--apply
+   --queue-rest`: `python scripts/accent_backfill.py import bundle.db`. A seed is
+   written only where the character's gallery and main image are exactly what was
+   measured; the rest is queued. Hand-picked colours are never touched.
+5. **Switch the engine:** add `ACCENT_ENGINE=v43` to `/etc/imgmanager/secrets.env`
+   and restart `imgmanager`. From here a stale seed is queued, not re-measured
+   inline, and new uploads get their accent once the worker reaches them.
+
+Rolling back is step 5 in reverse (remove the line, restart): the original
+extractor treats a V43 seed as fresh until the gallery changes, then re-measures
+it. `sudo systemctl disable --now imgmanager-accent` stops the worker.
 
 ## Local development
 

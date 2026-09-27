@@ -1,0 +1,50 @@
+# The V43 accent worker (accent_worker.py): runs the cut-out and face-parser
+# models on each new image once, in the background, and recomputes the character
+# accents the gallery endpoint queued. See docs/ACCENT.md section 29.
+#
+# Install to /etc/systemd/system/imgmanager-accent.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now imgmanager-accent
+# The first start downloads the two upstream models (~190 MB, checksum-verified)
+# into ACCENT_MODEL_DIR. deploy/update.sh restarts it on deploys once it is enabled.
+#
+# It only does work while characters are queued, which happens with
+# ACCENT_ENGINE=v43 set for the API (in /etc/imgmanager/secrets.env) or after the
+# precomputed accents are imported (scripts/accent_backfill.py).
+#
+# Like the API it writes to the SQLite database, which Litestream (run by the API
+# service) replicates; nothing else is needed for that.
+
+[Unit]
+Description=ImgManager accent worker (V43 models)
+After=network-online.target imgmanager.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=imgmanager
+Group=imgmanager
+WorkingDirectory=/opt/imgmanager
+Environment=DATABASE_PATH=/var/lib/imgmanager/imgmanager.db
+Environment=RCLONE_CONFIG=/var/lib/imgmanager/.rclone.conf
+Environment=ACCENT_MODEL_DIR=/var/lib/imgmanager/models
+Environment=ACCENT_THREADS=2
+EnvironmentFile=/etc/imgmanager/secrets.env
+ExecStart=/opt/imgmanager/.venv/bin/python /opt/imgmanager/accent_worker.py
+Restart=always
+RestartSec=10
+
+# Background work: never at the site's expense. Two of the four cores at most, a
+# lower priority than the API, and a memory ceiling well above the ~1.9 GB peak.
+Nice=10
+CPUQuota=200%
+MemoryMax=3G
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/imgmanager
+
+[Install]
+WantedBy=multi-user.target
