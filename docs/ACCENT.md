@@ -1469,3 +1469,66 @@ have no main image yet. 12 accents are near-neutral and need the frontend change
 
 The owner accepted Eto's move from green to red: a red highlight against her
 green theme still fits.
+
+---
+
+## 24. The owner's review of the full check (2026-09-27)
+
+About 55 characters flagged across both pages (10+ and 4–9 images), traced with the
+recorded reason for each (`.data/full/<name>.json`). The overall trend the owner
+named: **green characters are commonly not represented correctly.** Themes, by how
+many characters they explain:
+
+### 24.1 The skin/orange window still wins (≈17)
+The winning colour is a window centred at 18–38° HSV — skin, blush and brown
+shading — which then aims or shades into brick red, orange or pale gold: Sharron,
+Himiko Toga, Kim Soleum, Sukuna (an in-between "average"), Chizuru Ichinose,
+Tetsurou Kuroo (dark red wanted), Aoi Todo (0.71 for that window; dark red wanted,
+got pale gold), Izumi Miyamura, Han Sooyoung, Jiu Niangzi, Anya Forger (pink wanted,
+got cream), Tooth Fairy, Loki, Makoto Kino, Maki Zenin, Roronoa Zoro, Tsubasa
+Hanekawa. Damping the zone to ¼ (V20) was not enough, and presence pooling favours
+it because skin is in every image.
+
+### 24.2 Greens split by HSV geometry (≈11)
+HSV spreads green over ~100° of hue and squeezes yellow and orange. Of the pixels
+that are green perceptually (OKLCH hue 115–185°), HSV puts a large share under 100° —
+the yellow-green band that borders blonde and skin: Maki 74%, Daiyousei 65%, N 57%,
+Noriaki 53%, Daiyousei, Zoro 37%. Green therefore loses as thin slices, or wins a
+window at 68–78° whose aim drifts to 48–52° (gold) and whose shade comes from pale
+pixels: Nefer (very light green; darker wanted), Maomao, N, Noriaki, Green Lantern
+(68% of his green is dark and votes at half weight → too light), Daiyousei, Sanae
+Kochiya, Zoro, Jiu Niangzi, Maki, Gon. Green is not missing — it is 16–27% of the
+character for most of them. Maki and Gon have only ~3% green on the cut-out.
+Dark greens otherwise vote at about the same weight as mid greens, so "dark colours
+are under-counted" explains Green Lantern but not the rest.
+
+### 24.3 The main image's background decides (≈11)
+The tie-breaker and the fallback read the **whole** main image, background
+included (the owner's rule from §17, set for Reze), and now pick backgrounds or
+colours the gallery barely has: Kyouka Jirou, Arceus (sky), Ellen Joe (turquoise
+background via the fallback), Rio Futaba (pink only in the main image, via the
+fallback), Noriaki Kakyoin, Suika Ibuki and Usagi Tsukino (purple barely in the
+gallery), Alpha (pink that is not in the main image either), Sanae Kochiya,
+Daiyousei, Shizuku Murasaki, Mai Sakurajima.
+
+### 24.4 Nearly monochrome, but not below the line (≈9)
+Characters mostly black and white with some colour stay on the standard path and
+take a minor colour: Kim Dokja, Mai Sakurajima (red in 2 images), Han Sooyoung,
+Sharron; Tsukatsuki Rio and Alucard take the monochrome path but miss their red
+highlights; Gon Freecss goes monochrome white where green is wanted; Mahoraga could
+be whiter. **Griffith and Cheongmyeong got no colour at all** — the coverage gate
+declined and the fallback declined too, which breaks the owner's "never empty" rule.
+
+### 24.5 The pale-pink gates (≈6)
+False positives: Umbreon (black with yellow), Centurion — both small galleries where
+"pale pink in ≥15% of images" is one image. False negatives: Anya Forger (pink hair
+→ cream), Aemeath (pink → blue), and softer ones (Yae Miko pinker, Tsubasa Hanekawa,
+Yuyuko Saigyouji).
+
+### 24.6 Shade quality (≈6)
+Airani Iofifteen too dark, Makoto Kino too light, Sukuna an average of red and
+orange, Kim Soleum too orange, Gloria Martinez a pale yellow where a strong one is
+wanted, Vertin blue (previously purple or muted teal).
+
+Main images added since the run: Arthur Leywin, Centurion, Arisa, Tooth Fairy,
+Green Lantern (refetched).
