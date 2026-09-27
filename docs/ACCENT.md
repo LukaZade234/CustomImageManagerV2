@@ -2611,3 +2611,21 @@ copy the bundle over and `import` (dry run, then `--apply --queue-rest`); set
   extractor). The 172 characters with 1–3 images were never in the lab's reviews.
 - `review`: a page of the unreviewed ones (172) and the two that changed, each beside
   the site's current colour: https://claude.ai/artifact/UywrwNEauXp5qurkrkWjqC
+
+**The owner's look at the rollout page:** fine overall ("some with very few images
+tend to break a little ... I won't nitpick when there's so little to base colours
+off"); Jinx and Poison Ivy fine. Two asked about:
+- **Megumi Tadokoro** (1 gallery image) — pale cream `#f9eaa4` where her navy hair is
+  wanted. Her straw hat, large and bright in both images (and labelled "hair" by the
+  face parser, so counted twice), wins the yellow window (52°) over her hair (238°)
+  0.40 to 0.27. Navy hair is dark, and dark colour votes weakly by design (vivid over
+  dark). With one usable image the main image carries 70% of the vote, and its cut-out
+  keeps her basket of vegetables, adding more yellow.
+- **Souma Yukihira** (3 images, one dropped as a scene) — light blue `#919edb` where his
+  red hair (or navy shirt) is wanted. His red sits at 350–15°, exactly the hues the
+  anti-brick-red rules damp to ¼ as skin shadow and brown, so it votes weakly even
+  counted twice; his dark navy shirt and the blue-grey shading of his white cloth vote
+  blue. Blue wins in every image, his main image included (0.47 to 0.36), so there is
+  no tie for the main image to break; the shade then comes from the pale blue cloth
+  (lifted to chroma 0.09), which is why it is light rather than navy.
+Both are the override's job (§29), not a rule change.
