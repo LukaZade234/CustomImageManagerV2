@@ -227,21 +227,26 @@ export function usePurgeModerationImage() {
 
 /**
  * The ownership-claim queue: requests from users to be given a character's
- * unowned (v1-imported) images. `char` and `user` are the two filters the page
- * offers; `user` is a public ref, never an identity id.
+ * unowned (v1-imported) images. `char` and `claimant` are the two filters the
+ * page offers, each part of a name.
  */
-export const moderationClaimsKey = ({ status, char, user, page }) => [
+export const moderationClaimsKey = ({ status, char, claimant, page }) => [
   'moderation-claims',
   status,
   char || '',
-  user || '',
+  claimant || '',
   page || 1,
 ]
 
-export function useModerationClaims({ status = 'pending', char = '', user = '', page = 1 } = {}) {
+export function useModerationClaims({
+  status = 'pending',
+  char = '',
+  claimant = '',
+  page = 1,
+} = {}) {
   return useQuery({
-    queryKey: moderationClaimsKey({ status, char, user, page }),
-    queryFn: () => apiClient.listModerationClaims({ status, char, user, page }),
+    queryKey: moderationClaimsKey({ status, char, claimant, page }),
+    queryFn: () => apiClient.listModerationClaims({ status, char, claimant, page }),
     placeholderData: keepPreviousData,
   })
 }

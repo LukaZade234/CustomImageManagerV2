@@ -72,10 +72,10 @@ export const apiClient = {
     api(`/api/moderation/duplicates?limit=${encodeURIComponent(limit)}`),
   listModerationReports: ({ status = 'reported' } = {}) =>
     api(`/api/moderation/reports?status=${encodeURIComponent(status)}`),
-  listModerationClaims: ({ status = 'pending', char = '', user = '', page = 1 } = {}) => {
+  listModerationClaims: ({ status = 'pending', char = '', claimant = '', page = 1 } = {}) => {
     const params = new URLSearchParams({ status, page })
     if (char) params.set('char', char)
-    if (user) params.set('user', user)
+    if (claimant) params.set('claimant', claimant)
     return api(`/api/moderation/claims?${params}`)
   },
   decideModerationClaim: (claimId, { approve, reason = '' }) =>

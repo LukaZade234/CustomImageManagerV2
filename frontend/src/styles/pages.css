@@ -3784,6 +3784,14 @@ button.profile-card__link {
   gap: var(--space-3);
   margin: var(--space-4) 0;
 }
+/* The two boxes share what the status toggle leaves, and drop below it together
+   on a narrow screen. Neither carries a hint, so bottom alignment lines every
+   control up on one baseline. */
+.claims__filter {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 20rem;
+}
 .claims__list {
   list-style: none;
   margin: var(--space-4) 0 0;
