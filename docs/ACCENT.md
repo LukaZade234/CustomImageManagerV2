@@ -2379,7 +2379,7 @@ pixels.
   Other sizes: moat-v2 326 MB, convnext-v3 395 MB, swinv2-v3 468 MB, eva02-large
   1.26 GB.
 
-**Probe** (`.data/tagprobe.py`, colour tags at ≥ 0.35, share of each gallery's
+**Probe** (`scripts/accent_lab/tagprobe.py`, colour tags at ≥ 0.35, share of each gallery's
 images): the tagger names the colour the owner wanted for many of the cases pixels
 cannot solve — **Maki Zenin green_hair 46%, N green_hair 100%, Maomao green_hair
 61%, Nefer green_hair 100%, Eiki Shiki green_hair 100%, Gon green_shorts 71%,
