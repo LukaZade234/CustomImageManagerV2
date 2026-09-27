@@ -3284,3 +3284,82 @@ def method_v42(portrait, gallery):
 
 def method_v42h(portrait, gallery):
     return v42h(portrait, gallery)
+
+
+# ---- V43: a monochrome tint from a colour that recurs (ACCENT.md §40) -----------------------------
+#
+# Gon Freecss is monochrome by his figure (colour share 0.02-0.14) but green in every
+# image, mostly his surroundings. The monochrome tint read only the greys' cool/warm
+# lean (0.003 for him). Now, when a character is on the monochrome path without a
+# highlight, one hue family that recurs across the gallery -- read on the cut-out where
+# it separates and on the whole image where it does not -- sets the tint, provided it
+# is also on the character in at least one cut-out. Skin, brown and orange (HSV hue
+# up to 50) never count. Colourful characters are untouched: this runs after V40.
+
+MONO_RECUR_MIN_SHARE = 0.02  # a family is present in an image at >= 2% of its pixels
+MONO_RECUR_PRESENCE = 0.85  # ... in at least this share of images (at 0.6 Kaine, Yuuki,
+# Allen Walker and Shirakami Fubuki, 67-75%, took faint blue or lilac tints; Gon is 100%)
+MONO_RECUR_TINT_MAX = 0.06
+
+
+def _recurring_tint(gallery):
+    """(OKLCH hue, strength, presence) of a recurring non-warm hue family, or None."""
+    shares, on_char, cells = [], [], []
+    for g in gallery:
+        f = foreground_only(g)
+        whole = fg_share(f) > MAX_FG
+        a, h, s, v = _hsv_arrays(g if whole else f)
+        if len(h) < 50:
+            continue
+        col = (s >= 0.10) & (v >= 0.15) & (h > 50)
+        fam = ((h + 15) % 360 // 30).astype(int)
+        share = np.bincount(fam[col], minlength=12) / len(h)
+        shares.append(share)
+        on_char.append(None if whole else share)
+        cells.append((a[col], fam[col]))
+    if len(shares) < 2:
+        return None
+    shares = np.array(shares)
+    presence = (shares >= MONO_RECUR_MIN_SHARE).mean(0)
+    ok = presence >= MONO_RECUR_PRESENCE
+    if not ok.any():
+        return None
+    top = int(np.argmax(np.where(ok, shares.mean(0), -1)))
+    if not any(c is not None and c[top] >= MONO_RECUR_MIN_SHARE for c in on_char):
+        return None
+    rgb = np.concatenate([c[0][c[1] == top] for c in cells])
+    if len(rgb) < 50:
+        return None
+    L, C, hh = _to_oklch(Image.fromarray((rgb.reshape(1, -1, 3) * 255).astype(np.uint8)))
+    hue = (
+        math.degrees(
+            math.atan2((C * np.sin(np.radians(hh))).sum(), (C * np.cos(np.radians(hh))).sum())
+        )
+        % 360
+    )
+    strength = min(1.0, max(0.0, (presence[top] - 0.8) / 0.2))
+    return hue, strength, float(presence[top])
+
+
+def v43(portrait, gallery, trace=None):
+    local: list[str] = []
+    r = v40(portrait, gallery, local)
+    first = local[0] if local else ""
+    if r is not None and first.startswith("monochrome path") and "highlight" not in first:
+        t = _recurring_tint(gallery)
+        if t is not None:
+            hue, strength, presence = t
+            chroma = strength * MONO_RECUR_TINT_MAX
+            if chroma > r["chroma"]:
+                r = describe(fit_in_gamut(r["lightness"], chroma, hue))
+                local[0] = (
+                    f"{first}; a colour recurs in {presence:.0%} of images "
+                    f"-> tint {chroma:.3f} at {hue:.0f}deg"
+                )
+    if trace is not None:
+        trace.extend(local)
+    return r
+
+
+def method_v43(portrait, gallery):
+    return v43(portrait, gallery)

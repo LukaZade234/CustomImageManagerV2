@@ -2307,3 +2307,27 @@ blue and Maki Zenin dark teal at 0.5 — but by accident of background, not reli
 (a monochrome tint from a colour that recurs across images) could now read the
 scene images for its hue without them voting in the standard path — the only
 remaining non-override route, and a narrow one. `v42`/`v42h` stay in `methods.py`.
+
+---
+
+## 40. V43: a monochrome tint from a recurring colour (2026-09-27)
+
+§36's fix 2, now able to read scene images. V43 runs V40 unchanged; only when the
+result is a monochrome accent without a highlight does it look for one hue family
+(30° HSV bands, hue > 50 so skin, brown and orange never count) present at ≥ 2% of
+the pixels in **≥ 85% of images** — read on the cut-out where it separates, on the
+whole image where it does not — and also on the character in at least one cut-out.
+That family's chroma-weighted OKLCH hue becomes the tint, strength rising from 80%
+presence to full (chroma 0.06) at 100%, keeping the side (white or black tone).
+
+At a first bar of 60%, Kaine, Yuuki, Allen Walker and Shirakami Fubuki (colours in
+67–75% of images) took faint blue or lilac tints — Kaine's white was approved, so
+the bar was raised. At 85% **only two characters change across all 599**:
+
+- **Gon Freecss** — white `#e8e8e8` → pale green `#dcf1c7` (green in 100% of
+  images).
+- **Neferpitou** — dark-side grey-violet `#78718f` → dusty rose `#96686d` (a red
+  family in 100% of images). Not reviewed before.
+
+Checks unchanged: 83 of 96. **Review page:** https://claude.ai/artifact/NX5Mw9oVg2LE63MN57hr7Z
+If both are accepted, V43 replaces V40 as the candidate.
