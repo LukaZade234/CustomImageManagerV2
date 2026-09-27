@@ -2405,3 +2405,56 @@ It is a larger step than the variants of §31–43 — a third model and a new d
 input — and it would not fix Lynae or Ruka, whose wanted colours are not their hair.
 Otherwise the pixel approach has reached its limit (§38–39): ship V43 and use the
 override for the rest.
+
+---
+
+## 42. How much the tagger would help, and what it costs (2026-09-27)
+
+**Simulation** (`.data/tagscan.py`, `.data/tagsim2.py`): the WD tagger on all 119
+characters with a verdict or on the open list (≤ 20 images each); V43's own candidate
+windows; the tag may only choose among them (≥ 0.4× the winner's strength), never
+add a colour. Only distinctive tags count: hair colours other than black, white,
+grey, brown and blonde (at ≥ 40% of images), else a clothing colour at ≥ 60%. A
+first version that let blonde and brown hair choose backfired on Lynae, Saber,
+Aurore Lee and Sandrone (identity in clothes or effects, not hair) — excluded.
+
+| outcome | characters |
+|---|---|
+| **Fixes** | Eiki Shiki → green, Yuyuko → pink, Maki Zenin → green, N (aim held in green instead of gold) |
+| Small nudges the right way | Yae Miko, Tsubasa Hanekawa (pinker, same window) |
+| **Backfires** | Noriaki Kakyoin green → red (red hair 80%), Omaru Polka yellow → pink (pink hair 90%), Suwako Moriya khaki → red (red clothing), Jade (HSR) lilac → purple (minor) |
+| Already agrees (29) | e.g. Miku, Madoka, Zero Two, Reze, Zoro, Sanae, Nefer, Maomao, Ellen Joe, Aemeath, Airani |
+| Untouched (79) | everyone with black / white / grey / brown / blonde hair and no strong clothing colour — the whole skin/warm group, the near-monochrome group, Lynae, Ruka, Vertin, Shouko, Rio, Kyouka, Himiko; Audrey Hall's green is tagged (85%) but her green window is 0.399× the gold one, just under the bar |
+
+About 4 fixes and 2 nudges against 3–4 backfires; ~9% of the sampled characters
+would change. The tagger helps where a character has a distinctive hair colour the
+pixels lose; it cannot help where the identity is black, blonde or brown hair, and
+it backfires where the identity is not the hair.
+
+**Costs, in context.** Server (`docs/ROADMAP.md`): Oracle Always Free, 4 ARM cores,
+**23 GB RAM**, 43 GB disk free. Resident today: two gunicorn gthread workers (~70 MB
+each idle, measured locally; a few hundred MB each while processing uploads), the
+Mudae service (~55 MB), cloudflared and Litestream (tens of MB each, typical), and
+the OS (~0.5 GB) — roughly **1–2 GB in use**, ~21 GB free. The accent models, run
+once per new image in one background process (never inside the web workers, which
+would load them twice):
+
+| model | disk | RAM while running | desktop, 4 threads | desktop, 1 thread |
+|---|---|---|---|---|
+| cut-out (isnetis) | 176 MB | 1.6 GB | 0.70 s | 2.44 s |
+| face detector + parser | 18 MB | 0.27 GB | 0.12 s | 0.19 s |
+| **WD tagger (vit-v3)** | **378 MB** | **0.7 GB** | **0.35 s** | **1.28 s** |
+| total | 572 MB (1.3% of free disk) | **2.6 GB all loaded** (11% of RAM) or 1.7 GB loading one at a time; with the rest of the server ~4–4.5 GB of 23 | **~1.2 s per image** | ~3.9 s |
+
+The tagger is 30% of the per-image time and a quarter of the memory. On the ARM
+server (not measured; an N1 core is roughly 2–3× slower than a Zen 4 core for this
+work), a new upload would take about 3 s of background work on 4 cores, or 5–8 s
+on 2 cores leaving the other two to the site, once per image; the character's
+accent is then a sum of stored per-image results (milliseconds). The one-off
+backfill runs on the desktop: tagging 9,440 images ≈ 35 min in one process (8
+threads, measured 0.22 s per image), ~15 min split three ways; cut-outs are cached
+for the 4+ characters (65 min from scratch) and face labels take ~7 min.
+
+**Verdict:** affordable, but a poor trade on its own — a third model and ~30% more
+work per image for roughly four fixes against three backfires. Recorded as the one
+untried semantic lever; not recommended over shipping V43 with overrides.
