@@ -2112,3 +2112,35 @@ accepted). Makoto Kino (now orange-red `#c7623a`) and Suwako Moriya (now khaki
    (cut-out 176 MB + face 18 MB; ~1.9 GB peak RAM, dominated by the cut-out), per-image
    colour summaries instead of stored masks, a desktop backfill, background
    segmentation of new uploads on the server, and neutral seeds in the frontend.
+
+---
+
+## 35. V40: the pale-pink gate (2026-09-27)
+
+The owner accepted gold for Jotaro Kujo (V39 gives a pale gold `#f4e29c`; shown
+again on the page below for confirmation before his check is changed) and asked
+for §34's lever 1.
+
+**V40** = V39 with the presence route into the pale-pink path needing pale pink in
+**at least two images** as well as ≥ 15% of them (`PP_MIN_IMAGE_COUNT`); the
+coverage route (median ≥ 0.8%) is unchanged. Across all 599 characters it moves
+exactly one: **Centurion**, pale pink `#be8594` → burnt orange `#ad592d`. Off the
+pink path her standard path picks the warm window, her dark skin; gold (her
+jewellery) or her black-and-white hair would suit better, so the gate trades one
+wrong colour for the skin problem.
+
+**Umbreon is not caught.** Most of her images are scenes the cut-out cannot
+separate (moon, starry sky, window) and are dropped; of the four left, two show a
+person with pale skin and a pink blanket. Pale pink is then 2% of the character
+(median) and in 2 of 4 images, so she passes any "two images" rule and the
+coverage route. It is the "pale skin is not pink" problem with someone else's skin.
+
+**Fixed along the way:** V39 wrote its package-deal note as the first trace line,
+which the review pages read as the path and reason, so those 29 cards showed the
+wrong label (colours were unaffected). The note now comes last; `full_v39` was
+recomputed.
+
+`fullcheck render --also "Name|Name"` adds named characters to a
+`--changed-only` page.
+
+**Review page:** https://claude.ai/artifact/SS55GbUYFySLed16KhVwp9

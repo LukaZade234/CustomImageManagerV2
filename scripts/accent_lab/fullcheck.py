@@ -36,6 +36,7 @@ COMPARE_DIR = None
 COMPARE_LABEL = None
 MIN_CHANGE = 0.0  # Oklab distance for "changed"; 0 = any hex difference
 CHANGED_ONLY = False  # one page holding only the changed characters
+ALSO: set = set()  # characters to show on the changed-only page regardless
 
 
 def _oklab(hx):
@@ -309,7 +310,7 @@ def render():
     outputs = []
     pages = PAGES
     if CHANGED_ONLY:
-        rows = [r for r in rows if _is_changed(_old_seed(r), r["seed"])]
+        rows = [r for r in rows if _is_changed(_old_seed(r), r["seed"]) or r["name"] in ALSO]
         pages = [(f"changed from {COMPARE_LABEL}", 0, 10**9, f"changed-{METHOD}.html")]
     for title, lo, hi, fname in pages:
         members = sorted(
@@ -362,7 +363,7 @@ def render():
 
 
 def main() -> None:
-    global METHOD, OUT, COMPARE_DIR, COMPARE_LABEL, MIN_CHANGE, CHANGED_ONLY
+    global METHOD, OUT, COMPARE_DIR, COMPARE_LABEL, MIN_CHANGE, CHANGED_ONLY, ALSO
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--method", default="v33")
     parser.add_argument("--out", default="full", help="results folder in .data for --method")
@@ -374,6 +375,7 @@ def main() -> None:
         "--min-change", type=float, default=0.0, help="Oklab distance that counts as changed"
     )
     parser.add_argument("--changed-only", action="store_true", help="one page of changes only")
+    parser.add_argument("--also", default="", help="'|'-separated names to include on that page")
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compute")
     c.add_argument("--workers", type=int, default=6)
@@ -382,6 +384,7 @@ def main() -> None:
     args = parser.parse_args()
     METHOD, OUT = args.method, D / args.out
     MIN_CHANGE, CHANGED_ONLY = args.min_change, args.changed_only
+    ALSO = set(filter(None, args.also.split("|")))
     if args.compare:
         COMPARE_DIR, COMPARE_LABEL = D / args.compare, args.compare_label
     if args.cmd == "compute":

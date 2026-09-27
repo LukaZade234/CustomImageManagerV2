@@ -2246,6 +2246,7 @@ MONO_LIGHT_L, MONO_DARK_L = 0.93, 0.22
 MONO_TINT_FROM, MONO_TINT_FULL, MONO_TINT_MAX = 0.55, 0.95, 0.045
 MONO_HIGHLIGHT_COV, MONO_HIGHLIGHT_PRESENCE = 0.02, 0.15
 PP_MIN_COV, PP_MIN_IMAGES = 0.008, 0.15
+PP_MIN_IMAGE_COUNT = 1  # V40: 2 -- in a 5-image gallery one image is already 20%
 
 
 def _hsv_arrays(f):
@@ -2271,8 +2272,9 @@ def pale_pink_presence(images):
         pp = (h >= 315) & (h <= 355) & (s >= 0.15) & (s <= 0.45) & (v >= 0.7)
         covs.append(float(pp.mean()))
     if not covs:
-        return 0.0, 0.0
-    return float(np.median(covs)), float(np.mean([c >= 0.04 for c in covs]))
+        return 0.0, 0.0, 0
+    hits = [c >= 0.04 for c in covs]
+    return float(np.median(covs)), float(np.mean(hits)), int(sum(hits))
 
 
 def _mono_highlight(images):
@@ -2369,8 +2371,8 @@ def v31(portrait, gallery, trace=None):
                 trace.append(f"monochrome path, {why}: {tag}")
             return r
     if fg and prof["pink"] >= PINK_MIN_SHARE and prof["pale_in_pink"] >= PINK_MIN_PALE:
-        cov, presence = pale_pink_presence(fg)
-        if cov >= PP_MIN_COV or presence >= PP_MIN_IMAGES:
+        cov, presence, n_pp = pale_pink_presence(fg)
+        if cov >= PP_MIN_COV or (presence >= PP_MIN_IMAGES and n_pp >= PP_MIN_IMAGE_COUNT):
             saved = V8
             V8 = {**V8, "conf_span": 15}
             try:
@@ -3062,7 +3064,8 @@ def _face_hair(src):
     return out, int(fid.max())
 
 
-def _prepare_own_faces(portrait, gallery, trace=None):
+def _prepare_own_faces(portrait, gallery):
+    """Fill _OWN_FACES; returns a note for the trace when the gallery is a package deal."""
     _OWN_FACES.clear()
     info = {}
     for im in [portrait, *gallery]:
@@ -3072,9 +3075,7 @@ def _prepare_own_faces(portrait, gallery, trace=None):
     with_faces = [v for v in info.values() if v[1] > 0]
     solo = [next(iter(h.values())) for h, n in with_faces if n == 1 and h]
     if not with_faces or len(solo) < max(2, OWN_MIN_SOLO * len(with_faces)):
-        if trace is not None:
-            trace.append(f"own hair: package deal ({len(solo)} solo of {len(with_faces)})")
-        return
+        return f"own hair: package deal ({len(solo)} solo of {len(with_faces)})"
     ref = np.median(np.array(solo), axis=0)
     for src, (hair, n) in info.items():
         if n >= 2 and hair:
@@ -3100,9 +3101,11 @@ def _v39(portrait, gallery, trace, own, aim_plain=False):
     saved = (SHADE_PLAIN, AIM_PLAIN, OWN_HAIR)
     SHADE_PLAIN, AIM_PLAIN, OWN_HAIR = True, aim_plain, own
     try:
-        if own:
-            _prepare_own_faces(portrait, gallery, trace)
-        return v38e(portrait, gallery, trace)
+        note = _prepare_own_faces(portrait, gallery) if own else None
+        result = v38e(portrait, gallery, trace)
+        if note and trace is not None:
+            trace.append(note)  # after the decision: the first line is the path and reason
+        return result
     finally:
         SHADE_PLAIN, AIM_PLAIN, OWN_HAIR = saved
         _OWN_FACES.clear()
@@ -3133,3 +3136,23 @@ def method_v39a(portrait, gallery):
 
 def method_v39(portrait, gallery):
     return v39(portrait, gallery)
+
+
+# ---- V40: pale pink must recur (ACCENT.md §35) -----------------------------------------------------
+#
+# The presence route into the pale-pink path now needs pale pink in at least two
+# images, not just 15% of them: in 5-7 image galleries one image was enough
+# (Centurion, Umbreon). The coverage route (>= 0.8% median) is unchanged.
+
+
+def v40(portrait, gallery, trace=None):
+    global PP_MIN_IMAGE_COUNT
+    saved, PP_MIN_IMAGE_COUNT = PP_MIN_IMAGE_COUNT, 2
+    try:
+        return v39(portrait, gallery, trace)
+    finally:
+        PP_MIN_IMAGE_COUNT = saved
+
+
+def method_v40(portrait, gallery):
+    return v40(portrait, gallery)
