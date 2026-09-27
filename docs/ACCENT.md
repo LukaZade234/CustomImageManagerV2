@@ -2071,3 +2071,44 @@ https://claude.ai/artifact/1GY72otrTP7BDpRKczpqy3
 **Open for the owner:** that page; whether V39 replaces V37 as the candidate.
 Unchanged by every variant so far: the skin/warm group, the greens (Maki, N,
 Maomao, Nefer), Shizuku, Ruka, Xurkitree, Jotaro, 2B and A2.
+
+---
+
+## 34. Where it stands after V39 (2026-09-27)
+
+The owner: V39's changes are "all changes in the right direction". **V39 is the
+candidate** (83 of 96 checks), replacing V37.
+
+**Fixed since §28's list** (flagged in the full-check review, now right or
+accepted): Anya Forger, Aemeath, Kyouka Jirou, Ellen Joe (via hair), Arthur Leywin
+(red, his hair), Izumi Miyamura and Tanya (either accepted), Daphnis et Chloé (red
+accepted). Makoto Kino (now orange-red `#c7623a`) and Suwako Moriya (now khaki
+`#a2975f`) changed on the V38e page without comment.
+
+**Still open — every character the owner flagged that V39 has not fixed:**
+
+| issue | characters | why |
+|---|---|---|
+| Skin and warm tones win | Sharron, Himiko Toga (cream wanted), Kim Soleum, Sukuna, Aoi Todo, Chizuru Ichinose, Tetsurou Kuroo (dark red wanted), Jiu Niangzi, Loki, Eiki Shiki, Tooth Fairy | body skin, brown shading, warm clothes and lighting in the ~20° window; the face parser only reaches the head, and removing face skin changed none of them (§31) |
+| Pink identities | Tsubasa Hanekawa, Yae Miko, Yuyuko Saigyouji (missed or too red); Centurion, Umbreon (false pale-pink path) | pinks lose to or merge with the warm window; in 6–7 image galleries one image passes the 15% pale-pink presence test |
+| Nearly monochrome | Kim Dokja, Mai Sakurajima, Han Sooyoung, Gon Freecss (green wanted, gets white), Mahoraga (whiter); 2B and A2 (white wanted) | just above the monochrome line, so a minor colour wins; 2B/A2 need white, which also needs the frontend to accept neutral seeds |
+| Ties and the main image | Rio Futaba (pink), Shizuku Murasaki (blue), Jotaro Kujo (skin/gold; navy wanted), Ruka Urushibara (teal only in one of four images) | the main image's colour or presence rules decide against the owner; V39p fixes Rio, V38b (skin out) gave Jotaro navy |
+| Greens | Maki Zenin, N, Maomao, Nefer | HSV splits green; no green window width gets all of them and Yotsuba/David Martinez (§27–28) |
+| Shade and other | Airani Iofifteen (too dark), Zeus (gold wanted), Vertin (blue; purple or muted teal wanted), Shouko Nishimiya (her pinkish light-brown hair wanted), Xurkitree (blue wanted), Omaru Polka (paler, nitpick) | individual |
+| Not solvable by pixels | Audrey Hall | green is lore; her art is gold by area (§ TL;DR) |
+
+**Levers left:**
+1. **Pale-pink gate for small galleries** (§28 suggestion 2, not yet built): require
+   pale pink in at least two images. Centurion, Umbreon.
+2. **Skin beyond the head** — the largest group, and no small full-body anime
+   parser exists (§30). The one remaining idea is to learn each image's skin colour
+   from the parsed *face* (reliable) and remove matching pixels elsewhere, while
+   protecting parsed hair; §30's version of this over-grabbed (blonde hair, cream
+   clothes, dark bodies), so it would need to be much stricter.
+3. **The manual override** for the stubborn, individual ones — 2B, A2, the greens,
+   Jotaro, Ruka, Rio, Shizuku, Xurkitree, Zeus, Vertin: about 15. Each pick is also a
+   label for future tuning.
+4. **Ship V39** (§28 suggestion 4): port to `accent_extract.py` with the two models
+   (cut-out 176 MB + face 18 MB; ~1.9 GB peak RAM, dominated by the cut-out), per-image
+   colour summaries instead of stored masks, a desktop backfill, background
+   segmentation of new uploads on the server, and neutral seeds in the frontend.
